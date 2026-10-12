@@ -1,6 +1,7 @@
 @import 'tailwindcss';
 @import '../components/hero/hero-orbit.css';
 @import '../components/hero/hero-typewriter.css';
+@import '../components/book/storybook-flip.css';
 
 /* ============================================================================
  * 设计令牌 —— 全站唯一来源
@@ -70,8 +71,8 @@ body {
  * 组件文档明确要求「消费方在页面层给一个 min-width 兜底」，
  * 低于 1280px 就横向滚动。
  *
- * 刻意写在首页容器上、而不是 body 上：创作流程要移动端优先（家长是在手机上用的），
- * 一条全局的 body { min-width } 会把手机端创作页一起坑住。
+ * 刻意写在首页容器上、而不是 body 上：一条全局的 body { min-width }
+ * 会把之后所有页面一起锁死在桌面宽度，兜底不该变成全站规则。
  *
  * 这个类通过 HeroOrbit 的 className 属性落在它的根元素 .hero-experience 上。
  * -------------------------------------------------------------------------- */

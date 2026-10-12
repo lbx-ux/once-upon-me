@@ -13,6 +13,11 @@
    1. 滚动容器：比视口高，内部 sticky 钉住
       → 产生 scrollProgress 0→1，而页面视觉上"不动"
       这是整个滚动驱动效果的支点，高度比例可调
+
+      ★ 可滚的距离是 height - 100vh（这里 68vh），不是 height 本身。
+        这 68vh 的分配：0→45% 文案依次离场 + 轨道转过半格，
+        45%→95% 交接段（轨道下沉让位，下一节同时升起）。
+        下一节用负 margin 叠进来，叠入量见 components/book/storybook-flip.css §1 的推导。
    ============================================================ */
 .hero-experience {
   position: relative;
@@ -28,6 +33,7 @@
   --hero-scene-x: 0px;
   --hero-scene-y: 0px;
   --hero-copy-p: 0;              /* 文案淡出总进度，逐个错峰见 §5 */
+  --hero-out: 0;                 /* 交接进度：0 = 照常表演，1 = 已经让位给下一节 */
 
   position: sticky;
   top: 0;
@@ -74,6 +80,14 @@
 /* ============================================================
    3. 轨道容器 —— preserve-3d，整体轻微 rotateX 后仰
       那 3° 是"退向远方"的关键，去掉会立刻变扁
+
+      最外两层 translateY / scale 是交接段的"让位"：文案走完后整圈往下沉、
+      同时收小，像被人从手上放下去。写在最左边是因为 transform 从右往左应用，
+      放在最外层才落在屏幕坐标系里，不会被 rotateX 的斜面带歪。
+
+      ★ 这里刻意不写 opacity：容器带 preserve-3d，一旦 opacity < 1
+        就会把 3D 子元素压平，卡片的前后遮挡排序当场失效。
+        淡出改由 JS 逐张卡片写（HeroOrbit.tsx §3.5）。
    ============================================================ */
 .hero-orbit {
   position: absolute;
@@ -81,6 +95,8 @@
   z-index: 30;
   transform-style: preserve-3d;
   transform:
+    translateY(calc(var(--hero-out) * 24vh))
+    scale(calc(1 - var(--hero-out) * 0.18))
     translate3d(var(--hero-scene-x), calc(var(--hero-scene-y) - 50px), 0)
     rotateX(-3deg);
   cursor: grab;
@@ -159,12 +175,19 @@
 }
 
 /* 滚动淡出：JS 每帧只发布一个总进度 --hero-copy-p（0→1），
-   每个子元素按自己的 --out-start 依次离场，跨度统一 0.55（所以乘 1/0.55≈1.8182）。
+   每个子元素按自己的 --out-start 依次离场，跨度统一 .30（所以乘 1/.30≈3.3333）。
    顺序与入场一致：品牌 → 主张句 → 按钮组。
-   clamp 到 0..1 是因为下面的位移要复用同一个值（opacity 自己会夹，translate 不会）。 */
+   clamp 到 0..1 是因为下面的位移要复用同一个值（opacity 自己会夹，translate 不会）。
+
+   ★ 与 HeroOrbit.tsx 的 HANDOFF_START 是一对，改一边另一边就错位：
+     最后一层 .20 + 跨度 .30 = copy-p 的 .50，
+     而 copy-p = smoothstep(.06, .84, p) 在 p = .45 时正好是 .50 ——
+     三层全消失的那一刻，就是轨道开始下沉、下一节开始升起的那一刻。
+     原来跨度 .50 / out-start 间隔 .16 配上 smoothstep(.03,.24,p)，
+     三层在 p≈.19 就全没了，剩下 80% 的滚动只剩轨道空转。 */
 .hero__copy > * {
   --out-start: 0;
-  --fade: clamp(0, 1 - (var(--hero-copy-p, 0) - var(--out-start)) * 1.8182, 1);
+  --fade: clamp(0, 1 - (var(--hero-copy-p, 0) - var(--out-start)) * 3.3333, 1);
   opacity: var(--fade);
   transform: translateY(calc((1 - var(--fade)) * -24px));
   will-change: transform, opacity;
@@ -173,9 +196,9 @@
   animation: hero-rise .68s cubic-bezier(.22, 1, .36, 1) backwards;
 }
 .hero__copy > *:nth-child(1) { --out-start: 0; }
-.hero__copy > *:nth-child(2) { --out-start: .16; animation-delay: .1s; }
-.hero__copy > *:nth-child(3) { --out-start: .32; animation-delay: .18s; }
-.hero__copy > *:nth-child(4) { --out-start: .48; animation-delay: .26s; }
+.hero__copy > *:nth-child(2) { --out-start: .10; animation-delay: .1s; }
+.hero__copy > *:nth-child(3) { --out-start: .20; animation-delay: .18s; }
+.hero__copy > *:nth-child(4) { --out-start: .30; animation-delay: .26s; }
 
 /* ---------------------------------------------------------------
    5.1 品牌锁定：中文黑体 + 英文衬线斜体，中间一个分隔点

@@ -55,7 +55,13 @@ type Props = {
   children?: React.ReactNode
   /** 自转角速度，rad/ms。默认 0.000072 ≈ 87 秒一圈 */
   angularSpeed?: number
-  /** 滚动到底时额外转过的角度（π 的倍数）。默认 0.76 → 137° */
+  /**
+   * 滚动到底时额外转过的角度（π 的倍数）。默认 0.34 → 61° ≈ 两张卡位
+   *
+   * 原来是 0.76（137°，转过去 4 张半）。转得太多会让"该走了"这一段读成
+   * "还在转"：文案在 p=0.44 就该全部离场，之后每一分进度都属于交接段，
+   * 轨道要做的是让位，不是继续表演。
+   */
   scrollTurns?: number
   className?: string
 }
@@ -84,12 +90,26 @@ function smoothstep(edge0: number, edge1: number, x: number) {
 /** 缓出：起步快、收尾慢 */
 const easeOut = (x: number) => 1 - Math.pow(1 - clamp(x), 2)
 
+/* -------------------------------------------------- 交接段（让位给下一节）
+ * 与 hero-orbit.css §5 的文案离场时刻是**同一组数**，两处必须一起改。
+ *
+ * 三层文案在 --hero-copy-p 上依次离场（跨度 .30，最后一层 --out-start .20），
+ * 走完 copy-p = .50；而 copy-p = smoothstep(.06, .84, p)，代回去得 p ≈ .45。
+ * 所以交接段从 .45 起 —— 就是"三个差不多消失"的那一刻。
+ *
+ * 改这里任何一条时间，另一头的 .hero__copy 规则要跟着改，否则会出现
+ * "文案还在、轨道已经开始下沉"这种两头不接的状态。 */
+const HANDOFF_START = 0.45
+const HANDOFF_END = 0.95
+/** 卡片在交接段结束时保留的不透明度（不归零：留一点余影，下一节压上来时不是硬切） */
+const HANDOFF_MIN_OPACITY = 0.08
+
 /* ================================================================ 组件 */
 export function HeroOrbit({
   items,
   children,
   angularSpeed = 0.000072,
-  scrollTurns = 0.76,
+  scrollTurns = 0.34,
   className,
 }: Props) {
   const heroRef = useRef<HTMLDivElement>(null)
@@ -192,9 +212,10 @@ export function HeroOrbit({
       const dt = lastTs ? Math.min(64, ts - lastTs) : 16
       lastTs = ts
 
-      // 帧率节流：滚动活跃区跑 60fps，其余 30fps（省电，肉眼几乎无感）
+      // 帧率节流：有内容在动的区间跑 60fps，其余 30fps（省电，肉眼几乎无感）。
+      // 上界跟着交接段走 —— 交接段轨道在动，不能提前掉到 30fps。
       const activeScroll =
-        scrollProgress > 0.015 && scrollProgress < 0.52
+        scrollProgress > 0.015 && scrollProgress < HANDOFF_END + 0.02
       const minGap = 1000 / (activeScroll ? 60 : 30) - 1
       if (lastRenderTs && ts - lastRenderTs < minGap) {
         if (inView && visible) rafId = requestAnimationFrame(frame)
@@ -217,6 +238,12 @@ export function HeroOrbit({
         dragOffset += dragVelocity * dt
         dragVelocity *= Math.pow(INERTIA_DECAY, dt / 16.67)
       }
+
+      /* 3.5 交接进度：文案三层全离场后才开始动，0 = 照常表演，1 = 已经让位 */
+      const out = smoothstep(HANDOFF_START, HANDOFF_END, scrollProgress)
+      // 淡出写在每张卡片上，而不是轨道容器上 —— 容器带 preserve-3d，
+      // 一旦 opacity < 1 就会把 3D 子元素压平，遮挡排序当场失效。
+      const fadeOut = 1 - (1 - HANDOFF_MIN_OPACITY) * out
 
       /* 4. 椭圆半轴（都用 hero 自身的盒子，不用 window.innerWidth —
             窄于 min-width 的窗口会横向滚动，innerWidth 会比布局宽度小） */
@@ -258,7 +285,7 @@ export function HeroOrbit({
         const scale = 0.58 + 0.58 * d + lift[i]
         const rot = 5.2 * Math.sin(1.6 * a + 0.8 * i) * Math.pow(1 - d, 0.72)
         const blur = d < 0.5 ? 5.2 * Math.pow(0.5 - d, 1.3) : 0
-        const opacity = d >= 0.5 ? 1 : 0.28 + (d / 0.5) * 0.72
+        const opacity = (d >= 0.5 ? 1 : 0.28 + (d / 0.5) * 0.72) * fadeOut
 
         el.style.transform =
           `translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, ${z.toFixed(2)}px) ` +
@@ -267,24 +294,32 @@ export function HeroOrbit({
         el.style.opacity = opacity.toFixed(4)
         el.style.zIndex = String(Math.round(10 + 80 * d))
 
+        // 交接过半就别再解码了 —— 卡片已经淡到看不出来，省电换不来任何观感
         syncVideo(
           el,
-          !reduced.matches && inView && visible && d > VIDEO_PLAY_DEPTH && frontSet.has(i),
+          !reduced.matches &&
+            inView &&
+            visible &&
+            out < 0.5 &&
+            d > VIDEO_PLAY_DEPTH &&
+            frontSet.has(i),
         )
       }
 
       /* 7. 三个不同量级的视差 = 层次感 */
-      setVar(
-        '--hero-grid-opacity',
-        (0.58 * (1 - easeOut(clamp((scrollProgress - 0.36) / 0.32)))).toFixed(4),
-      )
+      setVar('--hero-grid-opacity', (0.58 * (1 - easeOut(out))).toFixed(4))
       setVar('--hero-grid-x', `${(-3 * sceneX).toFixed(2)}px`)
       setVar('--hero-grid-y', `${(-2 * sceneY).toFixed(2)}px`)
       setVar('--hero-scene-x', `${(16 * sceneX).toFixed(2)}px`)
       setVar('--hero-scene-y', `${(10 * sceneY).toFixed(2)}px`)
 
-      // 只发布一个总进度；逐个错开的淡出由 CSS 的 --out-start 决定（见 §5）
-      setVar('--hero-copy-p', smoothstep(0.03, 0.24, scrollProgress).toFixed(4))
+      // 只发布一个总进度；逐个错开的淡出由 CSS 的 --out-start 决定（见 §5）。
+      // 区间从 (.03,.24) 摊到 (.06,.84)：原来三层文案在头 19% 的滚动里就走完了，
+      // 剩下 80% 只剩轨道空转 —— 那是"第一页转得太久"的真正原因。
+      setVar('--hero-copy-p', smoothstep(0.06, 0.84, scrollProgress).toFixed(4))
+
+      // 交接进度：轨道下沉 / 缩小由 CSS 消费（§3），淡出由 JS 逐卡消费（§3.5）
+      setVar('--hero-out', out.toFixed(4))
 
       orbitEl!.dataset.orbitReady = 'true'
       if (inView && visible) rafId = requestAnimationFrame(frame)

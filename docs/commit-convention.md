@@ -35,9 +35,12 @@
 
 用**目录或模块名**，不要用个人偏好词。当前有效值：
 
-`scaffold` `tokens` `hero` `art` `home` `themes` `docs` `scripts`
+`scaffold` `tokens` `hero` `book` `art` `home` `themes` `docs` `scripts`
 
 后续按 [README 的预留结构](../README.md) 增加：`engine` `prompts` `schemas` `store` `creation` `reader` `panels` `mcp`。
+
+> `book` 对应 `src/components/book/`（滚动翻页绘本）。加它是因为书与首屏是**两套独立的
+> 滚动几何**，混在 `hero` 或 `home` 里，日后想单独看"翻页那套是怎么长出来的"就翻不出来了。
 
 一次改动跨多个 scope 时，**优先拆提交**；拆不开就不写 scope，别写 `misc` 这种空词。
 

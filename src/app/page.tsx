@@ -1,18 +1,19 @@
+import StorybookFlip from '@/components/book/StorybookFlip'
 import HeroOrbit from '@/components/hero/HeroOrbit'
 import HeroTypewriter, { type TypewriterLine } from '@/components/hero/HeroTypewriter'
 import { THEMES, artPath, videoPath } from '@/lib/themes'
 
 /**
- * 首页 —— 12 张绘本封面的 3D 环形轨道
+ * 首页 —— 12 张绘本封面的 3D 环形轨道 + 第二屏的滚动翻页绘本
  *
- * 结构由 HeroOrbit 组件自己渲染（.hero-experience > .hero > 背景 + 轨道 + 文案层），
- * 这里只负责两件事：
- *   1. 把 THEMES 映射成轨道条目，动效走 public/video/{key}.mp4，封面走
- *      public/art/{key}.webp（Figma 里的 poster —— 视频没加载出来时显示的那张）
+ * 结构由组件自己渲染，这里只负责组装：
+ *   1. 首屏：把 THEMES 映射成轨道条目，动效走 public/video/{key}.mp4，
+ *      封面走 public/art/{key}.webp（Figma 里的 poster —— 视频没加载出来时显示的那张）
  *   2. 中心文案 —— 三层
+ *   3. 第二屏 —— <StorybookFlip />：一本一页页翻开的书，中途能替孩子做一次选择
  *
  * ★ 三层的顺序是有约束的：hero-orbit.css 用 `.hero__copy > *:nth-child(2..4)`
- *   写死了入场动画的延迟（§5）。层级或顺序一变，动画节奏就得跟着改。
+ *   写死了入场动画的延迟与离场错峰（§5）。层级或顺序一变，动画节奏就得跟着改。
  *
  * 主张句与副句已合并成一行轮流打字（HeroTypewriter），省出一整行竖向空间。
  * min-width 兜底见 globals.css 的 .home-hero。
@@ -57,33 +58,46 @@ const HERO_LINES: TypewriterLine[] = [
 
 export default function HomePage() {
   return (
-    <HeroOrbit items={orbitItems} className="home-hero">
-      <h1 className="hero__brand">
-        <span className="hero__brand-cn">
-          {/* 装饰性图形：旁边的「小主角」三个字已经是名字，屏读不该再念第二遍，所以 alt 留空。
-              暂用原生 <img>，与 HeroOrbit 一致 —— next/image 的迁移按 README 的未做清单统一做。 */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img className="mark" src="/brand/mark.webp" alt="" width={560} height={560} />
-          小主角
-        </span>
-        <span className="sep" aria-hidden="true">
-          ·
-        </span>
-        <span className="serif">Once Upon Me</span>
-      </h1>
+    <>
+      <HeroOrbit items={orbitItems} className="home-hero">
+        <h1 className="hero__brand">
+          <span className="hero__brand-cn">
+            {/* 装饰性图形：旁边的「小主角」三个字已经是名字，屏读不该再念第二遍，所以 alt 留空。
+                暂用原生 <img>，与 HeroOrbit 一致 —— next/image 的迁移按 README 的未做清单统一做。 */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img className="mark" src="/brand/mark.webp" alt="" width={560} height={560} />
+            小主角
+          </span>
+          <span className="sep" aria-hidden="true">
+            ·
+          </span>
+          <span className="serif">Once Upon Me</span>
+        </h1>
 
-      <HeroTypewriter lines={HERO_LINES} />
+        <HeroTypewriter lines={HERO_LINES} />
 
-      <div className="hero__cta">
-        {/* TODO: 创作流程做出来后换成指向 /create 的 Link */}
-        <button className="btn" type="button">
-          开始创作 →
-        </button>
-        {/* TODO: 阅读器做出来后换成指向成品示例的 Link */}
-        <button className="btn btn--ghost" type="button">
-          看一本成品
-        </button>
-      </div>
-    </HeroOrbit>
+        <div className="hero__cta">
+          {/* TODO: 创作流程做出来后换成指向 /create 的 Link */}
+          <button className="btn" type="button">
+            开始创作 →
+          </button>
+          {/* TODO: 阅读器做出来后换成指向成品示例的 Link */}
+          <button className="btn btn--ghost" type="button">
+            看一本成品
+          </button>
+        </div>
+      </HeroOrbit>
+
+      {/* --------------------------------------------------------------------
+          第二屏：滚动翻页绘本。
+
+          首屏回答"能做什么"（12 个不同的孩子），这一节回答产品真正的承诺 ——
+          「每一页都是同一个他」。论点不靠文字说，靠翻给人看：
+          同一本《小宇的云》四个跨页，中途停下来让孩子选一次往哪朵云去。
+
+          区间、叠入量与叶模型见 components/book/storybook-flip.css 顶部。
+          -------------------------------------------------------------------- */}
+      <StorybookFlip />
+    </>
   )
 }

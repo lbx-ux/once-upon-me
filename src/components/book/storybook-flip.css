@@ -1,0 +1,440 @@
+/* ============================================================================
+ * storybook-flip.css —— 第二屏：滚动翻页绘本
+ *
+ * 与 StorybookFlip.tsx 同名同目录，在 app/globals.css 里 @import（与 hero 那套一致，
+ * 理由见 README 的分层约定：这些规则依赖属性选择器与兄弟关系，换 CSS Modules 收益为零）。
+ *
+ * ---------------------------------------------------------------------------
+ * 三条几何约定，改之前先读 flip.ts 顶部那段：
+ *
+ *   1. **.book 不是 preserve-3d。** 叶用 z-index 排序，**不靠深度排序** ——
+ *      加了 preserve-3d，z-index 就当场失效，正在翻的那一叶会被下一页吃掉半截。
+ *      每片叶自己是 preserve-3d（好让正反两面共用一层 3D 空间），.book 只提供 perspective。
+ *   2. **合着的书只有一页宽。** 舞台正中放的是"两页宽的书"，合上时整体左移半页
+ *      （--book-x 25% → 0），让**右半幅**、也就是封面，落在正中。
+ *   3. **不要在 .book 或 .book__leaf 上写 opacity。** 那会压平 3D 子元素，
+ *      顺带废掉层序。要淡出就逐面写（见 .book__shade）。
+ * ========================================================================== */
+
+/* ----------------------------------------------------------------------------
+ * 1. 这一节与舞台
+ *
+ * 区间是 enter-exit（见 useScrollDriver）：p=0 是**书顶边触到视口下沿**那一刻，
+ * 不是钉住那一刻 —— 书要在升上来的途中就开始翻开。
+ *
+ * 叠入量 -62vh 的算法（与首屏 HANDOFF_START = .45 咬合，改一个要同时想另一个）：
+ *   舞台满屏高、书在里面垂直居中，书高 = 书宽 × 2/3，
+ *   所以书的**顶边**落在本节顶边下方 (视口高 − 书高)/2 处。
+ *   要让它"首屏文案差不多走完时露头"，实测出 -62vh：
+ *   1440×900 下本节顶边在 954px，书顶边约 1134px，滚到 237px 时露头 ——
+ *   而首屏可滚 612px，237px ≈ 首屏 p .39（上一版脚手架量的 0.38 就是它）。
+ *   再往前（-76vh）会让书早于文案离场就爬上来，交接段会读成"换页"而不是"接力"。
+ *
+ * ★ 书高由**三条上限里最小的那条**决定（见 .storybook__book），其中 90vh 那条
+ *   就是为这段推导留的：它把书高钉在 60vh，于是顶边落在 (100vh − 60vh)/2 = 20vh，
+ *   与 2:1 时代 1440×900 下的 20.4vh 几乎重合 —— **首屏那三个数因此一个都不用动**。
+ *   不夹这道，3:2 的书会比 2:1 高 1/3，顶边抬高、书会提前露头，还会顶到收尾 CTA。
+ *
+ * ★ 刻意不设背景：设了就得到一条横切轨道与书的硬边。整节透明，
+ *   首屏在交接段自己沉到 .08，两者是互相融进去的。
+ * -------------------------------------------------------------------------- */
+.storybook {
+  position: relative;
+  z-index: 1; /* .hero-experience 是 z-index: 0，这一节要压在它上面 */
+  min-width: 1280px; /* 与 .home-hero 同一套桌面兜底，理由见 README */
+  height: 340vh;
+  margin-top: -62vh;
+}
+
+/* ★ ref 落在这里：useScrollDriver 的契约是「ref 指 sticky 那一层，
+   它的直接父元素是撑高的那一节」。 */
+.storybook__stage {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: grid;
+  place-items: center;
+  /* 不写 overflow: hidden —— 叶带透视转起来会略微越出书框，裁掉会切边 */
+}
+
+/* 两页宽的那本书：3:2。**一条跨页 = 两个 3:4 的页面**，与 3:4 的封面同比例，
+   封面落进页面不用再裁（2026-10-12 之前跨页是 2:1、页面是 1:1，封面得上下各裁 12.5%）。
+   三条宽度上限，取最小的：
+     1120px  桌面上的最大宽
+     74vw    窄屏不压边（与首屏同一套桌面兜底，见 README）
+     90vh    ★ 高度上限 —— 书高 = 宽 × 2/3 ≤ 60vh。夹它的两个理由见 §1 的推导：
+             顶边留在 20vh 上（首屏交接契约），底下留出 .book__ground 与收尾 CTA 的位置。
+   宽高都用 width + aspect-ratio 定，逐叶的 50% 与 --book-x 25% 因此都不用改。 */
+.storybook__book {
+  position: relative;
+  width: min(1120px, 74vw, 90vh);
+  aspect-ratio: 3 / 2;
+}
+
+/* ----------------------------------------------------------------------------
+ * 2. 书
+ *
+ * --book-x：合着时 25%（= 半页 / 书宽），翻开时 0，由 qDisplay 驱动。
+ * 转轴与灭点重合：perspective-origin 默认落在 .book 的水平中点，
+ * 而叶的 transform-origin: left center 也正好落在那里。
+ * -------------------------------------------------------------------------- */
+.book {
+  position: absolute;
+  inset: 0;
+  perspective: 2400px;
+  transform: translateX(calc(-1 * var(--book-x, 25%)));
+}
+
+.book__leaf {
+  position: absolute;
+  left: 50%; /* 书脊 */
+  top: 0;
+  width: 50%;
+  height: 100%;
+  transform-origin: left center;
+  transform-style: preserve-3d;
+  transform: rotateY(var(--leaf-angle, 0deg));
+  z-index: var(--leaf-z, 1);
+}
+
+.book__face {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  backface-visibility: hidden;
+  border-radius: 2px;
+  box-shadow: 0 2px 7px rgba(19, 19, 28, 0.1);
+  background-color: #fbf7ef; /* 图铺不满时的纸色，不是白 */
+  background-repeat: no-repeat;
+  background-position: 50% 50%;
+  background-size: cover; /* 封面/封底：3:4 的封面装进 3:4 的页面，一比一，不裁 */
+}
+
+/* 跨页的两个半页：同一张 3:2 的图挂两次，靠 position 各取一半。
+   ★ 3:2 的图铺进 3:4 的页面（宽 200%、高 100%）正好是原比例，不拉伸也不裁 ——
+   2:1 的图在这里会被纵向拉长 1/3，这就是"跨页比例与页面比例必须咬死"的意思。
+   ★ 背面自己 rotateY(180deg)，转轴是**它自己的中心**，所以翻到左边之后
+   它的局部左边落在左页外缘、局部右边落在书脊 —— 图不用镜像，
+   但**明暗渐变要镜像**（两面各自的"书脊侧"都在自己的书脊一边）。 */
+.book__face--back {
+  transform: rotateY(180deg);
+}
+.book__face[data-half='left'] {
+  background-size: 200% 100%;
+  background-position: 0 0;
+}
+.book__face[data-half='right'] {
+  background-size: 200% 100%;
+  background-position: 100% 0;
+}
+
+/* 纸感全靠这一层：shade = sin(θ)，平放时恰好 0、立起来时 1（flip.ts 把两端点钉死）。
+   不做卷曲 —— 水彩风下卷曲几乎看不出，而它要分裂 DOM、要引库，收益为负。 */
+.book__shade {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: var(--leaf-shade, 0);
+}
+.book__face--front .book__shade {
+  background: linear-gradient(to right, rgba(30, 22, 12, 0.32), rgba(30, 22, 12, 0) 54%);
+}
+.book__face--back .book__shade {
+  background: linear-gradient(to left, rgba(30, 22, 12, 0.32), rgba(30, 22, 12, 0) 54%);
+}
+
+/* 书下那团随开合变宽的影子。
+   ★ 位置必须**在书的下沿之外**：写成 top: 97% + translateY(-50%) 会把它整个压在页面
+   底部，读起来不是"书投下的影子"，而是"页脚多了条黑边"（实测就是这样）。 */
+.book__ground {
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  width: 100%;
+  height: 7%;
+  pointer-events: none;
+  transform-origin: center;
+  transform: translate(calc(-50% - var(--book-x, 25%)), -35%) scaleX(var(--ground-s, 0.6));
+  background: radial-gradient(ellipse at center, rgba(19, 19, 28, 0.22), rgba(19, 19, 28, 0) 64%);
+  filter: blur(10px);
+}
+
+/* ----------------------------------------------------------------------------
+ * 3. 页面上的字（叠在图上，真 HTML 文字 —— 屏读能念，这也是画面里不放字的理由）
+ *
+ * 统一放在**下角**：这几张图的视觉重心都在垂直中线 ±5%，下角是草地与野餐垫。
+ * "自己的下角"就是读者看到的左下角（背面翻过去之后仍然成立）。
+ * -------------------------------------------------------------------------- */
+.book__text {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  max-width: 74%;
+  padding: 12% 8% 7% 9%;
+  background: linear-gradient(
+    to top,
+    rgba(255, 253, 247, 0.94) 0%,
+    rgba(255, 253, 247, 0.8) 46%,
+    rgba(255, 253, 247, 0) 100%
+  );
+}
+.book__text p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: clamp(13px, 1.06vw, 19px);
+  line-height: 1.72;
+  letter-spacing: 0.01em;
+}
+
+.book__cover,
+.book__back {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 9% 10% 11%;
+}
+.book__cover {
+  justify-content: flex-end;
+  opacity: var(--cover-title-o, 1);
+  background: linear-gradient(
+    to top,
+    rgba(255, 253, 247, 0.92) 0%,
+    rgba(255, 253, 247, 0.66) 32%,
+    rgba(255, 253, 247, 0) 64%
+  );
+}
+.book__back {
+  justify-content: center;
+  background: rgba(20, 20, 26, 0.5); /* 复用封面图，压暗当封底 */
+}
+
+.book__title {
+  margin: 0;
+  color: var(--ink);
+  font-size: clamp(26px, 2.5vw, 44px);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+.book__byline {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: clamp(12px, 0.95vw, 16px);
+  letter-spacing: 0.02em;
+}
+.book__note {
+  margin: 0;
+  max-width: 24em;
+  font-size: clamp(15px, 1.25vw, 22px);
+  line-height: 1.6;
+}
+.book__back .book__note {
+  color: #fff;
+}
+
+/* ----------------------------------------------------------------------------
+ * 4. 最后一页的收尾
+ *
+ * 刻意**不放在封底那张纸上**：q 到 4 就停住了，封底在动画路径里翻不到，
+ * 字写在那里等于没人看得见。放在舞台层，用 --book-end-o 升起。
+ * -------------------------------------------------------------------------- */
+.storybook__end {
+  position: absolute;
+  left: 50%;
+  bottom: clamp(20px, 7vh, 84px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  transform: translateX(-50%);
+  text-align: center;
+  opacity: var(--book-end-o, 0);
+  pointer-events: none; /* 还没升起来时不该抢滚轮与点击 */
+}
+.storybook__end[data-on] {
+  pointer-events: auto;
+}
+.storybook__end .book__note {
+  color: var(--ink-soft);
+}
+/* 本书自己的按钮样式。**刻意不复用 hero-orbit.css 的 .btn** ——
+   跨组件借用样式会把两节的改版绑在一起；这几十行重复是有意的。 */
+.book-cta {
+  display: inline-flex;
+  align-items: center;
+  height: 52px;
+  padding: 0 30px;
+  border: 0;
+  border-radius: 999px;
+  background: #1a1a20;
+  color: #fff;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(23, 23, 29, 0.18);
+  transition:
+    transform 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.18s ease;
+}
+.book-cta:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px rgba(23, 23, 29, 0.24);
+}
+.book-cta:active {
+  transform: translateY(0);
+}
+
+/* ----------------------------------------------------------------------------
+ * 5. 右侧刻度
+ *
+ * 3.4 屏的滚动必须有进度指示，否则人不知道后面还有没有内容。
+ * 顺带是这一节唯一的可点导航（另一处是键盘 ← →）。
+ * -------------------------------------------------------------------------- */
+.book-spine {
+  position: absolute;
+  right: clamp(20px, 3.2vw, 52px);
+  top: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 11px;
+  transform: translateY(-50%);
+}
+.book-spine__tick {
+  width: 20px;
+  height: 2px;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  background: rgba(23, 23, 29, 0.2);
+  cursor: pointer;
+  transition:
+    width 0.24s cubic-bezier(0.22, 1, 0.36, 1),
+    background 0.24s ease;
+}
+.book-spine__tick:hover {
+  background: rgba(23, 23, 29, 0.42);
+}
+.book-spine__tick[data-on] {
+  width: 34px;
+  background: var(--accent);
+}
+.book-spine__count {
+  margin-top: 6px;
+  color: var(--ink-muted);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ----------------------------------------------------------------------------
+ * 6. 静止模式（prefers-reduced-motion）
+ *
+ * **两套 DOM 都渲染，靠这里的 display 切** —— 首帧就是对的，
+ * 不用等 JS 读到 matchMedia 再换树（那会先闪一下动效版）。
+ * 被藏起来的那一套是背景图，URL 与书那套相同，不会多一次请求。
+ * -------------------------------------------------------------------------- */
+.storybook__static,
+.storybook__pager {
+  display: none;
+}
+
+/* 动效那套的屏读替身。视觉上永远不进画面（书那叠 3D 叶对 AT 是噪音），
+   静止模式下退回正常排版 —— 那一套没有书页可以叠字。 */
+.storybook__live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .storybook {
+    height: auto;
+    margin-top: 0;
+    padding: 10vh 0 12vh;
+  }
+  .storybook__stage {
+    position: static;
+    display: block;
+    height: auto;
+  }
+  .storybook__book,
+  .book-spine,
+  .storybook__end {
+    display: none;
+  }
+
+  .storybook__static {
+    display: block;
+    width: min(1120px, 74vw);
+    aspect-ratio: 3 / 2;
+    margin: 0 auto;
+    border-radius: var(--card-radius);
+    box-shadow: var(--card-shadow);
+    background-color: #fbf7ef;
+    background-repeat: no-repeat;
+    background-position: 50% 50%;
+    background-size: cover;
+  }
+  /* 封面是**一页**（3:4），不是跨页（3:2）——塞进跨页的框会被裁掉一半。
+     它自己一档比例，正好装下，不裁。 */
+  .storybook__static[data-cover] {
+    width: min(420px, 30vw);
+    aspect-ratio: 3 / 4;
+  }
+
+  .storybook__live {
+    position: static;
+    width: auto;
+    height: auto;
+    max-width: min(1120px, 74vw);
+    margin: clamp(20px, 3vh, 32px) auto 0;
+    padding: 0;
+    overflow: visible;
+    white-space: normal;
+    clip-path: none;
+    color: var(--ink-soft);
+    font-size: 15px;
+    line-height: 1.85;
+  }
+
+  .storybook__pager {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    margin-top: clamp(16px, 2.6vh, 28px);
+  }
+  .storybook__pager button {
+    width: 44px;
+    height: 44px;
+    border: 0;
+    border-radius: 999px;
+    background: rgba(23, 23, 29, 0.06);
+    color: var(--ink);
+    font: inherit;
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .storybook__pager button:disabled {
+    opacity: 0.34;
+    cursor: default;
+  }
+  .storybook__pager span {
+    min-width: 4.5em;
+    color: var(--ink-muted);
+    font-size: 14px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+}
