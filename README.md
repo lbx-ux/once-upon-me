@@ -72,10 +72,12 @@ once-upon-me/
 │  └─ commit-convention.md       提交规范（消息格式 / 粒度 / 禁区）
 ├─ public/
 │  ├─ art/                       12 张绘本封面（1280×720 WebP，合计 1.16 MB）
+│  ├─ video/                     12 段卡片动效（640×360 H.264，合计 3.22 MB）
 │  └─ brand/
 │     └─ mark.webp               首屏品牌标记（560×560，23.8 KB）
 ├─ scripts/
 │  ├─ make-webp.py               源图 JPG → public/art 的 WebP 转换脚本
+│  ├─ make-clip.py               源视频 → public/video 的 MP4 压缩脚本
 │  └─ make-favicon.py            品牌标记 → src/app/icon.ico 的 favicon 脚本
 └─ src/
    ├─ app/                       App Router
@@ -113,6 +115,7 @@ once-upon-me/
 | App Router 路由段 | kebab-case 英文                                     | `/create`、`/reader/[bookId]`         |
 | 样式文件          | 与所属组件同名                                      | `hero-orbit.css`                      |
 | 美术资源          | 全小写英文语义名，与提示词文档一致                  | `public/art/dino.webp`                |
+| 视频资源          | 与同主题的封面同名，只换扩展名                      | `public/video/dino.mp4`               |
 | 脚本文档          | 文件名 kebab-case 英文，正文中文                    | `docs/cover-art-prompts.md`           |
 | 类型 / 组件       | PascalCase                                          | `OrbitItem`、`StoryPage`              |
 | 常量              | SCREAMING_SNAKE                                     | `THEMES`、`MAX_RETRY`                 |
@@ -194,6 +197,18 @@ python -I scripts/make-webp.py <源图目录> public/art
 
 文件名与 `src/lib/themes.ts` 里的 `key` 必须一一对应——对不上首屏就是一片空白。
 
+### 卡片动效的重新生成
+
+`public/video/` 里的 12 段 4 秒动效由源视频压缩而来（源 1284×716 / 30fps / 约 10Mbps → 居中裁精确 16:9 → 640×360 → 丢音轨 → 逐条从 crf 26 起试到 ≤400KB）。转换脚本是 [`scripts/make-clip.py`](scripts/make-clip.py)，与图片脚本同样用参数传目录：
+
+```bash
+python -I scripts/make-clip.py <源视频目录> public/video
+```
+
+640×360 不是随手定的：卡片最大显示宽 318px，2× 屏要 636px，640 刚好够，再大就是纯浪费。源文件共 61.56 MB，压完 3.22 MB（19×）。
+
+**卡片只在转到最前面时才播视频**，转过去就暂停并停在那一帧（组件内 `VIDEO_PLAY_DEPTH = 0.72`）。12 张卡片全部 `preload="none"`，只有要播的那几张才真正开始下载，同时在播的至多 4 张——所以首屏的动效增量约 1 MB，不是 3.22 MB。
+
 ---
 
 ## 四、团队信息
@@ -245,6 +260,15 @@ python -I scripts/make-webp.py <源图目录> public/art
 
 设计令牌只有浅色一套，`color-scheme` 已锁定为 `light`。
 
+### 卡片动效只在转到前排时播放
+
+12 张卡片各挂一段 4 秒视频，但**不是全部一起播**：只有转到最前面、且深度超过 0.72 的至多 4 张会播，转过去立刻暂停。代价有两处：
+
+- **回到后排的卡片停在中途那一帧**，不回封面。这几张在环上又小又偏，看不出差别；换来的是「前排会动、后排安静」这个层次。
+- **首屏比纯图片重约 1 MB**。这已经是压到 640×360 / 平均 275KB 的结果，再往下压就会在水彩的平坦渐变上出色带——那正是这组画最怕的失真。
+
+`prefers-reduced-motion: reduce` 下完全不加载、不播放视频，只保留封面（与打字机文案同一个开关）。
+
 ### 刻意未做（按周次计划）
 
 | 项                                    | 计划                                                                               |
@@ -260,5 +284,7 @@ python -I scripts/make-webp.py <源图目录> public/art
 ## 六、原创声明
 
 本作品为原创，未抄袭、未直接使用开源项目包装参赛。首屏 12 张绘本封面插画由 AI 生成，完整提示词见 [`docs/cover-art-prompts.md`](docs/cover-art-prompts.md)；品牌标记小插画同为 AI 生成，提示词与落盘前的裁切依据见 [`docs/brand-mark-prompt.md`](docs/brand-mark-prompt.md)。两类画面均不含任何文字、水印或签名。
+
+12 段卡片动效同样是 AI 生成的（以上述封面为输入帧），源文件不入库，只保留压缩后的成品与转换脚本 [`scripts/make-clip.py`](scripts/make-clip.py)。
 
 `HeroOrbit` 组件的 3D 环形卡片轨道为独立实现：椭圆参数方程布点、`preserve-3d` 遮挡排序、三层视差、拖拽惯性与帧率节流都在组件内部自己完成，**没有引入任何动画库**。视觉上参考了公开站点的「卡片环绕中心」构图。

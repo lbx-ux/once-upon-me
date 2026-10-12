@@ -162,7 +162,11 @@ export function HeroOrbit({
       const v = el.querySelector('video')
       if (!v) return
       if (shouldPlay) {
-        if (v.dataset.playing !== 'true') {
+        // 除了「本组件还没让它播」，还要看元素**当前**是不是真的在播：
+        // 浏览器会在标签页隐藏、省电模式、系统抢占时自己把画面停掉，
+        // 而 dataset 是我们自己的账本，不会跟着变。只看账本的话，
+        // 回到前台就会以为「已经在播」而不再调 play()，前排这几张永久停住。
+        if (v.dataset.playing !== 'true' || v.paused) {
           // 首次要播时才真正下载（模板里用 preload="none"）
           if (!v.getAttribute('src') && v.dataset.orbitSrc) {
             v.src = v.dataset.orbitSrc
@@ -350,7 +354,12 @@ export function HeroOrbit({
     const onVisibility = () => {
       visible = !document.hidden
       if (visible) start()
-      else stop()
+      else {
+        stop()
+        // 标签页藏起来就该停解码，别用电池换一个没人看的画面。
+        // 回到前台时主循环会重新 syncVideo，靠上面那句 v.paused 恢复播放。
+        pauseAll()
+      }
     }
 
     const onBlur = () => {

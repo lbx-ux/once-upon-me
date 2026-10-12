@@ -11,6 +11,7 @@ next-env.d.ts
 # 二进制美术资源：不是文本，Prettier 处理它们只会误伤
 public/art
 public/brand
+public/video
 
 # 环形轨道这两个文件是从一份参考实现改写来的，刻意保留了它原本的排版：
 # 每次改动在 diff 里就是「删了哪几行、加了哪几行」这种读得懂的形状。

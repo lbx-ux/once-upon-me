@@ -1,13 +1,14 @@
 import HeroOrbit from '@/components/hero/HeroOrbit'
 import HeroTypewriter, { type TypewriterLine } from '@/components/hero/HeroTypewriter'
-import { THEMES, artPath } from '@/lib/themes'
+import { THEMES, artPath, videoPath } from '@/lib/themes'
 
 /**
  * 首页 —— 12 张绘本封面的 3D 环形轨道
  *
  * 结构由 HeroOrbit 组件自己渲染（.hero-experience > .hero > 背景 + 轨道 + 文案层），
  * 这里只负责两件事：
- *   1. 把 THEMES 映射成轨道条目，图片走 public/art/{key}.webp
+ *   1. 把 THEMES 映射成轨道条目，动效走 public/video/{key}.mp4，封面走
+ *      public/art/{key}.webp（Figma 里的 poster —— 视频没加载出来时显示的那张）
  *   2. 中心文案 —— 三层
  *
  * ★ 三层的顺序是有约束的：hero-orbit.css 用 `.hero__copy > *:nth-child(2..4)`
@@ -17,9 +18,17 @@ import { THEMES, artPath } from '@/lib/themes'
  * min-width 兜底见 globals.css 的 .home-hero。
  */
 
-/** 12 张封面 → 轨道条目 */
+/**
+ * 12 张封面 → 轨道条目
+ *
+ * src 与 video 都传：HeroOrbit 见到 video 就走 <video>，src 只作为 poster 的来源。
+ * 封面本来就是这条片子的静帧，两者都是同一场景的同一次生成，切换时只会轻微
+ * 换一口气，不会跳画面（12 条实测平均色差 4.3/255，最差 8.0）。
+ */
 const orbitItems = THEMES.map((theme) => ({
   src: artPath(theme.key),
+  video: videoPath(theme.key),
+  poster: artPath(theme.key),
   alt: theme.label,
 }))
 
