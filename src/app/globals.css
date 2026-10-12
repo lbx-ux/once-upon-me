@@ -1,0 +1,80 @@
+@import 'tailwindcss';
+@import '../components/hero/hero-orbit.css';
+@import '../components/hero/hero-typewriter.css';
+
+/* ============================================================================
+ * 设计令牌 —— 全站唯一来源
+ *
+ * 变量名刻意保持简短原名（--bg / --ink / --accent …），这样组件层 CSS
+ * （hero-orbit.css 以及后续所有组件样式）一行都不用改。
+ * 映射给 Tailwind 的那份在下面 @theme inline。
+ *
+ * 改配色只需动这一块。
+ * ========================================================================== */
+:root {
+  --bg: #f7f7f8;
+  --ink: #17171d;
+  --ink-soft: #1c1b22;
+  --ink-muted: #6b6a74;
+  /* 强调色取自封面自己的色相分布：12 张图约 72% 的有饱和度像素落在 0–75°
+     （橙红→黄），陶土橙的 17° 正压在最大的峰上；对 --bg 的对比度 4.84:1，
+     过正文级 AA。原来的紫（251°）在那个区间里几乎没有像素，所以总显得贴上去。
+     依据与过程见 docs/cover-art-prompts.md §九。 */
+  --accent: #c2410c;
+  --accent-rgb: 194, 65, 12; /* 与 --accent 同色，供 rgba() 用；换配色时两个一起改 */
+  --dot: rgba(28, 28, 36, 0.18);
+  --dot-size: 20px;
+  --card-radius: 14px;
+  /* 卡片投影：刻意比一般浮层更紧、更深。它要表达的是「图片本身浮在页面上」，
+     而不是「一张裱在白卡纸上的照片」—— 后者的观感来自「白底 + 大而虚的投影」
+     这个组合。12 张封面是水彩风，多张边缘留了大片浅色，投影一虚，浅边就和页面
+     底色连成一片，被读成卡纸边。取舍与实测见 components/hero/hero-orbit.css §4。 */
+  --card-shadow: 0 18px 44px rgba(19, 19, 28, 0.24);
+
+  color-scheme: light; /* 目前只有浅色一套，先锁掉系统深色的表单控件反色 */
+}
+
+/* ============================================================================
+ * 把设计令牌暴露给 Tailwind，后续页面可直接用 bg-bg / text-ink / text-accent /
+ * rounded-card 这类工具类，而不必再写 var()
+ * ========================================================================== */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-muted: var(--ink-muted);
+  --color-accent: var(--accent);
+
+  --radius-card: var(--card-radius);
+
+  /* 中文优先的系统字体栈。不用 next/font 拉 Noto Sans SC：
+     中文字体包体积大、构建期需联网，收益不抵风险。 */
+  --font-sans:
+    'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, -apple-system, sans-serif;
+}
+
+/* ============================================================================
+ * 基础样式
+ * ========================================================================== */
+body {
+  background: var(--bg);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ----------------------------------------------------------------------------
+ * 页面层：首页的桌面兜底
+ *
+ * HeroOrbit 是桌面 Web 专用组件 —— 它内部没有任何断点，环上的卡片数与半轴都按
+ * 宽屏调过，缩到手机宽度只会糊成一团（理由见 HeroOrbit.tsx 顶部注释）。
+ * 组件文档明确要求「消费方在页面层给一个 min-width 兜底」，
+ * 低于 1280px 就横向滚动。
+ *
+ * 刻意写在首页容器上、而不是 body 上：创作流程要移动端优先（家长是在手机上用的），
+ * 一条全局的 body { min-width } 会把手机端创作页一起坑住。
+ *
+ * 这个类通过 HeroOrbit 的 className 属性落在它的根元素 .hero-experience 上。
+ * -------------------------------------------------------------------------- */
+.home-hero {
+  min-width: 1280px;
+}

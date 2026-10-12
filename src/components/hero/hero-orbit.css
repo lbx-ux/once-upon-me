@@ -1,0 +1,299 @@
+/* ============================================================================
+ * HeroOrbit 配套样式 —— 与 HeroOrbit.tsx 搭配使用
+ *
+ * 引入方式：在 app/globals.css 里 @import，保持全局样式。
+ *   不改成 CSS Modules 的原因：组件依赖 `.hero[data-orbit-dragging='true'] .hero-orbit`
+ *   这类属性选择器，以及卡片上的 `:nth-child(2n)`；改 Modules 要同时重写类名和这些
+ *   选择器，收益为零。类名都带 hero- 前缀，冲突风险低。
+ *
+ * 设计令牌不在这里 —— 统一放在 app/globals.css 的 :root，避免两处打架。
+ * ========================================================================== */
+
+/* ============================================================
+   1. 滚动容器：比视口高，内部 sticky 钉住
+      → 产生 scrollProgress 0→1，而页面视觉上"不动"
+      这是整个滚动驱动效果的支点，高度比例可调
+   ============================================================ */
+.hero-experience {
+  position: relative;
+  z-index: 0;
+  height: max(1120px, 168vh);
+}
+
+.hero {
+  /* 运行时由 JS 写入的变量，这里给初始值避免首帧跳动 */
+  --hero-grid-opacity: .58;
+  --hero-grid-x: 0px;
+  --hero-grid-y: 0px;
+  --hero-scene-x: 0px;
+  --hero-scene-y: 0px;
+  --hero-copy-p: 0;              /* 文案淡出总进度，逐个错峰见 §5 */
+
+  position: sticky;
+  top: 0;
+  width: 100%;
+  height: 100vh;
+  min-height: 620px;
+  overflow: clip;
+  isolation: isolate;
+  background: var(--bg);
+  color: var(--ink);
+  perspective: 1400px;          /* ★ 3D 透视，作用于 .hero-orbit */
+}
+
+/* ============================================================
+   2. 点阵网格背景 —— 纯 CSS radial-gradient 平铺，零图片零 canvas
+   ============================================================ */
+.hero__ambient {
+  position: absolute;
+  inset: -24px;                 /* 留出视差位移余量，防止边缘露白 */
+  z-index: 1;
+  pointer-events: none;
+  background-image: radial-gradient(circle, var(--dot) .75px, transparent .95px);
+  background-position: 2px 2px;
+  background-size: var(--dot-size) var(--dot-size);
+  opacity: var(--hero-grid-opacity);
+  transform: translate3d(var(--hero-grid-x), var(--hero-grid-y), 0);
+  will-change: transform, opacity;
+}
+
+/* 中心柔光：让文字从卡片堆里浮出来 */
+.hero__glow {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background: radial-gradient(
+    58% 46% at 50% 46%,
+    rgba(247, 247, 248, .96) 0%,
+    rgba(247, 247, 248, .78) 42%,
+    rgba(247, 247, 248, 0) 72%
+  );
+}
+
+/* ============================================================
+   3. 轨道容器 —— preserve-3d，整体轻微 rotateX 后仰
+      那 3° 是"退向远方"的关键，去掉会立刻变扁
+   ============================================================ */
+.hero-orbit {
+  position: absolute;
+  inset: -10%;
+  z-index: 30;
+  transform-style: preserve-3d;
+  transform:
+    translate3d(var(--hero-scene-x), calc(var(--hero-scene-y) - 50px), 0)
+    rotateX(-3deg);
+  cursor: grab;
+  pointer-events: auto;
+  touch-action: pan-y;
+  user-select: none;
+  will-change: transform;
+}
+.hero[data-orbit-dragging='true'] .hero-orbit { cursor: grabbing; }
+
+/* ============================================================
+   4. 卡片 —— 全部叠在正中心，位置完全由 JS 写 transform
+   ============================================================
+   卡片刻意没有白底、没有描边、没有内边距 —— 图片就是卡片本身。
+
+   这里原本有一条 `background: #fff`，它是「有的卡片看着有边框、有的没有」的
+   主因：白底 + 大而虚的投影，合起来表达的是「一张裱在白卡纸上的照片」。
+   而这一版封面是水彩风，多张在边缘留了大片浅色（天空、墙面、沙滩），外圈亮度
+   实测从 184 到 240 不等；浅边一旦挨着白底，就被读成卡纸边。12 张里 whale /
+   paint / flower / star 的浅边最宽，于是「有框」的观感只出现在其中几张上。
+
+   修法是拿掉「裱纸」这个前提，而不是去裁图 —— 那些浅色是画面内容（whale 的
+   淡青海天 RGB(229,245,246)，不是画上去的白边），裁掉会伤构图；而且外圈差
+   0→464px，任何统一裁剪量都不可能同时修好两头。白底去掉、投影收紧加深
+   （见 globals.css 的 --card-shadow）之后，浅色边缘两侧就都是深色了。
+   ============================================================ */
+.hero-orbit__item {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: clamp(224px, 20.2vw, 318px);
+  aspect-ratio: 16 / 9;
+  margin: 0;
+  overflow: hidden;
+  border-radius: var(--card-radius);
+  background: transparent;      /* 不要白底，理由见上 */
+  box-shadow: var(--card-shadow);
+  opacity: 0;                   /* JS 接管前不可见，避免首帧闪一下 */
+  transform-style: preserve-3d;
+  backface-visibility: hidden;
+  contain: layout paint style;  /* 隔离重绘范围，性能关键 */
+  will-change: transform, opacity;
+}
+
+/* 偶数张略小 —— 打破机械的等宽，制造节奏 */
+.hero-orbit__item:nth-child(2n) { width: clamp(214px, 19.1vw, 302px); }
+
+.hero-orbit__item img,
+.hero-orbit__item video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  backface-visibility: hidden;
+}
+
+/* ============================================================
+   5. 中心文案层 —— z-index 高于卡片，压在轨道之上
+   ============================================================ */
+.hero__copy {
+  position: absolute;
+  top: 47%;
+  left: 50%;
+  z-index: 100;
+  /* 100% 而不是 100vw：100vw 把竖向滚动条也算进去，而且窄于页面 min-width 时
+     会跟着视口缩、跟 1280px 的布局盒对不上。100% 认的是 .hero 的内容盒。 */
+  width: min(1320px, calc(100% - 96px));
+  text-align: center;
+  /* 淡出不再作用在整层上 —— 改由下面的子元素逐个离场，这里只负责居中 */
+  transform: translate3d(-50%, -50%, 0);
+}
+
+@keyframes hero-rise {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* 滚动淡出：JS 每帧只发布一个总进度 --hero-copy-p（0→1），
+   每个子元素按自己的 --out-start 依次离场，跨度统一 0.55（所以乘 1/0.55≈1.8182）。
+   顺序与入场一致：品牌 → 主张句 → 按钮组。
+   clamp 到 0..1 是因为下面的位移要复用同一个值（opacity 自己会夹，translate 不会）。 */
+.hero__copy > * {
+  --out-start: 0;
+  --fade: clamp(0, 1 - (var(--hero-copy-p, 0) - var(--out-start)) * 1.8182, 1);
+  opacity: var(--fade);
+  transform: translateY(calc((1 - var(--fade)) * -24px));
+  will-change: transform, opacity;
+  /* fill-mode 必须是 backwards 而不是 both —— both 会在入场动画结束后
+     继续占住 opacity / transform，滚动淡出就再也写不进去了。 */
+  animation: hero-rise .68s cubic-bezier(.22, 1, .36, 1) backwards;
+}
+.hero__copy > *:nth-child(1) { --out-start: 0; }
+.hero__copy > *:nth-child(2) { --out-start: .16; animation-delay: .1s; }
+.hero__copy > *:nth-child(3) { --out-start: .32; animation-delay: .18s; }
+.hero__copy > *:nth-child(4) { --out-start: .48; animation-delay: .26s; }
+
+/* ---------------------------------------------------------------
+   5.1 品牌锁定：中文黑体 + 英文衬线斜体，中间一个分隔点
+       文案在 src/app/page.tsx 的 <h1 className="hero__brand">
+   --------------------------------------------------------------- */
+.hero__brand {
+  display: flex;
+  align-items: baseline;        /* 中英基线对齐，不是顶对齐 */
+  justify-content: center;
+  gap: clamp(10px, 1.1vw, 18px);
+  font-size: clamp(40px, 6.4vw, 84px);
+  font-weight: 800;
+  letter-spacing: -.03em;
+  line-height: 1.05;
+  margin: 0;
+}
+
+.hero__brand-cn { display: inline-flex; align-items: center; gap: .14em; }
+
+/* 品牌标记：一张 AI 出的小插画（提示词与裁切依据见 docs/brand-mark-prompt.md）。
+   保持 .78em 见方，锁排不会散；换成真 logo 时只改 src。 */
+.hero__brand .mark {
+  width: .78em;
+  height: .78em;
+  border-radius: .2em;
+  /* 底色取图片自己的纸色，加载那一帧不闪块 */
+  background: #f6eddc;
+  object-fit: cover;
+  /* 图本身是浅纸色，原来的陶土橙光晕会糊成一圈脏边 —— 换成中性的墨色投影 */
+  box-shadow: 0 8px 22px rgba(19, 19, 28, .14);
+  transform: translateY(-.04em);
+}
+
+/* 分隔符是标点，不是内容：小、淡、不抢戏 */
+.hero__brand .sep {
+  color: var(--accent);
+  opacity: .34;
+  font-weight: 400;
+  font-size: .58em;
+  transform: translateY(-.08em);
+}
+
+/* 英文衬线词 —— 原站用 Abhaya Libre ExtraBold，这里用系统衬线兜底 */
+.hero__brand .serif {
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 700;
+  color: var(--accent);
+  font-style: italic;
+  font-size: .82em;             /* 永远比中文矮一档，否则英文抢戏 */
+  letter-spacing: -.02em;
+  transform: translateY(-.02em);
+}
+
+/* 5.2 主张句（情绪钩子）—— 不出现产品词 */
+.hero__tagline {
+  margin: clamp(20px, 3vh, 30px) 0 0;
+  color: var(--ink-soft);
+  font-size: clamp(18px, 1.9vw, 27px);
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: -.015em;
+}
+
+/* 5.3 副句已并入打字机 —— 见 hero-typewriter.css 的 .hero__typing。
+       主张句与副句轮流打在同一行里，省出一整行竖向空间。
+       排版基线沿用上面的 .hero__tagline，打字机只补定位与光标部分。 */
+
+/* 5.4 按钮组 */
+.hero__cta {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  padding-top: clamp(30px, 4.4vh, 42px);
+}
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 52px;
+  padding: 0 30px;
+  border: 0;
+  border-radius: 999px;
+  background: #1a1a20;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: transform .18s cubic-bezier(.22, 1, .36, 1), box-shadow .18s ease;
+  box-shadow: 0 8px 24px rgba(23, 23, 29, .16);
+}
+.btn:hover  { transform: translateY(-2px); box-shadow: 0 12px 30px rgba(23, 23, 29, .22); }
+.btn:active { transform: translateY(0); }
+.btn--ghost {
+  background: rgba(255, 255, 255, .72);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px rgba(23, 23, 29, .1), 0 8px 24px rgba(23, 23, 29, .06);
+  backdrop-filter: blur(10px);
+}
+
+/* ============================================================
+   6. 只做桌面 Web，不做移动端断点
+      消费方在页面层给一个 min-width 兜底即可（demo 里是 1280px），
+      低于它就横向滚动 —— 组件保持一套布局，不会漂移。
+      理由见 HeroOrbit.tsx 顶部注释。
+   ============================================================ */
+
+/* ============================================================
+   7. 无障碍：尊重 prefers-reduced-motion
+      JS 会只画一帧静态布局，这里同步取消高度撑高与入场动画
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  .hero__copy > * { animation: none; }
+  .hero-experience { height: auto; }
+  .hero {
+    position: relative;
+    top: auto;
+    height: auto;
+    min-height: 100vh;
+  }
+}

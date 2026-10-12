@@ -1,0 +1,9 @@
+# pnpm 配置（pnpm 10.6+ 起设置项统一放在这里；package.json 里的 pnpm 字段已不再被读取）
+#
+# allowBuilds：pnpm 默认拦截依赖的 postinstall 脚本（供应链防护），
+# 这里逐个显式放行。新增条目请先确认该包确实需要执行脚本。
+#
+#   unrs-resolver —— eslint-config-next → eslint-import-resolver-typescript
+#   的传递依赖，需要 postinstall 编译原生绑定。缺了它 eslint 会报解析错误。
+allowBuilds:
+  unrs-resolver: true

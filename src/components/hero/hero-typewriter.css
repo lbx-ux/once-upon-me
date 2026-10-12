@@ -1,0 +1,48 @@
+/* ============================================================================
+ * HeroTypewriter 配套样式 —— 与 HeroTypewriter.tsx 搭配使用
+ *
+ * 排版基线（字号 / 字重 / 颜色 / 上边距）沿用 hero-orbit.css 的 .hero__tagline，
+ * 两个类同时挂在同一个 <p> 上。这里只补打字机特有的三件事：
+ *   撑住宽度的隐形占位、覆盖其上的实时文字、光标。
+ * ========================================================================== */
+
+.hero__typing {
+  position: relative;
+  display: inline-block; /* 收缩到内容宽度，配合 .hero__copy 的 text-align 居中 */
+  white-space: nowrap; /* 两句都不换行，宽度由最长的那句钉死 */
+}
+
+/* 隐形占位：容器宽度永远等于最长的一句。
+   没有它的话，文案居中 + 逐字增减 = 每打一个字整句左右抖一次。 */
+.hero__typing-ghost {
+  visibility: hidden;
+}
+
+/* 实时文字覆盖在占位之上，并在这个固定宽度内居中 */
+.hero__typing-live {
+  position: absolute;
+  inset: 0;
+}
+
+.hero__typing-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1.05em;
+  margin-left: 3px;
+  vertical-align: -0.16em;
+  background: var(--accent);
+  animation: typing-blink 1.05s steps(1, end) infinite;
+}
+
+@keyframes typing-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* 与 HeroOrbit 同一套规矩：尊重系统的「减少动态效果」，光标不闪 */
+@media (prefers-reduced-motion: reduce) {
+  .hero__typing-caret {
+    animation: none;
+  }
+}

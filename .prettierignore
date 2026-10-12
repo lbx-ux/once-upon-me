@@ -1,0 +1,26 @@
+# 构建产物与依赖
+node_modules
+.next
+out
+build
+
+# 锁文件与自动生成文件由 pnpm / Next 维护，格式化成 PR 噪音
+pnpm-lock.yaml
+next-env.d.ts
+
+# 二进制美术资源：不是文本，Prettier 处理它们只会误伤
+public/art
+public/brand
+
+# 环形轨道这两个文件是从一份参考实现改写来的，刻意保留了它原本的排版：
+# 每次改动在 diff 里就是「删了哪几行、加了哪几行」这种读得懂的形状。
+# Prettier 会把整篇一次性重排（.58 → 0.58、注释列对齐、属性折行），
+# 真正的改动被淹在几百行格式噪音里 —— 纯格式、无语义差异，收益为零。
+# 首屏这版轨道调稳定之后，把下面两行删掉、让 Prettier 接管即可。
+src/components/hero/HeroOrbit.tsx
+src/components/hero/hero-orbit.css
+
+# 设计源文件（若放入仓库）
+*.psd
+*.ai
+*.sketch
