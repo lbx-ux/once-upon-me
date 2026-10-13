@@ -29,3 +29,6 @@ src/components/hero/hero-orbit.css
 *.psd
 *.ai
 *.sketch
+
+# 引擎验收脚本的产物目录
+.out/

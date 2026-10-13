@@ -48,3 +48,7 @@ next-env.d.ts
 
 # 本地工具目录（编辑器的启动配置等，与作品无关）
 /.claude/
+
+# 引擎验收脚本的产物（node scripts/engine-run.mts --out=.out/...）
+# 不是资产，是每次跑都能重出来的东西；进仓库会让人误以为那是预生成资产
+.out/

@@ -9,7 +9,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.engine.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "format": "prettier --write .",
