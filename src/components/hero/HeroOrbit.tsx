@@ -40,12 +40,8 @@
 import { useEffect, useRef } from 'react'
 
 export type OrbitItem = {
-  /** 静态图（与 video 二选一） */
-  src?: string
-  /** 视频地址；会懒加载，且只在转到最前面时才播放 */
-  video?: string
-  /** 视频封面（必填，避免加载前空白） */
-  poster?: string
+  /** 封面图。这一屏**刻意不放动效**，理由见 README §五「首屏卡片是静帧不是短片」 */
+  src: string
   alt?: string
 }
 
@@ -68,10 +64,6 @@ type Props = {
 
 /* ------------------------------------------------------------------ 常量 */
 const TAU = Math.PI * 2
-/** 同时播放的视频数量上限（只有最靠前的这几张会播） */
-const MAX_CONCURRENT_VIDEOS = 4
-/** 深度高于此值才播视频 */
-const VIDEO_PLAY_DEPTH = 0.72
 /** 鼠标平滑系数：0.055 ≈ 0.3s 追上，丝滑不抖 */
 const SMOOTHING = 0.055
 /** 惯性衰减（每 16.67ms 保留的比例） */
@@ -177,34 +169,6 @@ export function HeroOrbit({
       scrollProgress = clamp((window.scrollY - rangeTop) / rangeHeight)
     }
 
-    /* ------------------------------------------------------ 视频懒加载 */
-    function syncVideo(el: HTMLElement, shouldPlay: boolean) {
-      const v = el.querySelector('video')
-      if (!v) return
-      if (shouldPlay) {
-        // 除了「本组件还没让它播」，还要看元素**当前**是不是真的在播：
-        // 浏览器会在标签页隐藏、省电模式、系统抢占时自己把画面停掉，
-        // 而 dataset 是我们自己的账本，不会跟着变。只看账本的话，
-        // 回到前台就会以为「已经在播」而不再调 play()，前排这几张永久停住。
-        if (v.dataset.playing !== 'true' || v.paused) {
-          // 首次要播时才真正下载（模板里用 preload="none"）
-          if (!v.getAttribute('src') && v.dataset.orbitSrc) {
-            v.src = v.dataset.orbitSrc
-            v.load()
-          }
-          v.dataset.playing = 'true'
-          v.play()?.catch(() => { v.dataset.playing = 'false' })
-        }
-      } else if (v.dataset.playing === 'true') {
-        v.pause()
-        v.dataset.playing = 'false'
-      }
-    }
-
-    function pauseAll() {
-      itemEls.forEach((el) => syncVideo(el, false))
-    }
-
     /* ---------------------------------------------------------- 主循环 */
     function frame(ts: number) {
       rafId = 0
@@ -254,9 +218,6 @@ export function HeroOrbit({
       for (let i = 0; i < N; i++) {
         depths[i] = (Math.sin(phase + (i / N) * TAU) + 1) / 2
       }
-      const frontSet = new Set(
-        [...depths.keys()].sort((a, b) => depths[b] - depths[a]).slice(0, MAX_CONCURRENT_VIDEOS),
-      )
 
       /* 6. 逐卡摆位 */
       for (let i = 0; i < N; i++) {
@@ -293,17 +254,6 @@ export function HeroOrbit({
         el.style.filter = blur > 0.08 ? `blur(${blur.toFixed(2)}px)` : 'none'
         el.style.opacity = opacity.toFixed(4)
         el.style.zIndex = String(Math.round(10 + 80 * d))
-
-        // 交接过半就别再解码了 —— 卡片已经淡到看不出来，省电换不来任何观感
-        syncVideo(
-          el,
-          !reduced.matches &&
-            inView &&
-            visible &&
-            out < 0.5 &&
-            d > VIDEO_PLAY_DEPTH &&
-            frontSet.has(i),
-        )
       }
 
       /* 7. 三个不同量级的视差 = 层次感 */
@@ -386,15 +336,12 @@ export function HeroOrbit({
       else start()
     }
 
+    /** 藏起来的标签页不跑循环：没人看的时候不该占着机器。
+     *  回到前台由 start() 重新起帧，首帧直接落位到当前滚动量。 */
     const onVisibility = () => {
       visible = !document.hidden
       if (visible) start()
-      else {
-        stop()
-        // 标签页藏起来就该停解码，别用电池换一个没人看的画面。
-        // 回到前台时主循环会重新 syncVideo，靠上面那句 v.paused 恢复播放。
-        pauseAll()
-      }
+      else stop()
     }
 
     const onBlur = () => {
@@ -417,7 +364,6 @@ export function HeroOrbit({
           start()
         } else {
           stop()
-          pauseAll()
         }
       },
       { rootMargin: '160px 0px', threshold: 0.01 },
@@ -453,7 +399,6 @@ export function HeroOrbit({
       window.removeEventListener('blur', onBlur)
       document.removeEventListener('visibilitychange', onVisibility)
       reduced.removeEventListener('change', onReducedChange)
-      pauseAll()
       delete orbitEl.dataset.orbitReady
       delete heroEl.dataset.orbitDragging
     }
@@ -470,28 +415,25 @@ export function HeroOrbit({
         <div className="hero-orbit" ref={orbitRef} data-hero-orbit aria-hidden="true">
           {items.map((item, i) => (
             <figure
-              key={item.video ?? item.src ?? i}
+              key={item.src}
               className="hero-orbit__item"
               data-orbit-index={i}
               ref={(el) => {
                 itemRefs.current[i] = el
               }}
             >
-              {item.video ? (
-                <video
-                  data-orbit-src={item.video}
-                  poster={item.poster}
-                  muted
-                  loop
-                  playsInline
-                  preload="none"
-                  disablePictureInPicture
-                  tabIndex={-1}
-                />
-              ) : (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={item.src} alt={item.alt ?? ''} loading="lazy" decoding="async" />
-              )}
+              {/* 静帧。这一屏曾经是 12 段 4 秒短片（只有转到前排才播、至多 4 条并发），
+                  换回静帧的理由与实测见 README §五「首屏曾经有 12 段卡片动效」。
+                  ★ 刻意**不写** loading="lazy"：这 12 张全都在首屏的环上，
+                    一张不落，懒加载它们等于让首屏先画一个空环再去取图 ——
+                    它们就是这一页的 LCP。fetchPriority 给浏览器排个先后。 */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={item.src}
+                alt={item.alt ?? ''}
+                decoding="async"
+                fetchPriority={i < 4 ? 'high' : 'auto'}
+              />
             </figure>
           ))}
         </div>

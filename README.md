@@ -48,8 +48,7 @@
 框架与工程链已拍板，图像 / 语音 / 大模型三家定的是候选集与实测判据，**10/20 由 W1 实测拍板**）。
 
 **本仓库目前有的**：首页三屏（首屏环形轨道 + 第二屏滚动翻页绘本 + 第三屏项目亮点），
-美术素材全部落盘（封面 12 张 1.16 MB / 绘本 8 张 0.46 MB / 第三屏插画 5 张 0.51 MB /
-卡片动效 3.22 MB）；**以及 W1 的引擎层**——`src/lib/engine/` 目录定稿、
+美术素材全部落盘（封面 12 张 1.16 MB / 绘本 8 张 0.46 MB / 第三屏插画 5 张 0.51 MB）；**以及 W1 的引擎层**——`src/lib/engine/` 目录定稿、
 角色卡资产化、供应商适配层、自写 Schema 校验、三条闸门的机械执法，
 验收方式是 `node scripts/engine-run.mts --mode=stub` 不启动浏览器跑完一本书。
 
@@ -99,12 +98,10 @@ once-upon-me/
 │  ├─ art/                       12 张绘本封面（1280×720 WebP，合计 1.16 MB）
 │  ├─ book/                      演示绘本的 1 封面 + 5 跨页 + 2 枚选择点图标（WebP，合计 0.46 MB）
 │  ├─ highlights/                第三屏 5 张卡片插画（1280×720 WebP，合计 0.51 MB）
-│  ├─ video/                     12 段卡片动效（640×360 H.264，合计 3.22 MB）
 │  └─ brand/
 │     └─ mark.webp               首屏品牌标记（560×560，23.8 KB）
 ├─ scripts/
 │  ├─ make-webp.py               源图 → WebP，四档预设（hero / book-spread / book-cover / book-icon）
-│  ├─ make-clip.py               源视频 → public/video 的 MP4 压缩脚本
 │  ├─ make-favicon.py            品牌标记 → src/app/icon.ico 的 favicon 脚本
 │  └─ sample-tints.py            跨页图 → 三朵主色，生成 book/spreadTints.ts（染色层用）
 ├─ vitest.config.mts             只跑 src 下的 .test.ts，environment: 'node'
@@ -167,7 +164,6 @@ once-upon-me/
 | App Router 路由段 | kebab-case 英文                                     | `/create`、`/reader/[bookId]`         |
 | 样式文件          | 与所属组件同名                                      | `hero-orbit.css`                      |
 | 美术资源          | 全小写英文语义名，与提示词文档一致                  | `public/art/dino.webp`                |
-| 视频资源          | 与同主题的封面同名，只换扩展名                      | `public/video/dino.mp4`               |
 | 脚本文档          | 文件名 kebab-case 英文，正文中文                    | `docs/cover-art-prompts.md`           |
 | 类型 / 组件       | PascalCase                                          | `OrbitItem`、`StoryPage`              |
 | 常量              | SCREAMING_SNAKE                                     | `THEMES`、`MAX_RETRY`                 |
@@ -327,18 +323,6 @@ python -I scripts/make-webp.py <源图目录> public/highlights
 源 4.41 MB（5 张 JPG）→ 530,536 B（5 张 WebP，单张 89–117 KB），8.7×。
 逐张的验收记录（四边信箱检测 + 右下角亮度 + 五张的逐张判读）见
 [`docs/highlights-art-prompts.md`](docs/highlights-art-prompts.md) §四。
-
-### 卡片动效的重新生成
-
-`public/video/` 里的 12 段 4 秒动效由源视频压缩而来（源 1284×716 / 30fps / 约 10Mbps → 居中裁精确 16:9 → 640×360 → 丢音轨 → 逐条从 crf 26 起试到 ≤400KB）。转换脚本是 [`scripts/make-clip.py`](scripts/make-clip.py)，与图片脚本同样用参数传目录：
-
-```bash
-python -I scripts/make-clip.py <源视频目录> public/video
-```
-
-640×360 不是随手定的：卡片最大显示宽 318px，2× 屏要 636px，640 刚好够，再大就是纯浪费。源文件共 61.56 MB，压完 3.22 MB（19×）。
-
-**卡片只在转到最前面时才播视频**，转过去就暂停并停在那一帧（组件内 `VIDEO_PLAY_DEPTH = 0.72`）。12 张卡片全部 `preload="none"`，只有要播的那几张才真正开始下载，同时在播的至多 4 张——所以首屏的动效增量约 1 MB，不是 3.22 MB。
 
 ---
 
@@ -621,14 +605,44 @@ grep 得出来。已经用 `next.config.ts` 的 `devIndicators: false` 关掉
 
 设计令牌只有浅色一套，`color-scheme` 已锁定为 `light`。
 
-### 卡片动效只在转到前排时播放
+### 首屏曾经有 12 段卡片动效，现在删了
 
-12 张卡片各挂一段 4 秒视频，但**不是全部一起播**：只有转到最前面、且深度超过 0.72 的至多 4 张会播，转过去立刻暂停。代价有两处：
+这一节留在这里是为了说清**为什么删**，以及要拿回来该动哪几处 —— 不是因为忘了。
 
-- **回到后排的卡片停在中途那一帧**，不回封面。这几张在环上又小又偏，看不出差别；换来的是「前排会动、后排安静」这个层次。
-- **首屏比纯图片重约 1 MB**。这已经是压到 640×360 / 平均 275KB 的结果，再往下压就会在水彩的平坦渐变上出色带——那正是这组画最怕的失真。
+首屏那 12 张卡曾经各挂一段 4 秒短片（`public/video/{key}.mp4`，640×360 / 无音轨 /
+源 61.56 MB 压到 3.22 MB，压缩脚本 `scripts/make-clip.py`）。播放策略是认真做过的：
+全部 `preload="none"`，只有转到最前排、深度 > 0.72 的至多 4 张才真正拉流并开始解码，
+转过去就停在那一帧；标签页藏起来或本节滚出视口时全停。首屏的动效增量约 1 MB。
 
-`prefers-reduced-motion: reduce` 下完全不加载、不播放视频，只保留封面（与打字机文案同一个开关）。
+**换回静帧的原因是实测手感**：整页滚动时首屏明显发涩。定位到的成本有两处，
+一处是这些短片，另一处比它更隐蔽：
+
+- 12 个 `<video>` 元素本身就要占 12 条媒体管线，前排 4 条同时解码，
+  而它们各自还是一个 `will-change: transform, opacity` 的合成层 ——
+  **解码与 3D 变换抢的是同一批帧**。
+- 一颗 `position: fixed` 的按钮上挂了 `backdrop-filter: blur(6px)`。
+  固定元素做背景模糊 = **每一帧滚动都要重新采样并重绘它背后那块屏幕**，
+  为了一颗常驻右下角的小按钮把整页的滚动成本抬上去。这条与视频无关，
+  是同一轮里一起摘掉的（`back-to-top.css` 里留了注释，别再加回去）。
+- 换回静帧时顺手发现的、**可能是最值钱的一条**：那 12 张封面 `<img>` 带着
+  `loading="lazy"`。它们全都在首屏的环上一张不落，懒加载它们等于让首屏先画
+  一个空环、再去取图 —— 而这 12 张就是这一页的 LCP。现在改成不 lazy，
+  前排 4 张给 `fetchPriority="high"`。
+  后台面板里量得到后果：12 张全部 `pending`、`/art/` 请求数 **0**。
+
+★ 一条诚实的保留：**没有做出"删之前 / 删之后"的帧率对照**。
+预览面板是后台文档，rAF 与 CSS 过渡的时间线都不走，量不到真帧率；
+所以"视频是卡顿主因"是**推断 + 用户体感**，不是实测结论。
+真正被量过的是"这些短片在后台一页里一字节都没拉"（`mp4Requested: 0`、
+12 个元素 `readyState` 全 0）—— 它证明懒加载策略本身没失效，
+不能证明前台解码不贵。
+
+要拿回来需要动的地方（都在 git 里，`git show 05b818c` 那一次提交）：
+`OrbitItem` 的 `video`/`poster` 两个字段、`themes.ts` 的 `videoPath()`、
+`HeroOrbit.tsx` 的 `syncVideo()` / `pauseAll()` / `VIDEO_PLAY_DEPTH` / `frontSet`、
+`page.tsx` 里 `orbitItems` 的 `video` 一项、`hero-orbit.css` 的 `.hero-orbit__item video`，
+以及 `public/video/` 与 `scripts/make-clip.py` 两个产物。
+拿回来时**顺手把 `backdrop-filter` 那条一起看住**，否则修好一个卡点又留一个。
 
 ### 第三屏：项目亮点（`HighlightsReel`）
 
@@ -838,7 +852,7 @@ root container 上，位置在 `window` 之前，所以挡得住，**且不必�
 
 本作品为原创，未抄袭、未直接使用开源项目包装参赛。首屏 12 张绘本封面插画由 AI 生成，完整提示词见 [`docs/cover-art-prompts.md`](docs/cover-art-prompts.md)；品牌标记小插画同为 AI 生成，提示词与落盘前的裁切依据见 [`docs/brand-mark-prompt.md`](docs/brand-mark-prompt.md)。两类画面均不含任何文字、水印或签名。
 
-12 段卡片动效同样是 AI 生成的（以上述封面为输入帧），源文件不入库，只保留压缩后的成品与转换脚本 [`scripts/make-clip.py`](scripts/make-clip.py)。
+首屏那 12 张卡曾经还配过 12 段 AI 生成的短片（以同主题的封面静帧为输入帧），**现已整条移除**，理由与"要拿回来该动哪几处"记在 §五。
 
 `HeroOrbit` 组件的 3D 环形卡片轨道为独立实现：椭圆参数方程布点、`preserve-3d` 遮挡排序、三层视差、拖拽惯性与帧率节流都在组件内部自己完成，**没有引入任何动画库**。视觉上参考了公开站点的「卡片环绕中心」构图。
 

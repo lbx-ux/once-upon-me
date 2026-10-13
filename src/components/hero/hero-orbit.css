@@ -144,8 +144,7 @@
 /* 偶数张略小 —— 打破机械的等宽，制造节奏 */
 .hero-orbit__item:nth-child(2n) { width: clamp(214px, 19.1vw, 302px); }
 
-.hero-orbit__item img,
-.hero-orbit__item video {
+.hero-orbit__item img {
   display: block;
   width: 100%;
   height: 100%;

@@ -3,14 +3,13 @@ import BackToTop from '@/components/BackToTop'
 import HeroOrbit from '@/components/hero/HeroOrbit'
 import HeroTypewriter, { type TypewriterLine } from '@/components/hero/HeroTypewriter'
 import HighlightsReel from '@/components/highlights/HighlightsReel'
-import { THEMES, artPath, videoPath } from '@/lib/themes'
+import { THEMES, artPath } from '@/lib/themes'
 
 /**
  * 首页 —— 12 张绘本封面的 3D 环形轨道 + 第二屏的滚动翻页绘本 + 第三屏的项目亮点
  *
  * 结构由组件自己渲染，这里只负责组装：
- *   1. 首屏：把 THEMES 映射成轨道条目，动效走 public/video/{key}.mp4，
- *      封面走 public/art/{key}.webp（Figma 里的 poster —— 视频没加载出来时显示的那张）
+ *   1. 首屏：把 THEMES 映射成轨道条目，封面走 public/art/{key}.webp（静帧）
  *   2. 中心文案 —— 三层
  *   3. 第二屏 —— <StorybookFlip />：一本一页页翻开的书，中途能替孩子做一次选择
  *   4. 第三屏 —— <HighlightsReel />：五条亮点，回答"凭什么做得出来"
@@ -26,14 +25,11 @@ import { THEMES, artPath, videoPath } from '@/lib/themes'
 /**
  * 12 张封面 → 轨道条目
  *
- * src 与 video 都传：HeroOrbit 见到 video 就走 <video>，src 只作为 poster 的来源。
- * 封面本来就是这条片子的静帧，两者都是同一场景的同一次生成，切换时只会轻微
- * 换一口气，不会跳画面（12 条实测平均色差 4.3/255，最差 8.0）。
+ * 只有静帧。这一屏曾经是 12 段 4 秒短片（`preload="none"`、只有转到前排的至多 4 张才播、
+ * 首屏实际拉流约 1 MB），换回静帧的理由与实测见 README §五「首屏卡片是静帧不是短片」。
  */
 const orbitItems = THEMES.map((theme) => ({
   src: artPath(theme.key),
-  video: videoPath(theme.key),
-  poster: artPath(theme.key),
   alt: theme.label,
 }))
 

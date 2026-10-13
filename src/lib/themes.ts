@@ -3,7 +3,6 @@
  *
  * 数据来源：docs/cover-art-prompts.md 的「12 张卡的内容」一节
  * 资源文件：public/art/{key}.webp（封面静帧，1280×720，脚本 scripts/make-webp.py）
- *           public/video/{key}.mp4（卡片动效，640×360，脚本 scripts/make-clip.py）
  *
  * ★ 数组顺序是有意义的：它决定 12 张卡片在环上的排列顺序，
  *   改动会让首屏整体错位。新增主题请追加到末尾。
@@ -54,9 +53,4 @@ export const THEMES: readonly Theme[] = [
 /** 封面资源路径 —— 统一从这里取，避免 '/art/' 这个约定散落在各处 */
 export function artPath(key: ThemeKey): string {
   return `/art/${key}.webp`
-}
-
-/** 卡片动效路径 —— 与 artPath 同名，文件在各自主目录下 */
-export function videoPath(key: ThemeKey): string {
-  return `/video/${key}.mp4`
 }
