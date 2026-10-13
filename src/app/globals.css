@@ -4,6 +4,7 @@
 @import '../components/hero/hero-typewriter.css';
 @import '../components/book/storybook-flip.css';
 @import '../components/highlights/highlights-reel.css';
+@import '../components/creation/create-flow.css';
 @import '../components/back-to-top.css';
 
 /* ============================================================================
@@ -88,4 +89,31 @@ body {
  * -------------------------------------------------------------------------- */
 .home-hero {
   min-width: 1280px;
+}
+
+/* ----------------------------------------------------------------------------
+ * 页面层：创作流（/create）
+ *
+ * 只放"页面级"的两条规则，交互样式在 components/creation/create-flow.css。
+ * ★ 这一页**故意不继承首页的桌面兜底**：首页那条 `min-width: 1280px` 写在
+ *   `.home-hero` 上而不是 body 上（理由见那一节），所以创作流在手机上是单列正常流。
+ * -------------------------------------------------------------------------- */
+.create-page {
+  min-height: 100vh;
+}
+
+.create-page__back {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 20px 20px 0;
+  font-size: 14px;
+}
+
+.create-page__back a {
+  color: var(--ink-muted);
+  text-decoration: none;
+}
+
+.create-page__back a:hover {
+  color: var(--accent);
 }

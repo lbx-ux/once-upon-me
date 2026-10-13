@@ -45,6 +45,35 @@
   background: var(--bg);
   color: var(--ink);
   perspective: 1400px;          /* ★ 3D 透视，作用于 .hero-orbit */
+
+  /* ---------------------------------------------------------------- 轨道半轴
+     这两个数供**预渲染那一帧**用（`HeroOrbit.tsx` 给每张卡写的内联样式里
+     是 `calc(系数 * var(--orbit-rx))`，见 lib/orbit.ts 的 restInlineStyle）。
+
+     ★ 它们与 HeroOrbit.frame() 里那两条
+         rx = min(heroEl.clientWidth * 0.56, 1420)
+         ry = min(heroEl.clientHeight * 0.38, 285)
+       是**同一对数**，改一处要改另一处（与 §5 交接段那三个数同一类耦合）。
+
+     用 cqw/cqh 而不是 vw/vh：容器查询单位认的是 `.hero` 自己的内容盒 ——
+     就是 clientWidth / clientHeight，**不含滚动条**。vw 含滚动条，1440 的窗口上
+     会多 15px（rx 差 8.4px），那一跳就发生在 JS 接手的第一帧上。
+     container-type: size 要求两个方向都是定尺寸：height 100vh × width 100%，
+     成立；reduced-motion 那条把 height 改成 auto，但 .hero 的子元素全是
+     absolute，auto 高本来就是 0、由 min-height 兜成 100vh，与今天一致。
+
+     没有容器查询的引擎退回 vw/vh 一档（高度那两套本来就一样，宽度差 ≤8px），
+     所以静态帧最坏也只是"环略宽一点"，不会是空的。 */
+  container-type: size;
+  --orbit-rx: min(56cqw, 1420px);
+  --orbit-ry: min(38cqh, 285px);
+}
+
+@supports not (container-type: size) {
+  .hero {
+    --orbit-rx: min(56vw, 1420px);
+    --orbit-ry: min(38vh, 285px);
+  }
 }
 
 /* 首屏把底色让给页面级的背景层（<SceneBackdrop /> 那三幕场景，页面传 backdrop="none"）。
@@ -144,7 +173,12 @@
   border-radius: var(--card-radius);
   background: transparent;      /* 不要白底，理由见上 */
   box-shadow: var(--card-shadow);
-  opacity: 0;                   /* JS 接管前不可见，避免首帧闪一下 */
+  opacity: 0;                   /* JS 接管前不可见，避免首帧闪一下
+                                   ★ 2026-10-13 起这条已经**不是首帧的样子**：每张卡
+                                   都带预渲染内联样式（lib/orbit.ts），内联压过这里，
+                                   所以首帧是一张完整的环。留着这一条是兜底 ——
+                                   万一哪天内联没渲染出来，退回"看不见"而不是
+                                   "12 张全叠在中心的全透明卡"。 */
   transform-style: preserve-3d;
   backface-visibility: hidden;
   contain: layout paint style;  /* 隔离重绘范围，性能关键 */
@@ -301,11 +335,17 @@
 }
 .btn:hover  { transform: translateY(-2px); box-shadow: 0 12px 30px rgba(23, 23, 29, .22); }
 .btn:active { transform: translateY(0); }
+/* 次要按钮：半透明的纸。
+   ★ 刻意**不用** backdrop-filter（原来有一条 blur(10px)，2026-10-13 拆了）。
+   理由与 .to-top 那条一字不差（见 back-to-top.css）：毛玻璃意味着背景每变一次
+   就要重新采样并重绘它背后那块屏幕 —— 而它背后正是**每帧都在动**的环形轨道，
+   等于给一个次要按钮常年挂一份逐帧的合成开销。
+   差别只有"透过玻璃看"的那层柔化：底色从 .72 提到 .86 之后，按钮在方案三的
+   场景图上也更实、`--ink` 的对比度只高不低（这层底是白的，越实越稳）。 */
 .btn--ghost {
-  background: rgba(255, 255, 255, .72);
+  background: rgba(255, 255, 255, .86);
   color: var(--ink);
   box-shadow: inset 0 0 0 1px rgba(23, 23, 29, .1), 0 8px 24px rgba(23, 23, 29, .06);
-  backdrop-filter: blur(10px);
 }
 
 /* ============================================================

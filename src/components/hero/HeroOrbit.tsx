@@ -35,9 +35,27 @@
  * 适用范围：**桌面 Web**。移动端不做（超出本项目范围），低于 1280px 由页面层
  * 用 `min-width` 兜底成横向滚动，所以组件里没有任何断点和 isMobile 分支 ——
  * 环上的卡片数和半轴都按宽屏调过，缩到手机宽度只会糊成一团，硬做不如不做。
+ *
+ * ---------------------------------------------------------------------------
+ * ★ 首帧不靠 JS（2026-10-13 加的）
+ *
+ * 每张卡的 `<figure>` 带一份**预渲染内联样式**（`lib/orbit.ts` 的
+ * `restInlineStyle`，t=0 那一帧）。理由有两条，第二条比第一条重：
+ *
+ *   1. 这 12 张图**就是这一页的 LCP**（见下面 img 上那条注释）。原来 CSS 写
+ *      `opacity: 0` 等 JS 接管，等于把 LCP 从"图下载完"推到"hydration + 第一帧"。
+ *   2. JS 挂了 / 用户禁了 JS，原来首屏只剩文案和一张空环。第三屏为同一件事
+ *      删过一个 `rendered`（"内容缺失才是问题"），首屏现在同一条待遇。
+ *
+ * 摆位数学因此搬进 `lib/orbit.ts`，由**两个调用方**共用：这个组件的 frame()，
+ * 与预渲染那一帧。半轴（rx/ry）是浏览器布局出来的数，构建期不知道，所以
+ * 静态帧里写的是系数，由 `hero-orbit.css` 的 `--orbit-rx/--orbit-ry` 解 ——
+ * 那对变量与这里的 `clientWidth × 0.56` / `clientHeight × 0.38` 是**契约**，
+ * 改一处要改另一处。等价性由 `src/lib/orbit.test.ts` 摁着。
  */
 
 import { useEffect, useRef } from 'react'
+import { blurFilter, placeCard, restInlineStyle } from '@/lib/orbit'
 
 export type OrbitItem = {
   /** 封面图。这一屏**刻意不放动效**，理由见 README §五「首屏卡片是静帧不是短片」 */
@@ -146,6 +164,13 @@ export function HeroOrbit({
     let dragLastX = 0
     let dragLastTs = 0
 
+    /* 自转时钟的零点。★ 原来是 `ts * angularSpeed`，而 `ts` 是**从导航起点**算的：
+       首帧会把环从"预渲染那一帧"（phase 0，见 lib/orbit.ts）直接跳到
+       「加载耗时 × 角速度」那个角度 —— 1 秒 ≈ 0.072rad ≈ 前排卡 46px。
+       改成相对这一刻取，第一帧 ≈ 0.9px，静态帧与 JS 第一帧接得上。
+       ★ 转速、scrollTurns、交接段那三个数都不在这条路径上，一个没动。 */
+    const phaseBase = performance.now()
+
     let targetX = 0, targetY = 0
     let sceneX = 0, sceneY = 0
     let scrollProgress = 0
@@ -162,6 +187,35 @@ export function HeroOrbit({
       if (lastVars.get(name) === value) return
       lastVars.set(name, value)
       heroEl!.style.setProperty(name, value)
+    }
+
+    /* ------------------- 逐卡写入去重（与上面 setVar 同一条理由）
+       每帧无条件写 12 张卡的 4 个属性是 48 次 style 写入 —— 而 transform 之外的
+       三个多数帧根本没变（filter 量化之后更是十几帧才动一档，见 lib/orbit.ts
+       的 blurFilter）。比较字符串比让它走一遍样式重算便宜。 */
+    const lastCardStyle = new WeakMap<HTMLElement, [string, string, string, string]>()
+    function setCardStyle(el: HTMLElement, t: string, f: string, o: string, z: string) {
+      let last = lastCardStyle.get(el)
+      if (!last) {
+        last = ['', '', '', '']
+        lastCardStyle.set(el, last)
+      }
+      if (last[0] !== t) {
+        last[0] = t
+        el.style.transform = t
+      }
+      if (last[1] !== f) {
+        last[1] = f
+        el.style.filter = f
+      }
+      if (last[2] !== o) {
+        last[2] = o
+        el.style.opacity = o
+      }
+      if (last[3] !== z) {
+        last[3] = z
+        el.style.zIndex = z
+      }
     }
 
     /* ------------------------------------------------ 几何测量与滚动量 */
@@ -204,9 +258,9 @@ export function HeroOrbit({
       sceneX += (targetX - sceneX) * SMOOTHING
       sceneY += (targetY - sceneY) * SMOOTHING
 
-      /* 2. 相位：自转 + 滚动 + 拖拽 */
+      /* 2. 相位：自转 + 滚动 + 拖拽。自转是相对 phaseBase 的（见上） */
       phase =
-        (reduced.matches ? 0 : ts * angularSpeed) +
+        (reduced.matches ? 0 : (ts - phaseBase) * angularSpeed) +
         scrollProgress * Math.PI * scrollTurns +
         dragOffset
 
@@ -223,50 +277,38 @@ export function HeroOrbit({
       const fadeOut = 1 - (1 - HANDOFF_MIN_OPACITY) * out
 
       /* 4. 椭圆半轴（都用 hero 自身的盒子，不用 window.innerWidth —
-            窄于 min-width 的窗口会横向滚动，innerWidth 会比布局宽度小） */
+            窄于 min-width 的窗口会横向滚动，innerWidth 会比布局宽度小）
+            ★ 这两个数与 hero-orbit.css 的 --orbit-rx / --orbit-ry 是同一对：
+              静态帧的 transform 就是乘的那两个变量。改这里要同步改那里。 */
       const rx = Math.min(heroEl!.clientWidth * 0.56, 1420)
       const ry = Math.min(heroEl!.clientHeight * 0.38, 285)
 
-      /* 5. 先算深度，决定谁在最前面 */
+      /* 5. 先算深度 —— 决定谁在最前面，也决定弹簧的目标值 */
       for (let i = 0; i < N; i++) {
         depths[i] = (Math.sin(phase + (i / N) * TAU) + 1) / 2
       }
 
-      /* 6. 逐卡摆位 */
+      /* 6. 逐卡摆位。★ 数学在 lib/orbit.ts 的 placeCard 里，与预渲染那一帧
+            （restInlineStyle）是**同一份** —— 这一屏的静态首帧就是靠这条
+            不靠 JS 画出来的（见那个文件头）。搬动等价性由 orbit.test.ts 摁着。 */
       for (let i = 0; i < N; i++) {
         const el = itemEls[i]
-        const a = phase + (i / N) * TAU
         const d = depths[i]
-
-        // X：椭圆横向 × 近大远小补偿 + 按深度加权的视差
-        const x =
-          Math.cos(a) * rx * (0.82 + 0.18 * d) * (1.2 + 0.06 * smoothstep(0.72, 0.96, d)) +
-          sceneX * (18 + 22 * d)
-
-        // Y：椭圆纵向 + 后排上抬（避免被中心文案压住）
-        let y = Math.sin(a) * ry * 0.89 + sceneY * (10 + 12 * d) - 16 * Math.pow(1 - d, 1.7)
-        // 前排把弧线压平一点，让最前面那张稳稳落在视线下方
-        const frontY = 0.89 * ry + 22 * sceneY
-        y += (frontY - y) * smoothstep(0.68, 0.9, d)
-
-        // Z：真实深度，浏览器据此做遮挡排序
-        const z = (d - 0.5) * 360
 
         // 前冲弹簧：只有最前面那张被"顶"一下
         const liftTarget = 0.34 * smoothstep(0.92, 1, d)
         lift[i] += (liftTarget - lift[i]) * (1 - Math.pow(0.88, dt / 16.67))
 
-        const scale = 0.58 + 0.58 * d + lift[i]
-        const rot = 5.2 * Math.sin(1.6 * a + 0.8 * i) * Math.pow(1 - d, 0.72)
-        const blur = d < 0.5 ? 5.2 * Math.pow(0.5 - d, 1.3) : 0
-        const opacity = (d >= 0.5 ? 1 : 0.28 + (d / 0.5) * 0.72) * fadeOut
+        const c = placeCard({ i, n: N, phase, rx, ry, sceneX, sceneY, fadeOut, lift: lift[i] })
 
-        el.style.transform =
-          `translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, ${z.toFixed(2)}px) ` +
-          `translate(-50%, -50%) rotate(${rot.toFixed(2)}deg) scale(${scale.toFixed(4)})`
-        el.style.filter = blur > 0.08 ? `blur(${blur.toFixed(2)}px)` : 'none'
-        el.style.opacity = opacity.toFixed(4)
-        el.style.zIndex = String(Math.round(10 + 80 * d))
+        setCardStyle(
+          el,
+          `translate3d(${c.x.toFixed(2)}px, ${c.y.toFixed(2)}px, ${c.z.toFixed(2)}px) ` +
+            `translate(-50%, -50%) rotate(${c.rot.toFixed(2)}deg) scale(${c.scale.toFixed(4)})`,
+          blurFilter(c.blur),
+          c.opacity.toFixed(4),
+          String(c.zIndex),
+        )
       }
 
       /* 7. 三个不同量级的视差 = 层次感 */
@@ -431,6 +473,11 @@ export function HeroOrbit({
               key={item.src}
               className="hero-orbit__item"
               data-orbit-index={i}
+              /* ★ 预渲染那一帧（phase 0）：JS 跑起来之前，这一屏就该是一张完整的环，
+                 而不是 12 张全透明、全叠在中心的卡 —— 这 12 张就是这一页的 LCP，
+                 被 hydration 挡在门外等于 LCP 从"图加载完"退到"JS 执行完"。
+                 x / y 存的是系数，半轴由 CSS 解（见 lib/orbit.ts 与 hero-orbit.css）。 */
+              style={restInlineStyle(i, items.length)}
               ref={(el) => {
                 itemRefs.current[i] = el
               }}

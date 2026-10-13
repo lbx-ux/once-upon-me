@@ -3,12 +3,15 @@ import BackToTop from '@/components/BackToTop'
 import HeroOrbit from '@/components/hero/HeroOrbit'
 import HeroTypewriter, { type TypewriterLine } from '@/components/hero/HeroTypewriter'
 import HighlightsReel from '@/components/highlights/HighlightsReel'
+import SceneBackdrop from '@/components/scene/SceneBackdrop'
 import { THEMES, artPath } from '@/lib/themes'
 
 /**
  * 首页 —— 12 张绘本封面的 3D 环形轨道 + 第二屏的滚动翻页绘本 + 第三屏的项目亮点
  *
  * 结构由组件自己渲染，这里只负责组装：
+ *   0. <SceneBackdrop /> —— 全页背景：三幕场景靠长交叉溶解连起来（清晨天光 /
+ *      午后草坡 / 夜晚台灯下的书桌），随滚动换幕
  *   1. 首屏：把 THEMES 映射成轨道条目，封面走 public/art/{key}.webp（静帧）
  *   2. 中心文案 —— 三层
  *   3. 第二屏 —— <StorybookFlip />：一本一页页翻开的书，中途能替孩子做一次选择
@@ -59,7 +62,20 @@ const HERO_LINES: TypewriterLine[] = [
 export default function HomePage() {
   return (
     <>
-      <HeroOrbit items={orbitItems} className="home-hero">
+      {/* --------------------------------------------------------------------
+          页面级背景：三幕场景 + 长交叉溶解（方案三）。
+
+          放在最前 = 层序在最下（三节各自是 z-index 0 或 1，见各节 CSS）；
+          背景层自己写 z-index: 0，靠 DOM 顺序让三节压在它上面。
+          它是满屏 fixed，所以首屏必须把底色让出来 —— 见下面 HeroOrbit 的
+          backdrop="none" 与 hero-orbit.css 那一条。
+
+          权重怎么算、为什么按"幕中心距视口中心"算而不是按总进度，
+          见 components/scene/SceneBackdrop.tsx 文件头三条。
+          -------------------------------------------------------------------- */}
+      <SceneBackdrop />
+
+      <HeroOrbit items={orbitItems} className="home-hero" backdrop="none">
         <h1 className="hero__brand">
           <span className="hero__brand-cn">
             {/* 装饰性图形：旁边的「小主角」三个字已经是名字，屏读不该再念第二遍，所以 alt 留空。

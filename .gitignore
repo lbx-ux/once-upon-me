@@ -13,12 +13,11 @@
 # testing
 /coverage
 
-# next.js
-/.next/
-# 并行会话的第二个 dev server（NEXT_DIST_DIR，见 next.config.ts）
-/.next-preview/
-# 有并行 dev server 在跑时，验证生产构建用：NEXT_DIST_DIR=.next-build pnpm build
-/.next-build/
+# next.js 的构建产物。刻意写成 `/.next*/` 而不是逐个列 `.next` / `.next-preview`：
+# 每条并行会话一个产物目录（NEXT_DIST_DIR，见 next.config.ts），逐个列的话
+# 第三条会话加一个目录就得记得回来补一行，忘了的后果是**构建产物被提交进仓库**。
+# 同一条道理在 eslint.config.mjs 的 ignores 与 .prettierignore 里已经写过一次。
+/.next*/
 /out/
 
 # production

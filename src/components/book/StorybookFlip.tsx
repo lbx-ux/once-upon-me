@@ -224,8 +224,20 @@ function leafVars(i: number): CSSProperties {
  *
  * 半页不切文件：同一张 3:2 跨页图挂两次，data-half 决定取哪一半（见 CSS §2）。
  * 平衡性靠 .book__shade —— shade = sin(θ)，平放时 0、立起来时 1。
+ *
+ * `showImage` 是跨页图什么时候挂上去的开关（见组件里 spreadsReady 那段）：
+ * 关着的时候这一面露的是 `.book__face` 自己的纸色（#fbf7ef）—— 一张还没印上
+ * 画的纸，不是"坏了"。封面与封底不走这个开关：封面是第二屏的第一拍，等不起。
  * ------------------------------------------------------------------------- */
-function Face({ face, side }: { face: PageFace; side: 'front' | 'back' }) {
+function Face({
+  face,
+  side,
+  showImage,
+}: {
+  face: PageFace
+  side: 'front' | 'back'
+  showImage: boolean
+}) {
   const cls = `book__face book__face--${side}`
   const shade = <i className="book__shade" aria-hidden="true" />
 
@@ -255,7 +267,11 @@ function Face({ face, side }: { face: PageFace; side: 'front' | 'back' }) {
   }
 
   return (
-    <div className={cls} data-half={face.half} style={{ backgroundImage: `url(${face.image})` }}>
+    <div
+      className={cls}
+      data-half={face.half}
+      style={showImage ? { backgroundImage: `url(${face.image})` } : undefined}
+    >
       {face.text ? (
         <div className="book__text">
           {face.text.map((line) => (
@@ -295,6 +311,39 @@ export default function StorybookFlip() {
   const [reduced, setReduced] = useState(false)
   /** 选择点窗口开没开。用布尔而不是透明度：关着的时候那几个按钮不能是可点的 */
   const [choiceOn, setChoiceOn] = useState(false)
+
+  /**
+   * 跨页图挂上去没有。**这是首屏的带宽账**，不是省事：
+   * 四条跨页（去重后 4 个文件、约 370KB）原来在预渲染 HTML 里就以
+   * `background-image` 出现 —— 它不受 `loading="lazy"` 管，元素一进布局就请求，
+   * 于是在**初次加载的关键窗口里和首屏那 12 张封面（1.16MB）抢带宽**，
+   * 而要看它们得先滚过一屏半。关着的时候露的是纸色（见 Face 上面那段）。
+   *
+   * 两个开闸条件，各管一种走法：
+   *   · 第一次滚动 —— 正常模式下要看到跨页必须滚，滚动就是"他要看了"；
+   *   · 页码离开封面 —— 静止模式（reduced-motion）不滚动，靠按钮翻页，
+   *     那种走法下 `page > 0` 就是同一个信号。
+   * 刷新落在页面中间（scrollY > 0）直接算就绪，不然会先看见一页纸。
+   *
+   * ★ 这不算"内容缺失"：跨页图只能靠 JS 翻出来（翻页本身是 JS 驱动的），
+   *   禁 JS 的人看到的是合着的书 + 封面，那两张图本来就取不到。
+   *   正文另有 `.storybook__live` 那段 aria-live 在，不依赖这些图。
+   */
+  const [spreadsReady, setSpreadsReady] = useState(false)
+
+  useEffect(() => {
+    if (window.scrollY > 0) {
+      setSpreadsReady(true)
+      return
+    }
+    const onScroll = () => setSpreadsReady(true)
+    window.addEventListener('scroll', onScroll, { passive: true, once: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+
+  useEffect(() => {
+    if (page > 0) setSpreadsReady(true)
+  }, [page])
 
   const qRef = useRef(0)
   const startedRef = useRef(false)
@@ -479,8 +528,8 @@ export default function StorybookFlip() {
           <div className="book" aria-hidden="true">
             {leaves.map((leaf, i) => (
               <div key={i} className="book__leaf" style={leafVars(i)}>
-                <Face face={leaf.front} side="front" />
-                <Face face={leaf.back} side="back" />
+                <Face face={leaf.front} side="front" showImage={spreadsReady} />
+                <Face face={leaf.back} side="back" showImage={spreadsReady} />
               </div>
             ))}
           </div>
@@ -504,7 +553,10 @@ export default function StorybookFlip() {
           className="storybook__static"
           data-cover={page === 0 || undefined}
           aria-hidden="true"
-          style={{ backgroundImage: `url(${pageImage(branch, page)})` }}
+          style={{
+            backgroundImage:
+              spreadsReady || page === 0 ? `url(${pageImage(branch, page)})` : undefined,
+          }}
         />
         <p className="storybook__live" aria-live="polite">
           {text.join(' ')}
