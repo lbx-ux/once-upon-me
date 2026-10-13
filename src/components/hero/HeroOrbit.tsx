@@ -59,6 +59,18 @@ type Props = {
    * 轨道要做的是让位，不是继续表演。
    */
   scrollTurns?: number
+  /**
+   * 首屏自己的底色。
+   *
+   * `'bg'`（默认）＝ `.hero` 铺一层不透明的 `--bg`，首屏是"压在灰桌面上"的独立一层。
+   * `'none'`＝ 底色让出去，露出页面级的背景层（<SceneBackdrop /> 那三幕场景）。
+   *
+   * ★ 为什么做成属性而不是让页面从外面覆盖：`.hero` 同时带着 `isolation: isolate`
+   *   与满屏 sticky，从外面写 `.hero { background: transparent }` 要跨过组件边界去点
+   *   别人的类名，改一次组件就得跟着改一次页面。属性选择器落在 hero-orbit.css 里，
+   *   这件事就只有这一处知道。
+   */
+  backdrop?: 'bg' | 'none'
   className?: string
 }
 
@@ -102,6 +114,7 @@ export function HeroOrbit({
   children,
   angularSpeed = 0.000072,
   scrollTurns = 0.34,
+  backdrop = 'bg',
   className,
 }: Props) {
   const heroRef = useRef<HTMLDivElement>(null)
@@ -406,7 +419,7 @@ export function HeroOrbit({
 
   return (
     <section className={`hero-experience ${className ?? ''}`}>
-      <div className="hero" ref={heroRef} data-hero-experience>
+      <div className="hero" ref={heroRef} data-hero-experience data-backdrop={backdrop}>
         {/* 点阵网格 */}
         <div className="hero__ambient" aria-hidden="true" />
         <div className="hero__glow" aria-hidden="true" />

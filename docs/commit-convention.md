@@ -62,6 +62,7 @@
 
 - 破坏性改动：`BREAKING CHANGE: <说明>`
 - 关联 issue：`Refs: #123`
+
 ---
 
 ## 二、提交前必过

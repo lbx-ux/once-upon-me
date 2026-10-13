@@ -1,0 +1,34 @@
+# 行尾统一为 LF。这条不是洁癖，是修一个实测的假故障：
+#
+# Windows 上 core.autocrlf=true 会把工作区检出成 CRLF，而 .prettierrc.json 要求
+# endOfLine: "lf" —— 于是 `pnpm format:check` 在本机整仓报错。
+# 实测（2026-10-13）：
+#   · `git ls-files --eol`：63 个文件 `i/lf w/crlf`，60 个 `i/lf w/lf`，27 个 `i/-text`
+#     （26 个 .webp + 1 个 .ico）。**索引里没有任何文件是 CRLF**，
+#     所以下面的 `eol=lf` 对已入库文件是零改动，不是一次重写。
+#   · 把 58 个报错文件逐个 CRLF→LF 后重跑 prettier：**57 个变成干净**，
+#     只有 docs/commit-convention.md 还剩一处真差异（一个空行）。也就是说
+#     这条闸门此前失败的原因几乎全是行尾，不是格式化。
+#
+# `eol` 属性优先于 core.autocrlf，对新克隆也生效——所以这里是从仓库层面修的，
+# 不依赖任何人记得去改本机的 core.autocrlf。
+# 副作用一个：克隆后工作区不再有 CRLF，某些老 Windows 工具（记事本、
+# 少数批处理）读纯 LF 的 .bat/.cmd 会出问题。本仓库没有 .bat/.cmd，不受影响。
+
+* text=auto eol=lf
+
+# 真正的二进制单独声明：不依赖 text=auto 的自动探测（探测会随版本变化，
+# 而这里写死的后果比探测错更可控）。
+*.webp binary
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.avif binary
+*.mp4 binary
+*.webm binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary

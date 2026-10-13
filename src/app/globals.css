@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+@import '../components/scene/scene-backdrop.css';
 @import '../components/hero/hero-orbit.css';
 @import '../components/hero/hero-typewriter.css';
 @import '../components/book/storybook-flip.css';
