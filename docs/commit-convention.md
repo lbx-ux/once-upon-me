@@ -62,8 +62,6 @@
 
 - 破坏性改动：`BREAKING CHANGE: <说明>`
 - 关联 issue：`Refs: #123`
-- AI 协作署名（可选，本项目默认带）：`Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>`
-
 ---
 
 ## 二、提交前必过
