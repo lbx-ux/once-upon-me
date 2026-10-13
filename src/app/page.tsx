@@ -1,16 +1,20 @@
 import StorybookFlip from '@/components/book/StorybookFlip'
+import BackToTop from '@/components/BackToTop'
 import HeroOrbit from '@/components/hero/HeroOrbit'
 import HeroTypewriter, { type TypewriterLine } from '@/components/hero/HeroTypewriter'
+import HighlightsReel from '@/components/highlights/HighlightsReel'
 import { THEMES, artPath, videoPath } from '@/lib/themes'
 
 /**
- * 首页 —— 12 张绘本封面的 3D 环形轨道 + 第二屏的滚动翻页绘本
+ * 首页 —— 12 张绘本封面的 3D 环形轨道 + 第二屏的滚动翻页绘本 + 第三屏的项目亮点
  *
  * 结构由组件自己渲染，这里只负责组装：
  *   1. 首屏：把 THEMES 映射成轨道条目，动效走 public/video/{key}.mp4，
  *      封面走 public/art/{key}.webp（Figma 里的 poster —— 视频没加载出来时显示的那张）
  *   2. 中心文案 —— 三层
  *   3. 第二屏 —— <StorybookFlip />：一本一页页翻开的书，中途能替孩子做一次选择
+ *   4. 第三屏 —— <HighlightsReel />：五条亮点，回答"凭什么做得出来"
+ *   5. <BackToTop /> —— 全页浮层，滚过首屏才出现的"回到页首"
  *
  * ★ 三层的顺序是有约束的：hero-orbit.css 用 `.hero__copy > *:nth-child(2..4)`
  *   写死了入场动画的延迟与离场错峰（§5）。层级或顺序一变，动画节奏就得跟着改。
@@ -98,6 +102,22 @@ export default function HomePage() {
           区间、叠入量与叶模型见 components/book/storybook-flip.css 顶部。
           -------------------------------------------------------------------- */}
       <StorybookFlip />
+
+      {/* --------------------------------------------------------------------
+          第三屏：项目亮点。
+
+          前两屏让人**相信这个产品存在**（12 个不同的孩子 + 一本翻开的书），
+          这一屏回答的是下一个问题：凭什么做得出来。五条，全部来自 README
+          已定稿的设计与周计划 —— 卡上只讲机制与做法，排期留在 README 的进度表里。
+
+          视觉上是首屏那个环的压平版（同样的近大远小、后排糊、陶土色只点两处）。
+          GSAP 只用在这一屏，前两屏的滚动驱动仍是 useScrollDriver，理由见
+          components/highlights/HighlightsReel.tsx 文件头与 README §五。
+          -------------------------------------------------------------------- */}
+      <HighlightsReel />
+
+      {/* 全页浮层：三屏加起来约 6 屏滚动量，滚到底想回头看第一屏不该一路往上拽。 */}
+      <BackToTop />
     </>
   )
 }

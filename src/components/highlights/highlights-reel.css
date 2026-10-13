@@ -1,0 +1,501 @@
+/* ============================================================================
+ * highlights-reel.css —— 第三屏：项目亮点
+ *
+ * 与 HighlightsReel.tsx 同名同目录，在 app/globals.css 里 @import
+ * （与 hero / book 那两套一致，理由见 README 的分层约定）。
+ * 类名统一 `hl-` 前缀，冲突风险低。
+ *
+ * ---------------------------------------------------------------------------
+ * ★ 谁写 transform（改之前先读组件头注释那张表）
+ *
+ *   .hl__slot  只归 CSS：轮播位移 + 深度。GSAP 一次也不碰它。
+ *   .hl__card  只归 GSAP：rotationX/rotationY、进场 y/autoAlpha、--hl-gx/gy。
+ *              CSS 在这里只写**独立属性** translate / scale —— 它们与 transform
+ *              复合，所以 hover 抬起和进场动画不会抢同一个属性。
+ *   .hl__art   只归 GSAP：x / y（反向视差）。
+ *
+ *   混写的后果不是崩，是一种"糊但有延迟"的怪抖 —— 从代码里看不出来，只能眼看。
+ * ========================================================================== */
+
+/* ----------------------------------------------------------------------------
+ * 1. 这一节
+ *
+ * 刻意**不做**第二屏那条 -62vh 的负 margin 叠入。那条是首屏交接段三个数咬出来的
+ * 特例（README §五），不是通用手法。这一节用正常文档流接上，
+ * 靠同一套点阵与同一张纸色延续，不靠重叠。
+ * -------------------------------------------------------------------------- */
+.hl {
+  position: relative;
+  z-index: 1; /* 与前两屏同一套层序：后写的节压在前面那节上面 */
+  min-width: 1280px; /* 与 .home-hero / .storybook 同一套桌面兜底 */
+  overflow: hidden; /* 最外那两张卡是故意被切掉的（见 §3），不切就会顶出横向滚动条 */
+  padding: clamp(96px, 13vh, 168px) 0 clamp(72px, 10vh, 132px);
+}
+
+/* 点阵。与首屏 .hero__ambient、第二屏 .storybook__ambient **同一套**
+   --dot / --dot-size / background-position —— 三屏用的是同一张"桌面"，
+   换的只是遮罩：这一节不满屏，所以挂在节上，并在正中挖一个让卡片呼吸的洞。 */
+.hl__ambient {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(circle, var(--dot) 0.75px, transparent 0.95px);
+  background-position: 2px 2px;
+  background-size: var(--dot-size) var(--dot-size);
+  opacity: 0.42; /* 三屏里最低的一档：这一节的主体是字，不是纹理 */
+  -webkit-mask-image: radial-gradient(
+    78% 62% at 50% 46%,
+    transparent 0 28%,
+    rgba(0, 0, 0, 0.5) 58%,
+    #000 84%
+  );
+  mask-image: radial-gradient(
+    78% 62% at 50% 46%,
+    transparent 0 28%,
+    rgba(0, 0, 0, 0.5) 58%,
+    #000 84%
+  );
+}
+
+/* ----------------------------------------------------------------------------
+ * 2. 标题区
+ *
+ * 左对齐，与首屏居中的三层文案**故意不同**：首屏是"一句话"，要居中才有分量；
+ * 这一节是"一份清单"，左对齐才读得下去。
+ * -------------------------------------------------------------------------- */
+.hl__head {
+  position: relative;
+  max-width: min(1240px, 88vw);
+  margin: 0 auto clamp(48px, 7vh, 88px);
+}
+
+.hl__eyebrow {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0 0 18px;
+  color: var(--ink-muted);
+  font-size: 12px;
+  letter-spacing: 0.16em;
+}
+.hl__eyebrow-cn {
+  padding-left: 22px;
+  /* 陶土色在这一节只出现两处：这条、当前卡的编号。
+     （原来还有"当前卡的点"与"暂停态的暂停键"两处 —— 底下那排控件整条删了。） */
+  border-left: 2px solid var(--accent);
+  line-height: 1.1;
+}
+.hl__eyebrow-en {
+  color: rgba(23, 23, 29, 0.34);
+  letter-spacing: 0.2em;
+}
+
+/* 大标题走衬线。原来是无衬线 700 + 负字距 —— 那个组合在落地页上被用滥了，
+   读起来像"产品发布"，不像"一本书的扉页"。衬线 + 正字距 + 松一点的行高，
+   加上文案本身改了口吻，才是这一屏该有的语气。
+   卡片自己的小标题仍然用无衬线：大标题衬线 + 正文无衬线是一套编辑排版，
+   两处都衬线就糊成一片，分不出主次。 */
+.hl__title {
+  max-width: 20em;
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-serif);
+  font-size: clamp(32px, 3.4vw, 54px);
+  font-weight: 600;
+  line-height: 1.34;
+  letter-spacing: 0.012em;
+  text-wrap: balance;
+}
+
+.hl__sub {
+  max-width: 46em;
+  margin: 18px 0 0;
+  color: var(--ink-muted);
+  font-size: clamp(14px, 1.06vw, 17px);
+  line-height: 1.78;
+}
+
+/* ----------------------------------------------------------------------------
+ * 3. 轮播
+ *
+ * 绝对定位 + 一张 CSS 变量算出的位移：当前卡在正中，左右各两张依次缩小、变糊、
+ * 变淡 —— 与首屏那个环的景深语言同一套，所以两屏读起来是一件事的两种形状。
+ * -------------------------------------------------------------------------- */
+.hl__viewport {
+  position: relative;
+  /* 卡片抬起 6px + 透视，会略微越出这一层；overflow 挂在 .hl 上而不是这里，
+     这样卡片的投影能自然落在"桌面"上，而不是被切出一条直线。 */
+  --hl-card-w: min(560px, 36vw);
+  /* 相邻卡位的横向步长 = **一整张卡宽 + 一条缝**。
+     这是轮播图的读法：卡片并排、当前卡居中、邻居被视口边缘切掉一半。
+     原来是 `卡宽 × 0.66`（邻居压在当前卡身上，coverflow 的读法）——
+     实测结果是五张卡糊成一道向右的瀑布，当前卡被挤在左边，那不是轮播图。 */
+  --hl-step: calc(var(--hl-card-w) + clamp(28px, 3.2vw, 56px));
+  /* 五张卡是绝对定位的，不贡献高度，所以这里必须给一个。
+     1.24 = 插画 0.5625（16:9 相对卡宽）+ 文字区约 0.62 + 一点余量。
+     跟着 --hl-card-w 走，窗口变窄时整节一起缩，不会出现"卡比框高"。 */
+  height: max(620px, calc(var(--hl-card-w) * 1.24));
+}
+
+.hl__reel {
+  position: relative;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hl__slot {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: var(--hl-card-w);
+  /* 居中靠独立属性 translate，transform 整条留给轮播位移 ——
+     两件事分在两个属性上，将来谁要加东西都不用抢。 */
+  translate: -50% -50%;
+  transform: translateX(calc(var(--hl-offset) * var(--hl-step)));
+  /* ★ perspective 挂在**每张卡自己的父层**上，不挂在 .hl__reel 上。
+     slot 带 opacity < 1 与 filter: blur()，这两样都会压平 3D 子元素；
+     挂在 reel 上就会得到"邻居卡不倾斜"这个查不出原因的 bug。
+     首屏那条 preserve-3d + opacity 的坑（README §五）是同一件事的另一面。 */
+  perspective: 1100px;
+  /* 0.56s：自动播的间隔是 2000ms（组件里的 AUTOPLAY_MS），
+     位移补间要在这之前**明显停住**，不然看起来是"一直在滑"而不是"一条一条地翻"。
+     0.56 + 1.44 停 —— 停的那 1.44 秒才是给人看的时间。
+     原来那对 0.68s / 6.5s 是另一种节奏，两个数是咬在一起的，改一个要想着另一个。 */
+  transition:
+    transform 0.56s cubic-bezier(0.22, 1, 0.36, 1),
+    scale 0.56s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.46s ease,
+    filter 0.46s ease;
+}
+
+/* 三档深度。**轮播图的读法**：邻居要看得清，只是退后一步 ——
+   所以 scale 只收到 0.93、blur 一档干脆为零。
+   原来那组（0.845 / blur 1.6 / opacity 0.6）照抄了首屏环上的景深，
+   放在并排轮播里就成了"五张卡糊成一道瀑布"：邻居糊到读不出，
+   视线只剩正中那张，左右两边等于没有。首屏那套景深属于环，不属于排。 */
+.hl__slot[data-depth='0'] {
+  scale: 1;
+  opacity: 1;
+}
+.hl__slot[data-depth='1'] {
+  scale: 0.93;
+  opacity: 0.82;
+}
+.hl__slot[data-depth='2'] {
+  scale: 0.86;
+  opacity: 0.42;
+  filter: blur(1.5px);
+  pointer-events: none; /* 只剩一条边的那两张不该抢点击 */
+}
+/* 环形轮播绕回去时**跨界那一张**：关掉它这一拍的补间（组件里的 `jumped`）。
+   补间是连续插值，从最左到最右**必然经过正中间** —— 不关就会看到一张模糊的卡
+   横穿整个轮播，像页面坏了。关掉之后它是"在最左消失、在最右出现"，
+   而那两处都在舞台半径外、被 `.hl` 的 overflow 裁着，看不见，也就没有跳的痕迹。
+   下一轮它不再跨界，属性自然消失、过渡自动恢复 —— 不需要 JS 记得清掉它。 */
+.hl__slot[data-jump] {
+  transition: none;
+}
+/* ----------------------------------------------------------------------------
+ * 4. 卡片
+ *
+ * 一张**纸**，不是一个网页控件：纸色底、1px 极淡描边、紧而深的投影
+ * （--card-shadow 的取向就是"图片浮在页面上"，这里连正文区一起浮起来）。
+ * -------------------------------------------------------------------------- */
+.hl__card {
+  /* 光斑位置：**0–1 的比例**，不是像素（GSAP 按裸数字序列化自定义属性）。
+     所以下面用 calc(… * 100%)，卡片多宽多高都不用管。 */
+  --hl-gx: 0.5;
+  --hl-gy: 0.5;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid rgba(23, 23, 29, 0.07);
+  border-radius: var(--card-radius);
+  background: #fffdf7; /* 与 .book__face 的纸色同一张，不是纯白 */
+  box-shadow:
+    0 2px 6px rgba(19, 19, 28, 0.06),
+    0 18px 44px rgba(19, 19, 28, 0.14);
+  /* 抬起走 translate（独立属性，与 GSAP 的 transform 复合）。
+     0.34s 比倾斜的 0.4s 短：起手要利落，落下不拖。 */
+  transition:
+    translate 0.34s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.34s ease;
+  will-change: transform;
+}
+.hl__card[data-hover] {
+  translate: 0 -6px; /* = tilt.ts 的 TILT.liftPx，两处一起改 */
+  border-color: rgba(23, 23, 29, 0.11);
+  box-shadow:
+    0 4px 10px rgba(19, 19, 28, 0.08),
+    0 26px 56px rgba(19, 19, 28, 0.2);
+}
+/* 当前卡与"点它会翻过去"的那两张才有手型；更外面的已经 pointer-events: none 了 */
+.hl__slot[data-depth='1'] .hl__card {
+  cursor: pointer;
+}
+
+/* 非当前卡压一层极淡的白。
+   ★ 这一层**不是**为了好看：邻居卡在 scale 0.845 之后仍然很抢眼，
+     视线会先落在它们身上而不是正中那张。压一点，主次就回来了。
+   z-index 1 在插画之上、光斑（2）之下 —— 邻居卡也该被照到，只是淡一些。 */
+.hl__slot:not([data-current]) .hl__card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: rgba(247, 247, 248, 0.1);
+}
+
+/* ----------------------------------------------------------------------------
+ * 5. 插画区
+ *
+ * 五张图都已落盘（`public/highlights/{key}.webp`，提示词与验收见
+ * docs/highlights-art-prompts.md）。`.hl__art` 那层 CSS 暖纸底纹**保留当退路**：
+ * 图挂了、或网络掐了的时候，这里露出的仍然是一张按主题色画的水彩纸 + 一枚编号，
+ * 读起来是"这一条有一张图"，而不是"这里坏了"。
+ * -------------------------------------------------------------------------- */
+.hl__frame {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  background: #efe7db;
+}
+
+/* 兜底底纹那一层。GSAP 的视差写在这一层（它比框四周各多出 6%，
+   所以往反方向位移 10px 也不会露出底）。 */
+.hl__art {
+  position: absolute;
+  inset: -6%;
+  background-color: #f2e9dc;
+  /* 兜底底纹：两团极淡的暖色 + 一层纸纹。刻意不像"图片加载失败"。
+     读起来是"这一条有一张图"，而不是"这里坏了"。 */
+  background-image:
+    radial-gradient(58% 72% at 22% 26%, rgba(255, 250, 240, 0.9), rgba(255, 250, 240, 0) 68%),
+    radial-gradient(64% 78% at 78% 74%, rgba(var(--accent-rgb), 0.13), rgba(255, 250, 240, 0) 70%),
+    repeating-linear-gradient(122deg, rgba(23, 23, 29, 0.022) 0 2px, rgba(23, 23, 29, 0) 2px 5px);
+  background-repeat: no-repeat;
+}
+/* 成图压在底纹之上。**图没进来时这里什么都不画** —— `alt=""` 的 `<img>` 在 404 时
+   不留碎图标，所以露出来的就是下面那张暖纸。图一到就是一张不透明的画正好盖住它。
+   与选择点那两枚小云图（`book-choice__art`）同一个机制，同一个理由。 */
+.hl__art-img {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+/* 图没到位时的那枚大字。用 ::before + attr() 而不是多塞一个元素：
+   它纯粹是这张兜底纸的一部分，不进 DOM 也就不进任何辅助技术。
+   z-index 0 在成图（1）之下 —— 图一到就自然被盖住，不需要 JS 知道加载成功这件事。 */
+.hl__art::before {
+  content: attr(data-n);
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: grid;
+  place-items: center;
+  padding-bottom: 8%; /* 视觉中心比几何中心略高，正字放在中间会显得往下坠 */
+  color: rgba(23, 23, 29, 0.055);
+  font-family: Georgia, 'Songti SC', 'Noto Serif SC', serif;
+  /* 上限压在框高之内：这枚字是兜底，不该被 overflow 切掉半截 —— 切了就又变回"像坏了"。 */
+  font-size: clamp(88px, 12vw, 148px);
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+/* 编号压在右下角。图到位之后它变成图的角标，读起来仍然对（与 meta 行同数）。 */
+.hl__art-num {
+  position: absolute;
+  right: 14px;
+  bottom: 10px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: rgba(255, 253, 247, 0.72);
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 跟着光标的暖光。挂在**卡片**上而不是插画上：它要跟着光标扫过整张纸，
+   而且 --hl-gx/gy 本来就是相对卡片矩形算出来的。
+   ★ mix-blend-mode: plus-lighter 而不是 screen：screen 在浅底上几乎看不见，
+     plus-lighter 给的是"被光照到"那种加亮。在 #fffdf7 的纸面上它近乎无操作，
+     落在水彩上才亮起来 —— 正是想要的：光照在画上，不是照在字上。
+     透明度压到 .34 是因为再高会把插画高光区推出纯白，变成一个小洞。 */
+.hl__glow {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(
+    240px 240px at calc(var(--hl-gx) * 100%) calc(var(--hl-gy) * 100%),
+    rgba(255, 246, 230, 0.34) 0%,
+    rgba(255, 246, 230, 0.11) 42%,
+    rgba(255, 246, 230, 0) 70%
+  );
+  mix-blend-mode: plus-lighter;
+  transition: opacity 0.34s ease;
+}
+.hl__card[data-hover] .hl__glow {
+  opacity: 1;
+}
+
+/* ----------------------------------------------------------------------------
+ * 6. 文字区
+ * -------------------------------------------------------------------------- */
+.hl__body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 22px clamp(22px, 2.1vw, 30px) 24px;
+}
+
+.hl__meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+}
+.hl__index {
+  color: var(--ink);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+/* 陶土色第二处：只有当前卡的编号上色 */
+.hl__slot[data-current] .hl__index {
+  color: var(--accent);
+}
+.hl__index-of {
+  color: rgba(23, 23, 29, 0.32);
+  font-weight: 400;
+}
+.hl__cat {
+  color: var(--ink-muted);
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+.hl__tag {
+  color: rgba(23, 23, 29, 0.38);
+  letter-spacing: 0.14em;
+}
+
+.hl__card-title {
+  margin: 2px 0 0;
+  color: var(--ink);
+  font-size: clamp(19px, 1.55vw, 25px);
+  font-weight: 700;
+  line-height: 1.38;
+  letter-spacing: -0.012em;
+  text-wrap: pretty;
+}
+
+.hl__card-text {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: clamp(13px, 0.95vw, 15px);
+  line-height: 1.82;
+  /* 五行封顶。第 3 条那段最长（独读/共读两种形态要说清楚），
+     不封顶的话五张卡的高度会差出一截，轮播就歪了。 */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+  overflow: hidden;
+  line-clamp: 5;
+}
+
+.hl__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 4px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(23, 23, 29, 0.07);
+}
+.hl__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.hl__chip {
+  padding: 3px 10px;
+  border: 1px solid rgba(23, 23, 29, 0.12);
+  border-radius: 999px;
+  color: var(--ink-muted);
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+/* 底部右边那一行进度标注（`.hl__status`：W4 · 11/04–11/10、↑ 上面那本书演示过）
+   连同它的样式一起删了 —— 首页不该带排期。周次与"哪条演示过"在 README §一 的进度表。 */
+
+/* ----------------------------------------------------------------------------
+ * 7. 控制条 —— 已经整条删掉
+ *
+ * 这里原来有 `.hl__dock` / `.hl__arrow` / `.hl__dots` / `.hl__dot` / `.hl__pause`
+ * 五组规则（一排圆点 + 两个箭头 + 一颗暂停键）。按产品要求删掉之后，
+ * 翻这一屏只剩三条路：点左右邻居卡、Tab 进本节用 ← →、以及自动播本身。
+ *
+ * ★ 删掉的代价记在组件文件头与 README §五：那颗暂停键是 WCAG 2.2.2 要的控件，
+ *   不装饰。现在"停"依赖"焦点一进本节就停"，所以 `.hl__viewport` 的 tab 落点
+ *   与下面这个焦点环**是这件事唯一的可见证据**，别顺手删了。
+ * -------------------------------------------------------------------------- */
+.hl__viewport:focus-visible {
+  /* 环画在视口内沿（inset 负值会去贴被 overflow 切掉的那圈，看不见）。
+     不写 outline-offset: 0 的话默认是 0，但 Chrome 的环宽 1px 太细，撑不起
+     "现在轮到你用方向键了"这句话。 */
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: var(--card-radius);
+}
+
+/* ----------------------------------------------------------------------------
+ * 8. 屏读专用
+ * -------------------------------------------------------------------------- */
+.hl__sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+/* ----------------------------------------------------------------------------
+ * 9. 静止模式（prefers-reduced-motion）
+ *
+ * 组件那边：不建进场 tween、不接指针监听（所以卡片永远不会倾斜）。
+ * 这边：把 CSS 自己那几处过渡也停掉 —— 抬起与轮播位移仍然是"动"，
+ * 只是它们不该在减少动效下还带一段补间。轮播本身照常可用，那是功能不是动效。
+ * -------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .hl__slot,
+  .hl__card,
+  .hl__glow {
+    transition: none;
+  }
+  .hl__card[data-hover] {
+    translate: none;
+  }
+  .hl__glow {
+    display: none;
+  }
+}

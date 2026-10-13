@@ -6,7 +6,7 @@
  * 它回答的是"我还要滑多久"。3.4 屏的滚动里这是**必须**给的东西：
  * 没有它，人不知道后面还有内容，也不知道自己走到哪了。
  *
- * 顺带是这一节唯一的可点导航（除了键盘 ← →）：点了就滚到对应那一页。
+ * 顺带是可点导航之一（另两处是键盘 ← → 与选择点的两个按钮）：点了就滚到对应那一页。
  * 静止模式（reduced-motion）下它整块隐藏，翻页交给静态视图自带的 ‹ ›。
  */
 
@@ -34,6 +34,15 @@ export default function BookSpine({ labels, active, onJump }: BookSpineProps) {
         />
       ))}
       <span className="book-spine__count">{active === 0 ? '封面' : `${active} / ${last}`}</span>
+      {/* 当前这一面的短名。填右侧那条留白，顺便回答"我读到哪儿了"——
+          3.4 屏的滚动里本来就需要这句话，而光靠五根刻度说不出来。
+          ★ 对辅助技术隐藏：上面那个 aria-current="step" 的刻度已经把同一句
+            话念过了（「第 2 页：上去了」），再念一遍就是重复。
+          ★ key 换掉是为了让元素重新挂载、入场动画重播一次 —— 名字换了而
+            文字不跳一下，人不容易注意到刻度旁的说明变了。 */}
+      <span className="book-spine__now" key={labels[active]} aria-hidden="true">
+        {labels[active] ?? ''}
+      </span>
     </nav>
   )
 }

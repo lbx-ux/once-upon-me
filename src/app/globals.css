@@ -2,6 +2,8 @@
 @import '../components/hero/hero-orbit.css';
 @import '../components/hero/hero-typewriter.css';
 @import '../components/book/storybook-flip.css';
+@import '../components/highlights/highlights-reel.css';
+@import '../components/back-to-top.css';
 
 /* ============================================================================
  * 设计令牌 —— 全站唯一来源
@@ -52,6 +54,13 @@
      中文字体包体积大、构建期需联网，收益不抵风险。 */
   --font-sans:
     'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, -apple-system, sans-serif;
+  /* 衬线那一档。第三屏的大标题用它：黑体（--font-sans）在大字号上读起来像
+     产品发布页，衬线才像"书的封面上那句话"。拉丁走 Georgia，中文走宋体，
+     与 .hl__art::before 那枚兜底大字同一套。
+     ★ hero-orbit.css 的 `.hero__brand .serif` 与 highlights-reel.css 的兜底数字
+       各有一份手写 serif 栈，那是**已交付的**、且拉丁优先的取法，
+       不在这里顺手改（同「迁移是单独一个提交」那条纪律）。 */
+  --font-serif: Georgia, 'Songti SC', 'STSong', 'Noto Serif SC', 'SimSun', serif;
 }
 
 /* ============================================================================
