@@ -162,9 +162,10 @@ export function describeProviders(env: Env): Record<string, string> {
   return {
     text: one('文本', 'LLM_API_KEY', 'LLM_MODEL', 'LLM_BASE_URL'),
     image: one('图像', 'IMAGE_API_KEY', 'IMAGE_MODEL', 'IMAGE_BASE_URL'),
+    // 视觉比对缺 key 时回落到 LLM 的 key，所以这里报"用哪个 key"而不是"VISION_API_KEY 空不空"
     vision: env['VISION_MODEL']?.trim()
-      ? one('视觉比对', 'VISION_API_KEY', 'VISION_MODEL')
-      : `视觉比对: 复用 ${env['LLM_MODEL']?.trim() || '未配置'}（VISION_MODEL 未单列）`,
+      ? `视觉比对: ${env['VISION_MODEL'].trim()} @ ${(env['VISION_BASE_URL'] || env['LLM_BASE_URL'] || DEFAULT_BASE).replace(/^https?:\/\//, '')}（key 取 ${env['VISION_API_KEY']?.trim() ? 'VISION_API_KEY' : 'LLM_API_KEY'}）`
+      : '视觉比对: 未配置 VISION_MODEL —— 引擎会走「未核对」路径，不会假装通过',
     voice: '未配置（W4 落地）',
   }
 }
