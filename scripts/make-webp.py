@@ -5,18 +5,20 @@ import —— 源图是外部下载物，不当作可信代码）：
 
     python -I scripts/make-webp.py <源图目录> <产出目录> [--preset <名>] [选项]
 
-三个预设（不传 --preset 就是 hero，行为与加预设之前一字不差）：
+四个预设（不传 --preset 就是 hero，行为与加预设之前一字不差）：
 
   hero         16:9  1280  ≤130KB   首屏 12 张卡片封面
   book-spread   3:2  1536  ≤220KB   绘本内页跨页（书脊在正中，主体必须避开中缝）
   book-cover    3:4  1024  ≤150KB   绘本竖版封面
+  book-icon     1:1    192   ≤15KB   选择点那两枚小云图（显示只有 56px）
 
-例：首屏 12 张、演示书的一个封面与四个跨页——
+例：首屏 12 张、演示书的一个封面与四个跨页、两枚选择点图标——
 
     python -I scripts/make-webp.py <源图目录> public/art
     python -I scripts/make-webp.py <源图目录> public/book \\
         --preset book-cover --match 'rocket*' --name cover
     python -I scripts/make-webp.py <源图目录> public/book --preset book-spread --match 'spread-*'
+    python -I scripts/make-webp.py <源图目录> public/book --preset book-icon --match 'choice-*'
 
 选项：
   --match <glob>   只处理文件名匹配该 glob 的源图（不区分大小写）
@@ -50,6 +52,7 @@ PRESETS = {
     'hero':        (16, 9, 1280, 130 * 1024),
     'book-spread': (3, 2, 1536, 220 * 1024),
     'book-cover':  (3, 4, 1024, 150 * 1024),
+    'book-icon':   (1, 1, 192, 15 * 1024),
 }
 DEFAULT_PRESET = 'hero'
 QUALITIES = [78, 74, 70, 66, 62, 58, 54]

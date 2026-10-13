@@ -68,28 +68,45 @@ const SPREADS: readonly Spread[] = [
  * 选择点的两个分支 —— **左 = 恐龙云，右 = 帆船云**，
  * 与 P1 封面、P4 那张图里的左右完全一致（出图文档 §一定死的）。
  * 顺序不许改：孩子看图、看按钮，方向反了就成两件事。
+ *
+ * `icon` 是那朵云自己的小插画（出图文档 P7）—— 按钮里放的就是画面里那一朵，
+ * 不是系统 emoji。`emoji` 退成**兜底**：图还没进来时按下去看得见东西，
+ * 而不是一个空框（见 StorybookFlip 的 .book-choice__icon）。
  */
-export const BRANCHES: Record<BranchKey, Spread & { emoji: string; label: string }> = {
-  a: {
-    image: '/book/spread-4a.webp',
-    caption: '爬上恐龙的背',
-    emoji: '🦕',
-    label: '去恐龙云上',
-    text: ['小宇爬上了恐龙云的脖子。', '每一步都软软的，像踩在晒过太阳的被子卷上。'],
-  },
-  b: {
-    image: '/book/spread-4b.webp',
-    caption: '坐进船帆里',
-    emoji: '⛵',
-    label: '去帆船云里',
-    text: ['小宇坐进帆船云里，两条腿晃啊晃。', '小狗趴在他腿上睡着了。云慢慢地飘，风轻轻地吹。'],
-  },
-}
+export const BRANCHES: Record<BranchKey, Spread & { emoji: string; label: string; icon: string }> =
+  {
+    a: {
+      image: '/book/spread-4a.webp',
+      caption: '爬上恐龙的背',
+      emoji: '🦕',
+      label: '去恐龙云上',
+      icon: '/book/choice-dino.webp',
+      text: ['小宇爬上了恐龙云的脖子。', '每一步都软软的，像踩在晒过太阳的被子卷上。'],
+    },
+    b: {
+      image: '/book/spread-4b.webp',
+      caption: '坐进船帆里',
+      emoji: '⛵',
+      label: '去帆船云里',
+      icon: '/book/choice-ship.webp',
+      text: ['小宇坐进帆船云里，两条腿晃啊晃。', '小狗趴在他腿上睡着了。云慢慢地飘，风轻轻地吹。'],
+    },
+  }
 
 export const BRANCH_ORDER: readonly BranchKey[] = ['a', 'b'] as const
 
+/** 选择点上那句话。孩子不识字，所以按钮走「大图标 + 一句短问」双通道 */
+export const BOOK_CHOICE_ASK = '你想去哪一朵？'
+
 /** 默认分支：不选也能一路滚到底，走 A */
 export const DEFAULT_BRANCH: BranchKey = 'a'
+
+/**
+ * 选择点落在**第 3 个跨页**上（也就是最后一个固定跨页）——
+ * 它后面的第 4 个跨页由分支决定。
+ * ★ 这个数必须与 StorybookFlip 的 P_Q 停顿段和选择窗口对齐，那里有开发期自检。
+ */
+export const CHOICE_PAGE = SPREADS.length
 
 export const SPREAD_COUNT = SPREADS.length + 1 // 4 个跨页
 export const LEAF_COUNT = SPREAD_COUNT + 1 // 5 叶

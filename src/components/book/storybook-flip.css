@@ -35,8 +35,10 @@
  *   与 2:1 时代 1440×900 下的 20.4vh 几乎重合 —— **首屏那三个数因此一个都不用动**。
  *   不夹这道，3:2 的书会比 2:1 高 1/3，顶边抬高、书会提前露头，还会顶到收尾 CTA。
  *
- * ★ 刻意不设背景：设了就得到一条横切轨道与书的硬边。整节透明，
- *   首屏在交接段自己沉到 .08，两者是互相融进去的。
+ * ★ 这一节自己**不设背景**：挂在 section 上就会得到一条横切轨道与书的硬边。
+ *   整节透明，首屏在交接段自己沉到 .08，两者是互相融进去的。
+ *   四周的纹理与暖光挂在 **stage** 上（见 §1.5）—— stage 是 sticky 满屏的，
+ *   所以那两层永远正好铺满视口，不存在"边"。
  * -------------------------------------------------------------------------- */
 .storybook {
   position: relative;
@@ -55,6 +57,94 @@
   display: grid;
   place-items: center;
   /* 不写 overflow: hidden —— 叶带透视转起来会略微越出书框，裁掉会切边 */
+}
+
+/* ----------------------------------------------------------------------------
+ * 1.5 四周：点阵 + 一团落在桌面上的光
+ *
+ * 首屏那点唯一的纹理（点阵与暖光）挂在 .hero 上，跟着首屏一起滚走了，
+ * 于是书是"贴在灰墙上"而不是"放在桌上"。这里把它续下来。
+ *
+ * ★ 两层都挂在 **stage** 而不是 section 上，这是关键的一步：
+ *   stage 是 sticky 满屏的，所以这两层永远正好铺满视口 ——
+ *     · 不会有"某条边切过画面"的硬边（§1 那条"刻意不设背景"担心的正是这个，
+ *       担心得对：挂在 section 上就会那样）；
+ *     · 点阵与首屏 .hero__ambient 用的是**同一套** --dot / --dot-size /
+ *       background-position，而那两个也都是 sticky 满屏元素上的同一组 inset，
+ *       所以两屏同时钉住时点阵逐像素重合，**不会摩尔纹**。
+ *       （挂在 section 上就一定错位：section 顶边在文档里比 hero 低 954px。）
+ *   代价：书升起的那一小段里 stage 还没钉住，点阵会短暂与首屏的错开 ——
+ *     那一刻首屏的 --hero-grid-opacity 已经掉到 .1 以下，看不出来。
+ * -------------------------------------------------------------------------- */
+
+/* 点阵。中间挖一个洞，让书坐在干净的底色上，点只出现在四周的留白里 ——
+   这正是这次要填的地方，也是首屏 .hero__glow 的同一种做法（用遮罩而不是用边框）。 */
+.storybook__ambient {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(circle, var(--dot) 0.75px, transparent 0.95px);
+  background-position: 2px 2px;
+  background-size: var(--dot-size) var(--dot-size);
+  opacity: 0.5; /* 比首屏的 .58 低一档：这里它是背景，不是主角 */
+  /* 遮罩写成一个变量，只为了一份定义两处用 —— 老 Safari 只认 -webkit- 前缀，
+     而这条渐变有五个色标，抄两遍迟早会改一处漏一处。 */
+  --dot-mask: radial-gradient(
+    62% 56% at 50% 50%,
+    transparent 0 34%,
+    rgba(0, 0, 0, 0.45) 52%,
+    #000 76%
+  );
+  -webkit-mask-image: var(--dot-mask);
+  mask-image: var(--dot-mask);
+}
+
+/* 落在桌面上的那团光：核心偏亮（像被照白），外圈一点极淡的陶土暖色。
+   ★ 透明度必须低到"看不出有个圆"才算对 —— 一旦能看见椭圆的边界就是做坏了。 */
+.storybook__light {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(52% 44% at 50% 47%, rgba(255, 251, 243, 0.9) 0%, rgba(255, 251, 243, 0) 62%),
+    radial-gradient(
+      66% 56% at 50% 50%,
+      rgba(var(--accent-rgb), 0.055) 0%,
+      rgba(var(--accent-rgb), 0) 70%
+    );
+}
+
+/* ----------------------------------------------------------------------------
+ * 1.6 被当前页染上的那一层色
+ *
+ * 三朵主色是从这一面的图里取的：`scripts/sample-tints.py` → `spreadTints.ts`
+ * （生成物，换了图要重跑，命令写在那个文件头上）。顺序是**彩度从高到低**，
+ * 所以这里可以固定读法：前两朵做有色的那两团，最后一朵（最白的那朵）做外圈底色。
+ *
+ * 五面各铺一张，靠 opacity 交叉淡入 —— 不用 color-mix、不用 Houdini 注册属性，
+ * 老一点的浏览器也只是没有这层色，不会渲染出错。
+ *
+ * ★ .18 这一档的判据是"看不出这是哪张图的颜色，但能觉出桌面跟着页面换了口气"。
+ *   再往上就会读成"背景换了张图"，那是壁纸，不是光。
+ *   0.78s 比翻页本身慢一点：要的是"颜色慢慢映到桌上"，不是"背景跟着跳一下"。
+ * -------------------------------------------------------------------------- */
+.storybook__tint {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.storybook__tint-face {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 0.78s ease;
+  background:
+    radial-gradient(56% 44% at 27% 31%, var(--t1) 0%, transparent 66%),
+    radial-gradient(50% 42% at 73% 63%, var(--t2) 0%, transparent 64%),
+    radial-gradient(86% 74% at 50% 50%, var(--t3) 0%, transparent 80%);
+}
+.storybook__tint-face[data-on] {
+  opacity: 0.18;
 }
 
 /* 两页宽的那本书：3:2。**一条跨页 = 两个 3:4 的页面**，与 3:4 的封面同比例，
@@ -243,7 +333,7 @@
 .storybook__end {
   position: absolute;
   left: 50%;
-  bottom: clamp(20px, 7vh, 84px);
+  bottom: clamp(16px, 5.5vh, 68px);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -291,7 +381,7 @@
  * 5. 右侧刻度
  *
  * 3.4 屏的滚动必须有进度指示，否则人不知道后面还有没有内容。
- * 顺带是这一节唯一的可点导航（另一处是键盘 ← →）。
+ * 顺带是可点导航之一（另两处是键盘 ← → 与选择点的两个按钮）。
  * -------------------------------------------------------------------------- */
 .book-spine {
   position: absolute;
@@ -329,9 +419,191 @@
   letter-spacing: 0.06em;
   font-variant-numeric: tabular-nums;
 }
+/* 当前跨页的短名（「上去了」）。nav 是 align-items: flex-end，所以它天然右对齐，
+   长起来只往左走，不会顶出屏幕。 */
+.book-spine__now {
+  color: var(--ink-soft);
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  animation: book-spine-in 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes book-spine-in {
+  from {
+    opacity: 0;
+    transform: translateX(7px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
 
 /* ----------------------------------------------------------------------------
- * 6. 静止模式（prefers-reduced-motion）
+ * 6. 选择点
+ *
+ * 窗口由 StorybookFlip 的 CHOICE_FROM / CHOICE_TO 决定（与 P_Q 里那段停顿对齐，
+ * 那里有开发期自检）。同样是 data-on 驱动，不用透明度变量：
+ * 淡出到一半的时候那几个按钮还 clickable，就会有一发点到看不见的东西。
+ *
+ * 与收尾 CTA（.storybook__end）共用 bottom: clamp(16px, 5.5vh, 68px) 这一条基线，
+ * 但两块在时间上不相接（选择点 p .60–.78、收尾 p ≥ .83），所以共用一个槽位
+ * 而不用打架。
+ *
+ * ★ 这条基线原来是 7vh：选择点换成"大图标 + 一句短问"之后整块高了约 20px，
+ *   7vh 会让它压到书的下沿（1280×800 下溢出 6px）。收到 5.5vh 之后还留着缝 ——
+ *   书底下还有 .book__ground 那团影子，压上去就脏了。
+ *
+ * ★ 关着的时候写的是 visibility: hidden，不只 opacity: 0 —— opacity
+ *   **不会**把东西从辅助技术里去掉，封面那一屏会照着把按钮念一遍。
+ *   visibility 也顺手挡掉点击，比只写 pointer-events 更彻底。
+ * -------------------------------------------------------------------------- */
+.book-choice {
+  position: absolute;
+  left: 50%;
+  bottom: clamp(16px, 5.5vh, 68px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 11px;
+  transform: translate(-50%, 10px);
+  text-align: center;
+  opacity: 0;
+  visibility: hidden; /* 关着的按钮不能留在辅助技术与点击里，理由见本节抬头 */
+  pointer-events: none;
+  transition:
+    opacity 0.34s ease,
+    transform 0.34s cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0s linear 0.34s;
+}
+.book-choice[data-on] {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+  pointer-events: auto;
+  transition:
+    opacity 0.34s ease,
+    transform 0.34s cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0s;
+}
+.book-choice__ask {
+  margin: 0;
+  color: var(--ink);
+  font-size: clamp(14px, 1.1vw, 18px);
+  letter-spacing: 0.02em;
+}
+.book-choice__row {
+  display: flex;
+  gap: 16px;
+}
+/* 倾斜与抬起走两个自定义属性，而不是各自重写 transform ——
+   nth-child / [aria-pressed] / :hover 三条的特异性全是 (0,2,0)，
+   谁赢只看书写顺序，迟早会打架。拆成变量之后 transform 只在基准那一条里出现。 */
+.book-choice__btn {
+  --tilt: 0deg;
+  --lift: 0px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 22px 9px 9px;
+  border: 1.5px solid rgba(23, 23, 29, 0.13);
+  border-radius: 20px;
+  background: #fbf7ef;
+  color: var(--ink-muted);
+  font: inherit;
+  font-size: clamp(13px, 1.02vw, 15px);
+  font-weight: 500;
+  cursor: pointer;
+  transform: rotate(var(--tilt)) translateY(var(--lift));
+  box-shadow:
+    0 2px 6px rgba(19, 19, 28, 0.08),
+    0 10px 22px rgba(19, 19, 28, 0.07);
+  transition:
+    transform 0.2s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    color 0.2s ease,
+    background 0.2s ease;
+}
+/* 两片纸各歪一点 —— 也和画面里"两朵云分居左右两页"的构图呼应 */
+.book-choice__btn:nth-child(1) {
+  --tilt: -1.2deg;
+}
+.book-choice__btn:nth-child(2) {
+  --tilt: 1.2deg;
+}
+.book-choice__btn[aria-pressed='true'] {
+  --lift: -1px;
+  border-color: var(--accent);
+  background: #fffdf7;
+  color: var(--ink);
+  box-shadow:
+    0 0 0 3px rgba(var(--accent-rgb), 0.18),
+    0 4px 10px rgba(19, 19, 28, 0.1),
+    0 14px 28px rgba(19, 19, 28, 0.09);
+}
+.book-choice__btn:hover {
+  --lift: -3px;
+}
+.book-choice__btn:active {
+  --lift: 0px;
+}
+/* 左上角一枚小勾。选中态**不能只靠 1px 描边** —— 那一圈在浅灰底上读不出来，
+   实测截图里选中与未选中第一眼分不出谁是谁。 */
+.book-choice__btn[aria-pressed='true']::after {
+  content: '✓';
+  position: absolute;
+  top: -7px;
+  left: -7px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1;
+  box-shadow: 0 2px 6px rgba(19, 19, 28, 0.2);
+}
+/* 大图标 + 一句短问 —— 孩子不识字，这是共读版选项的双通道（README 的论点）。
+   所以图标是主角：56px 见方，文字只是给家长看的。 */
+.book-choice__icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  flex: none;
+  overflow: hidden;
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(23, 23, 29, 0.07);
+}
+/* 图还没进来时露出 emoji；图到了就是一张不透明的水彩小画，正好把它盖住。
+   alt="" 的 <img> 在 404 时什么都不画，所以不会留一个碎图标。 */
+.book-choice__glyph {
+  font-size: 26px;
+  line-height: 1;
+}
+.book-choice__art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+/* 没选中的那一朵略微褪色 —— 让"选了哪一朵"在颜色上也有答案，不只靠描边 */
+.book-choice__btn:not([aria-pressed='true']) .book-choice__art {
+  filter: saturate(0.72) brightness(1.02);
+}
+.book-choice__label {
+  letter-spacing: 0.02em;
+}
+
+/* ----------------------------------------------------------------------------
+ * 7. 静止模式（prefers-reduced-motion）
  *
  * **两套 DOM 都渲染，靠这里的 display 切** —— 首帧就是对的，
  * 不用等 JS 读到 matchMedia 再换树（那会先闪一下动效版）。
@@ -370,6 +642,14 @@
   .storybook__book,
   .book-spine,
   .storybook__end {
+    display: none;
+  }
+  /* 两层背景与染色层也一起去掉：静止模式下 stage 不再是 sticky 满屏，
+     inset: 0 会去贴那一节 340vh 高的框，光斑会被拉成一条竖长的椭圆。
+     静止模式本来就该是最朴素的一版。 */
+  .storybook__ambient,
+  .storybook__light,
+  .storybook__tint {
     display: none;
   }
 
@@ -436,5 +716,33 @@
     font-size: 14px;
     text-align: center;
     font-variant-numeric: tabular-nums;
+  }
+
+  /* 选择点在静止模式里**回到文档流**：它本来就该是正常排版的一部分，
+     在动效模式里浮起来只是为了不挡住书。
+     ★ 只改位置，**不动 opacity / visibility / pointer-events** —— 开关还是那一套
+       （data-on），在两种模式下必须说同一件事。
+     ★ 但 transform 必须两个选择器一起写：`.book-choice[data-on]` 的特异性比
+       单类名高，只写 `.book-choice { transform: none }` 的话，
+       基准规则里的 `translate(-50%, 0)` 会赢下来，整块被推走半屏。 */
+  .book-choice,
+  .book-choice[data-on] {
+    position: static;
+    transform: none;
+    transition: none;
+  }
+  /* 静止模式下没有滚动窗口，只有翻到第 CHOICE_PAGE 面时它才在 ——
+     不在的那几页要真的不占位（display，不是 visibility） */
+  .book-choice {
+    display: none;
+    margin-top: clamp(16px, 2.4vh, 24px);
+  }
+  .book-choice[data-on] {
+    display: flex;
+  }
+  /* 纸片那 1.2° 的歪是**静止造型**，不是动效，留着；
+     但 hover 抬起的过渡要停 —— 那才是动。 */
+  .book-choice__btn {
+    transition: none;
   }
 }

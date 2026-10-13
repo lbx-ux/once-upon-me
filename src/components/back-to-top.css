@@ -1,0 +1,78 @@
+/* ============================================================================
+ * back-to-top.css —— 右下角那颗"回到页首"
+ *
+ * 与 BackToTop.tsx 同名同目录，在 app/globals.css 里 @import（与其余三套一致）。
+ * 类名 `to-top`，全站唯一，不与前几屏的 .hero__ / .book__ / .hl__ 命名空间相撞。
+ * ========================================================================== */
+
+.to-top {
+  position: fixed;
+  right: clamp(24px, 2.6vw, 44px);
+  bottom: clamp(24px, 4vh, 44px);
+  /* 三屏的 section 各自是 z-index: 1（互相叠），首屏是 0。这颗要一直浮在最上面，
+     所以给一个明显更高的档，而不是 2 —— 将来谁再加一层也看得见这里的意图。 */
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  /* 48px：过 44px 的最小可点尺寸那条线，又不大到压住卡片右下角的编号 */
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 1px solid rgba(23, 23, 29, 0.1);
+  border-radius: 999px;
+  /* 与卡片同一张纸，不是深色实心圆 —— 深色圆在浅灰底上是全页最重的一个元素，
+     会把视线从内容上抢走（理由写在组件头）。 */
+  background: rgba(255, 253, 247, 0.92);
+  color: var(--ink-soft);
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  box-shadow:
+    0 2px 6px rgba(19, 19, 28, 0.07),
+    0 10px 24px rgba(19, 19, 28, 0.12);
+  /* 默认藏起来：opacity 0 + 往下沉 10px + visibility hidden。
+     ★ visibility 不是可选的装饰 —— 只写 opacity 的话，一颗看不见的按钮
+       仍然可点、仍然会被 Tab 到、仍然会被读屏念一遍（`.book-choice` 那条同一个理由）。 */
+  opacity: 0;
+  visibility: hidden;
+  translate: 0 10px;
+  transition:
+    opacity 0.28s ease,
+    translate 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.2s ease,
+    border-color 0.2s ease,
+    visibility 0s linear 0.28s;
+}
+.to-top[data-on] {
+  opacity: 1;
+  visibility: visible;
+  translate: 0 0;
+  transition:
+    opacity 0.28s ease,
+    translate 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.2s ease,
+    border-color 0.2s ease,
+    visibility 0s;
+}
+.to-top:hover {
+  border-color: rgba(23, 23, 29, 0.22);
+  box-shadow:
+    0 4px 10px rgba(19, 19, 28, 0.09),
+    0 16px 32px rgba(19, 19, 28, 0.16);
+}
+.to-top:active {
+  translate: 0 1px;
+}
+.to-top:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+/* 减少动效下不升起、也不淡出，直接在场/不在场。
+   位移与淡出都是"动"，而这一颗本来就不是内容。 */
+@media (prefers-reduced-motion: reduce) {
+  .to-top,
+  .to-top[data-on] {
+    transition: none;
+    translate: none;
+  }
+}

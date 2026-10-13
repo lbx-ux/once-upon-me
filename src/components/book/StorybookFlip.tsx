@@ -21,23 +21,32 @@
  *
  * ---------------------------------------------------------------------------
  * 滚动映射（p → q）写在 P_Q 表里，**成对的停顿让每一页真的停得住**：
- * 翻页只占一小段，其余是"停在这一页让你读完"。改这张表要连着看
- * useScrollDriver 的 enter-exit 区间（p=0 是书顶边触到视口下沿那一刻，
- * p=0.773 之后书开始被顶出去 —— 所以最后一页的停顿要**早于** 0.773 开始）。
+ * 翻页只占一小段，其余是"停在这一页让你读完"。改这张表要连着看两件事：
+ *
+ *   1. useScrollDriver 的 enter-exit 区间（p=0 是书顶边触到视口下沿那一刻）；
+ *   2. ★ `PUSH_OUT_P` —— 书被顶出视口那一刻的 p = 0.7727。
+ *      **每一个要让人读的停顿都必须落在它之前。** 这一条以前只是注释，
+ *      表还是排到了 0.86，于是最后一页整个是在书已经离场之后才翻开的
+ *      （症状就是"最后一页展开了，书不在中间"）。现在有常量，也有开发期断言。
  *
  * 角度一律用插值后的 qDisplay，不用 qTarget：鼠标滚轮是离散格，
  * 不插值就是一顿一顿（触控板连续，看不出这个问题，只有真拿滚轮滚才会暴露）。
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import useScrollDriver from '@/lib/useScrollDriver'
+import useScrollDriver, { enterExitSpan } from '@/lib/useScrollDriver'
 import BookSpine from './BookSpine'
 import { flipState } from './flip'
+import { SPREAD_TINTS } from './spreadTints'
 import {
   BOOK_BYLINE,
+  BOOK_CHOICE_ASK,
   BOOK_CTA,
   BOOK_NOTE,
   BOOK_TITLE,
+  BRANCHES,
+  BRANCH_ORDER,
+  CHOICE_PAGE,
   COVER_IMAGE,
   DEFAULT_BRANCH,
   LEAF_COUNT,
@@ -45,8 +54,34 @@ import {
   pageImage,
   pageText,
   spineLabels,
+  type BranchKey,
   type PageFace,
 } from './demoBook'
+
+/**
+ * 书被顶出视口那一刻的 p —— **所有"要让人读"的停顿都必须排在这个数之前**。
+ *
+ * 推导（与 useScrollDriver 的 enter-exit 同一套几何）：
+ *
+ *     本节高 H、视口高 V、本节顶边在文档里位于 T
+ *     rangeTop = T − V，span = H + V                    ← enterExitSpan 未夹时的值
+ *     stage 从 y = T 起钉住，到"本节底边贴住视口底"被顶走：y = T + H − V
+ *     ⟹ p = (T + H − V − (T − V)) / (H + V) = H / (H + V)
+ *
+ * 本节 H = 340vh、V = 100vh ⟹ 340/440 = **0.7727**。vh 上下同约，V 消掉了，
+ * 所以这个数与视口高度无关；1440×900 下在浏览器里量到 0.7727，对得上。
+ *
+ * ★ 也就是说 enter-exit 这个量程**最后 23% 天生是退场**，不是"停在最后一页"。
+ *   把最后一个跨页排在 0.86，等于排在书已经往屏幕外走的路上 ——
+ *   p=1 时 stage 的顶边在 −900px，整本书在视口上方。这就是
+ *   "最后一页展开完整了，绘本却在中间偏上、还被切掉一截"的根因。
+ *
+ * ★ 这个数与 CSS 是咬死的：它由 `.storybook { height: 340vh }` 推出来。
+ *   改那一行必须同时改这里。另外它假设**本节下面还有内容**（第三屏），
+ *   所以 enterExitSpan 不会被夹到文档尽头（实测 clamped=false）；
+ *   若哪天本节又成最后一页，量程会被夹短，这个数要重新量。
+ */
+const PUSH_OUT_P = 340 / (340 + 100)
 
 /* ---------------------------------------------------------------------------
  * 滚动预算：p → 已翻过多少叶
@@ -56,31 +91,49 @@ import {
  *   p ≈ 0.29 舞台钉住（从这一刻起书不再往上走）
  *   p = 1  本节底边触到视口下沿，也就是页面滚到底
  *
+ * ★ 但**书真正开始离开屏幕比 p = 1 早得多**，见下面 P_PUSH_OUT 的推导。
+ *   这一条以前写在注释里（"最后一页的停顿要早于 0.773 开始"），
+ *   然后 P_Q 还是把最后一个跨页排到了 0.86 —— 注释没拦住表，实测也没人看：
+ *   结果就是"最后一页翻开时书不在中间"（它已经被顶上去 165px，顶边切掉）。
+ *   现在这个数变成一个常量，并且有开发期断言摁着。
+ *
+ * 现在的分段（p 值，括号里是 1440×900 下的实际像素滚动量）：
  * p 0.00–0.18  书从下面升上来（**合着**，封面这一拍要留出来）
  * p 0.18–0.32  封面翻开 —— 与"钉住"那一刻交错，"书落定，才翻第一页"
- * p 0.32–0.39  停 S1（像什么？）
- * p 0.39–0.48  翻到 S2
- * p 0.48–0.53  停 S2（上去了）
- * p 0.53–0.62  翻到 S3
- * p 0.62–0.76  停 S3 —— **选择点的窗口**（Step 5 的两个按钮挂在这一段）
- * p 0.76–0.86  翻到 S4（分支页）
- * p 0.86–1.00  停 S4 —— 正文 + 收尾 CTA
+ * p 0.32–0.37  停 S1（像什么？）
+ * p 0.37–0.43  翻到 S2
+ * p 0.43–0.465 停 S2（上去了）
+ * p 0.465–0.525 翻到 S3
+ * p 0.525–0.615 停 S3 —— **选择点的窗口**（两个按钮挂在这一段）
+ * p 0.615–0.68  翻到 S4（分支页）
+ * p 0.68–0.7727 停 S4 —— 正文 + 收尾 CTA，**全部留在钉住的那一段里**
+ * p 0.7727–1.0  书被顶出视口；这一段是"退场"，不是"给人读的一页"
  * ------------------------------------------------------------------------- */
 const P_Q: ReadonlyArray<readonly [number, number]> = [
   [0.0, 0],
   [0.18, 0],
   [0.32, 1],
-  [0.39, 1],
-  [0.48, 2],
-  [0.53, 2],
-  [0.62, 3],
-  [0.76, 3],
-  [0.86, 4],
-  [1.0, 4],
+  [0.37, 1],
+  [0.43, 2],
+  [0.465, 2],
+  [0.525, 3],
+  [0.615, 3],
+  [0.68, 4],
+  [PUSH_OUT_P, 4],
 ]
 
 /** 每帧朝目标插值的系数。比 HeroOrbit 的 0.055 快一档 —— 翻页要跟手 */
 const SMOOTHING = 0.12
+
+/**
+ * 选择点的窗口。**与 P_Q 里 p 0.525–0.615 那段停顿对齐**，前面留 .02 的余量：
+ * 按钮要比"停稳"早一点浮出来（不然人还没看见就过去了）。
+ * ★ 后面**不留**余量：收口正好压在 0.615（开始翻走那一刻）——
+ *   上一版收到 0.78，比翻走的 0.76 还晚，等于让按钮跟着书一起被翻出去。
+ *   而且 0.78 已经在 PUSH_OUT_P 之后，那一段书正在离场，按钮还亮着。
+ */
+const CHOICE_FROM = 0.505
+const CHOICE_TO = 0.615
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
 
@@ -99,6 +152,39 @@ function qFromP(p: number): number {
     }
   }
   return P_Q[P_Q.length - 1][1]
+}
+
+/* 开发期自检：选择点窗口的中点必须落在"停在第 CHOICE_PAGE 个跨页"那一段上。
+   窗口与 P_Q 是两处手写的数 —— 改了 P_Q 忘了改窗口，按钮就会挂到别的页上去，
+   而那种错要滚到半路才看得见，值得在这里摁一下。
+
+   ★ 第二条自检是这次踩出来的：P_Q 与 PUSH_OUT_P 也是两处手写的数
+     （后者由 CSS 的 340vh 推出来），排晚了不会报错、只会让最后几页
+     在书已经离场之后才翻开 —— 上一版正是这样（0.86 > 0.7727）。
+     这类"两个数各改一处"的耦合，注释挡不住，得摁着。 */
+if (process.env.NODE_ENV !== 'production') {
+  const mid = (CHOICE_FROM + CHOICE_TO) / 2
+  const at = Math.round(qFromP(mid))
+  if (at !== CHOICE_PAGE) {
+    console.error(
+      `[StorybookFlip] 选择点窗口的中点落在 q=${at}，不是第 ${CHOICE_PAGE} 个跨页 —— 请与 P_Q 对齐`,
+    )
+  }
+
+  // 每一次"翻到新的一页"都必须发生在书被顶出视口之前。
+  const late = P_Q.filter(([, q], i) => i > 0 && P_Q[i - 1][1] !== q && P_Q[i][0] > PUSH_OUT_P)
+  if (late.length) {
+    console.error(
+      `[StorybookFlip] 有 ${late.length} 次翻页排在 p=${PUSH_OUT_P.toFixed(4)}（书开始离场）之后：` +
+        late.map(([p, q]) => `p=${p} → 第 ${q} 页`).join('、') +
+        ' —— 那些页是在书往屏幕外走的路上翻开的，见 PUSH_OUT_P 的推导',
+    )
+  }
+  if (CHOICE_TO > PUSH_OUT_P) {
+    console.error(
+      `[StorybookFlip] 选择点窗口收到 p=${CHOICE_TO}，已在书离场（${PUSH_OUT_P.toFixed(4)}）之后`,
+    )
+  }
 }
 
 /**
@@ -186,17 +272,34 @@ export default function StorybookFlip() {
   const stageRef = useRef<HTMLDivElement>(null)
   const wrapRef = useRef<HTMLElement>(null)
 
-  // ★ Step 5 的选择点会把 DEFAULT_BRANCH 换成 state（默认仍走 a），其余不动
-  const leaves = useMemo(() => buildLeaves(DEFAULT_BRANCH), [])
-  const labels = useMemo(() => spineLabels(DEFAULT_BRANCH), [])
+  /** ★ 全页唯一一处用 React state 驱动图片切换的地方 —— 其余全部 DOM 直写 */
+  const [branch, setBranch] = useState<BranchKey>(DEFAULT_BRANCH)
+  const leaves = useMemo(() => buildLeaves(branch), [branch])
+  const labels = useMemo(() => spineLabels(branch), [branch])
+
+  /**
+   * 每一面（0 = 封面，1–4 = 跨页）的三朵主色，给"整个阅读器被当前页染一层色"用。
+   *
+   * 表是 `scripts/sample-tints.py` 从图里取出来的生成物，**换了图要重跑**
+   * （命令写在生成文件的头上）。按 `pageImage(branch, k)` 查，所以分支一切换
+   * （4a ↔ 4b）染的就是新那一页的颜色，不用另写映射。
+   * 查不到就是 undefined → 那一面**不染色**，而不是染一个猜出来的颜色。
+   */
+  const tints = useMemo(
+    () => Array.from({ length: LEAF_COUNT }, (_, k) => SPREAD_TINTS[pageImage(branch, k)]),
+    [branch],
+  )
 
   const [page, setPage] = useState(0)
   /** 只用来决定 ← → 是"滚动"还是"直接换页"，不参与渲染 —— 渲染那套的切换交给 CSS */
   const [reduced, setReduced] = useState(false)
+  /** 选择点窗口开没开。用布尔而不是透明度：关着的时候那几个按钮不能是可点的 */
+  const [choiceOn, setChoiceOn] = useState(false)
 
   const qRef = useRef(0)
   const startedRef = useRef(false)
   const pageRef = useRef(0)
+  const choiceRef = useRef(false)
 
   const lastPage = leaves.length - 1
 
@@ -204,6 +307,10 @@ export default function StorybookFlip() {
     range: 'enter-exit',
     // 这一段从书露头到滚出去全程都在动，别提前掉到 30fps
     fastWindow: [0.01, 0.99],
+    /* 刻意**不传** onActiveChange：它是给"循环一停就再收不到帧"的收尾用的
+       （首屏那边用它 pauseAll() 停 12 段视频）。这一节里没有长跑的媒体，
+       每一帧要写的东西都是纯量、停了就是停在原地，没有需要主动掐断的东西。
+       日后要是往这一节里加了音频/视频，记得把它接回来。 */
     onFrame: ({ progress, reduced: isReduced, setVar }) => {
       if (isReduced) {
         // 静止模式：这一节由按钮翻页，滚动不参与。顺手把插值重置，
@@ -241,6 +348,12 @@ export default function StorybookFlip() {
         pageRef.current = next
         setPage(next)
       }
+
+      const inChoice = progress > CHOICE_FROM && progress < CHOICE_TO
+      if (inChoice !== choiceRef.current) {
+        choiceRef.current = inChoice
+        setChoiceOn(inChoice)
+      }
     },
   })
 
@@ -253,9 +366,26 @@ export default function StorybookFlip() {
   }, [])
 
   /**
+   * 选择点上换的是**另一张**图（4a ↔ 4b）。到窗口打开才预取：
+   * 放进首屏会白拉 60KB；等点了再拉，翻页那一拍会看得见白。
+   */
+  useEffect(() => {
+    if (!choiceOn) return
+    const other = BRANCH_ORDER.find((k) => k !== branch)
+    if (!other) return
+    const img = new Image()
+    img.src = BRANCHES[other].image
+  }, [choiceOn, branch])
+
+  /**
    * 到第 index 面去。
    * 正常模式 = 滚到那一面的停顿段（p ↔ scrollY 是线性的，反推即可，见 useScrollDriver）；
    * 静止模式 = 直接换页。
+   *
+   * ★ 反推用的量程必须与 hook 算进度用的是**同一套算法**（enterExitSpan），
+   *   不能在这里自己加 wrap.offsetHeight + innerHeight 了事：这一节是页面最后一节，
+   *   量程要夹到文档滚得到的地方，不夹的话每一格都多滚约 30% ——
+   *   点刻度第 3 格会直接跳到第 4 页上。
    */
   const goTo = useCallback(
     (index: number) => {
@@ -268,10 +398,30 @@ export default function StorybookFlip() {
       const wrap = wrapRef.current
       if (!wrap) return
       const top = wrap.getBoundingClientRect().top + window.scrollY - window.innerHeight
-      const height = wrap.offsetHeight + window.innerHeight
-      window.scrollTo({ top: top + P_AT[i] * height, behavior: 'smooth' })
+      const span = enterExitSpan(
+        wrap.offsetHeight,
+        window.innerHeight,
+        document.documentElement.scrollHeight,
+        top,
+      )
+      window.scrollTo({ top: top + P_AT[i] * span, behavior: 'smooth' })
     },
     [lastPage, reduced],
+  )
+
+  /**
+   * 选定一朵云，并**当场替他翻过去**。
+   *
+   * 停在原地等他自己往下滚，读起来像是没生效 —— 按钮的语义是"去那一朵"，
+   * 那就该出发。这跟"不阻塞"不冲突：不点照样能一路滚到底（默认 A），
+   * 滚过头之后往回滚，窗口会再出现、按下态还在。
+   */
+  const pick = useCallback(
+    (key: BranchKey) => {
+      setBranch(key)
+      goTo(CHOICE_PAGE + 1)
+    },
+    [goTo],
   )
 
   useEffect(() => {
@@ -292,12 +442,37 @@ export default function StorybookFlip() {
     return () => window.removeEventListener('keydown', onKey)
   }, [goTo])
 
-  const text = pageText(DEFAULT_BRANCH, page)
+  const text = pageText(branch, page)
   const atEnd = page >= lastPage
+  /** 静止模式没有滚动，窗口只能由页码决定；动效模式由 onFrame 里那对边界决定 */
+  const showingChoice = reduced ? page === CHOICE_PAGE : choiceOn
 
   return (
     <section className="storybook" ref={wrapRef} aria-label={`滚动翻页绘本《${BOOK_TITLE}》`}>
       <div className="storybook__stage" ref={stageRef}>
+        {/* 四周的点阵与那团"落在桌面上的光"。两层都挂在 stage 而不是这一节上，
+            所以永远正好铺满视口、不会有条边切过画面 —— 推导见
+            storybook-flip.css §1.5。纯装饰，对辅助技术整块隐藏。 */}
+        <div className="storybook__ambient" aria-hidden="true" />
+        <div className="storybook__light" aria-hidden="true" />
+
+        {/* 被当前页染上的那一层色（CSS §1.6）。五面各一张铺底，靠 opacity 交叉淡入，
+            所以翻页时背景是"换色"而不是"跳色"。
+            挂在 stage 上与点阵、光斑同一层理由：sticky 满屏，永远正好铺满视口。
+            纯装饰，整块对辅助技术隐藏。 */}
+        <div className="storybook__tint" aria-hidden="true">
+          {tints.map((t, k) =>
+            t ? (
+              <i
+                key={k}
+                className="storybook__tint-face"
+                data-on={page === k || undefined}
+                style={{ '--t1': t[0], '--t2': t[1], '--t3': t[2] } as CSSProperties}
+              />
+            ) : null,
+          )}
+        </div>
+
         <div className="storybook__book">
           {/* 5 片 3D 叶对辅助技术是一团噪音（十个面里一半还是背朝外的），
               整块 aria-hidden，内容由下面那段 aria-live 的正文替代。 */}
@@ -329,11 +504,12 @@ export default function StorybookFlip() {
           className="storybook__static"
           data-cover={page === 0 || undefined}
           aria-hidden="true"
-          style={{ backgroundImage: `url(${pageImage(DEFAULT_BRANCH, page)})` }}
+          style={{ backgroundImage: `url(${pageImage(branch, page)})` }}
         />
         <p className="storybook__live" aria-live="polite">
           {text.join(' ')}
         </p>
+
         <div className="storybook__pager">
           <button
             type="button"
@@ -347,6 +523,56 @@ export default function StorybookFlip() {
           <button type="button" onClick={() => goTo(page + 1)} disabled={atEnd} aria-label="下一页">
             ›
           </button>
+        </div>
+
+        {/* ------------------------------------------------------------------
+            选择点。**不阻塞滚动** —— 不点也能一路滚到底，默认走分支 A。
+            阻塞式（不选就不让走）会把人困在原地，评审尤其容易以为页面坏了。
+            但**点了就当场翻过去**（见 pick）：不阻塞说的是"不逼你选"，
+            不是"选了也没反应"。
+
+            两个按钮的左右方位必须与 P4 那张图、P1 封面严格一致：
+            左 = 🦕 恐龙云，右 = ⛵ 帆船云。方向反了，孩子看图、看按钮会读成两件事。
+            顺序就是 BRANCH_ORDER，不许改。
+            ------------------------------------------------------------------ */}
+        <div
+          className="book-choice"
+          data-on={showingChoice || undefined}
+          role="group"
+          aria-label={BOOK_CHOICE_ASK}
+        >
+          <p className="book-choice__ask">{BOOK_CHOICE_ASK}</p>
+          <div className="book-choice__row">
+            {BRANCH_ORDER.map((key) => {
+              const b = BRANCHES[key]
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  className="book-choice__btn"
+                  aria-pressed={branch === key}
+                  onClick={() => pick(key)}
+                >
+                  <span className="book-choice__icon">
+                    {/* 图标是**那朵云自己的小插画**（出图文档 P7），不是系统 emoji ——
+                        emoji 是扁平高饱和的 clip-art，与水彩是两套画法，而且和画面里
+                        那两朵云只有语义对应、没有视觉对应。
+                        glyph 是兜底：图还没进来时按得见的是一块有东西的纸片，
+                        而不是一个空框；图一到就是一张不透明的小画，正好盖住它。 */}
+                    <span className="book-choice__glyph" aria-hidden="true">
+                      {b.emoji}
+                    </span>
+                    {/* 刻意**不**加 loading="lazy"：两张图一共 2.6KB，省不下什么，
+                        而懒加载会让它们拖到面板快出现时才取 —— 选择点只有 18% 的
+                        滚动窗口，慢一点就是一帧空框。宁可白拿 2.6KB。 */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img className="book-choice__art" src={b.icon} alt="" />
+                  </span>
+                  <span className="book-choice__label">{b.label}</span>
+                </button>
+              )
+            })}
+          </div>
         </div>
       </div>
     </section>

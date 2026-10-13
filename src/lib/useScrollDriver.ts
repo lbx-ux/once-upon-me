@@ -84,6 +84,28 @@ export type ScrollDriverOptions = {
 
 const clamp = (v: number, lo = 0, hi = 1) => Math.min(hi, Math.max(lo, v))
 
+/**
+ * enter-exit 区间的**真实量程**（滚动像素数）。
+ *
+ * ★ 单独导出是为了让「跳页」和「算进度」用同一套算法：这一节是页面最后一节时，
+ *   量程要夹到文档实际滚得到的地方。两处各写一遍的话，刻度跳页会按未夹的量程
+ *   反推位置，结果**每一格都多滚 30%**（点第 3 格会跳到第 4 页上去）。
+ *
+ * @param wrapHeight      撑高那一节的高度
+ * @param viewportHeight  window.innerHeight
+ * @param docScrollHeight document.documentElement.scrollHeight
+ * @param rangeTop        区间起点（已经减掉一个视口高的那个）
+ */
+export function enterExitSpan(
+  wrapHeight: number,
+  viewportHeight: number,
+  docScrollHeight: number,
+  rangeTop: number,
+): number {
+  const maxScroll = Math.max(0, docScrollHeight - viewportHeight)
+  return Math.max(1, Math.min(wrapHeight + viewportHeight, maxScroll - rangeTop))
+}
+
 export function useScrollDriver<T extends HTMLElement>(
   stageRef: RefObject<T | null>,
   options: ScrollDriverOptions,
@@ -135,13 +157,16 @@ export function useScrollDriver<T extends HTMLElement>(
       if (range === 'enter-exit') {
         // 顶边进视口下沿 → 整节滚出视口顶
         rangeTop -= window.innerHeight
-        const span = wrap.offsetHeight + window.innerHeight
         // ★ 但**页面最后一节滚不出视口顶** —— 文档到"它底边触到视口下沿"就结束了。
         //   不夹这一下，最后 100vh 是一段永远走不到的量程：进度到 0.77 就顶死，
         //   末尾那一页只分到一百多像素的停留，收尾等于没有。
-        //   夹到文档真实可达的滚动量上；本节不是最后一节时这一夹不生效。
-        const maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight)
-        rangeHeight = Math.max(1, Math.min(span, maxScroll - rangeTop))
+        //   跳页要反推同一个量程，所以这套算法在 enterExitSpan 里，只此一份。
+        rangeHeight = enterExitSpan(
+          wrap.offsetHeight,
+          window.innerHeight,
+          document.documentElement.scrollHeight,
+          rangeTop,
+        )
       } else {
         rangeHeight = Math.max(
           1,
