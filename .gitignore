@@ -15,6 +15,10 @@
 
 # next.js
 /.next/
+# 并行会话的第二个 dev server（NEXT_DIST_DIR，见 next.config.ts）
+/.next-preview/
+# 有并行 dev server 在跑时，验证生产构建用：NEXT_DIST_DIR=.next-build pnpm build
+/.next-build/
 /out/
 
 # production

@@ -1,6 +1,10 @@
 # 构建产物与依赖
 node_modules
-.next
+# 写成 `.next*` 而不是 `.next`：并行会话按 NEXT_DIST_DIR 把产物写到
+# `.next-preview/` 或 `.next-build/`，而 `.next` 这条**匹配不到它们**——
+# 后果与 README §三里 ESLint 那条是同一个：`format:check` 去检查 90 个打包产物，
+# 一整片 warn，把真问题的信号淹掉。`.next*/` 三个目录一起盖住。
+.next*
 out
 build
 
