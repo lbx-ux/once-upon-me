@@ -11,6 +11,22 @@
  *    `URL → 字节`，接口上不存在"只存链接"这条路。
  * 3. **超时不重试**（§10 第 8 条）。同步接口超时是"不知道有没有扣费"，
  *    重试可能翻倍。这里直接抛错，把决定权交给引擎（它会发一条 error 事件）。
+ * 4. **参考图没有入口，带进来就报错，不许静默丢掉**。★ 这是实测结论，不是猜测：
+ *    七个候选字段名（`image` / `image_url` / `reference_image` / `reference_images` /
+ *    `images` / `input_image` / `content[]`）在 `wan2.7-image` 与 `qwen-image-2.0` 上
+ *    **全部**被同一个错误挡回：`HTTP 400 · BAD_REQUEST · 请求包含未知字段`。
+ *    探针脚本 `scripts/probe-image-reference.mts`（送假值探字段名，一次都不扣费——
+ *    因为这个接口**未知字段必拒**，所以字段名可以零成本枚举）。
+ *
+ *    所以 ADR-0007 那条"用参考图锁脸"的链路，**在这一家上是空的**：
+ *    跨页一致性目前只能靠 `promptFragmentOf(card)` 那段文字锚点。
+ *    曾经这里做成可配置（`referenceField`），代价是"开了开关但字段名没填对"时
+ *    参考图被悄悄丢掉、页面什么都看不出来——那比报错贵得多，
+ *    症状是整本书画完才发现不像，而那时钱已经花完了。
+ *
+ *    ★ 未核实的一件事：**平台是否另有图生图 / 图像编辑接口**。
+ *    本文件说的只是"`/images/generations` 这个接口没有参考图字段"，
+ *    不等于"这家做不了图生图"。换供应商是另一回事（GPT-Image-2 已证支持参考图）。
  *
  * ⚠️ 这个接口在官方文档里**一个字都没提**（模型.md §0），字段可能变动，
  *    所以取字段一律走 `http.ts` 的递归查找，不硬编码 `data[0].url`。
@@ -40,14 +56,15 @@ const RATIO_OF_SIZE: Record<string, string> = {
 }
 
 export type TokenrhythmImageOptions = {
-  /** 支持参考图的实测结论落地处；未确认前保持 false */
-  supportsReference?: boolean
   /**
-   * 参考图字段名。**待实测**：官方文档没有图像接口，字段是逆向出来的，
-   * 所以这里做成可配置，横评脚本换字段名不必改代码。
-   * 一旦测出来，就把结论回填到本文件顶部并把这个开关删掉——留着它是临时状态。
+   * 支持参考图与否。**实测结论是 false**，理由见文件头第 4 条。
+   *
+   * 这个开关留着只为换供应商时少改一处：填 `1` 而这家仍不支持，
+   * `generate()` 会在带参考图时**直接报错**，不会把参考图悄悄丢掉。
+   * 曾经这里还配一个 `referenceField` 让你填字段名——删了，
+   * 因为"字段名没填对"的表现是静默降级，而不是失败。
    */
-  referenceField?: string
+  supportsReference?: boolean
   /** 一口价 0.20 元/张（实测，与尺寸无关）。回传缺 cost_cny 时用这个兜底记账 */
   unitCostCny?: number
   extra?: Record<string, unknown>
@@ -85,11 +102,21 @@ export function createTokenrhythmImage(
         size: req.size,
         ...(opts.extra ?? {}),
       }
-      let referenceApplied = false
-      if (req.referenceDataUrl && opts.referenceField) {
-        payload[opts.referenceField] = [req.referenceDataUrl]
-        referenceApplied = true
+      // ★ 带参考图进来就**当场报错**，不走"那就不带参考图画一张"。
+      //   被忽略的参考图会让整本书"看着像已经在锁脸了"——那是比报错贵得多的失败：
+      //   症状要到 20 页画完、家长说"这不像我孩子"时才浮出来，而那时钱已经花完了。
+      //   实测依据见文件头第 4 条（七个字段名 × 两个模型全部 400「请求包含未知字段」）。
+      if (req.referenceDataUrl) {
+        throw new EngineError(
+          'provider-call-failed',
+          `${modelId} 所在的图像接口没有参考图字段（实测：任何未知字段都会 ` +
+            `400「请求包含未知字段」，七个候选字段名无一例外，见本文件头第 4 条）。` +
+            `本次请求带了参考图，拒绝降级成"不带参考图继续画"——` +
+            `跨页一致性目前只能靠 prompt 里的角色锚点段。` +
+            `要真用参考图，得换一家支持图生图的供应商（GPT-Image-2 已证支持）`,
+        )
       }
+      const referenceApplied = false
 
       const body = await requestJson(deps, {
         method: 'POST',

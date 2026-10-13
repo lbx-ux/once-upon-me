@@ -113,9 +113,11 @@ export async function createProviders(input: RegistryInput): Promise<ProviderBun
     },
     requireModel(env, 'IMAGE_MODEL'),
     {
-      // 参考图能力**实测确认之前一直是 false**。翻它的时机见 docs/tech-selection.md §7.2
+      // 参考图能力**在 tokenrhythm 这条图像接口上是实测的"没有"**（7 个候选字段名
+      // 全被 400「请求包含未知字段」挡回，见 tokenrhythm-image.ts 文件头第 4 条）。
+      // 这个开关留着是为了换供应商时只动一行；填 1 而这家仍不支持，
+      // 适配器会**直接报错**，不会把参考图悄悄丢掉——丢掉的参考图比报错贵得多。
       supportsReference: env['IMAGE_SUPPORTS_REFERENCE'] === '1',
-      referenceField: env['IMAGE_REF_FIELD'] || undefined,
       unitCostCny: numberOf(env, 'IMAGE_UNIT_COST_CNY') ?? 0.2,
     },
   )
