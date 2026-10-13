@@ -42,6 +42,11 @@ export type PlanOptions = {
   form: BookForm
   /** 含首次在内的最大次数。默认 3：两次带反馈的重试足够暴露"这家不会出 JSON" */
   maxAttempts?: number
+  /**
+   * 覆盖生成器的 token 预算。**通常不传**——留着它是给"同一家模型换个档"用的，
+   * 常规路径上预算由适配器按模型决定。
+   */
+  maxTokens?: number
   emit: (payload: EngineEventPayload) => void
 }
 
@@ -59,7 +64,11 @@ export async function planStory(input: StoryPlanInput, opts: PlanOptions): Promi
       user: attempt === 1 ? baseUser : withFeedback(baseUser, failures),
       jsonSchema: planJsonSchema(),
       temperature: 0.8,
-      maxTokens: 4096,
+      // ★ 这里**不给** maxTokens：预算随模型走，不随阶段走。
+      //   写死在规划阶段的那版是 4096，而实测思考模型会把这个数整条花在思考链上、
+      //   正文一个字都不写（见 openai-text.ts 的 DEFAULT_TEXT_MAX_TOKENS）。
+      //   谁最清楚该给多少？适配器——它知道自己在跟哪个模型说话。
+      maxTokens: opts.maxTokens,
     })
 
     const draft = parseWith(planDraftCodec, response.text)

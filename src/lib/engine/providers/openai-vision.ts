@@ -59,7 +59,13 @@ export function createOpenAiVision(deps: HttpDeps, modelId: string): VisionCompa
           max_tokens: 400,
         },
         signal: budget?.signal,
-        timeoutMs: budget?.timeoutMs ?? 90_000,
+        // ★ 缺省 300s，不是 90s。这个调用一次要送**两张 1440×1440 的 data URL**
+        //   （约 7 MB base64），90s 实测不够：live 跑书时 kimi-k2.6 做比对，
+        //   多页直接回 504 或 fetch failed。而超时的代价是"这一页没核对"，
+        //   它会让 r_redraw（§12.2 产出物 4）算不出来——所以宁等勿弃。
+        //   同时**要认 deps.timeoutMs**：原来这里把它整个忽略了，
+        //   于是 .env 里配多少都没用，配了也是白配。
+        timeoutMs: budget?.timeoutMs ?? deps.timeoutMs ?? 300_000,
       })
 
       const text = extractContent(body)

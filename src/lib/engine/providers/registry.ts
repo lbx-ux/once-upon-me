@@ -39,6 +39,40 @@ export type RegistryInput = {
 
 const DEFAULT_BASE = 'https://tokenrhythm.studio/v1'
 
+/**
+ * 文本适配器的选项，**从 env 派生**。
+ *
+ * ★ 这个函数被导出去，是为了让横评脚本用**同一份**选项建适配器。
+ *   上一版横评自己 `createOpenAiText(deps, model, {jsonMode})`，于是它测的
+ *   是"横评以为的生产配置"而不是生产配置——maxTokens、思考开关、超时三项全不一样。
+ *   横评表的价值全押在"跑的就是要上线的那个配置"上，所以这份构造只留一处。
+ */
+export function textOptionsOf(env: Env): {
+  jsonMode: 'none' | 'object' | 'schema'
+  defaultMaxTokens?: number
+  extra?: Record<string, unknown>
+} {
+  const thinking = (env['LLM_THINKING'] ?? 'off').trim()
+  if (thinking !== 'on' && thinking !== 'off') {
+    throw new EngineError(
+      'provider-not-configured',
+      `LLM_THINKING 只接受 on / off，当前是「${thinking}」`,
+    )
+  }
+  return {
+    jsonMode: jsonModeOf(env, 'LLM_JSON_MODE'),
+    defaultMaxTokens: numberOf(env, 'LLM_MAX_TOKENS'),
+    // ★ 缺省**关**思考，这是实测决定的，不是偏好：
+    //   思考模型会把 max_tokens 整条花在思考链上，正文一个字都不写
+    //   （实测：预算 4096 → 正文 0 字符、思考 9072 字符、finish_reason=length）。
+    //   开着它出厂的默认配置就是坏的；想开就 LLM_THINKING=on 并且把
+    //   LLM_MAX_TOKENS 提到 16000（实测 5373–7417 tokens 才写完一张故事表）。
+    //   例外：glm-5.3-flash **不允许**关思考（HTTP 400 REASONING_REQUIRED），
+    //   选到它只能 on + 16000，见 docs/tech-selection.md §9.1.1。
+    extra: thinking === 'on' ? undefined : { enable_thinking: false },
+  }
+}
+
 export async function createProviders(input: RegistryInput): Promise<ProviderBundle> {
   const { env, mode } = input
   const store =
@@ -68,7 +102,7 @@ export async function createProviders(input: RegistryInput): Promise<ProviderBun
       timeoutMs: numberOf(env, 'LLM_TIMEOUT_MS'),
     },
     requireModel(env, 'LLM_MODEL'),
-    { jsonMode: jsonModeOf(env, 'LLM_JSON_MODE') },
+    textOptionsOf(env),
   )
 
   const image = createTokenrhythmImage(
@@ -94,6 +128,10 @@ export async function createProviders(input: RegistryInput): Promise<ProviderBun
           {
             baseUrl: env['VISION_BASE_URL'] || env['LLM_BASE_URL'] || DEFAULT_BASE,
             apiKey: visionKey,
+            // 与文本同一条道理：视觉比对的缺省超时要按**它自己的载荷**定（两张
+            // 1440² 的图），不是按一句话定。缺省由适配器给（300s），这里只让
+            // .env 能压过去
+            timeoutMs: numberOf(env, 'VISION_TIMEOUT_MS'),
           },
           visionModel,
         )
@@ -160,7 +198,12 @@ export function describeProviders(env: Env): Record<string, string> {
     return `${label}: ${env[model]?.trim() || '缺模型名'} @ ${(env[base ?? '']?.trim() || DEFAULT_BASE).replace(/^https?:\/\//, '')}`
   }
   return {
-    text: one('文本', 'LLM_API_KEY', 'LLM_MODEL', 'LLM_BASE_URL'),
+    // 文本这一行**必须带上思考开关与预算**：它们是"实际生效的配置"的一部分，
+    // 而且默认值与平台默认值**相反**（我们默认关思考）。看不见就等于没配
+    text:
+      one('文本', 'LLM_API_KEY', 'LLM_MODEL', 'LLM_BASE_URL') +
+      `（思考 ${(env['LLM_THINKING'] ?? 'off').trim() === 'on' ? '开' : '关'}，` +
+      `预算 ${env['LLM_MAX_TOKENS']?.trim() || '4096（缺省）'}）`,
     image: one('图像', 'IMAGE_API_KEY', 'IMAGE_MODEL', 'IMAGE_BASE_URL'),
     // 视觉比对缺 key 时回落到 LLM 的 key，所以这里报"用哪个 key"而不是"VISION_API_KEY 空不空"
     vision: env['VISION_MODEL']?.trim()
