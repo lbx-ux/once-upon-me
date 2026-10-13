@@ -183,6 +183,9 @@ export async function runBook(request: BookRequest, deps: RunDeps): Promise<Book
     form: plan.tree.form,
     tree: plan.tree,
     illustrations,
+    // 硬失败页要跟着书走，不能只闪一下事件流——这就是 illustrateAll 注释里
+    // 说的"书要标'这一页缺'"
+    errors,
     // 配音在 W1 是空的。留空数组而不是留一个假的：见 CLAUDE.md「没有的东西直说没有」
     narrations: [] as Narration[],
     createdAt: startedAt,

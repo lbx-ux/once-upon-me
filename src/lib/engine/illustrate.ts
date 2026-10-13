@@ -142,11 +142,39 @@ export async function illustrateNode(
     }
 
     const pageDataUrl = toDataUrl(response.bytes, response.mime)
-    const compared = await opts.vision.compare({
-      referenceDataUrl: opts.referenceDataUrl,
-      pageDataUrl,
-      checklist: checklistOf(opts.card),
-    })
+    // ★ 比对**调用本身**失败（504 / 网络错 / 超时）必须与"比对给不出分"走同一条路。
+    //   这里原来的写法是直接 await，异常会冒到 illustrateAll 的 catch——于是这一页
+    //   连同**已经画完、已经付过钱的图**一起从书里消失：
+    //
+    //   实测（`node scripts/engine-run.mts --mode=live --pages=5`，2026-10-13）：
+    //   5 页全部出图（磁盘上 8 张 PNG，含重画），但比对模型在 3 页上回 504/网络错，
+    //   书里只剩 2 页，汇总行还写着"2/5 页有图"——那是假的，5/5 都有图。
+    //
+    //   这正是文件头第 1 条说的那种情况：**裁判没到场，不是选手没跑**。
+    //   没到场就标"未核对"（降级 B 的入口，见第 1 条），图留着，书是完整的。
+    let compared: Awaited<ReturnType<VisionComparator['compare']>>
+    try {
+      compared = await opts.vision.compare({
+        referenceDataUrl: opts.referenceDataUrl,
+        pageDataUrl,
+        checklist: checklistOf(opts.card),
+      })
+    } catch (err) {
+      lastConsistency = unjudgeable(
+        node.pageNo,
+        attempt,
+        threshold,
+        `比对调用没跑成，这一页没有核对过：${asEngineError(err).message}`,
+      )
+      opts.emit({
+        kind: 'consistency',
+        stage: 'checking',
+        pageNo: node.pageNo,
+        attempt,
+        ...shape(lastConsistency),
+      })
+      break
+    }
 
     const score = compared.score
     const verdict: ConsistencyResult['verdict'] =

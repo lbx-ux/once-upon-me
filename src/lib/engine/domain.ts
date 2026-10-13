@@ -266,6 +266,18 @@ export type Narration = {
 }
 
 /** 一本书 = 一堆资产 + 一份清单。★ 它是资产，不是一次调用（ADR-0003） */
+/**
+ * 一页的硬失败：这一页**没有图**（出图调用抛错、用尽重画后仍无资产…）。
+ *
+ * ★ 它与"未核对"是两件事，**不许并成一个数**：
+ *   - 有图 + 未核对 → `Illustration.consistency.verdict === 'unavailable'`
+ *     （比对没配或没跑成；降级 B 的入口，图是好的）
+ *   - 没有图 → 这个类型
+ *   实测踩过一次：比对调用 504 时异常冒出去，把**已经画完、已经付过钱的图**
+ *   一起从书里丢掉，汇总行还写着"2/5 页有图"。见 `illustrate.ts` 里的那段注释。
+ */
+export type PageFailure = { pageNo: number; message: string }
+
 export type Book = {
   bookId: string
   cardId: string
@@ -273,6 +285,12 @@ export type Book = {
   form: BookForm
   tree: StoryTree
   illustrations: readonly Illustration[]
+  /**
+   * 硬失败页。`illustrateAll` 的注释早就写了"书要标'这一页缺'"，
+   * 但这个字段一直到 2026-10-13 才补上——在那之前这些失败只在事件流里闪一下，
+   * 书本身看不出来（`summary.json` 里也没有）。
+   */
+  errors: readonly PageFailure[]
   narrations: readonly Narration[]
   createdAt: number
   /** 端到端统计：#14「记录真实耗时与成本」的数据源，跑一次就有一份 */
