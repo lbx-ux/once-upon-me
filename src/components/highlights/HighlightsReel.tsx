@@ -13,6 +13,7 @@
  *
  * | 层 | 主人 | 管什么 |
  * | --- | --- | --- |
+ * | `.hl__reel` | **CSS** | 拖拽位移（独立属性 `translate`，只吃 `--hl-drag`） |
  * | `.hl__slot` | **CSS** | 轮播位移 + 深度（scale/opacity/blur/z） |
  * | `.hl__card` | **GSAP** | 倾斜（rotationX/Y）与进场淡入（autoAlpha） |
  * | `.hl__card` 的抬起 | **CSS `translate`** | 独立属性，与 transform 复合，不抢笔 |
@@ -44,7 +45,8 @@
  * 上一屏整屏都在用滚轮翻页（340vh）。到这一屏偷偷改滚轮语义，是最恶劣的一种坏。
  *
  * 自动轮播原先写过一条"不做"，后来按产品要求改成"一直走"，代价是**必须**配中断条件，
- * 见下面 `playing` 那三个输入。底部那排圆点 + 箭头 + 暂停键**已经整条删掉**（画面太碎），
+ * 见下面 `playing` 那四个输入（指针在本节内 / 键盘焦点在本节内 / 标签页在后台 /
+ * 正被拖着）。底部那排圆点 + 箭头 + 暂停键**已经整条删掉**（画面太碎），
  * 于是"停一下"这件事只剩三种给力的做法：
  *
  *   1. 指针一进这一节就停（鼠标用户）；
@@ -78,7 +80,7 @@ import gsap from 'gsap'
    这条是实测撞出来的：删掉这行之后 typecheck 与 lint 全绿，页面第三屏整节白屏。 */
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 
-import { reelDepth, reelJumped, reelState, wrapActive } from '@/lib/reel'
+import { dragSteps, reelDepth, reelJumped, reelState, wrapActive } from '@/lib/reel'
 import { normalizePointer, tiltFromPointer } from '@/lib/tilt'
 import { HIGHLIGHTS, artPath } from './highlights'
 
@@ -102,6 +104,12 @@ const ART_DURATION = TILT_DURATION + 0.12
  * 而不是间隔 —— 否则卡片永远在滑，读起来就是"一直在飞"。
  */
 const AUTOPLAY_MS = 2000
+/**
+ * 超过这个像素数才算"在拖"，否则算一次点击。
+ * 6px 是浏览器自己判定拖拽的常用量级：再小就会把一次正常点击读成拖动，
+ * 手抖一下邻居卡就不翻了 —— 那是更差的体验。
+ */
+const DRAG_SLOP_PX = 6
 
 type CardCtl = {
   rotX: gsap.QuickToFunc
@@ -123,6 +131,9 @@ export function HighlightsReel() {
   const [hovered, setHovered] = useState(false)
   const [focused, setFocused] = useState(false)
   const [behindTab, setBehindTab] = useState(false)
+  /** 正在被拖着。只为"拖的时候别抢"而存在：画面上的拖拽态走 DOM 直写，
+   *  每帧一次的量不进 React（同下面 tilt 那一段的理由）。 */
+  const [dragging, setDragging] = useState(false)
   /** 手动翻一次就换一颗种子，让 2s 从头计 —— 不然刚点到第 3 条，
    *  0.5 秒后就被自动播扔去第 4 条，等于把人刚做的选择吃掉。 */
   const [timerSeed, setTimerSeed] = useState(0)
@@ -133,6 +144,13 @@ export function HighlightsReel() {
   const viaPointerRef = useRef(false)
   /** 上一轮提交给 DOM 的那些偏移 —— 给下面判断"谁跨界了"用。 */
   const prevOffsetsRef = useRef<number[]>([])
+  const reelRef = useRef<HTMLUListElement>(null)
+  /** 一根没有 transform、也没有过渡的探针，用来量 `--hl-step` 到底是多少像素。 */
+  const probeRef = useRef<HTMLSpanElement>(null)
+  /** 本次拖拽的临时账：起点、当前位移、有没有越过"这算拖不算点"的阈值。 */
+  const dragRef = useRef<{ id: number; x0: number; dx: number; moved: boolean } | null>(null)
+  /** 拖完之后浏览器还会补一次 click，得记着把它吞掉，否则翻两下。 */
+  const suppressClickRef = useRef(false)
 
   /**
    * 环形轮播绕回去那一下，恰好有**一张**卡要从最左跨到最右。
@@ -150,9 +168,9 @@ export function HighlightsReel() {
     prevOffsetsRef.current = offsets
   })
 
-  /** 真的在走吗。三个"临时让路"任一成立就停。
-   *  （原来还有第四个：用户按暂停键。那排控件整条删掉了，理由与代价见文件头。） */
-  const playing = !hovered && !focused && !behindTab
+  /** 真的在走吗。四个"临时让路"任一成立就停。
+   *  （原来还有一个：用户按暂停键。那排控件整条删掉了，理由与代价见文件头。） */
+  const playing = !hovered && !focused && !behindTab && !dragging
 
   const sectionRef = useRef<HTMLElement>(null)
 
@@ -168,6 +186,95 @@ export function HighlightsReel() {
     setActive(index)
     setTimerSeed((n) => n + 1)
   }, [])
+
+  /* ---------------------------------------------------- 拖拽（横向抓取）
+   *
+   * 三条规矩决定了这套写法：
+   *
+   * 1. **每帧的位移不进 React。** 拖拽量直接写成一个 CSS 变量 `--hl-drag`
+   *    挂在 `.hl__reel` 上（那一层的 transform 没人认领，见文件头那张表），
+   *    React 这边只留一个 `dragging` 布尔用来停自动播。
+   * 2. **拖的时候关过渡，松手那一刻开回来。** 也是直接写 dataset，不走 state ——
+   *    否则 `--hl-drag: 0` 写下去时 `data-dragging` 还在（state 要到 commit 才掉），
+   *    浏览器就会先把拖拽量**瞬间抹掉**、再让卡片走剩下的路，看着像弹了一下。
+   *    同一个任务里改两处样式，浏览器只算一次"前后状态"，过渡就从当前拖到的位置起算。
+   * 3. **这是环，所以不用橡皮筋。** 直线轮播拖到端头要减速回弹，环上没有端头。
+   */
+  /**
+   * 一次拖拽的收尾：画面回位、过渡开回来、按拖过的距离翻页。
+   *
+   * `advance = false` 给 `pointercancel` 用 —— 系统把这次手势接管了（比如它判定
+   * 用户其实在纵向滚页面），那就只该把画面放回去，不该替他翻页。
+   *
+   * ★ 归零与去属性两句必须**在同一个任务里**写完，见上面第 2 条规矩：
+   *   分开写就会先瞬间抹掉拖拽量、再让卡片补剩下的路。
+   */
+  const finishDrag = (reel: HTMLUListElement, dx: number, moved: boolean, advance: boolean) => {
+    dragRef.current = null
+    reel.style.setProperty('--hl-drag', '0px')
+    delete reel.dataset.dragging
+    setDragging(false)
+    if (!moved) return // 没过阈值：当成一次点击，交给卡片的 onClick
+    suppressClickRef.current = true
+    if (!advance) return
+    const steps = dragSteps(dx, probeRef.current?.offsetWidth ?? 0, count)
+    if (steps !== 0) {
+      setActive((cur) => wrapActive(cur, steps, count))
+      setTimerSeed((n) => n + 1) // 刚拖过，2 秒从头计
+    }
+  }
+
+  const onPointerDown = (e: React.PointerEvent<HTMLUListElement>) => {
+    // 只认主键：右键/中键（中键还带自动滚动）不该开始一次拖拽
+    if (e.pointerType === 'mouse' && e.button !== 0) return
+    const reel = reelRef.current
+    if (!reel) return
+    /* 上一次拖拽没收尾就又开始了一次（pointerup 丢了：抓指针失败、或指针在
+       reel 外面抬起）。不先结掉的话 `dragging` 会永远挂着 —— 自动播被无限期停住、
+       拖拽量停在半路，而且再也修不好。所以先 heal，别往 window 挂监听兜这个。 */
+    const stale = dragRef.current
+    if (stale) finishDrag(reel, stale.dx, stale.moved, true)
+    suppressClickRef.current = false
+    dragRef.current = { id: e.pointerId, x0: e.clientX, dx: 0, moved: false }
+    /* ★ 顺序：先写"正在拖"的视觉状态，再去抓指针。
+       反过来的话 setPointerCapture 一抛异常整段 handler 当场中断 —— 画面没进拖拽态、
+       过渡没关，而 dragRef 已经建好了，于是得到"能拖但拖起来黏糊糊"的怪状态，
+       比直接坏还难查。实测它会抛：合成事件里没有 active pointer → NotFoundError。 */
+    reel.dataset.dragging = 'true'
+    setDragging(true)
+    try {
+      // 抓住指针：后续 move/up 全部转给 reel，不会漏掉抬手
+      reel.setPointerCapture(e.pointerId)
+    } catch {
+      /* 抓不住也照样能拖：move 只在指针还落在 reel 上时更新，
+         漏掉的抬手由上面那个"下一次 down 先 heal"收尸。 */
+    }
+  }
+
+  const onPointerMove = (e: React.PointerEvent<HTMLUListElement>) => {
+    const d = dragRef.current
+    const reel = reelRef.current
+    if (!d || !reel || d.id !== e.pointerId) return
+    d.dx = e.clientX - d.x0
+    if (!d.moved && Math.abs(d.dx) > DRAG_SLOP_PX) d.moved = true
+    // 没过阈值前**不动画面**：不然"点一下邻居卡"会先抖一格，点击的手感就毁了
+    if (d.moved) reel.style.setProperty('--hl-drag', `${d.dx}px`)
+  }
+
+  const onPointerUp = (e: React.PointerEvent<HTMLUListElement>) => {
+    const d = dragRef.current
+    const reel = reelRef.current
+    if (!d || !reel || d.id !== e.pointerId) return
+    finishDrag(reel, d.dx, d.moved, true)
+  }
+
+  /** 手势被系统接管（滚成纵向页面滚动等）：画面回位，但不替他翻页。 */
+  const onPointerCancel = (e: React.PointerEvent<HTMLUListElement>) => {
+    const d = dragRef.current
+    const reel = reelRef.current
+    if (!d || !reel || d.id !== e.pointerId) return
+    finishDrag(reel, d.dx, d.moved, false)
+  }
 
   /* ------------------------------------------------ 自动轮播
    *
@@ -481,9 +588,21 @@ export function HighlightsReel() {
         role="region"
         tabIndex={0}
         aria-roledescription="轮播"
-        aria-label={`项目亮点，共 ${count} 条。用左右方向键翻看`}
+        aria-label={`项目亮点，共 ${count} 条。可拖动、或用左右方向键翻看`}
       >
-        <ul className="hl__reel">
+        {/* 一根探针，只为量出 `--hl-step` 到底是多少像素。
+            为什么不自己按公式算（卡宽 + 缝宽）：那个公式在 CSS 里已经写了一遍，
+            JS 再抄一遍就是两个手写的数 —— 本项目为这种耦合付过两次学费了。
+            探针没有 transform、没有过渡，所以任何时候量都是准的。 */}
+        <span className="hl__step-probe" ref={probeRef} aria-hidden="true" />
+        <ul
+          className="hl__reel"
+          ref={reelRef}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerCancel}
+        >
           {HIGHLIGHTS.map((h, i) => {
             const s = slots[i]
             const depth = reelDepth(s.offset)
@@ -503,7 +622,15 @@ export function HighlightsReel() {
                   aria-roledescription="亮点"
                   aria-label={`第 ${i + 1} 条，共 ${count} 条：${h.title}`}
                   aria-hidden={s.exposed ? undefined : true}
-                  onClick={s.advanceOnClick ? () => goTo(i) : undefined}
+                  onClick={
+                    s.advanceOnClick
+                      ? () => {
+                          // 刚拖完那一下浏览器还会补一次 click，不吞掉就会翻两下
+                          if (suppressClickRef.current) return
+                          goTo(i)
+                        }
+                      : undefined
+                  }
                 >
                   <div className="hl__frame">
                     {/* 五张图都已落盘。这一层仍然自带一张 CSS 暖纸底纹**当退路**：
@@ -521,6 +648,9 @@ export function HighlightsReel() {
                         height={720}
                         loading="lazy"
                         decoding="async"
+                        /* 不关掉浏览器原生的"拖图片"，横向拖动会被它接走：
+                           用户看到的是图片被拽起来、轮播一动不动。 */
+                        draggable={false}
                       />
                       <span className="hl__art-num">{num}</span>
                     </div>

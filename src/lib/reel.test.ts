@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   CLICK_RADIUS,
   STAGE_RADIUS,
+  dragSteps,
   reelDepth,
   reelJumped,
   reelState,
@@ -196,6 +197,41 @@ describe('wrapActive —— 环形步进（键盘与自动播共用）', () => {
 
   it('非整数 delta 取整，不算出半个卡位', () => {
     expect(wrapActive(0, 1.7, 5)).toBe(1)
+  })
+})
+
+describe('dragSteps —— 拖了多少像素该翻到第几条', () => {
+  const STEP = 525
+
+  it('往左拖 = 前进（内容跟着手走）', () => {
+    expect(dragSteps(-STEP, STEP, 5)).toBe(1)
+    expect(dragSteps(STEP, STEP, 5)).toBe(-1)
+  })
+
+  it('★ 过半就认，不过半弹回', () => {
+    // 用 round 不是 floor：拖到 0.5 格时用户已经表达意图了，
+    // 而"卡在中间不上不下"是最坏的结果。
+    expect(dragSteps(-260, STEP, 5)).toBe(0) // 0.495 格 → 弹回
+    expect(dragSteps(-270, STEP, 5)).toBe(1) // 0.514 格 → 认
+    expect(dragSteps(-100, STEP, 5)).toBe(0) // 当成点击，不翻
+  })
+
+  it('拖满两格就是两格', () => {
+    expect(dragSteps(-STEP * 2, STEP, 5)).toBe(2)
+    expect(dragSteps(STEP * 2, STEP, 5)).toBe(-2)
+  })
+
+  it('★ 上限夹在半圈：环上绕两圈会落回同一处，只会让人误判', () => {
+    expect(dragSteps(-STEP * 10, STEP, 5)).toBe(2) // floor(5/2)
+    expect(dragSteps(STEP * 10, STEP, 5)).toBe(-2)
+    expect(dragSteps(-STEP * 4, STEP, 4)).toBe(2) // 偶数张同样夹在半圈
+  })
+
+  it('量不到步长时什么都不翻，不除零', () => {
+    expect(dragSteps(-900, 0, 5)).toBe(0)
+    expect(dragSteps(-900, Number.NaN, 5)).toBe(0)
+    expect(dragSteps(Number.NaN, STEP, 5)).toBe(0)
+    expect(dragSteps(-900, STEP, 0)).toBe(0)
   })
 })
 

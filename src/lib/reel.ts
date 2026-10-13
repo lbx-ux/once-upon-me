@@ -125,6 +125,25 @@ export function reelJumped(prev: number[], next: number[], count: number): boole
 }
 
 /**
+ * 拖了多少像素 → 该翻到第几条（相对当前卡的位移）。
+ *
+ * 方向：**往左拖 = 前进**（内容跟着手走，右边那张被拉进来），所以是 `-dx`。
+ * 用 `round` 不是 `floor`：过半就认，不过半就弹回 —— 拖到 0.5 格时用户已经
+ * 表达了意图，卡在中间不上不下是最坏的结果。
+ *
+ * 上限夹在 `floor(count / 2)`：环上最远就是半圈，往右绕 4 格与往左绕 1 格是同一张卡，
+ * 让它绕两圈落回同一处只会让人以为拖动了别的卡。
+ *
+ * `step <= 0`（探针还没量到、或 CSS 出错）返回 0 —— 宁可什么都不翻，
+ * 也不要除零算出 `Infinity` 再被 `wrapActive` 夹成 0，那等于凭空跳到第一条。
+ */
+export function dragSteps(dx: number, step: number, count: number): number {
+  if (!Number.isFinite(dx) || !(step > 0) || count <= 0) return 0
+  const cap = Math.floor(count / 2)
+  return clamp(Math.round(-dx / step), -cap, cap)
+}
+
+/**
  * 环形步进：手动（键盘 ← →）与自动轮播**共用这一个函数**。
  *
  * 原先这里有两个函数：`stepActive`（夹在两端，给箭头按钮用，到头就 disable）

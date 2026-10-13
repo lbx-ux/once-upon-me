@@ -143,6 +143,47 @@
   margin: 0;
   padding: 0;
   list-style: none;
+  /* ★ 拖拽位移写在这一层，不写在 slot 上。
+     这一层的 transform 原本没人认领（文件头那张表里 slot 归 CSS、card 归 GSAP），
+     所以拖拽量可以直接落在这里，与每张卡自己的轮播位移**复合**而互不抢占。
+     用独立属性 `translate` 而不是 `transform`：将来谁要再动这层的 transform
+     也不会把拖拽量一笔抹掉（同一个坑在 .hl__card 的抬起上踩过一次）。 */
+  translate: var(--hl-drag, 0px) 0;
+  /* 松手时这 0.56s 与 slot 的补间同长同曲线，两者相加正好是"从拖到的位置补到终点"，
+     不会看见两段速度。 */
+  transition: translate 0.56s cubic-bezier(0.22, 1, 0.36, 1);
+  cursor: grab;
+  /* 纵向留给页面滚动：这是整页的一节，不是横向滚动容器。
+     不写这条，触屏上横向拖动会把用户的竖直滑动一起吃掉。 */
+  touch-action: pan-y;
+}
+/* 拖的时候关过渡：要跟手 1:1，任何补间都会让它闻起来像"橡皮筋"而不是"抓着东西"。
+   ★ 这个属性是组件里**直接写 DOM** 的，不走 React state ——
+     走 state 的话松手那一帧 `--hl-drag` 已经是 0 而属性还挂着，
+     浏览器会先把拖拽量瞬间抹掉、再让卡片走剩下的路，看着就是弹一下。 */
+.hl__reel[data-dragging] {
+  transition: none;
+  cursor: grabbing;
+  /* 拖拽期间禁选。刻意只挂在 [data-dragging] 上而不是整条 reel 上：
+     平时这些正文应该还能被选中复制，为了一个拖拽手势把文字锁死是过界。 */
+  user-select: none;
+}
+/* 卡片自己那两条 cursor 规则（邻居卡是 pointer）特异性更高，压过 reel 的 grab；
+   拖的时候必须让"抓着"这个状态赢，否则手放在邻居卡上拖动时图标一直是手指。 */
+.hl__reel[data-dragging] .hl__card {
+  cursor: grabbing;
+}
+/* 量 `--hl-step` 用的探针：没有 transform、没有过渡，所以任何时候读 offsetWidth 都是准的。
+   为什么不自己按公式算 —— 那个公式在 CSS 里已经写了一遍，JS 再抄一遍就是
+   两个手写的数会各自漂移（本项目为这类耦合付过学费，见 README §五）。 */
+.hl__step-probe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--hl-step);
+  height: 0;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .hl__slot {
@@ -487,6 +528,7 @@
  * 只是它们不该在减少动效下还带一段补间。轮播本身照常可用，那是功能不是动效。
  * -------------------------------------------------------------------------- */
 @media (prefers-reduced-motion: reduce) {
+  .hl__reel,
   .hl__slot,
   .hl__card,
   .hl__glow {
