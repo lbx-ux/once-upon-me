@@ -2,7 +2,7 @@
 
 > 说出孩子的名字和爱好，得到一本**以他为主角**、用**你的声音**朗读、可以反复探索的定制绘本。
 
-参赛作品：**2026 第九届传智杯 · AI WEB 网页开发挑战赛** |  赛道主题「智启未来：AI 驱动的 Web 应用创新挑战」｜选题方向：**多模态 AI 创意平台**
+参赛作品：**2026 第九届传智杯 · AI WEB 网页开发挑战赛** | 赛道主题「智启未来：AI 驱动的 Web 应用创新挑战」｜选题方向：**多模态 AI 创意平台**
 
 ---
 
@@ -33,21 +33,28 @@
 
 ### 当前进度
 
-| 阶段                              | 日期        | 状态   |
-| --------------------------------- | ----------- | ------ |
-| 启动 · 选型与定义                 | 10/11–10/13 | 已完成 |
-| **W1 · 角色一致性验证（生死线）** | 10/14–10/20 | 未开始 |
-| W2 · 独读版全链路                 | 10/21–10/27 | 未开始 |
-| W3 · 共读版                       | 10/28–11/03 | 未开始 |
-| W4 · 声音克隆 + 三个校验 Agent    | 11/04–11/10 | 未开始 |
-| W5 · 打磨与材料                   | 11/11–11/17 | 未开始 |
-| **省赛作品提交截止**              | **11/18**   | —      |
+| 阶段                              | 日期        | 状态                                                      |
+| --------------------------------- | ----------- | --------------------------------------------------------- |
+| 启动 · 选型与定义                 | 10/11–10/13 | 已完成                                                    |
+| **W1 · 角色一致性验证（生死线）** | 10/14–10/20 | 进行中：架构与 harness 已就位，**实测一次未跑**（缺 Key） |
+| W2 · 独读版全链路                 | 10/21–10/27 | 未开始                                                    |
+| W3 · 共读版                       | 10/28–11/03 | 未开始                                                    |
+| W4 · 声音克隆 + 三个校验 Agent    | 11/04–11/10 | 未开始                                                    |
+| W5 · 打磨与材料                   | 11/11–11/17 | 未开始                                                    |
+| **省赛作品提交截止**              | **11/18**   | —                                                         |
 
 启动阶段的四件事都已落地：组队 / 报名 / 缴费（见 [`docs/launch-checklist.md`](docs/launch-checklist.md)）、
 一句话选题定义、技术选型定稿（见 [`docs/tech-selection.md`](docs/tech-selection.md)——
 框架与工程链已拍板，图像 / 语音 / 大模型三家定的是候选集与实测判据，**10/20 由 W1 实测拍板**）。
 
-**本仓库目前完成了首页的三屏**（首屏环形轨道 + 第二屏滚动翻页绘本 + 第三屏项目亮点），三屏的美术素材都已出齐并落盘（封面 12 张 1.16 MB / 绘本 8 张 0.46 MB / 第三屏插画 5 张 0.51 MB / 卡片动效 3.22 MB）。创作流程、引擎、状态管理都还没开始。详见文末「已知取舍」。
+**本仓库目前有的**：首页三屏（首屏环形轨道 + 第二屏滚动翻页绘本 + 第三屏项目亮点），
+美术素材全部落盘（封面 12 张 1.16 MB / 绘本 8 张 0.46 MB / 第三屏插画 5 张 0.51 MB /
+卡片动效 3.22 MB）；**以及 W1 的引擎层**——`src/lib/engine/` 目录定稿、
+角色卡资产化、供应商适配层、自写 Schema 校验、三条闸门的机械执法，
+验收方式是 `node scripts/engine-run.mts --mode=stub` 不启动浏览器跑完一本书。
+
+**还没有的**：任何一次真供应商调用（缺 API Key），所以 §7–§10 的实测格子是空的；
+创作流的界面（W2）；配音（W4）。详见文末「已知取舍」。
 
 ---
 
@@ -134,7 +141,10 @@ once-upon-me/
       ├─ reel.ts                 轮播状态；offset 走**环形最短位移**（第 1 条的左边是第 5 条）
       ├─ reel.test.ts            两侧永远填满、跨界判据、可见性三者不合并、环形取模的负数坑
       ├─ tilt.ts                 归一化指针 → 倾斜量（★ 纯函数，符号表在测试里）
-      └─ tilt.test.ts            四角与中心的符号表、上限、出界夹取、-0 与 NaN
+      ├─ tilt.test.ts            四角与中心的符号表、上限、出界夹取、-0 与 NaN
+      ├─ engine/                 ★ 生成引擎（W1 定稿，见下「引擎层」）
+      ├─ schemas/                结构化输出的校验器 + 契约（自写，一份定义两用）
+      └─ prompts/                分阶段提示词，带版本号
 ```
 
 ### 分层约定
@@ -163,24 +173,39 @@ once-upon-me/
 | 常量              | SCREAMING_SNAKE                                     | `THEMES`、`MAX_RETRY`                 |
 | 环境变量          | SCREAMING_SNAKE，服务端专用不加 `NEXT_PUBLIC_` 前缀 | `LLM_API_KEY`                         |
 
-### 为后续预留的结构（尚未创建）
+### 引擎层（W1 定稿并跑通）
 
-引擎与 UI 严格解耦，后续会落到：
+引擎与 UI 严格解耦，已落到：
 
 ```
-src/
-├─ lib/
-│  ├─ engine/      角色卡 / 规划 / 生成 / 校验 / 配音 / 合成 —— ★ 禁止 import 任何 React
-│  ├─ prompts/     分阶段提示词（分镜 / 画面 / 审核 / 连贯），带版本注释，不散落在组件里
-│  └─ schemas/     故事分镜的 zod schema（每页 = 场景描述 + 正文 + 画面 prompt + 情绪标签）
-├─ stores/         Zustand 状态管理
-└─ components/
-   ├─ creation/    创作流（Step 1–5）
-   ├─ reader/      阅读器（翻页 / 选择点 / 走过的路）
-   └─ panels/      面板（生成过程可视化 / 审核结果）
+src/lib/
+├─ engine/
+│  ├─ index.ts        唯一入口：runBook(request, deps) → Book，过程 = 事件流
+│  ├─ domain.ts       领域类型（角色卡 / 树 / 页 / 资产 / 出处 / 统计）
+│  ├─ events.ts       ★ 引擎与 UI 的 seam：事件协议（界面 / MCP / 日志共用）
+│  ├─ tree.ts         扁平页表 → 故事树（★ 纯函数）
+│  ├─ plan.ts         ② 规划：Schema 校验 + 带反馈的重试
+│  ├─ illustrate.ts   ③ 逐页生成 + 一致性核对 + 重画（Agent 的落点）
+│  ├─ digest.ts       内容指纹与规范化序列化
+│  ├─ errors.ts       显式失败，无静默降级
+│  ├─ character-card/ card.ts 派生规则（纯）· store.ts 资产读写
+│  └─ providers/      types.ts 能力接口 · registry.ts env→实现 · http.ts ·
+│                     openai-text · openai-vision · tokenrhythm-image ·
+│                     replay.ts（录制/回放）· stores.ts（内存/磁盘）
+├─ schemas/           自写校验器（一份定义同时出 JSON Schema 与运行时校验）+ 故事契约
+└─ prompts/           story-plan.ts · image.ts —— 带版本号，实测踩过的坑写进约束
 ```
 
-**硬性约束**：`lib/engine/` 不得 import React。验收方式是写一个 node 脚本、不启动浏览器直接调用引擎生成完整绘本——这一条同时是「平台而非聚合」的技术证据。
+**三条硬性约束，都有机械执法**：
+
+| 约束                            | 怎么把门                                                                                                                                 | 怎么验收                                                                                             |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `lib/engine/` 不得 import React | `eslint.config.mjs` 对 engine/schemas/prompts 三个目录禁 `react` / `next/*` / `@/components/**` / `window` / `document` / `localStorage` | `node scripts/engine-run.mts --mode=stub` 不启动浏览器跑完一本书                                     |
+| 新代码吃最严 TS 档              | `tsconfig.engine.json` 叠 `noUncheckedIndexedAccess`，`pnpm typecheck` 两个 config 都跑                                                  | 已交付的三屏**不吃**这一档（实测 67 处报错，全在动过的测量代码里）——留作单独一次迁移，见「已知取舍」 |
+| 模型名不写死                    | `providers/registry.ts` 只认 `LLM_MODEL` / `IMAGE_MODEL` / `VISION_MODEL`，缺一个就报「换模型不许改代码」                                | 全仓库零个硬编码模型 id                                                                              |
+
+**还没做的**（按周次）：`stores/`（Zustand，W2 第一个跨组件共享状态的界面出现时再装）、
+`components/creation|reader|panels`（W2–W3）、配音适配器（W4）、审核 Agent（W4）。
 
 ---
 
@@ -213,18 +238,32 @@ pnpm dev
 
 ### 全部脚本
 
-| 命令                | 作用                                                 |
-| ------------------- | ---------------------------------------------------- |
-| `pnpm dev`          | 启动开发服务器（产物写 `.next/`）                    |
-| `pnpm dev:preview`  | 第二个开发服务器，产物写 `.next-preview/`，端口 3100 |
-| `pnpm build`        | 生产构建                                             |
-| `pnpm start`        | 启动生产服务器（需先 build）                         |
-| `pnpm lint`         | ESLint 检查                                          |
-| `pnpm typecheck`    | `tsc --noEmit`，类型检查                             |
-| `pnpm test`         | Vitest 跑一遍纯函数测试                              |
-| `pnpm test:watch`   | Vitest watch 模式                                    |
-| `pnpm format`       | Prettier 格式化                                      |
-| `pnpm format:check` | 只检查不写入（CI 用）                                |
+| 命令                | 作用                                                                                                                        |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm dev`          | 启动开发服务器（产物写 `.next/`）                                                                                           |
+| `pnpm dev:preview`  | 第二个开发服务器，产物写 `.next-preview/`，端口 3100                                                                        |
+| `pnpm build`        | 生产构建                                                                                                                    |
+| `pnpm start`        | 启动生产服务器（需先 build）                                                                                                |
+| `pnpm lint`         | ESLint 检查（含引擎层的依赖禁令）                                                                                           |
+| `pnpm typecheck`    | **两个 config 各跑一遍**：全局一档，`tsconfig.engine.json` 对引擎/契约/提示词三个目录再叠 `noUncheckedIndexedAccess` 严一档 |
+| `pnpm test`         | Vitest 跑一遍纯函数测试（130 条，全在 node 环境）                                                                           |
+| `pnpm test:watch`   | Vitest watch 模式                                                                                                           |
+| `pnpm format`       | Prettier 格式化                                                                                                             |
+| `pnpm format:check` | 只检查不写入（CI 用）                                                                                                       |
+
+引擎与跑测的脚本不进 `package.json`（它们是 node 直接跑的 `.mts`，不是 npm 生命周期）：
+
+| 命令                                             | 作用                                                     |
+| ------------------------------------------------ | -------------------------------------------------------- |
+| `node scripts/engine-run.mts --mode=stub`        | ★ 引擎验收：不启动浏览器、不联网、不花钱跑完一本书       |
+| `node scripts/engine-run.mts --mode=live`        | 真供应商跑一本，并顺手录制离线回放包                     |
+| `node scripts/engine-run.mts --mode=offline`     | 用录好的 manifest 回放（ADR-0003 的断网演示路径）        |
+| `node scripts/w1-image-bakeoff.mts --models=a,b` | 图像横评：同一角色 5 页 × N 候选，产出盲评包与横评表     |
+| `node scripts/w1-text-bakeoff.mts --models=a,b`  | 大模型横评：同一批主题 × 10 本的 Schema 通过率与重试次数 |
+
+> 两个横评脚本**必须真跑**：没有 `IMAGE_API_KEY` 时直接拒绝运行，
+> 不带 `--yes=1` 时只打印预算。理由写在 CLAUDE.md「不糊弄」——
+> 数字要能复现，不接受手工填数。
 
 `dev:preview` 的存在理由与实测症状写在 [`next.config.ts`](next.config.ts) 的注释里：
 两个 `next dev` 默认共用同一个 `.next/`，一边跑 `pnpm build` 另一边就会
@@ -305,14 +344,14 @@ python -I scripts/make-clip.py <源视频目录> public/video
 
 ## 四、团队信息
 
-| 项       | 内容                   |
-| -------- | ---------------------- |
-| 队名     | 破晓微光               |
-| 成员     | 范嘉庆、胡锦宇         |
-| 学校     | 太原理工大学           |
-| 参赛组别 | A 组  |
-| 指导老师 | 王琦                   |
-| 赛区     | 北部赛区               |
+| 项       | 内容           |
+| -------- | -------------- |
+| 队名     | 破晓微光       |
+| 成员     | 范嘉庆、胡锦宇 |
+| 学校     | 太原理工大学   |
+| 参赛组别 | A 组           |
+| 指导老师 | 王琦           |
+| 赛区     | 北部赛区       |
 
 ---
 
