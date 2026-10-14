@@ -35,6 +35,14 @@ const HARD: CharacterAnchor[] = [
 ]
 
 function raw(anchors: readonly CharacterAnchor[] = HARD): CharacterCard {
+  return buildCardLike('image/webp', anchors)
+}
+
+/** 只改参考图 mime 的同一条构造路径（回归用） */
+function buildCardLike(
+  referenceMime: string,
+  anchors: readonly CharacterAnchor[] = HARD,
+): CharacterCard {
   const input: BuildCardInput = {
     cardId: 'xiaolu-r1',
     childId: 'xiaolu',
@@ -42,6 +50,7 @@ function raw(anchors: readonly CharacterAnchor[] = HARD): CharacterCard {
     style: STYLE,
     referencePath: 'cards/xiaolu-r1/ref.abc.webp',
     referenceBytes: 12_345,
+    referenceMime,
     modelId: 'wan2.7-image',
     promptVersion: 'character-card@v1',
     now: 1_700_000_000_000,
@@ -81,6 +90,16 @@ describe('buildCard', () => {
   it('缺模型出处的卡不合法（ADR-0003：说不出哪版模型画的，就不能当交付物）', () => {
     const card = { ...makeCard(), provenance: { ...makeCard().provenance, modelId: '' } }
     expect(validateCard(card).join('')).toContain('模型出处')
+  })
+
+  it('参考图的 mime 来自调用方，**不是写死的**', () => {
+    // 回归：这一句原先是 `mime: 'image/webp'` 硬编码，而实测出图回来是 PNG
+    // （wan2.7-image / qwen-image-2.0 都是）。三方不一致会一路传到
+    // `toDataUrl(bytes, card.reference.mime)`，视觉比对就收到一个
+    // "声明 webp、内容 png"的 data URL ——症状是"比对时灵时不灵"，怀疑对象还错。
+    const png = buildCardLike('image/png')
+    expect(png.reference.mime).toBe('image/png')
+    expect(makeCard().reference.mime).toBe('image/webp')
   })
 })
 

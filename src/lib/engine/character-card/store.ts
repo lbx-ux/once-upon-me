@@ -33,6 +33,7 @@ import {
   attachReferenceDigest,
   buildCard,
   cardDigest,
+  normalizeAnchors,
   validateCard,
   type BuildCardInput,
 } from './card.ts'
@@ -51,9 +52,25 @@ export type CardSummary = {
 export type CardStore = {
   /** 造卡：算参考图指纹 → 建卡 → 校验 → 落盘 → 更新 latest */
   create(
-    input: Omit<BuildCardInput, 'referencePath'> & {
+    input: // ★ `referenceBytes` 要一起 Omit 掉再重声明：`BuildCardInput.referenceBytes` 是
+    //   **字节数**（`number`，卡里存的是长度），而这一层的入参是**字节本身**
+    //   （`Uint8Array`）。只 Omit 'referencePath' 的话，交叉类型会得到
+    //   `number & Uint8Array` —— 一个没有任何值能满足的类型。
+    //   它一直没被闸门抓到的原因很具体：调它的三个调用方都在 `scripts/*.mts` 里，
+    //   而 `tsconfig.json` 的 include 是 `**/*.ts`，**.mts 不在其中**。
+    Omit<BuildCardInput, 'referencePath' | 'referenceBytes'> & {
       referenceBytes: Uint8Array
       referenceMime: string
+      /**
+       * 「换一版」：在旧卡上叠一个新 revision，**不覆盖**（ADR-0007）。
+       *
+       * ★ 为什么要有这个入参，而不是让调用方自己 `save` 一张改过 revision 的卡：
+       *   参考图是**内容寻址**的（`ref.<指纹>.webp`），换图必须同时换文件名、
+       *   换 `reference` 三件套、并且知道 store 算出来的指纹——那三件事全在这一层，
+       *   调用方拿不到也拼不对。没有它，界面上的"换一版"只有两条歪路：
+       *   覆盖旧版（旧书的图来源被抹掉），或者从 `load` 拿到旧版自己改（拼错指纹）。
+       */
+      previous?: CharacterCard
     },
   ): Promise<{
     card: CharacterCard
@@ -80,10 +97,29 @@ export function createCardStore(store: AssetStore): CardStore {
       const digestOfBytes = digest(input.referenceBytes)
       const path = refPath(input.cardId, digestOfBytes, input.referenceMime)
       const ref = await store.put({ path, bytes: input.referenceBytes, mime: input.referenceMime })
+
+      const fresh = buildCard({ ...input, referencePath: path, referenceBytes: ref.bytes })
+      // 「换一版」：新 revision + 新锚点 + 新参考图，**旧版文件一个字节都不动**
+      // （ADR-0007：旧书的那些页出自旧版卡，覆盖了它们，"这张图是哪版画的"就答不上来）
       const card = attachReferenceDigest(
-        buildCard({ ...input, referencePath: path, referenceBytes: ref.bytes }),
+        input.previous
+          ? {
+              ...input.previous,
+              revision: input.previous.revision + 1,
+              anchors: normalizeAnchors(input.anchors),
+              style: input.style,
+              reference: fresh.reference,
+              provenance: {
+                modelId: input.modelId,
+                promptVersion: input.promptVersion,
+                cardRevision: input.previous.revision + 1,
+                generatedAt: input.now,
+              },
+            }
+          : fresh,
         ref.digest,
       )
+
       const problems = validateCard(card)
       if (problems.length > 0) {
         throw new EngineError('card-invalid', `角色卡不合格：${problems.join('；')}`)

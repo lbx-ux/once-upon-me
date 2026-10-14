@@ -20,10 +20,19 @@
 import { EngineError } from '../errors.ts'
 import { createOpenAiText } from './openai-text.ts'
 import { createOpenAiVision } from './openai-vision.ts'
+import { createQwenSpeech } from './qwen-speech.ts'
 import { createTokenrhythmImage } from './tokenrhythm-image.ts'
 import { createFsStore, createMemoryStore } from './stores.ts'
 import { createReplayImage, createReplayText, type ReplayManifest } from './replay.ts'
-import type { AssetStore, ProviderBundle, ProviderMode } from './types.ts'
+import type {
+  AssetStore,
+  ImageGenerator,
+  ProviderBundle,
+  ProviderMode,
+  TextGenerator,
+  VisionComparator,
+  VoiceSynthesizer,
+} from './types.ts'
 
 export type Env = Record<string, string | undefined>
 
@@ -90,12 +99,34 @@ export async function createProviders(input: RegistryInput): Promise<ProviderBun
       text: createReplayText(store, input.manifest),
       image: createReplayImage(store, input.manifest),
       vision: null,
+      // 离线不合成配音：书清单里已经带了 narrations（那是**产物**，见 ADR-0003），
+      // 阅读器直接读盘上的音频文件。离线要的是"能重放已生成的"，不是"重新生成"
       voice: null,
       store,
     }
   }
 
-  const text = createOpenAiText(
+  return {
+    mode,
+    text: textProviderOf(env),
+    image: imageProviderOf(env),
+    vision: visionProviderOf(env),
+    voice: voiceProviderOf(env),
+    store,
+  }
+}
+
+/* ───────────────── 一组一组的构造：createProviders 与设置抽屉的"试一试"共用 ─────────────
+ *
+ * ★ 为什么把它们单独导出来：设置抽屉里每一个"试一试"只该**真的调那一个能力**
+ *   （实测那句话：探测要打真请求，不然等于没测）。而 `createProviders` 是全都要，
+ *   少一项就抛错——拿它去做单项探测，等于逼着界面把四组都填满才能验一组。
+ *   导出来之后**构造仍然只有一处**，不会出现"探测用的配置与生产配置不一样"
+ *   （这正是 `textOptionsOf` 当初被导出的同一条理由）。
+ */
+
+export function textProviderOf(env: Env): TextGenerator {
+  return createOpenAiText(
     {
       baseUrl: requireUrl(env, 'LLM_BASE_URL'),
       apiKey: requireKey(env, 'LLM_API_KEY'),
@@ -104,8 +135,10 @@ export async function createProviders(input: RegistryInput): Promise<ProviderBun
     requireModel(env, 'LLM_MODEL'),
     textOptionsOf(env),
   )
+}
 
-  const image = createTokenrhythmImage(
+export function imageProviderOf(env: Env): ImageGenerator {
+  return createTokenrhythmImage(
     {
       baseUrl: requireUrl(env, 'IMAGE_BASE_URL'),
       apiKey: requireKey(env, 'IMAGE_API_KEY'),
@@ -115,31 +148,49 @@ export async function createProviders(input: RegistryInput): Promise<ProviderBun
     {
       // 参考图能力**在 tokenrhythm 这条图像接口上是实测的"没有"**（7 个候选字段名
       // 全被 400「请求包含未知字段」挡回，见 tokenrhythm-image.ts 文件头第 4 条）。
-      // 这个开关留着是为了换供应商时只动一行；填 1 而这家仍不支持，
-      // 适配器会**直接报错**，不会把参考图悄悄丢掉——丢掉的参考图比报错贵得多。
+      // ★ 更正（2026-10-14）：那不是"模型吃不了参考图"，是那条**路由**没有入口——
+      //   `/v1/images/edits` 是通的。这个开关的处置见 app-restructure 工单 02，
+      //   在它落地之前这里保持原样，改动不许顺手做。
       supportsReference: env['IMAGE_SUPPORTS_REFERENCE'] === '1',
       unitCostCny: numberOf(env, 'IMAGE_UNIT_COST_CNY') ?? 0.2,
     },
   )
+}
 
+export function visionProviderOf(env: Env): VisionComparator | null {
   const visionKey = env['VISION_API_KEY'] || env['LLM_API_KEY'] || ''
   const visionModel = env['VISION_MODEL'] || ''
-  const vision =
-    visionKey && visionModel
-      ? createOpenAiVision(
-          {
-            baseUrl: env['VISION_BASE_URL'] || env['LLM_BASE_URL'] || DEFAULT_BASE,
-            apiKey: visionKey,
-            // 与文本同一条道理：视觉比对的缺省超时要按**它自己的载荷**定（两张
-            // 1440² 的图），不是按一句话定。缺省由适配器给（300s），这里只让
-            // .env 能压过去
-            timeoutMs: numberOf(env, 'VISION_TIMEOUT_MS'),
-          },
-          visionModel,
-        )
-      : null
+  if (!visionKey || !visionModel) return null
+  return createOpenAiVision(
+    {
+      baseUrl: env['VISION_BASE_URL'] || env['LLM_BASE_URL'] || DEFAULT_BASE,
+      apiKey: visionKey,
+      // 与文本同一条道理：视觉比对的缺省超时要按**它自己的载荷**定（两张
+      // 1440² 的图），不是按一句话定。缺省由适配器给（300s），这里只让 .env 能压过去
+      timeoutMs: numberOf(env, 'VISION_TIMEOUT_MS'),
+    },
+    visionModel,
+  )
+}
 
-  return { mode, text, image, vision, voice: null, store }
+export function voiceProviderOf(env: Env): VoiceSynthesizer | null {
+  const voiceKey = env['TTS_API_KEY']?.trim() || ''
+  const voiceModel = env['TTS_MODEL']?.trim() || ''
+  if (!voiceKey || !voiceModel) return null
+  return createQwenSpeech(
+    {
+      // ★ 这一家**不回落**到 DEFAULT_BASE。别的能力回落是因为同一家供应商的
+      //   两个接口共用域名；语音这家（阿里云百炼）既不在聚合站上，路径也是
+      //   `/api/v1/services/...` 而不是聚合站的 `/v1/images/...`。
+      //   回落到 DEFAULT_BASE 的表现是"配了一半，然后一路 404"——
+      //   那正是本文件头第 2 条要挡的静默降级。
+      baseUrl: requireUrl(env, 'TTS_BASE_URL', { required: true, pathPrefix: '/api/v1' }),
+      apiKey: voiceKey,
+      timeoutMs: numberOf(env, 'TTS_TIMEOUT_MS'),
+    },
+    voiceModel,
+    { voicePrefix: env['TTS_VOICE_PREFIX']?.trim() || undefined },
+  )
 }
 
 function requireKey(env: Env, name: string): string {
@@ -153,16 +204,49 @@ function requireKey(env: Env, name: string): string {
   return value
 }
 
-function requireUrl(env: Env, name: string): string {
-  const value = env[name]?.trim() || DEFAULT_BASE
-  if (!/^https?:\/\//.test(value)) {
+/**
+ * 取一个 base 地址。
+ *
+ * 缺省行为是"空值回落到 DEFAULT_BASE"（文本/图像都靠它），
+ * 但语音那家**不能回落**（见调用处注释），所以这里给两个开关：
+ * - `required`：空值直接报错，不回落
+ * - `pathPrefix`：要求的路径前缀。写错时的表现是所有请求 404，
+ *   而 404 不会告诉你"你少写了 /api"，所以要在配置期就说出来
+ */
+function requireUrl(
+  env: Env,
+  name: string,
+  opts: { required?: boolean; pathPrefix?: string } = {},
+): string {
+  const raw = env[name]?.trim() || ''
+  if (!raw) {
+    if (opts.required) {
+      throw new EngineError(
+        'provider-not-configured',
+        `${name} 未配置。这一项没有可回落的默认值：` +
+          `它的接口形状与其他几家不同，猜一个地址只会换来一串 404`,
+      )
+    }
+    return DEFAULT_BASE
+  }
+  if (!/^https?:\/\//.test(raw)) {
     throw new EngineError(
       'provider-not-configured',
-      `${name} 必须是 http(s) 地址，当前是「${value}」`,
+      `${name} 必须是 http(s) 地址，当前是「${raw}」`,
     )
   }
   // 供应商的路径都挂在 /v1 下；漏写就补上，写错成 /v2 则不猜
-  return /\/v\d+$/.test(value.replace(/\/+$/, '')) ? value : value.replace(/\/+$/, '') + '/v1'
+  const base = /\/v\d+$/.test(raw.replace(/\/+$/, ''))
+    ? raw.replace(/\/+$/, '')
+    : raw.replace(/\/+$/, '') + '/v1'
+  if (opts.pathPrefix && !base.endsWith(opts.pathPrefix)) {
+    throw new EngineError(
+      'provider-not-configured',
+      `${name} 要写成以 ${opts.pathPrefix} 结尾的地址（当前「${base}」）。` +
+        `例：https://dashscope.aliyuncs.com${opts.pathPrefix}`,
+    )
+  }
+  return base
 }
 
 function requireModel(env: Env, name: string): string {
@@ -211,6 +295,15 @@ export function describeProviders(env: Env): Record<string, string> {
     vision: env['VISION_MODEL']?.trim()
       ? `视觉比对: ${env['VISION_MODEL'].trim()} @ ${(env['VISION_BASE_URL'] || env['LLM_BASE_URL'] || DEFAULT_BASE).replace(/^https?:\/\//, '')}（key 取 ${env['VISION_API_KEY']?.trim() ? 'VISION_API_KEY' : 'LLM_API_KEY'}）`
       : '视觉比对: 未配置 VISION_MODEL —— 引擎会走「未核对」路径，不会假装通过',
-    voice: '未配置（W4 落地）',
+    // 语音这一行要报出**音色也要报**：换了模型而音色没跟着换的表现是
+    // `[cosyvoice]Engine error [411]`，一句厂商内部错误，看不出是配置问题
+    voice: (() => {
+      if (!env['TTS_API_KEY']?.trim() || !env['TTS_MODEL']?.trim()) {
+        return '语音: 未配置（这本书没有朗读）'
+      }
+      const model = env['TTS_MODEL'].trim()
+      const voiceId = env['TTS_VOICE']?.trim()
+      return `语音: ${model} @ ${(env['TTS_BASE_URL']?.trim() || '缺 TTS_BASE_URL').replace(/^https?:\/\//, '')}（音色 ${voiceId || '未指定 —— 生成时要给 voiceId'}，克隆音色绑定模型，换模型即失效）`
+    })(),
   }
 }

@@ -1,0 +1,13 @@
+{"seq":1,"at":1791910873178,"stage":"planning","kind":"stage","phase":"begin","attempt":1,"total":3}
+{"seq":2,"at":1791910880229,"stage":"planning","kind":"plan-ready","form":"solo","title":"雨天的桥","nodeCount":3,"choicePages":[]}
+{"seq":3,"at":1791910880588,"stage":"illustrating","kind":"stage","phase":"begin","pageNo":1,"attempt":1,"total":3}
+{"seq":4,"at":1791910906696,"stage":"illustrating","kind":"illustration","pageNo":1,"attempt":1,"assetPath":"books/xiaoyu-r1-4fe055c5723b/page-1-a1.png","modelId":"wan2.7-image","costCny":0.2}
+{"seq":5,"at":1791910906696,"stage":"checking","kind":"consistency","pageNo":1,"attempt":1,"score":null,"verdict":"unavailable","threshold":0.75,"missedAnchors":[]}
+{"seq":6,"at":1791910906697,"stage":"illustrating","kind":"stage","phase":"begin","pageNo":2,"attempt":1,"total":3}
+{"seq":7,"at":1791910928993,"stage":"illustrating","kind":"illustration","pageNo":2,"attempt":1,"assetPath":"books/xiaoyu-r1-4fe055c5723b/page-2-a1.png","modelId":"wan2.7-image","costCny":0.2}
+{"seq":8,"at":1791910928993,"stage":"checking","kind":"consistency","pageNo":2,"attempt":1,"score":null,"verdict":"unavailable","threshold":0.75,"missedAnchors":[]}
+{"seq":9,"at":1791910928993,"stage":"illustrating","kind":"stage","phase":"begin","pageNo":3,"attempt":1,"total":3}
+{"seq":10,"at":1791910951645,"stage":"illustrating","kind":"illustration","pageNo":3,"attempt":1,"assetPath":"books/xiaoyu-r1-4fe055c5723b/page-3-a1.png","modelId":"wan2.7-image","costCny":0.2}
+{"seq":11,"at":1791910951646,"stage":"checking","kind":"consistency","pageNo":3,"attempt":1,"score":null,"verdict":"unavailable","threshold":0.75,"missedAnchors":[]}
+{"seq":12,"at":1791910951646,"stage":"narrating","kind":"error","code":"provider-not-configured","message":"配音能力未接入（W4 落地），这本书暂时没有朗读","fatal":false}
+{"seq":13,"at":1791910951654,"stage":"assembling","kind":"book-ready","bookId":"xiaoyu-r1-4fe055c5723b","path":"books/xiaoyu-r1-4fe055c5723b/book.json","stats":{"elapsedMs":78468,"imageCalls":3,"firstPassCount":0,"redrawCount":0,"totalCostCny":0,"nodesPlanned":3,"nodesGenerated":3}}

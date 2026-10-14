@@ -1,0 +1,289 @@
+/* ============================================================================
+ * reader-book.css —— 独读版阅读器（`ReaderBook.tsx`）的样式
+ *
+ * 几何整块来自首页第二屏（`storybook-flip.css` §2），**类名另起一套**：
+ * 两张样式表都是全局引入的，共用 `.book__*` 就会互相串。
+ *
+ * 与首页那套的三处差别，都是"一页一图一句"决定的：
+ *   1. 每一面装的是一整页（方形插画在上 75%、正文在下 25%），不是跨页图的一半；
+ *   2. 舞台尺寸按**一页 3:4** 推，两页合起来正好还是 3:2 —— 与首页咬合在同一组
+ *      min() 上，观感一致，改一处要同时看另一处；
+ *   3. 静止模式（prefers-reduced-motion）走 `data-motion="reduced"`：
+ *      不是"不翻页"，是**不播动画**，直接落在目标页上（README §五 的硬要求）。
+ * ========================================================================== */
+
+.reader {
+  --page-h: min(74vh, 88vw);
+  padding: 24px 0 48px;
+}
+
+.reader__stage {
+  /* 舞台就是一整本书翻开的样子：宽 = 2 × 页宽 */
+  position: relative;
+  width: min(1120px, 96vw, 108vh);
+  aspect-ratio: 3 / 2;
+  margin: 0 auto;
+  outline: none;
+}
+
+.reader__stage:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 8px;
+  border-radius: var(--card-radius);
+}
+
+/* 与首页第二屏同一条：perspective-origin 落在书的中点上，叶的 transform-origin
+   也落在那里，转轴与灭点重合才不会"斜着翻" */
+.reader__book {
+  position: absolute;
+  inset: 0;
+  perspective: 2400px;
+  transform: translateX(calc(-1 * var(--book-x, 25%)));
+}
+
+.reader__leaf {
+  position: absolute;
+  left: 50%; /* 书脊 */
+  top: 0;
+  width: 50%;
+  height: 100%;
+  transform-origin: left center;
+  transform-style: preserve-3d;
+  transform: rotateY(var(--leaf-angle, 0deg));
+  z-index: var(--leaf-z, 1);
+}
+
+.reader__face {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  backface-visibility: hidden;
+  border-radius: 2px;
+  box-shadow: 0 2px 7px rgba(19, 19, 28, 0.1);
+  /* 纸色：图铺不满时露出来的那一层，不是白 */
+  background-color: #fbf7ef;
+  display: flex;
+  flex-direction: column;
+}
+
+.reader__face--back {
+  transform: rotateY(180deg);
+}
+
+/* 纸感：shade = sin(θ)，平放 0、立起 1（flip.ts 把两个端点钉死） */
+.reader__shade {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(to right, rgba(30, 22, 12, 0.32), rgba(30, 22, 12, 0) 54%);
+}
+
+/* ── 一页的版式：图在上、正文在下 ─────────────────────────────────────── */
+
+.reader__art {
+  flex: 0 0 75%;
+  background-repeat: no-repeat;
+  /* contain + 顶部对齐：方形画不裁不拉伸，正文那条纸色带留在下面 */
+  background-size: contain;
+  background-position: 50% 0;
+  background-color: #fbf7ef;
+}
+
+.reader__text {
+  flex: 1 1 25%;
+  padding: 4% 8% 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.35em;
+}
+
+.reader__text p {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: clamp(13px, 1.5vh, 19px);
+  line-height: 1.7;
+  color: var(--ink-soft);
+}
+
+/* 缺图那一页：写清"为什么这里没有画"，不留裂图也不留空框 */
+.reader__missing {
+  flex: 0 0 75%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-bottom: 1px dashed var(--dot);
+  color: var(--ink-muted);
+  font-size: 14px;
+}
+
+.reader__missing-no {
+  font-size: 12px;
+  color: var(--ink-muted);
+  letter-spacing: 0.08em;
+}
+
+.reader__cover,
+.reader__back {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 10%;
+  text-align: center;
+  /* 封面与封底铺一层极淡的暖底，与内页的纸色区分开 */
+  background: linear-gradient(160deg, rgba(var(--accent-rgb), 0.08), rgba(30, 22, 12, 0.03));
+}
+
+.reader__title {
+  font-family: var(--font-serif);
+  font-size: clamp(18px, 2.6vh, 30px);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.reader__hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+.reader__back-line {
+  font-family: var(--font-serif);
+  font-size: clamp(16px, 2.2vh, 24px);
+  margin: 0;
+}
+
+.reader__back-sub {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-muted);
+}
+
+/* ── 页码与进度 ─────────────────────────────────────────────────────────── */
+
+.reader__bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.reader__btn {
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--dot);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.reader__btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.reader__readout {
+  margin: 0;
+  font-size: 14px;
+  min-width: 12ch;
+  text-align: center;
+}
+
+.reader__total {
+  color: var(--ink-muted);
+}
+
+/**
+ * 朗读按钮。做成**药丸形**而不是圆形：它带字（"▶ 朗读"/"■ 停止"），
+ * 与左右两个只有箭头的圆钮不是一类东西——形状就把这件事说清了。
+ *
+ * ★ 用 `:disabled` 表示"这一面没有可念的"（封面与封底），并且**用同一个形状**：
+ *   封面确实没有正文，所以那不是"功能坏了"，是"这里本来就没有东西"。
+ */
+.reader__audio {
+  padding: 8px 14px;
+  border: 1px solid var(--dot);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/* 正在放：用强调色描边，不换底色——纸感的页面上多一块深色块反而更吵 */
+.reader__audio[aria-pressed='true'] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.reader__audio:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* 键盘聚焦要看得见：这一屏的翻页是键盘主路径，朗读钮也在同一条路径上 */
+.reader__audio:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* "这本书为什么没有朗读"那句。比书号那行**更醒目一点**：它是需要被读到的话 */
+.reader__meta--note {
+  color: var(--ink-soft);
+}
+
+.reader__progress {
+  width: min(320px, 60vw);
+  height: 2px;
+  margin: 14px auto 0;
+  background: var(--dot);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.reader__progress i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.reader__meta {
+  margin: 16px 0 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+/* ── 静止模式：不播补间，直接落在目标页 ─────────────────────────────────── */
+
+.reader[data-motion='reduced'] .reader__btn {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* 这一条与组件里的 matchMedia 是**同一件事的两半**：组件那一半负责"不跑补间"，
+     这一半负责"不给按钮加过渡"。两处都要有，少一处就会出现"少了一点动画"的中间态。 */
+  .reader__btn {
+    transition: none;
+  }
+}
+
+/* 竖屏手机：一页 3:4 装不下两页并排，就把舞台按宽度撑满、图仍是一页一图 */
+@media (max-width: 640px) {
+  .reader__stage {
+    width: 92vw;
+    aspect-ratio: 3 / 2;
+  }
+}

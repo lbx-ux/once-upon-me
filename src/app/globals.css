@@ -5,6 +5,12 @@
 @import '../components/book/storybook-flip.css';
 @import '../components/highlights/highlights-reel.css';
 @import '../components/creation/create-flow.css';
+@import '../components/reader/reader-book.css';
+@import '../components/settings/settings-drawer.css';
+@import '../components/shelf/shelf.css';
+@import '../components/shell/app-shell.css';
+@import '../components/studio/create-landing.css';
+@import '../components/studio/studio.css';
 @import '../components/back-to-top.css';
 
 /* ============================================================================
@@ -35,6 +41,26 @@
      这个组合。12 张封面是水彩风，多张边缘留了大片浅色，投影一虚，浅边就和页面
      底色连成一片，被读成卡纸边。取舍与实测见 components/hero/hero-orbit.css §4。 */
   --card-shadow: 0 18px 44px rgba(19, 19, 28, 0.24);
+
+  /* ── 创作流引入的四个令牌（W2）──────────────────────────────────────────
+     这一屏第一次出现"面板 / 输入框 / 只读文本块 / 真错误"这四种东西，
+     首页三屏一个都没有。按约定它们仍然只在这里定义一次。 */
+  /* 纸白表面：面板与输入框。与 --bg（页面底色）分开，
+     这样"面板浮在页面上"这一层关系在改配色时是可调的，而不只是一条边框 */
+  --surface: #ffffff;
+  /* 只读文本块的浅底。用 --ink 的极低透明度而不是另取一个灰：
+     换主色时它会跟着走，不会留下一块孤立的灰 */
+  --surface-soft: rgba(28, 28, 36, 0.05);
+  /* 错误色。★ 只用在"这一轮真的坏了"的地方（fatal、填错 key）——
+     拿它做装饰，红就不再表示任何东西了 */
+  --danger: #a4300c;
+
+  /* 工作台的纸色（侧栏外壳那一屏）。与 --bg（首页/冷灰）分开，因为工作台是
+     "坐下来做事"的那一屏，原型给的是暖纸；而首页那三屏的底色要跟水彩场景
+     的溶解走，不能一起改。对比度（脚本算的，见 app-restructure 工单 05 Comments）：
+     --ink 16.45:1、--ink-muted 4.92:1、--accent 4.77:1（三条都过正文级 AA；
+     数是 `node` 现算的，命令记在工单 05 的 Comments，不是估的） */
+  --paper: #faf5ee;
 
   color-scheme: light; /* 目前只有浅色一套，先锁掉系统深色的表单控件反色 */
 }
@@ -116,4 +142,61 @@ body {
 
 .create-page__back a:hover {
   color: var(--accent);
+}
+
+/* ----------------------------------------------------------------------------
+ * 页面层：阅读器（/reader/[bookId]）
+ *
+ * 与创作流同一条道理：首页那条桌面兜底写在 `.home-hero` 上，不会锁住这一页。
+ * 阅读器在手机上要能竖着看——一屏一页，字号随视口走（见 reader-book.css）。
+ * -------------------------------------------------------------------------- */
+.reader-page {
+  min-height: 100vh;
+}
+
+.reader-page__back {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 20px 20px 0;
+  font-size: 14px;
+}
+
+.reader-page__back a,
+.reader-page__actions a {
+  color: var(--ink-muted);
+  text-decoration: none;
+}
+
+.reader-page__back a:hover,
+.reader-page__actions a:hover {
+  color: var(--accent);
+}
+
+.reader-page__empty {
+  max-width: 620px;
+  margin: 12vh auto 0;
+  padding: 0 20px;
+}
+
+.reader-page__empty h1 {
+  font-family: var(--font-serif);
+  font-size: 24px;
+  margin: 0 0 10px;
+}
+
+.reader-page__empty p {
+  color: var(--ink-muted);
+  line-height: 1.8;
+}
+
+.reader-page__empty code {
+  font-size: 13px;
+  background: var(--surface-soft);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.reader-page__actions {
+  display: flex;
+  gap: 18px;
 }

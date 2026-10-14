@@ -159,6 +159,7 @@ async function main(): Promise<void> {
       `  派生的角色段（每一页 prompt 的开头，由卡唯一决定）：\n    ${promptFragmentOf(card)}\n\n`,
   )
 
+  let voiceId: string | undefined
   let providers: ProviderBundle
   if (mode === 'stub') {
     if (form !== 'shared') {
@@ -219,7 +220,14 @@ async function main(): Promise<void> {
       //   用可演示性换一点磁盘，.out/ 本来也不入库。
       image: recordImage(base.image, store, persist, manifest),
     }
-    process.stdout.write(`live：本次运行会同时录制到 ${manifestPath}\n\n`)
+    // ★ 音色由调用方给（引擎不读环境变量）：--voice= 优先，其次 .env.local 的 TTS_VOICE。
+    //   都不给就是「没有朗读」，并有一条非致命事件说清原因（见 runBook 的三分支）
+    voiceId = (args['voice'] ?? env['TTS_VOICE'] ?? '').trim() || undefined
+    process.stdout.write(`live：本次运行会同时录制到 ${manifestPath}
+`)
+    process.stdout.write(`live：音色 ${voiceId ?? '（未指定，这本书不会有朗读）'}
+
+`)
   } else {
     throw new Error(`未知 mode=${mode}（可用：stub / live / offline）`)
   }
@@ -239,6 +247,7 @@ async function main(): Promise<void> {
       theme,
       form,
       pages,
+      ...(voiceId ? { voiceId } : {}),
     },
     {
       providers,

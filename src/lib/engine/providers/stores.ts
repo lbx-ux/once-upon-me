@@ -175,15 +175,30 @@ export async function createFsStore(root: string): Promise<AssetStore> {
   return store
 }
 
-/** mime → 扩展名。资产文件名要能被 `<img src>` 与浏览器直接认，靠猜扩展名会炸 */
+/**
+ * mime → 扩展名。资产文件名要能被 `<img src>` / `<audio src>` 与浏览器直接认，
+ * 靠猜扩展名会炸。
+ *
+ * ★ `audio/mpeg` → `.mp3` 这一条是补的，而且是被实测抓出来的：
+ *   百炼的语音接口回的 content-type 就是 `audio/mpeg`，而它**不含 "mp3" 这三个字符**，
+ *   于是音频资产落成了 `page-1-a1.bin`（2026-10-14，`.out/tts-int.mts` 第一次跑）。
+ *   所以顺序很重要：`mpeg` 要先于任何宽泛判断，且不能笼统地写
+ *   `includes('mpeg')` —— 那会把 `video/mpeg` 也叫成 mp3。
+ */
 export function extensionOf(mime: string): string {
-  if (mime.includes('png')) return '.png'
-  if (mime.includes('webp')) return '.webp'
-  if (mime.includes('jpeg') || mime.includes('jpg')) return '.jpg'
-  if (mime.includes('svg')) return '.svg'
-  if (mime.includes('mp3')) return '.mp3'
-  if (mime.includes('mp4')) return '.mp4'
-  if (mime.includes('json')) return '.json'
+  // ★ 先剥掉参数：真实的 content-type 长这样 `audio/mpeg; charset=binary`，
+  //   拿整串去比相等会漏（这一条是 stores.test.ts 抓出来的）
+  const m = mime.toLowerCase().split(';')[0]?.trim() ?? ''
+  if (m.includes('png')) return '.png'
+  if (m.includes('webp')) return '.webp'
+  if (m.includes('jpeg') || m.includes('jpg')) return '.jpg'
+  if (m.includes('svg')) return '.svg'
+  // 音频：精确匹配，别用 'mp3' 去撞 'mpeg'（撞不上的）
+  if (m === 'audio/mpeg' || m === 'audio/mp3' || m.includes('mp3')) return '.mp3'
+  if (m === 'audio/wav' || m === 'audio/x-wav' || m === 'audio/wave') return '.wav'
+  if (m === 'audio/mp4' || m === 'audio/m4a' || m === 'audio/x-m4a') return '.m4a'
+  if (m.includes('mp4')) return '.mp4'
+  if (m.includes('json')) return '.json'
   return '.bin'
 }
 

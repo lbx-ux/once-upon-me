@@ -1,0 +1,300 @@
+/**
+ * shelf.css —— 书架（工单 05 的仪表盘，挪进工作台侧栏的「书架」）
+ *
+ * 设计稿的版式：顶部问候 → 四张统计卡 → 最近/主题模板 → 列表。
+ * 颜色一律走 `var(--x)`（globals.css 的 :root 是唯一定义处）。
+ *
+ * ★ 一处刻意的取舍：统计卡上的数字用**衬线体**且比别处大。
+ *   它们是这一屏的"温度"所在（家长先看到的是"我陪他读了 42 分钟"），
+ *   而这个页面没有插画可依靠——数字本身就是它的视觉主体。
+ */
+
+.home {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 32px 20px 64px;
+}
+
+.shelf__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.shelf__hello {
+  margin: 0 0 4px;
+  font-family: var(--font-serif);
+  font-size: 26px;
+  font-weight: 600;
+}
+
+.shelf__sub {
+  margin: 0;
+  font-size: 14px;
+  color: var(--ink-muted);
+}
+
+.shelf__tab:focus-visible,
+.shelf__theme:focus-visible,
+.shelf__book:focus-visible,
+.shelf__cta:focus-visible,
+.shelf__resume:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ── 统计卡 ────────────────────────────────────────────────────────────── */
+
+.shelf__stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin: 24px 0 10px;
+}
+
+.shelf__stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 16px;
+  border: 1px solid var(--dot);
+  border-radius: var(--card-radius);
+  background: var(--surface);
+}
+
+.shelf__stat-label {
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+.shelf__stat-value {
+  font-family: var(--font-serif);
+  font-size: 28px;
+  line-height: 1.2;
+}
+
+.shelf__stat-unit {
+  margin-left: 4px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+.shelf__stat-note {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--ink-muted);
+}
+
+/* 这几个数只在本机成立，所以它必须**看得见**，不能是一句藏在角落的小字 */
+.shelf__local-note {
+  margin: 0 0 24px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--ink-muted);
+}
+
+/* ── 继续上次创作 ─────────────────────────────────────────────────────── */
+
+.shelf__resume {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 24px;
+  padding: 16px 18px;
+  border: 1px solid rgba(var(--accent-rgb), 0.35);
+  border-radius: var(--card-radius);
+  background: rgba(var(--accent-rgb), 0.06);
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.shelf__resume-label {
+  font-size: 12px;
+  color: var(--accent);
+}
+
+.shelf__resume-title {
+  font-family: var(--font-serif);
+  font-size: 20px;
+}
+
+.shelf__resume-sub {
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+/* ── 两个 tab ─────────────────────────────────────────────────────────── */
+
+.shelf__tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--dot);
+}
+
+.shelf__tab {
+  padding: 8px 14px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--ink-muted);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.shelf__tab[aria-selected='true'] {
+  border-bottom-color: var(--accent);
+  color: var(--ink);
+}
+
+.shelf__section-title {
+  margin: 0 0 10px;
+  font-size: 15px;
+}
+
+.shelf__section-hint {
+  margin: 0 0 14px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--ink-muted);
+}
+
+/* ── 主题模板 ─────────────────────────────────────────────────────────── */
+
+.shelf__theme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 12px;
+}
+
+.shelf__theme {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 8px;
+  border: 1px solid var(--dot);
+  border-radius: var(--card-radius);
+  background: var(--surface);
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.shelf__theme-art {
+  width: 72px;
+  height: 72px;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+}
+
+.shelf__theme-label {
+  font-size: 13px;
+}
+
+/* ── 我的故事 ─────────────────────────────────────────────────────────── */
+
+.shelf__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.shelf__book {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid var(--dot);
+  border-radius: var(--card-radius);
+  background: var(--surface);
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.shelf__book--new {
+  align-items: center;
+  justify-content: center;
+  min-height: 76px;
+  border-style: dashed;
+  color: var(--ink-muted);
+}
+
+.shelf__book-title {
+  font-family: var(--font-serif);
+  font-size: 17px;
+}
+
+.shelf__book-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+.shelf__book-audio {
+  padding: 1px 7px;
+  border: 1px solid var(--dot);
+  border-radius: 999px;
+}
+
+.shelf__book-date {
+  margin-left: auto;
+}
+
+/* ── 空态 ─────────────────────────────────────────────────────────────── */
+
+.shelf__empty {
+  padding: 28px 20px;
+  border: 1px dashed var(--dot);
+  border-radius: var(--card-radius);
+  text-align: center;
+}
+
+.shelf__empty p {
+  margin: 0 0 10px;
+  font-size: 14px;
+  color: var(--ink-muted);
+}
+
+.shelf__empty-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 0 !important;
+}
+
+.shelf__cta {
+  padding: 9px 18px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--surface);
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.shelf__cta--ghost {
+  background: var(--surface);
+  color: var(--accent);
+}
+
+/* 窄屏：四张卡挤不下，两列 */
+@media (max-width: 640px) {
+  .shelf__stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .shelf__hello {
+    font-size: 22px;
+  }
+}

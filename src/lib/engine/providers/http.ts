@@ -118,7 +118,14 @@ export function shouldRetry(status: number, method: string): boolean {
   return status === 0 || status === 429 || status >= 500
 }
 
-/** 把一次不成功的响应变成 EngineError，消息里带供应商的中文原文（参数错误只有自然语言，没有字段名） */
+/**
+ * 把一次不成功的响应变成 EngineError，消息里带供应商的中文原文
+ * （参数错误只有自然语言，没有字段名）。
+ *
+ * ★ 状态码与供应商错误码**同时**塞进结构化字段：message 是给人读的，界面文案分流
+ *   要靠 `httpStatus` / `providerCode`（见 errors.ts 的注释与 app 层的
+ *   `provider-messages.ts`）。这里不改 message 的措辞——它对开发者仍然有用。
+ */
 export function failureToError(failure: HttpFailure, what: string): EngineError {
   const hint = STATUS_HINTS[failure.status] ?? ''
   const parts = [`${what} 失败 HTTP ${failure.status}`]
@@ -128,6 +135,8 @@ export function failureToError(failure: HttpFailure, what: string): EngineError 
   return new EngineError('provider-call-failed', parts.join(' · '), {
     traceId: failure.traceId || undefined,
     detail: failure.body,
+    httpStatus: failure.status,
+    providerCode: failure.code || undefined,
   })
 }
 

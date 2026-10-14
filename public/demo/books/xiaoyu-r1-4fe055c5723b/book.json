@@ -1,0 +1,198 @@
+{
+  "bookId": "xiaoyu-r1-4fe055c5723b",
+  "cardId": "xiaoyu-r1",
+  "cardRevision": 1,
+  "form": "solo",
+  "tree": {
+    "form": "solo",
+    "title": "雨天的桥",
+    "rootId": "n1",
+    "nodes": [
+      {
+        "nodeId": "n1",
+        "pageNo": 1,
+        "scene": "小宇站在窗前，看着外面下大雨，雨水汇聚成一条小河。",
+        "body": [
+          "哗啦啦，大雨落下来。",
+          "地上变成亮晶晶的河。"
+        ],
+        "imagePrompt": "透过明亮的窗户向外看，灰蓝色的雨天色调，窗外是模糊的城市轮廓，地面有积水反射着微光，远处有几朵低垂的云。",
+        "mood": "wonder",
+        "next": [
+          "n2"
+        ],
+        "pathFromRoot": [
+          "n1"
+        ]
+      },
+      {
+        "nodeId": "n2",
+        "pageNo": 2,
+        "scene": "小宇想象自己划着一艘小船，穿过积水的街道，去接他的恐龙玩具。",
+        "body": [
+          "我坐上小船出发啦。",
+          "去接我的三角龙朋友。"
+        ],
+        "imagePrompt": "画面转为幻想风格，柔和的光晕包裹着小船，水面平静如镜，倒映着天空的云彩，周围漂浮着巨大的、半透明的云朵形状，色彩梦幻且安静。",
+        "mood": "calm",
+        "next": [
+          "n3"
+        ],
+        "pathFromRoot": [
+          "n1",
+          "n2"
+        ]
+      },
+      {
+        "nodeId": "n3",
+        "pageNo": 3,
+        "scene": "雨停了，月亮出来，小宇抱着恐龙躺在床上，听着窗外的滴答声入睡。",
+        "body": [
+          "雨停了，月亮探出头。",
+          "闭上眼睛，晚安好梦。"
+        ],
+        "imagePrompt": "温馨的卧室场景，暖黄色的台灯照亮床头，窗外是深蓝色的夜空和一轮弯月，树枝在微风中轻轻摆动，整体氛围宁静安详。",
+        "mood": "tender",
+        "next": [],
+        "pathFromRoot": [
+          "n1",
+          "n2",
+          "n3"
+        ]
+      }
+    ]
+  },
+  "illustrations": [
+    {
+      "pageNo": 1,
+      "attempt": 1,
+      "asset": {
+        "path": "books/xiaoyu-r1-4fe055c5723b/page-1-a1.png",
+        "digest": "728f58ded7f5",
+        "bytes": 3399199,
+        "mime": "image/png",
+        "originUrl": "https://tokenrhythm-prod-backup-oss.oss-cn-beijing.aliyuncs.com/generated-images/de7b6fa6-ce7a-4fd4-b5db-ef33b8209afa/2026/10/aaa318d7-9c3e-4751-adb1-f188781cf74e.png?x-oss-credential=STS.NY3EJRm5CWotfrQAJXpCETvfQ%2F20261013%2Fcn-beijing%2Foss%2Faliyun_v4_request&x-oss-date=20261013T170145Z&x-oss-expires=3539&x-oss-signature-version=OSS4-HMAC-SHA256&x-oss-security-token=CAIS6gJ1q6Ft5B2yfSjIr5qGDvDmgOpi4K2fZFTgpUoNfMxpu7PNszz2IHhMfXNvCOodsvwynG1W6%2Fkclol4UZJJSErYbMJ09dFR9g%2BsYZGE4pPktOxU2ML5RTbNWkZJXxIJmLmrIunGc9KBNnrm9EYqs5aYGBymW1u6S%2B7r7bdsctUQWCShcDNCH604DwB%2BqcgcRxCzXLTXRXyMuGfLC1dysQdRkH527b%2FFoveR8R3Dllb3uIR3zsbTWsH%2BNZU3bM0lC4ftgLMtKvf7vXQOu0QQxsBfl7dZ%2FDrLhNaZDmRK7g%2BOW%2BiuqYU3dVUmN%2FJhR%2FYZ9KWiyKImoKTPkIf6zQxNLP1VVi3UR4%2BtxsbeEf%2BkOtM0ebfyIXPJ38AWryAJQNnaC5hyFHSpG7JJQhcYYXSnmozFKSSrgxlM7lMWwUwpBD3Sfb40ljPGtLOhbBP0SNbSmk17UeQnZDgTWnBboyqPO8FpfWQ9RoZwW979JRqAAZ1li9md0NUXOGGNaDBYEWoB5Ysetv6qUsDqCodVfYq6JR8uN1iSulox3X4RR8gZiSfR1WvNEL6sKAVVpb43zoOssDsGZkspSP1WZVeoBG9Rm4cej0ehd1c9dopGFOjUZR66DHTLpNLYqgLx9OEKGLmiUhIH1JeykZZRavPpG3L2IAA%3D&x-oss-signature=8cd4daed37a1042b4172f42c0c9563f7ffd65d14e5bc602eb4329e352fce28b3",
+        "originExpiresAt": 1791914443811
+      },
+      "provenance": {
+        "modelId": "wan2.7-image",
+        "promptVersion": "image-page@v1",
+        "cardRevision": 1,
+        "generatedAt": 1791910906696
+      },
+      "consistency": {
+        "pageNo": 1,
+        "attempt": 1,
+        "score": null,
+        "verdict": "unavailable",
+        "threshold": 0.75,
+        "missedAnchors": [],
+        "reason": "未配置视觉比对模型，这一页没有核对过"
+      },
+      "needsHumanReview": true
+    },
+    {
+      "pageNo": 2,
+      "attempt": 1,
+      "asset": {
+        "path": "books/xiaoyu-r1-4fe055c5723b/page-2-a1.png",
+        "digest": "1c4574abebd5",
+        "bytes": 3813468,
+        "mime": "image/png",
+        "originUrl": "https://tokenrhythm-prod-backup-oss.oss-cn-beijing.aliyuncs.com/generated-images/de7b6fa6-ce7a-4fd4-b5db-ef33b8209afa/2026/10/b3b7f3bc-246b-4d72-b99d-2c5fda0c13c8.png?x-oss-credential=STS.NZq5sK2B1rZfcKCqTveqsSMQz%2F20261013%2Fcn-beijing%2Foss%2Faliyun_v4_request&x-oss-date=20261013T170208Z&x-oss-expires=3539&x-oss-signature-version=OSS4-HMAC-SHA256&x-oss-security-token=CAIS6gJ1q6Ft5B2yfSjIr5nEfsn%2F350QxZiNYW3ylVQjaf5fvIj6mDz2IHhMfXNvCOodsvwynG1W6%2Fkclol4UZJJSErYbMJ09dFR9g%2BsYZGE4pPktOxb1cD%2BQjfIW0Z%2BLxAJmLmrIunGc9KBNnrm9EYqs5aYGBymW1u6S%2B7r7bdsctUQWCShcDNCH604DwB%2BqcgcRxCzXLTXRXyMuGfLC1dysQdRkH527b%2FFoveR8R3Dllb3uIR3zsbTWsH%2BNZU3bM0lC4ftgLMtKvf7vXQOu0QQxsBfl7dZ%2FDrLhNaZDmRK7g%2BOW%2BiuqYU3dVUmN%2FJhR%2FYZ9KWiyKImoKTPkIf6zQxNLP1VVi3UR4%2BtxsbeEf%2BkOtM0ebfyIXPJ38AWryAJQNnaC5hyFHSpG7JJQhcYYXSnWuJdtAEGtnp%2BwxZx5tlkwSBHMGtPxSEM17BkCXbB7cu3%2F0hmVNGywQ3mVXo0mViFWMtg12T%2BbZyoW979JRqAASQiYO2WoP2k0RsWxSmphCEBHKUgqQ9OM8ey7TKuuMFO7foUzoU%2BnIGxEfH2Gi4yRxaD47o6KtZq%2FKhhSQinsn93dwlbPNMJprHppTGN%2FxLuSDT9dEIfZ9AYDFmMDFtRYIlkspC7LIae2RLBQJb%2FCJv2ODumy6lzqerWuVNdEfqEIAA%3D&x-oss-signature=286477709ccedd25ab18979b75bf9a4bdcbe1e5b86b6013de18e1c3e25a02e25",
+        "originExpiresAt": 1791914466318
+      },
+      "provenance": {
+        "modelId": "wan2.7-image",
+        "promptVersion": "image-page@v1",
+        "cardRevision": 1,
+        "generatedAt": 1791910928993
+      },
+      "consistency": {
+        "pageNo": 2,
+        "attempt": 1,
+        "score": null,
+        "verdict": "unavailable",
+        "threshold": 0.75,
+        "missedAnchors": [],
+        "reason": "未配置视觉比对模型，这一页没有核对过"
+      },
+      "needsHumanReview": true
+    },
+    {
+      "pageNo": 3,
+      "attempt": 1,
+      "asset": {
+        "path": "books/xiaoyu-r1-4fe055c5723b/page-3-a1.png",
+        "digest": "ff5406181f3d",
+        "bytes": 4247543,
+        "mime": "image/png",
+        "originUrl": "https://tokenrhythm-prod-backup-oss.oss-cn-beijing.aliyuncs.com/generated-images/de7b6fa6-ce7a-4fd4-b5db-ef33b8209afa/2026/10/1dccb88c-f0dc-4f13-84bc-e38bee5510c1.png?x-oss-credential=STS.NYwkVzE1Kp4BBSMS5gWcEKRZZ%2F20261013%2Fcn-beijing%2Foss%2Faliyun_v4_request&x-oss-date=20261013T170230Z&x-oss-expires=3539&x-oss-signature-version=OSS4-HMAC-SHA256&x-oss-security-token=CAIS6gJ1q6Ft5B2yfSjIr5rCIOzOqO5qx%2FapQHX8tzUyW%2BxppJfxuDz2IHhMfXNvCOodsvwynG1W6%2Fkclol4UZJJSErYbMJ09dFR9g%2BsYZGE4pPktO1d0Mz4QTTMU0Yufh8JmLmrIunGc9KBNnrm9EYqs5aYGBymW1u6S%2B7r7bdsctUQWCShcDNCH604DwB%2BqcgcRxCzXLTXRXyMuGfLC1dysQdRkH527b%2FFoveR8R3Dllb3uIR3zsbTWsH%2BNZU3bM0lC4ftgLMtKvf7vXQOu0QQxsBfl7dZ%2FDrLhNaZDmRK7g%2BOW%2BiuqYU3dVUmN%2FJhR%2FYZ9KWiyKImoKTPkIf6zQxNLP1VVi3UR4%2BtxsbeEf%2BkOtM0ebfyIXPJ38AWryAJQNnaC5hyFHSpG7JJQhcYYXSn%2BqJEjAEGtnp%2BwxZx5tlkwSBHMGtPxSEM17BkCXbB7cu3%2F0hmVNGywQ3mVXo0mViFWMtg12Rp%2FW4xW979JRqAAV0YaUkwsd0XtvBgI5Qjm02XCYTAAA%2BZLofGL41YUeuq%2BYC8mUD90%2BjIYHBFmRoTo8HpSrT5vai%2FW2aZ7c1e0WcE0iDJLe1h%2BnUS6YURBskVIr5onDpd8FGT06OSr%2B9DToxB7OVEWIWAJ2aON5QYDUzyTngtdjhtxo1VoywTIFbmIAA%3D&x-oss-signature=5bc8e62e09f47dd2516f2e09a71f18f56fc62cac10e3cea02ec4d67384f37aa4",
+        "originExpiresAt": 1791914488644
+      },
+      "provenance": {
+        "modelId": "wan2.7-image",
+        "promptVersion": "image-page@v1",
+        "cardRevision": 1,
+        "generatedAt": 1791910951645
+      },
+      "consistency": {
+        "pageNo": 3,
+        "attempt": 1,
+        "score": null,
+        "verdict": "unavailable",
+        "threshold": 0.75,
+        "missedAnchors": [],
+        "reason": "未配置视觉比对模型，这一页没有核对过"
+      },
+      "needsHumanReview": true
+    }
+  ],
+  "errors": [],
+  "narrations": [
+    {
+      "pageNo": 1,
+      "voiceId": "longjielidou_v3.6",
+      "textHash": "515ab515c10e",
+      "asset": {
+        "path": "books/xiaoyu-r1-4fe055c5723b/page-1-a1.mp3",
+        "digest": "d1175e9037e9",
+        "bytes": 101851,
+        "mime": "audio/mpeg"
+      }
+    },
+    {
+      "pageNo": 2,
+      "voiceId": "longjielidou_v3.6",
+      "textHash": "2769e6eadb5f",
+      "asset": {
+        "path": "books/xiaoyu-r1-4fe055c5723b/page-2-a1.mp3",
+        "digest": "fa80e2c428a4",
+        "bytes": 77851,
+        "mime": "audio/mpeg"
+      }
+    },
+    {
+      "pageNo": 3,
+      "voiceId": "longjielidou_v3.6",
+      "textHash": "5535f404736b",
+      "asset": {
+        "path": "books/xiaoyu-r1-4fe055c5723b/page-3-a1.mp3",
+        "digest": "f3c6fb81d4c8",
+        "bytes": 111451,
+        "mime": "audio/mpeg"
+      }
+    }
+  ],
+  "createdAt": 1791910873178,
+  "stats": {
+    "elapsedMs": 78468,
+    "imageCalls": 3,
+    "firstPassCount": 0,
+    "redrawCount": 0,
+    "totalCostCny": 0,
+    "nodesPlanned": 3,
+    "nodesGenerated": 3
+  },
+  "cardDigest": "8a1bd36bbdba"
+}

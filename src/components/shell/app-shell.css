@@ -1,0 +1,258 @@
+/**
+ * app-shell.css —— 工作台外壳
+ *
+ * 侧栏 232px、折叠后收成 72px 的图标栏。底色是暖纸 + 点阵，
+ * 点阵与首页第二屏**共用同一套令牌**（`--dot` / `--dot-size`），
+ * 不另取一份——那是 README §五 里"改配色只动那一块"的同一条纪律。
+ *
+ * ★ 折叠不是"把宽度改成 0"：折叠后**图标还在**，标签隐藏。
+ *   只剩图标时名字靠 `title` 与 `aria-label` 给读屏（组件那边写了）。
+ */
+
+.shell {
+  display: flex;
+  min-height: 100vh;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+/* ── 侧栏 ─────────────────────────────────────────────────────────────── */
+
+.shell__side {
+  flex: 0 0 232px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 20px 14px 16px;
+  background: var(--surface);
+  border-right: 1px solid var(--dot);
+  transition: flex-basis 0.22s ease;
+}
+
+.shell[data-collapsed='true'] .shell__side {
+  flex-basis: 72px;
+}
+
+.shell__brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 6px 14px;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.shell__brand-mark {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  border-radius: 9px;
+  overflow: hidden;
+}
+
+.shell__brand-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.shell__brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.shell__brand-cn {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+/* 英文名用衬线斜体 + 强调色：这是原型里唯一一处"品牌声"，跟着首页的字体档走 */
+.shell__brand-en {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 14px;
+  color: var(--accent);
+}
+
+.shell__group-label {
+  margin: 0 0 4px;
+  padding: 0 8px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--ink-muted);
+  white-space: nowrap;
+}
+
+.shell__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.shell__link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 11px 12px;
+  border: none;
+  border-radius: 11px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.shell__link:hover {
+  background: var(--surface-soft);
+}
+
+/* 当前项：整块填强调色（原型就是这样，白字）。
+   ★ 不用"左边一条竖线"那种轻标记——侧栏只有四项，要一眼看出在哪 */
+.shell__link[aria-current='page'] {
+  background: var(--accent);
+  color: var(--surface);
+}
+
+.shell__link[aria-current='page']:hover {
+  background: var(--accent);
+}
+
+.shell__icon {
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+}
+
+.shell__link-label {
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.shell__foot {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: auto;
+  padding-top: 12px;
+}
+
+.shell__collapse {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--dot);
+  border-radius: 11px;
+  background: var(--surface);
+  color: var(--ink-muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.shell__collapse:hover {
+  color: var(--ink);
+}
+
+.shell__collapse-arrow {
+  flex: 0 0 20px;
+  width: 20px;
+  text-align: center;
+  font-size: 14px;
+  line-height: 1;
+}
+
+/* 折叠：藏掉所有文字，只留图标（居中） */
+.shell[data-collapsed='true'] .shell__link-label,
+.shell[data-collapsed='true'] .shell__brand-text,
+.shell[data-collapsed='true'] .shell__group-label {
+  display: none;
+}
+
+.shell[data-collapsed='true'] .shell__link,
+.shell[data-collapsed='true'] .shell__collapse {
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+/* ★ 品牌那一行的左右 padding 也要归零。
+   实测：折叠后侧栏渲染出来是 75px，不是这里写的 72px——`.shell__brand` 的
+   34px 标记 + 左右各 6px padding = 46px 的 min-content 撑的
+   （flex 项默认 `min-width: auto`，收缩不到内容以下）。
+   归零后最宽的孩子是 34px，小于 72 − 28(padding) − 1(border) = 43px，才是真的 72。 */
+.shell[data-collapsed='true'] .shell__brand {
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+/* ── 右边：干活的地方 ─────────────────────────────────────────────────── */
+
+.shell__main {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+}
+
+/* 点阵。与 storybook-flip.css 那一处同一套令牌与画法 */
+.shell__main::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(circle, var(--dot) 0.75px, transparent 0.95px);
+  background-size: var(--dot-size) var(--dot-size);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.shell__main > * {
+  position: relative;
+}
+
+/* 静止模式：折叠不animate，直接到位 */
+@media (prefers-reduced-motion: reduce) {
+  .shell__side {
+    transition: none;
+  }
+}
+
+/* 窄屏：侧栏强制成图标栏（收起/展开按钮在窄屏没有意义，宽度不够放标签）。
+   ★ 这一屏是家长在手机上看的，但工作台是桌面形态——手机上先保证能用，不追求好看 */
+@media (max-width: 900px) {
+  .shell__side {
+    flex-basis: 72px;
+  }
+
+  .shell__link-label,
+  .shell__brand-text,
+  .shell__group-label,
+  .shell__collapse .shell__link-label {
+    display: none;
+  }
+
+  .shell__link,
+  .shell__collapse {
+    justify-content: center;
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  /* 与上面折叠态同一条：品牌行不归零就会被它的 min-content 撑宽 */
+  .shell__brand {
+    justify-content: center;
+    padding-left: 0;
+    padding-right: 0;
+  }
+}

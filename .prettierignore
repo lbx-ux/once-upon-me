@@ -32,3 +32,11 @@ src/components/hero/hero-orbit.css
 
 # 引擎验收脚本的产物目录
 .out/
+
+# 随仓库提交的预生成演示书（`scripts/export-demo-book.mts` 从 `.out/` 拷进来的）。
+# ★ 这里是**引擎自己写出来的字节**，不是手写的源码：`JSON.stringify(x, null, 2)` 与
+#   Prettier 的排版不同（短数组是否折行、末尾有没有换行）。让 Prettier 接管，
+#   "仓库里那份"与"流水线刚吐出来的那份"从此就不是同一个文件了——
+#   ADR-0003 的演示路径正建立在"一本已生成的书是资产"上，资产要能被逐字节比对。
+#   要检查这本书的格式，去看产出它的代码，不是看它的排版。
+public/demo/books

@@ -1,3 +1,5 @@
+import Link from 'next/link'
+
 import StorybookFlip from '@/components/book/StorybookFlip'
 import BackToTop from '@/components/BackToTop'
 import HeroOrbit from '@/components/hero/HeroOrbit'
@@ -93,14 +95,20 @@ export default function HomePage() {
         <HeroTypewriter lines={HERO_LINES} />
 
         <div className="hero__cta">
-          {/* TODO: 创作流程做出来后换成指向 /create 的 Link */}
-          <button className="btn" type="button">
+          {/* ★ 这两个按钮从 W1 起就是死的（`<button>` 没有 handler，两条 TODO 都过期了），
+              用户报的"点开始创作进不去"就是这里。现在接上：创作流与阅读器都建好了。
+              主页 `/home` 做出来后，第一个要改指 `/home`（见 .scratch/app-restructure/issues/06）。 */}
+          {/* ★ 指向 /home 而不是 /create（工单 06 的收尾那条）：/home 是工作台的
+              「创作」那一屏——一句话就能进去，比直接落在四步表单的第一格里轻。
+              创作流本身仍在 /create，直接访问也照样能用；
+              "我做过什么"那一屏现在叫 /shelf（侧栏第二项） */}
+          <Link className="btn" href="/home">
             开始创作 →
-          </button>
-          {/* TODO: 阅读器做出来后换成指向成品示例的 Link */}
-          <button className="btn btn--ghost" type="button">
+          </Link>
+          {/* 指到 public/demo/books/ 里那本真的预生成演示书（ADR-0003：断网也能走完一本） */}
+          <Link className="btn btn--ghost" href="/reader/xiaoyu-r1-4fe055c5723b">
             看一本成品
-          </button>
+          </Link>
         </div>
       </HeroOrbit>
 

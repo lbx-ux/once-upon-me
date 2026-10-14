@@ -22,18 +22,37 @@ export class EngineError extends Error {
   readonly code: EngineErrorCode
   /** 排障用的供应商 traceId。实测同一概念两种拼法（traceId / trace_id），提取时两个都读 */
   readonly traceId?: string
+  /**
+   * 供应商回的 HTTP 状态码（本地错误、网络错、超时都没有它）。
+   *
+   * ★ 为什么它是一个**结构化字段**而不是留在 message 里：
+   *   ADR-0008 之后错误有了第二个读者——终端用户。界面要按"401 是 key 不对 /
+   *   403 是没这个模型的权限 / 404 是模型名不存在 / 429 是限流"分流文案，
+   *   而那个分流**绝不能靠正则去匹配 message**：message 是给人读的，
+   *   改一个字就会把界面文案改坏，而且这种坏法没有任何测试会红。
+   */
+  readonly httpStatus?: number
+  /** 供应商自己的错误码（`REASONING_REQUIRED` / `invalid_api_key`…），原样带出来 */
+  readonly providerCode?: string
   readonly detail?: unknown
 
   constructor(
     code: EngineErrorCode,
     message: string,
-    init?: { traceId?: string; detail?: unknown },
+    init?: {
+      traceId?: string
+      detail?: unknown
+      httpStatus?: number
+      providerCode?: string
+    },
   ) {
     super(message)
     this.name = 'EngineError'
     this.code = code
     this.traceId = init?.traceId
     this.detail = init?.detail
+    this.httpStatus = init?.httpStatus
+    this.providerCode = init?.providerCode
   }
 }
 

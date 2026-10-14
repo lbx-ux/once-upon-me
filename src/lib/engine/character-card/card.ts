@@ -62,6 +62,8 @@ export type BuildCardInput = {
   style: StyleLock
   referencePath: string
   referenceBytes: number
+  /** 参考图的真实 mime。★ 不许在这里写死一个（见下面 reference 处的实测教训） */
+  referenceMime: string
   modelId: string
   promptVersion: string
   now: number
@@ -86,7 +88,13 @@ export function buildCard(input: BuildCardInput): CharacterCard {
     path: input.referencePath,
     digest: 'pending',
     bytes: input.referenceBytes,
-    mime: 'image/webp',
+    // ★ 必须来自调用方。这里原先**写死 `image/webp`**，而实测出图回来的是 PNG
+    //   （`wan2.7-image` 与 `qwen-image-2.0` 都是），于是卡的 `reference.mime`
+    //   与字节、与文件名扩展名三方不一致，一路传到
+    //   `runBook` 里的 `toDataUrl(bytes, card.reference.mime)` ——
+    //   视觉比对收到一个"声明 webp、内容 png"的 data URL。
+    //   症状是"这家的比对时灵时不灵"，而排障会怀疑到平台头上。
+    mime: input.referenceMime,
   }
   const card: CharacterCard = {
     schemaVersion: 1,

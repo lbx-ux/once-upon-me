@@ -30,8 +30,53 @@ const PURE_ENGINE_FILES = [
   'src/lib/prompts/**/*.ts',
 ]
 
+/**
+ * 「客户端不许把引擎整包拖进 bundle」这条的机械执法处。
+ *
+ * 实测过的事故（W2，`/create` 第一次编译）：
+ *
+ * ```
+ * src/lib/creation/state.ts → @/lib/engine/index.ts → providers/stores.ts → node:fs/promises
+ * ⨯ Module build failed: UnhandledSchemeError: Reading from "node:fs/promises"
+ *   is not handled by plugins
+ * ```
+ *
+ * 起因只是"从 index 里取一个 `AGE_BANDS` 常量"。而 index 是引擎的公共入口，
+ * 它把 registry / providers / 存储适配器一起带进来——那些是**服务端**的东西。
+ * 手动修一次只能修这一次；写成规则之后，下一处同样的 import 当场过不了闸门。
+ *
+ * ★ 这条不改分层约定，是把它说清楚：**引擎对 UI 的接口分两半**——
+ *   · 跑一本（`runBook` / `createProviders` / 卡存储）：只在服务端用，走 `engine/index.ts`
+ *   · 事件协议与领域常量（`events.ts` / `domain.ts`）：浏览器安全，**直接从叶子模块取**
+ *   两半都是引擎的接口，只是生命周期不同。
+ */
+const CLIENT_LAYERS = [
+  'src/components/**/*.tsx',
+  'src/components/**/*.ts',
+  'src/lib/creation/**/*.ts',
+]
+
 const eslintConfig = [
   ...compat.extends('next/core-web-vitals', 'next/typescript'),
+  {
+    files: CLIENT_LAYERS,
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['@/lib/engine/index.ts', '*/engine/index.ts'],
+              message:
+                '客户端层不许 import engine/index（它会把 providers 与 node:fs 拖进浏览器 bundle）。' +
+                '要事件协议或领域常量请从 @/lib/engine/events.ts 或 @/lib/engine/domain.ts 取；' +
+                '要跑一本书请放到 Route Handler 里',
+            },
+          ],
+        },
+      ],
+    },
+  },
   {
     files: PURE_ENGINE_FILES,
     rules: {
@@ -74,7 +119,21 @@ const eslintConfig = [
     // `.next-preview/`。少了这个通配，`eslint .` 会去 lint 那些打包产物 ——
     // 实测过：多出 1414 条问题（123 个 error），全是 `.next-preview/**` 里的构建产物。
     // 构建产物不进 lint，这一条对 `.next` 和 `.next-preview` 是同一个理由。
-    ignores: ['node_modules/**', '.next*/**', 'out/**', 'build/**', 'next-env.d.ts'],
+    // ★ `.claude/**` 这一条是补的，症状与 `.next-preview` 那次同源：
+    //   并行会话在 `.claude/worktrees/<name>/` 下开一个**完整的仓库副本**，
+    //   而 `eslint .` 会把它整个 lint 一遍。实测（2026-10-14）：把一条 worktree
+    //   算进来，问题数从「0 error / 2 warning」变成 **1631 error / 19534 warning**——
+    //   真问题的信号被彻底淹掉，闸门从此等于没有。
+    //   `.out/` 里有生成的产物与一次性探针，本来就该忽略（它是 gitignored 的草稿区）。
+    ignores: [
+      'node_modules/**',
+      '.next*/**',
+      'out/**',
+      'build/**',
+      '.out/**',
+      '.claude/**',
+      'next-env.d.ts',
+    ],
   },
 ]
 

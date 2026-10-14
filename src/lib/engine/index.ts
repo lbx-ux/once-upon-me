@@ -38,6 +38,7 @@ import { createEventFactory, type EngineEventPayload } from './events.ts'
 import { EngineError } from './errors.ts'
 import { planStory } from './plan.ts'
 import { illustrateAll } from './illustrate.ts'
+import { narrateAll } from './narrate.ts'
 import { cardDigest, validateCard } from './character-card/card.ts'
 import { digest } from './digest.ts'
 import { toDataUrl } from './providers/http.ts'
@@ -45,6 +46,8 @@ import type { ProviderBundle } from './providers/types.ts'
 import type { StoryPlanInput } from '../prompts/story-plan.ts'
 
 export type {
+  AgeBand,
+  AnchorSlot,
   AssetRef,
   Book,
   BookForm,
@@ -60,7 +63,7 @@ export type {
   StoryTree,
   StyleLock,
 } from './domain.ts'
-export { EngineError } from './errors.ts'
+export { EngineError, asEngineError } from './errors.ts'
 export type { EngineEvent, EngineEventPayload } from './events.ts'
 export { STAGE_LABELS, describeEvent, isDisplayable } from './events.ts'
 export { buildTree, choicePagesOf, linearOrder, pathOf } from './tree.ts'
@@ -69,6 +72,7 @@ export {
   ANCHOR_SLOTS,
   ANCHOR_STRENGTH,
   AGE_BANDS,
+  BOOK_FORMS,
   MOODS,
   FORM_LABELS,
 } from './domain.ts'
@@ -96,6 +100,11 @@ export type BookRequest = {
   pages?: number
   /** 跑测与演示都要能缩小规模，所以它是入参不是常量 */
   maxIllustrationAttempts?: number
+  /**
+   * 用哪个音色朗读。**留给调用方**（界面与脚本各自决定默认值），引擎不读环境变量。
+   * 不给就不配音并说明——"默认音色"是产品概念，不是引擎概念。
+   */
+  voiceId?: string
 }
 
 export type RunDeps = {
@@ -158,14 +167,39 @@ export async function runBook(request: BookRequest, deps: RunDeps): Promise<Book
     now,
   })
 
+  // ── 配音 ──────────────────────────────────────────────────────────────────
+  // 三种状态都发一条**说清原因**的事件，而不是只有"成功"与"沉默"两种：
+  // 没配音的书在阅读器里是没有播放控件的，用户要知道为什么没有。
+  let narrations: readonly Narration[] = []
   if (!providers.voice) {
     forward({
       kind: 'error',
       stage: 'narrating',
       code: 'provider-not-configured',
-      message: '配音能力未接入（W4 落地），这本书暂时没有朗读',
+      message: '配音能力没接上（TTS_API_KEY / TTS_MODEL 未配置），这本书没有朗读',
       fatal: false,
     })
+  } else if (!request.voiceId) {
+    forward({
+      kind: 'error',
+      stage: 'narrating',
+      code: 'provider-not-configured',
+      message: '没指定音色（voiceId），这本书没有朗读',
+      fatal: false,
+    })
+  } else {
+    const narrated = await narrateAll(linearOrder(plan.tree), {
+      voice: providers.voice,
+      voiceId: request.voiceId,
+      store: providers.store,
+      bookId: bookIdOf(request),
+      emit: forward,
+    })
+    narrations = narrated.narrations
+    // ★ 配不上音的页**不进 `errors`**：那个字段是"这一页没有图"（见 domain.ts 里
+    //   PageFailure 那段注释，它专门警告过不要与"未核对"合并——同一个教训）。
+    //   音频缺席的记录在 `narrations` 本身：有 entry 的页才有录音，
+    //   没 entry 的页读出来就是"这一页没有朗读"，一个字段只有一种含义。
   }
 
   const stats = summarize({
@@ -186,13 +220,14 @@ export async function runBook(request: BookRequest, deps: RunDeps): Promise<Book
     // 硬失败页要跟着书走，不能只闪一下事件流——这就是 illustrateAll 注释里
     // 说的"书要标'这一页缺'"
     errors,
-    // 配音在 W1 是空的。留空数组而不是留一个假的：见 CLAUDE.md「没有的东西直说没有」
-    narrations: [] as Narration[],
+    // 没配音时是空数组，不填一个假的占位（CLAUDE.md「没有的东西直说没有」）。
+    // 有配音时，`narrations` 就是"哪些页有录音"的唯一记录
+    narrations,
     createdAt: startedAt,
     stats,
   }
 
-  const manifestPath = `books/${book.bookId}/book.json`
+  const manifestPath = manifestPathOf(book.bookId)
   await providers.store.putJson({
     path: manifestPath,
     value: { ...book, cardDigest: cardDigest(request.card) },
@@ -208,11 +243,32 @@ export async function runBook(request: BookRequest, deps: RunDeps): Promise<Book
 }
 
 /**
+ * 书目录与清单路径。
+ *
+ * ★ 为什么把它导出而不是留在本文件里：**这一层之外还有人要按同一个拼法找文件**——
+ *   app 层的事件日志（`books/<id>/events.jsonl`）、阅读器要读的 `book.json`、
+ *   静态导出的演示书。三处各写一遍 `books/${id}/...`，漂了以后的症状是
+ *   "日志写在这儿、阅读器去那儿找"，而两边都不会报错。所以只在这里定义一次。
+ */
+export function bookDirOf(bookId: string): string {
+  return `${BOOKS_PREFIX}/${bookId}`
+}
+
+export function manifestPathOf(bookId: string): string {
+  return `${bookDirOf(bookId)}/book.json`
+}
+
+export const BOOKS_PREFIX = 'books'
+
+/**
  * 书号 = 卡 + 版 + 主题指纹。
  * 刻意**不含时间戳**：同一份输入必须得到同一个书号，否则离线演示的资产
  * 每次跑都换目录，"预生成资产"就成了每次都重新生成的东西。
+ *
+ * ★ 导出它是因为调用方**在跑之前**就需要知道书号：事件日志要按书号开文件、
+ *   同一本书的并发保护要按书号挡。让调用方自己拼一遍指纹 = 两处拼法会漂。
  */
-function bookIdOf(request: BookRequest): string {
+export function bookIdOf(request: BookRequest): string {
   const theme = digest(
     `${request.card.cardId}|r${request.card.revision}|${request.form}|${request.theme}`,
   )
