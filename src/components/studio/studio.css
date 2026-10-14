@@ -1,14 +1,15 @@
 /**
- * studio.css —— 工作台里除了「创作」那一屏之外的两屏，以及三屏共用的页面框
+ * studio.css —— 工作台里**没有自己组件文件**的那些共用件
  *
- * ★ 为什么 `.ch__*`（小主角）与 `.vc__*`（声音）不各写一份：
- *   这两屏的标记都直接写在路由页里（`app/(studio)/character/page.tsx`、
- *   `components/studio/VoicePicker.tsx`），没有各自的组件文件可以同名。
- *   共用的是同一个页面框 `.studio`（路由组的 layout 给的），
- *   所以边框、留白、标题层级放在一起，改一处两屏一起走。
- *   「创作」那一屏有组件文件，所以它有自己同名的一份 `create-landing.css`。
+ * 现在只剩两样：三屏共用的页面框 `.studio`（路由组 layout 给的），
+ * 和「声音」那一屏的 `.vc__*`（它的标记直接写在 `VoicePicker.tsx` 里，
+ * 但那个文件同时导出了组件，所以它的样式**应该**搬去同名的 `voice-picker.css`——
+ * 搬的时候记得连 `.vc__head/.vc__title/.vc__sub` 一起，别留半截）。
  *
- * ★ 这三屏都在 `--paper` 暖纸底上（信封/台账的观感），不是首页那三屏的冷灰 `--bg`：
+ * ★ 「小主角」那一屏原来也住在这里（`.ch__*`）。它已经长成一张真正的卡片墙，
+ *   搬去 `character-wall.css` 与 `CharacterWall.tsx` 同名作伴了。
+ *
+ * ★ 这几屏都在 `--paper` 暖纸底上（信封/台账的观感），不是首页那三屏的冷灰 `--bg`：
  *   工作台是"坐下来做事"的地方。两张底色分开是刻意的，理由写在 globals.css 的 `--paper` 上。
  */
 
@@ -17,9 +18,8 @@
   padding: clamp(28px, 5vh, 52px) clamp(20px, 4vw, 56px) 64px;
 }
 
-/* ── 两屏共用的页头 ───────────────────────────────────────────────────── */
+/* ── 页头 ─────────────────────────────────────────────────────────────── */
 
-.ch__head,
 .vc__head {
   display: flex;
   align-items: flex-start;
@@ -28,7 +28,6 @@
   margin-bottom: 26px;
 }
 
-.ch__title,
 .vc__title {
   margin: 0 0 8px;
   font-family: var(--font-serif);
@@ -36,138 +35,12 @@
   font-weight: 600;
 }
 
-.ch__sub,
 .vc__sub {
   max-width: 60ch;
   margin: 0;
   font-size: 13px;
   line-height: 1.8;
   color: var(--ink-muted);
-}
-
-/* 次要动作：白底描边，不跟侧栏当前项抢那身强调色 */
-.ch__new {
-  flex: 0 0 auto;
-  padding: 9px 16px;
-  border: 1px solid var(--dot);
-  border-radius: 999px;
-  background: var(--surface);
-  color: var(--ink);
-  font-size: 13px;
-  text-decoration: none;
-}
-
-.ch__new:hover {
-  border-color: rgba(var(--accent-rgb), 0.5);
-  color: var(--accent);
-}
-
-/* ── 小主角 ───────────────────────────────────────────────────────────── */
-
-.ch__empty {
-  padding: 40px 24px;
-  border: 1px dashed var(--dot);
-  border-radius: var(--card-radius);
-  background: var(--surface);
-  text-align: center;
-}
-
-.ch__empty p {
-  margin: 0 0 16px;
-  font-size: 14px;
-  line-height: 1.8;
-  color: var(--ink-muted);
-}
-
-.ch__cta {
-  display: inline-block;
-  padding: 9px 20px;
-  border-radius: 999px;
-  background: var(--accent);
-  color: var(--surface);
-  font-size: 14px;
-  text-decoration: none;
-}
-
-.ch__grid {
-  display: grid;
-  /* 参考图是方的 220px：`auto-fill` 让窄屏自己掉列，不写断点 */
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 18px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.ch__card {
-  height: 100%;
-  padding: 14px;
-  border: 1px solid var(--dot);
-  border-radius: var(--card-radius);
-  background: var(--surface);
-}
-
-.ch__art {
-  display: block;
-  width: 100%;
-  height: auto;
-  aspect-ratio: 1 / 1;
-  object-fit: cover;
-  border-radius: 10px;
-  background: var(--surface-soft);
-}
-
-.ch__name {
-  margin: 12px 0 6px;
-  font-size: 15px;
-  font-weight: 600;
-  /* childId 是 `child-xxxxxxxx` 这种机器名，断行别把卡片撑破 */
-  overflow-wrap: anywhere;
-}
-
-.ch__meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 0 0 6px;
-  font-size: 11px;
-  color: var(--ink-muted);
-}
-
-.ch__meta span {
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: var(--surface-soft);
-}
-
-.ch__model {
-  margin: 0;
-  font-size: 11px;
-  line-height: 1.6;
-  color: var(--ink-muted);
-}
-
-/* 「用过照片，已删除」——这句话是隐私设计的一部分，要看得见，别做成灰字 */
-.ch__photo {
-  margin: 8px 0 0;
-  font-size: 11px;
-  color: var(--accent);
-}
-
-.ch__anchors {
-  margin-top: 10px;
-  font-size: 12px;
-  line-height: 1.7;
-  color: var(--ink-muted);
-}
-
-.ch__anchors summary {
-  cursor: pointer;
-}
-
-.ch__anchors ul {
-  margin: 8px 0 0;
-  padding-left: 18px;
 }
 
 /* ── 声音 ─────────────────────────────────────────────────────────────── */
@@ -295,19 +168,15 @@
   color: var(--ink-muted);
 }
 
-/* 两屏共用的焦点圈：键盘走到哪里都要看得见 */
-.ch__new:focus-visible,
-.ch__cta:focus-visible,
+/* 键盘走到哪里都要看得见 */
 .vc__pick:focus-visible,
-.vc__listen:focus-visible,
-.ch__anchors summary:focus-visible {
+.vc__listen:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
 /* 窄屏：页头改竖排，右上的动作挪到下面 */
 @media (max-width: 720px) {
-  .ch__head,
   .vc__head {
     flex-direction: column;
   }

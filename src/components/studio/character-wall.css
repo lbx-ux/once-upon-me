@@ -1,0 +1,425 @@
+/**
+ * character-wall.css —— 「小主角」那一屏：一墙用胶带贴在纸上的角色卡
+ *
+ * ★ 为什么是"纸卡"而不是"UI 卡片"：这一屏的东西**就是**一张卡的档案——
+ *   它有版次、有依据、有画它的人。把它做成一张贴着的纸，是在说
+ *   "这是你攒下来的东西"；做成圆角大阴影的浮层卡片，是在说"这是一个列表项"。
+ *
+ * 三处与参考图不同，都是刻意的（理由在 CharacterWall.tsx 的文件头）：
+ *   没有垃圾桶（删除那条路零测试）、没有铅笔（换成真的能走的"用它做一本"）、
+ *   没有"5 岁"（卡上没有年龄这个字段，编一个就是给不存在的数据源背书）。
+ *
+ * ★ 动效全部是 CSS，这一屏因此仍是**服务端组件**：
+ *   入场"贴上去"（错开 90ms 一拍）→ 停在每张自己的静置角上 →
+ *   悬停/键盘聚焦时**被按正并抬起**，胶带掀起一点、框里的画慢半拍。
+ *   "被按正"是这一屏唯一的物理隐喻：纸本来歪着，你碰它，它就正了。
+ */
+
+.cw {
+  max-width: 1180px;
+  margin: 0 auto;
+}
+
+/* ── 页头 ─────────────────────────────────────────────────────────────── */
+
+.cw__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 34px;
+}
+
+.cw__title {
+  margin: 0 0 8px;
+  font-family: var(--font-serif);
+  font-size: clamp(26px, 3.6vw, 36px);
+  font-weight: 600;
+}
+
+.cw__sub {
+  max-width: 52ch;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--ink-muted);
+}
+
+/* 新建那颗：整颗填强调色。它是这一屏唯一的"造东西"动作，值得最重的视觉 */
+.cw__new {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  padding: 11px 20px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--surface);
+  font-size: 13.5px;
+  text-decoration: none;
+  box-shadow: 0 4px 12px rgba(var(--accent-rgb), 0.28);
+}
+
+.cw__new:hover {
+  filter: brightness(1.06);
+}
+
+.cw__new-plus {
+  font-size: 15px;
+  line-height: 1;
+}
+
+/* ── 那面墙 ───────────────────────────────────────────────────────────── */
+
+.cw__wall {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(292px, 372px));
+  justify-content: center;
+  gap: 40px 30px;
+  margin: 0;
+  padding: 12px 0 0;
+  list-style: none;
+}
+
+.cw__card {
+  /* 静置角：一奇一偶歪向两边。★ 不用随机——随机每次刷新都换一批歪法，
+     那会让"这些卡贴在那儿"变成"这些卡在抖" */
+  --rest: -0.8deg;
+  position: relative;
+  height: 100%;
+  padding: 16px 16px 18px;
+  /* 真纸卡的角几乎是直的。圆角一过 8px 就退回"UI 卡片"那个观感了 */
+  border-radius: 5px;
+  background: var(--card-paper);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    0 2px 3px rgba(19, 19, 28, 0.1),
+    0 12px 24px rgba(19, 19, 28, 0.13);
+  transform: rotate(var(--rest));
+  transition:
+    transform 0.3s cubic-bezier(0.2, 0.7, 0.25, 1),
+    box-shadow 0.3s ease;
+  animation: cw-pin 0.55s cubic-bezier(0.2, 0.8, 0.3, 1) backwards;
+  animation-delay: calc(var(--cw-i, 0) * 90ms);
+}
+
+.cw__slot:nth-child(even) .cw__card {
+  --rest: 0.7deg;
+}
+
+@keyframes cw-pin {
+  from {
+    opacity: 0;
+    transform: translateY(-18px) rotate(calc(var(--rest) - 3deg)) scale(1.03);
+  }
+  to {
+    opacity: 1;
+    transform: rotate(var(--rest));
+  }
+}
+
+/* 悬停与键盘聚焦走同一条：只用 hover 的话，键盘用户永远看不到"被按正"这件事 */
+.cw__card:hover,
+.cw__card:focus-within {
+  transform: rotate(0deg) translateY(-6px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+    0 3px 6px rgba(19, 19, 28, 0.12),
+    0 20px 34px rgba(19, 19, 28, 0.18);
+}
+
+/* ── 胶带 ─────────────────────────────────────────────────────────────── */
+
+.cw__tape {
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  width: 106px;
+  height: 26px;
+  transform: translateX(-50%) rotate(-2deg);
+  /* 两层：下面那层是胶带本身的暖褐半透明，上面那层是它表面的高光 */
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0.12)), rgba(150, 118, 72, 0.17);
+  border-left: 1px dashed rgba(255, 255, 255, 0.55);
+  border-right: 1px dashed rgba(255, 255, 255, 0.55);
+  box-shadow: 0 1px 2px rgba(19, 19, 28, 0.14);
+  transition: transform 0.3s cubic-bezier(0.2, 0.7, 0.25, 1);
+}
+
+/* 纸抬起来，胶带先被掀起一点：这一层比卡片多转 2°，"粘着"的错觉就来自这个差 */
+.cw__card:hover .cw__tape,
+.cw__card:focus-within .cw__tape {
+  transform: translateX(-50%) rotate(-4.5deg) translateY(-2px);
+}
+
+/* ── 相纸与画 ─────────────────────────────────────────────────────────── */
+
+.cw__mat {
+  position: relative;
+  padding: 9px;
+  border-radius: 3px;
+  background: var(--paper);
+  box-shadow: inset 0 0 0 1px rgba(28, 28, 36, 0.09);
+}
+
+/* 裁切线：压在画的四边上，是"这张图是从卡上裁下来的"那条线索 */
+.cw__mat::after {
+  content: '';
+  position: absolute;
+  inset: 5px;
+  border: 1px dashed rgba(28, 28, 36, 0.22);
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+.cw__art {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: 2px;
+  background: var(--surface-soft);
+  /* 框里的画慢半拍：卡片抬起 300ms，画用 420ms 跟上来 */
+  transition: transform 0.42s cubic-bezier(0.2, 0.7, 0.25, 1);
+}
+
+.cw__card:hover .cw__art,
+.cw__card:focus-within .cw__art {
+  transform: scale(1.022);
+}
+
+/* ── 卡上的字 ─────────────────────────────────────────────────────────── */
+
+.cw__eyebrow {
+  margin: 10px 0 6px;
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  color: var(--ink-muted);
+}
+
+.cw__name {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 4px;
+  font-family: var(--font-serif);
+  font-size: 27px;
+  font-weight: 600;
+  /* childId 是 `kid-abc123` 这种机器名，长起来要能断，不能把卡撑破 */
+  overflow-wrap: anywhere;
+}
+
+.cw__reading {
+  /* 读音是拼音，用衬线大字号反而难认；★ 不引 `--font-sans` 这个令牌——:root 里没有它 */
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--ink-muted);
+}
+
+.cw__meta {
+  margin: 0 0 10px;
+  font-size: 11.5px;
+  color: var(--ink-muted);
+}
+
+.cw__worn {
+  margin: 0 0 10px;
+  font-size: 13px;
+  line-height: 1.85;
+  color: var(--ink-soft);
+}
+
+/* 「用过照片，已删除」——隐私设计 §七 那一行，要看得见，别做成灰字 */
+.cw__photo {
+  margin: -4px 0 10px;
+  font-size: 11.5px;
+  color: var(--accent);
+}
+
+.cw__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 14px;
+  padding: 0;
+  list-style: none;
+}
+
+.cw__tag {
+  padding: 4px 10px;
+  border: 1px dashed rgba(28, 28, 36, 0.24);
+  border-radius: 999px;
+  background: var(--paper);
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+
+.cw__rule {
+  height: 0;
+  margin: 0 0 12px;
+  border: none;
+  border-top: 1px dashed rgba(28, 28, 36, 0.26);
+}
+
+/* ── 展开的那一层 ─────────────────────────────────────────────────────── */
+
+.cw__detail {
+  font-size: 12px;
+  line-height: 1.75;
+  color: var(--ink-muted);
+}
+
+.cw__detail summary {
+  cursor: pointer;
+  color: var(--accent);
+}
+
+.cw__anchors {
+  margin: 10px 0 0;
+}
+
+.cw__anchor {
+  display: grid;
+  grid-template-columns: 4.5em 1fr;
+  gap: 8px;
+  padding: 3px 0;
+}
+
+.cw__anchor dt {
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--ink-muted);
+}
+
+.cw__anchor dd {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.cw__why {
+  margin: 10px 0 0;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(28, 28, 36, 0.18);
+  font-size: 11.5px;
+  line-height: 1.85;
+  color: var(--ink-muted);
+}
+
+/* ── 卡上那颗动作 ─────────────────────────────────────────────────────── */
+
+.cw__use {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 14px;
+  padding: 8px 15px;
+  border: 1px solid rgba(var(--accent-rgb), 0.45);
+  border-radius: 999px;
+  color: var(--accent);
+  font-size: 12.5px;
+  text-decoration: none;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.cw__use::after {
+  content: '→';
+  font-size: 13px;
+  line-height: 1;
+}
+
+.cw__use:hover {
+  background: var(--accent);
+  color: var(--surface);
+}
+
+/* ── 空态 ─────────────────────────────────────────────────────────────── */
+
+.cw__empty {
+  padding: 46px 24px;
+  border: 1px dashed rgba(28, 28, 36, 0.26);
+  border-radius: 6px;
+  background: var(--card-paper);
+  text-align: center;
+}
+
+.cw__empty p {
+  margin: 0 0 16px;
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--ink-muted);
+}
+
+.cw__cta {
+  display: inline-block;
+  padding: 9px 20px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--surface);
+  font-size: 14px;
+  text-decoration: none;
+}
+
+/* ── 焦点可见 ─────────────────────────────────────────────────────────── */
+
+.cw__new:focus-visible,
+.cw__cta:focus-visible,
+.cw__use:focus-visible,
+.cw__detail summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+/* ── 静止模式：给一个**摆正的、贴好的**终态 ─────────────────────────────
+ * ★ 不是"关掉动画"就完事：入场动画关掉后卡片会停在 `--rest` 那个歪角上，
+ *   看起来像坏了。所以这里连静置角一起归零，只留阴影表达"能碰"。 */
+@media (prefers-reduced-motion: reduce) {
+  .cw__card,
+  .cw__slot:nth-child(even) .cw__card {
+    --rest: 0deg;
+    animation: none;
+    transform: none;
+  }
+
+  .cw__card:hover,
+  .cw__card:focus-within {
+    transform: none;
+  }
+
+  .cw__card:hover .cw__art,
+  .cw__card:focus-within .cw__art,
+  .cw__card:hover .cw__tape,
+  .cw__card:focus-within .cw__tape {
+    transform: none;
+  }
+
+  .cw__card,
+  .cw__art,
+  .cw__tape,
+  .cw__use {
+    transition: none;
+  }
+}
+
+/* 窄屏：墙变单列，卡就不该再歪着——歪角在两列时是"贴上去的"，
+   在单列满屏时变成"没摆正" */
+@media (max-width: 700px) {
+  .cw__head {
+    flex-direction: column;
+  }
+
+  .cw__wall {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 30px;
+  }
+
+  .cw__card,
+  .cw__slot:nth-child(even) .cw__card {
+    --rest: 0deg;
+  }
+}

@@ -10,6 +10,7 @@
 @import '../components/shelf/shelf.css';
 @import '../components/shell/app-shell.css';
 @import '../components/studio/create-landing.css';
+@import '../components/studio/character-wall.css';
 @import '../components/studio/studio.css';
 @import '../components/back-to-top.css';
 
@@ -61,6 +62,14 @@
      --ink 16.45:1、--ink-muted 4.92:1、--accent 4.77:1（三条都过正文级 AA；
      数是 `node` 现算的，命令记在工单 05 的 Comments，不是估的） */
   --paper: #faf5ee;
+
+  /* 角色卡那张"纸"的本色（工作台「小主角」那一屏）。比 --paper 深一档，
+     这样"卡贴在页面上"这一层关系是**颜色**在承担，不靠阴影硬撑。
+     ★ 这个档是量出来卡出来的，不是挑出来好看的：再深一档（#f6eddf）
+       `--ink-muted` 掉到 4.59、`--accent` 掉到 4.46，正文级 AA 就破了。
+       这一档上的对比度（同一支 node 脚本算的，命令记在工单 05 的 Comments）：
+       --ink 15.65:1、--ink-muted 4.67:1、--accent 4.54:1 —— 三条都过 4.5 */
+  --card-paper: #f7efe3;
 
   color-scheme: light; /* 目前只有浅色一套，先锁掉系统深色的表单控件反色 */
 }
