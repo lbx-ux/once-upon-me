@@ -5,6 +5,7 @@ Status: active（2026-10-14 起）
 [03](issues/03-character-profile.md) [04](issues/04-settings-drawer.md)
 [05](issues/05-home-dashboard.md) [06](issues/06-wire-entries.md)
 [07](issues/07-prompt-optimizer.md) [08](issues/08-voice.md) [09](issues/09-docs-adr.md)
+· 另加一张不在原始八条里的：[10 缩略图这条通路](issues/10-thumbnail-ladder.md)（做 03 时量出来的）
 
 用户 2026-10-14 提的八条，按本仓库的 issue-tracker 惯例拆成 spec + 九张工单
 （**一张工单一文件**，理由见 [docs/agents/issue-tracker.md](../../docs/agents/issue-tracker.md)）。

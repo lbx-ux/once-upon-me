@@ -127,6 +127,17 @@ button.cl__pill:hover {
   background: var(--accent);
 }
 
+/* 头像：240 档，实测 10 KB（原图 2.7 MB）。★ 圆的是"这是一个人"，
+   不是"这是一个应用图标"——所以它只出现在小主角那一格，画风那颗用的是方色片 */
+.cl__pill-face {
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--surface-soft);
+}
+
 .cl__pill-text {
   /* childId 是 `xiaoman-sheet` 这种机器名，长起来会把胶囊撑破 */
   max-width: 16ch;
@@ -166,7 +177,10 @@ button.cl__pill:hover {
 
 .cl__option {
   display: grid;
-  gap: 2px;
+  /* 头像占左边一整列、两行文字在右边：不这么排的话头像会被挤到名字上面 */
+  grid-template-columns: 26px 1fr;
+  align-items: center;
+  column-gap: 9px;
   width: 100%;
   padding: 9px 10px;
   border: none;
@@ -176,6 +190,10 @@ button.cl__pill:hover {
   font: inherit;
   text-align: left;
   cursor: pointer;
+}
+
+.cl__option .cl__pill-face {
+  grid-row: span 2;
 }
 
 .cl__option:hover {

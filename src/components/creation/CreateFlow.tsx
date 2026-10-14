@@ -32,6 +32,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
+import { assetUrlOf } from '@/lib/asset-url.ts'
 import { describeEvent, isDisplayable, type EngineEvent } from '@/lib/engine/events.ts'
 import {
   AGE_BANDS,
@@ -283,7 +284,9 @@ export default function CreateFlow({
       result: {
         cardId: item.cardId,
         revision: item.revision,
-        referenceUrl: item.referenceUrl,
+        // 预览取 768 档（原图是 2.7 MB 的 1440 PNG）。★ 这只影响**给人看的那一层**：
+        // 生成一本书用的是 cardId + revision，不是这个 URL（见 toBookBody）
+        referenceUrl: assetUrlOf(item.referencePath, 768),
         promptFragment: item.promptFragment,
         checklist: item.checklist,
         modelId: item.modelId,
@@ -631,7 +634,7 @@ export default function CreateFlow({
                             result: {
                               cardId: item.cardId,
                               revision: item.revision,
-                              referenceUrl: item.referenceUrl,
+                              referenceUrl: assetUrlOf(item.referencePath, 768),
                               promptFragment: item.promptFragment,
                               checklist: item.checklist,
                               modelId: item.modelId,
@@ -639,9 +642,14 @@ export default function CreateFlow({
                           })
                         }
                       >
-                        {/* 缩略图，旁边就是"第 N 版"，读屏不必再念一遍 → alt="" */}
+                        {/* 缩略图，旁边就是"第 N 版"，读屏不必再念一遍 → alt=""。
+                            240 档：这张图在界面上只有 48px，原图 2.7 MB 是 280 倍浪费 */}
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img className="cf__reuse-thumb" src={item.referenceUrl} alt="" />
+                        <img
+                          className="cf__reuse-thumb"
+                          src={assetUrlOf(item.referencePath, 240)}
+                          alt=""
+                        />
                         <span className="cf__reuse-text">
                           {item.childId} · 第 {item.revision} 版
                           <span className="cf__reuse-sub">用 {item.modelId} 画的</span>

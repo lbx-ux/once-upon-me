@@ -12,7 +12,7 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { readerPages } from './book-source.ts'
+import { demoAssetPathFor, readerPages } from './book-source.ts'
 import type { Book, Illustration, Narration, StoryNode } from './engine/index.ts'
 
 function node(pageNo: number, body: string[]): StoryNode {
@@ -127,5 +127,33 @@ describe('readerPages · 图与朗读互不影响', () => {
       (path) => `/demo/books/b1/${path.split('/').pop()}`,
     )
     expect(pages[0]?.audioUrl).toBe('/demo/books/b1/page-1-a1.mp3')
+  })
+})
+
+/**
+ * 演示副本的"有 .webp 就用它"这一条。
+ *
+ * ★ 它必须在这里测，而不是在浏览器里看：本机常常同时有同一本书的运行期副本
+ *   （书号是确定性的），`resolveBook` 会先命中那条，演示分支在面板里根本走不到。
+ *   而它真正生效的场合恰好是"那台只有 public/ 的机器"——演示机。
+ */
+describe('demoAssetPathFor · 演示图的 webp 兄弟文件', () => {
+  const siblings = new Set(['page-1-a1.webp'])
+
+  it('目录里有同名 .webp 就换过去', () => {
+    expect(demoAssetPathFor('books/b1/page-1-a1.png', siblings)).toBe('books/b1/page-1-a1.webp')
+  })
+
+  it('没有就照旧回 .png（不是回一个不存在的小图）', () => {
+    expect(demoAssetPathFor('books/b1/page-2-a1.png', siblings)).toBe('books/b1/page-2-a1.png')
+  })
+
+  it('音频与非 png 一律不动', () => {
+    expect(demoAssetPathFor('books/b1/page-1-a1.mp3', siblings)).toBe('books/b1/page-1-a1.mp3')
+    expect(demoAssetPathFor('books/b1/page-1-a1.webp', siblings)).toBe('books/b1/page-1-a1.webp')
+  })
+
+  it('空集合（那本从来没导出过小图）全部回原图，不抛', () => {
+    expect(demoAssetPathFor('books/b1/page-1-a1.png', new Set())).toBe('books/b1/page-1-a1.png')
   })
 })

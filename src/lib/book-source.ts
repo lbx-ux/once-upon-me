@@ -16,10 +16,11 @@
  *   它不需要知道这本书来自哪儿，也不该知道。
  */
 
-import { readFile } from 'node:fs/promises'
+import { readFile, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { assetUrlOf } from './asset-url.ts'
 import { assetRoot } from './books-runtime.ts'
+import { isResizableImage, READER_PAGE_WIDTH } from './thumbs.ts'
 import { linearOrder, manifestPathOf, type Book, type StoryNode } from './engine/index.ts'
 
 /** 预生成演示书在 `public/` 下的位置。导出脚本与这一层**共用**这串字面量 */
@@ -70,6 +71,25 @@ export function demoAssetUrl(bookId: string, assetPath: string): string {
   return `/${DEMO_DIR}/${encodeURIComponent(bookId)}/${encodePath(assetPathInDemo(bookId, assetPath))}`
 }
 
+/**
+ * 静态的演示图**不能**挂 `?w=`：Next 直接发盘上的字节，查询字符串它看不懂，
+ * 挂上去会静悄悄回原图——一个骗人的优化比不优化更糟。
+ * 所以演示书这一路换的是"导出时预生成的 `.webp` 兄弟文件"（见 `export-demo-book.mts`），
+ * 磁盘上有就用它，没有就照旧用原图。★ 原图仍然留在目录里：它是清单指的那份记录。
+ *
+ * ★ 为什么单独抽成一个函数：本机常常同时存在同一本书的**运行期副本**与演示副本
+ *   （书号是确定性的，同一份锚点 + 主题算出同一个号），于是 `resolveBook` 先命中运行期那条，
+ *   演示这条分支在浏览器里根本走不到。没有测试的分支等于没有——而它恰好只在
+ *   "评委那台只有 `public/` 的机器"上生效，那正是最需要它对的那一台。
+ *
+ * `webpSiblings` 是那一本目录里 `.webp` 的**文件名**集合（不是整条路径）。
+ */
+export function demoAssetPathFor(assetPath: string, webpSiblings: ReadonlySet<string>): string {
+  if (!/\.png$/i.test(assetPath)) return assetPath
+  const swapped = assetPath.replace(/\.png$/i, '.webp')
+  return webpSiblings.has(swapped.split('/').pop() ?? '') ? swapped : assetPath
+}
+
 async function readBook(path: string): Promise<Book | null> {
   try {
     return JSON.parse(await readFile(path, 'utf8')) as Book
@@ -86,16 +106,25 @@ export async function resolveBook(bookId: string): Promise<ResolvedBook | null> 
     return {
       book: runtime,
       source: 'runtime',
-      pages: readerPages(runtime, (path) => assetUrlOf(path)),
+      // ★ 图走 1024 档（`/api/assets` 现缩并落盘缓存），音频原样——
+      //   判据是扩展名，所以"这一页有没有朗读"这件事不受缩放影响
+      pages: readerPages(runtime, (path) =>
+        assetUrlOf(path, isResizableImage(path) ? READER_PAGE_WIDTH : undefined),
+      ),
     }
   }
 
-  const demo = await readBook(join(process.cwd(), 'public', DEMO_DIR, bookId, 'book.json'))
+  const demoDir = join(process.cwd(), 'public', DEMO_DIR, bookId)
+  const demo = await readBook(join(demoDir, 'book.json'))
   if (demo) {
+    // 目录里有哪些 `.webp` 兄弟文件。读不到目录就当都没有（回原图，不是回一张碎图）
+    const siblings = new Set(
+      (await readdir(demoDir).catch(() => [] as string[])).filter((name) => /\.webp$/i.test(name)),
+    )
     return {
       book: demo,
       source: 'demo',
-      pages: readerPages(demo, (path) => demoAssetUrl(bookId, path)),
+      pages: readerPages(demo, (path) => demoAssetUrl(bookId, demoAssetPathFor(path, siblings))),
     }
   }
   return null

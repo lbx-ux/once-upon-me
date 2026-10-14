@@ -107,8 +107,11 @@ export type CardSummary = {
   promptFragment: string
   checklist: string[]
   modelId: string
+  /** 资产根里的相对路径。界面上要小图就用 `assetUrlOf(referencePath, 想要的宽度)`
+   *  ——`referenceUrl` 指的是**原图**（2.7 MB 那一档） */
+  referencePath: string
   /** 锚点原样（slot + value）。这一屏不显示它们，但 `/api/cards` 回的是 `lib/cards-list.ts`
-      那一份统一的形状——客户端类型照着线上写，不写一个"比线上少两个字段"的假子集 */
+   *  那一份统一的形状——客户端类型照着线上写，不写一个"比线上少两个字段"的假子集 */
   anchors: { slot: string; value: string }[]
   photoDeleted: boolean
 }

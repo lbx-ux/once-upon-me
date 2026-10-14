@@ -27,8 +27,11 @@ export type CardListItem = {
   childId: string
   revision: number
   digest: string
-  /** 走 `/api/assets` 那条只读出口，不是 public/ 下的文件 */
+  /** 走 `/api/assets` 那条只读出口，不是 public/ 下的文件。★ 这是**原图**（2.7 MB 那一档），
+   *  界面上要小图请用下面的 `referencePath` 自己配档 */
   referenceUrl: string
+  /** 资产根里的相对路径。给 `assetUrlOf(path, 768)` 用——缩略档由消费者决定，不在这里猜 */
+  referencePath: string
   promptFragment: string
   /** ★ 两个数组都是 `readonly`：它们是引擎算出来的派生值（`checklistOf` / `card.anchors`），
    *  这一层不该有改它们的权力——要改就回到引擎里改那条规则 */
@@ -67,6 +70,7 @@ export async function listCardItems(root: string = assetRoot()): Promise<CardLis
       revision: card.revision,
       digest: cardDigest(card),
       referenceUrl: assetUrlOf(card.reference.path),
+      referencePath: card.reference.path,
       // 同一份锚点的两种用法：画的时候按 A 画、查的时候按 B 查（ADR-0007）
       promptFragment: promptFragmentOf(card),
       checklist: checklistOf(card),

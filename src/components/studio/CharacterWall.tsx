@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react'
 
 import { ANCHOR_LABELS } from '@/lib/engine/domain.ts'
+import { assetUrlOf } from '@/lib/asset-url.ts'
 import { DEFAULT_STYLE_LABEL } from '@/lib/prompts/character-sheet.ts'
 import type { CardListItem } from '@/lib/cards-list.ts'
 import type { KidName } from '@/lib/kid-names.ts'
@@ -80,15 +81,18 @@ export default function CharacterWall({ cards, names }: CharacterWallProps) {
 
                   {/* 相纸那一层：白边 + 虚线内框，图压在框里。
                       ★ 走原生 <img>：图在资产根里、经 /api/assets 出来，
-                      next/image 要另配 loader，而它是 README §五「刻意未做」那一条 */}
+                      next/image 要另配 loader，而它是 README §五「刻意未做」那一条。
+                      ★ 取 768 那一档而不是原图：卡面显示 372 CSS px，两倍屏要 744；
+                      原图是 2.7 MB 的 1440 PNG，两张贴满墙就是 5.6 MB（实测）。
+                      缩略档由 /api/assets 现缩并落盘缓存，见 lib/thumbs.ts */}
                   <div className="cw__mat">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       className="cw__art"
-                      src={card.referenceUrl}
+                      src={assetUrlOf(card.referencePath, 768)}
                       alt={`${kid?.name ?? card.cardId} 的形象`}
-                      width={512}
-                      height={512}
+                      width={768}
+                      height={768}
                       loading="lazy"
                       decoding="async"
                     />

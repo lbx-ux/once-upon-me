@@ -19,10 +19,10 @@
  *   3. 参考图里那颗"分享/导出"样的图标没做：这一屏没有可分享的东西（书还没生成）。
  *      一颗点了没反应的按钮不如没有。
  *
- * ★ 「小主角」那一格只列**已经存在的卡**，且不放头像图：
- *   卡的参考图实测 2,772,224 字节（1440×1440 PNG，`/api/assets` 原样给，没有缩略图那条路），
- *   首页第一屏不该为一个 20px 的圆点拉两兆多。要挑的是"用哪张脸"，
- *   而脸在下一步的角色卡里本来就看得见。
+ * ★ 「小主角」那一格只列**已经存在的卡**，头像取 240 那一档（实测 10 KB）。
+ *   上一版刻意不放头像，理由是"原图 2,772,224 字节，不该为一个 20px 的圆点拉两兆多"——
+ *   那个判断没错，错的是当时没有缩略图这条路。现在有了（`lib/thumbs.ts`），判断跟着改。
+ *   名字读不到时退回 childId（机器名），不编一个好听的说。
  */
 
 import { useRouter } from 'next/navigation'
@@ -37,6 +37,10 @@ export type ChildOption = {
   childId: string
   revision: number
   modelId: string
+  /** 档案层读到的名字。★ 可选不是装饰性的省略：卡上本来没有名字这个字段 */
+  label?: string
+  /** 240 档的头像 URL */
+  faceUrl: string
 }
 
 export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
@@ -121,8 +125,10 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
                 aria-expanded={picking}
                 aria-haspopup="listbox"
               >
-                <span className="cl__pill-dot" aria-hidden="true" />
-                <span className="cl__pill-text">{chosen.childId}</span>
+                {/* 头像 240 档（实测 10 KB）。alt 留空：名字就在旁边，读屏不必再念一遍 */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img className="cl__pill-face" src={chosen.faceUrl} alt="" width={24} height={24} />
+                <span className="cl__pill-text">{chosen.label ?? chosen.childId}</span>
                 <span className="cl__pill-caret" aria-hidden="true">
                   ⌄
                 </span>
@@ -141,7 +147,15 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
                           setPicking(false)
                         }}
                       >
-                        <span className="cl__option-name">{card.childId}</span>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          className="cl__pill-face"
+                          src={card.faceUrl}
+                          alt=""
+                          width={24}
+                          height={24}
+                        />
+                        <span className="cl__option-name">{card.label ?? card.childId}</span>
                         <span className="cl__option-meta">
                           第 {card.revision} 版 · {card.modelId} 画的
                         </span>
