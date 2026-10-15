@@ -10,8 +10,15 @@
  *
  * ★ **不做 3–4 张候选**（用户 10/13 定的档）：一次出一张，不满意就再点一次。
  *   重出就是按需的候选，比一次给四张更省，也比一次给四张更贴近真实的挑选过程。
- * ★ **不收照片**：图像接口不支持参考图（实测 7 个候选字段名全被 400 挡回），
- *   传上来的照片没有消费方。没有消费方的输入框就是假装。
+ * ★ **不收照片**，但理由换了（原来那句是错的，见下）。
+ *   旧理由是"图像接口不支持参考图（实测 7 个候选字段名全被 400 挡回）"——
+ *   那句话只在 `/images/generations` 这条路上成立。同一家另有一条 `/images/edits`
+ *   是**通的**（2026-10-14 实测，见工单 02 §一）。
+ *   现在不收照片的理由是**照片还没有消费方**：卡上的参考图既要用来逐页画
+ *   （`edit`），又要用来比对（`vision.compare`）。拿照片当参考图，第二件事是
+ *   拿**照片**比**插画**——与 ADR-0007 验过的那次（插画比插画）不是同一个任务，
+ *   **没量过**。没有消费方的输入框就是假装，所以这一格继续空着，
+ *   等工单 03 把"照片 → 卡"这条链连同比对一起量出来再开。
  * ★ 密钥走 per-request `Env`（ADR-0008），与 `/api/books` 同一个约定：
  *   请求体里那张表说了算，服务端的 `process.env` 不参与。
  *
@@ -24,24 +31,35 @@ import {
   checklistOf,
   createCardStore,
   createFsStore,
-  createProviders,
   promptFragmentOf,
   validateCard,
   type AnchorSlot,
   type CharacterAnchor,
 } from '@/lib/engine/index.ts'
+import { imageProviderOf } from '@/lib/engine/providers/registry.ts'
 import {
   ageLabelOf,
   characterSheetPrompt,
-  DEFAULT_STYLE_FRAGMENT,
+  DEFAULT_CARD_STYLE,
 } from '@/lib/prompts/character-sheet.ts'
 import { assetRoot } from '@/lib/books-runtime.ts'
 import { assetUrlOf } from '@/lib/asset-url.ts'
+import { EngineError } from '@/lib/engine/errors.ts'
+import { checkAnchors } from '@/lib/engine/character-card/card.ts'
 import { listCardItems } from '@/lib/cards-list.ts'
 import { userFailureOf } from '@/lib/provider-messages.ts'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+
+/** 失败一律走这里：文案、可重试性、状态码三件一起算（`userFailureOf` 是唯一那处判据） */
+function failureResponse(err: unknown): Response {
+  const failure = userFailureOf(err)
+  return Response.json(
+    { code: failure.code, message: failure.message, retryable: failure.retryable },
+    { status: failure.status },
+  )
+}
 
 /** 出图尺寸与页内插画同一档（方形）。标准像与页内形象同比例，家长看到的就是书里的样子 */
 const SHEET_SIZE = '1440x1440'
@@ -134,15 +152,35 @@ export async function POST(req: Request): Promise<Response> {
   const store = await createFsStore(root)
   const cardStore = createCardStore(store)
 
-  let providers
-  try {
-    providers = await createProviders({ env: body.env, mode: 'live', assetRoot: root, store })
-  } catch (err) {
-    const failure = userFailureOf(err)
-    return Response.json(
-      { code: failure.code, message: failure.message, retryable: failure.retryable },
-      { status: failure.status },
+  // ★ 锚点先校验一次，**必须在出图之前**。
+  //   `cardStore.create` 里（`buildCard`）也会校验，但它跑在出图**之后**——
+  //   于是"锚点不合格"的真实代价是：先花掉一次出图的钱，再收到一句"角色卡不合格"，
+  //   而卡没建成。这不是假想的：`DEFAULT_ANCHORS` 的 mark 那一格曾经带「笑」
+  //   （页级词），家长不动那一格直接点生成，**每一次都白花一次钱**（2026-10-15 实测，
+  //   见 `lib/creation/default-anchors.test.ts`）。一句话的检查换掉一次白花的调用。
+  // ★ 码用 `card-invalid` 而不是 `invalid-request`：它翻出来的那句是
+  //   "回到第 3 步改那几条被标出来的锚点"，而这正是这里该说的事
+  const anchorProblems = checkAnchors(body.anchors)
+  if (anchorProblems.length > 0) {
+    return failureResponse(
+      new EngineError('card-invalid', `角色卡锚点不完整：${anchorProblems.join('；')}`),
     )
+  }
+
+  // ★ 直接取**图像**那一个，不用 `createProviders`（2026-10-15 修，与 `/api/cards/revise`、
+  //   `/api/cards/photo` 对齐）。
+  //
+  //   原来这里是 `createProviders({...})`——那是全都要：文本、图像、视觉、语音缺一项就抛。
+  //   于是**这一条路只用到图像接口，却会因为"没填文本模型"整条跑不起来**，
+  //   而家长拿到的是一句"模型与密钥没配全，这一轮跑不起来"。
+  //   实测到的现场：只配了 IMAGE_* 去跑 `/api/cards`，回 502 +
+  //   `LLM_API_KEY 未配置`——一件与出形象毫无关系的事。
+  //   按组构造的工厂就该按组用（同一个用法在 `/api/settings/probe` 里）。
+  let image
+  try {
+    image = imageProviderOf(body.env)
+  } catch (err) {
+    return failureResponse(err)
   }
 
   const prompt = characterSheetPrompt({
@@ -154,7 +192,7 @@ export async function POST(req: Request): Promise<Response> {
 
   let generated
   try {
-    generated = await providers.image.generate({ prompt, size: SHEET_SIZE })
+    generated = await image.generate({ prompt, size: SHEET_SIZE })
   } catch (err) {
     const failure = userFailureOf(err)
     // 出图失败**不改卡**：这一版没做成，旧版仍然是旧版（ADR-0007 的"不覆盖"）
@@ -181,11 +219,9 @@ export async function POST(req: Request): Promise<Response> {
       cardId,
       childId: body.childId,
       anchors: body.anchors,
-      style: {
-        key: 'warm-handdrawn',
-        promptFragment: DEFAULT_STYLE_FRAGMENT,
-        ratio: '1:1',
-      },
+      // ★ 这一份画风从 `character-sheet.ts` 来，不在这里就地写字面量：
+      //   建卡的路有两条了（工单 03 加了"用他的照片"那条），两份字面量会安静地漂
+      style: DEFAULT_CARD_STYLE,
       referenceBytes: generated.bytes,
       referenceMime: generated.mime,
       modelId: generated.modelId,
@@ -209,6 +245,10 @@ export async function POST(req: Request): Promise<Response> {
       // 同一份锚点的两种用法，一起回给界面（ADR-0007：画的时候按 A 画、查的时候按 B 查）
       promptFragment: promptFragmentOf(card),
       checklist: checklistOf(card),
+      // ★ 锚点跟着回（工单 03 第 4 刀）。回的是**卡里那份**而不是请求里那份：
+      //   建卡时归一化过（去空、按槽位排序），而且"换一版"那条路上生效的也确实是卡里这份。
+      //   客户端拿请求值顶上，界面就会显示一份"服务端其实没用"的锚点
+      anchors: card.anchors,
       modelId: generated.modelId,
     })
   } catch (err) {

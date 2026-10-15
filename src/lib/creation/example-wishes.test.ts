@@ -10,14 +10,8 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { THEME_KEYS, THEMES } from '../themes.ts'
-import {
-  EXAMPLE_WISHES,
-  missingThemes,
-  nextExample,
-  ofTheme,
-  suggestions,
-} from './example-wishes.ts'
+import { THEME_KEYS, THEMES, themeCardPath } from '../themes.ts'
+import { EXAMPLE_WISHES, missingThemes, nextExample, ofTheme } from './example-wishes.ts'
 
 describe('示例愿望表', () => {
   it('每一条的 theme 都是真实存在的主题键', () => {
@@ -41,15 +35,23 @@ describe('示例愿望表', () => {
   })
 })
 
-describe('建议卡与灵感按钮', () => {
-  it('建议卡三条，主题互不相同，且每条都查得回来', () => {
-    const items = suggestions()
-    expect(items).toHaveLength(3)
-    expect(new Set(items.map((item) => item.theme)).size).toBe(3)
-    for (const item of items) expect(ofTheme(item.theme)?.text).toBe(item.text)
+describe('主题墙与"换一句"', () => {
+  it('主题墙一格一条：12 个主题都查得回自己那句', () => {
+    // ★ 这条钉的是"墙上的每一格按下去都有反应"。查不回来就是一格点了不填字的死卡
+    for (const theme of THEMES) {
+      const item = ofTheme(theme.key)
+      expect(item, `${theme.key} 没有例句，那一格按下去填不出东西`).not.toBeNull()
+      expect(item?.text.trim().length).toBeGreaterThan(0)
+    }
   })
 
-  it('灵感按钮是循环不是随机：连着按不会撞到同一条，转一圈回到起点', () => {
+  it('派生小图的路径由 key 决定（文件名对不上就是一张裂图）', () => {
+    for (const theme of THEMES) {
+      expect(themeCardPath(theme.key)).toBe(`/art-cards/${theme.key}.webp`)
+    }
+  })
+
+  it('换一句是循环不是随机：连着按不会撞到同一条，转一圈回到起点', () => {
     const first = nextExample(0)
     expect(nextExample(1).text).not.toBe(first.text)
     expect(nextExample(EXAMPLE_WISHES.length)).toEqual(first)

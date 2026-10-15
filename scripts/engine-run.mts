@@ -233,6 +233,8 @@ async function main(): Promise<void> {
   }
 
   const events: string[] = []
+  /** 人读的那份之外，另留一份原始事件（理由见 `onEvent` 里那段） */
+  const eventsRaw: unknown[] = []
   const book = await runBook(
     {
       child: {
@@ -254,6 +256,11 @@ async function main(): Promise<void> {
       onEvent: (event) => {
         const line = `[${String(event.seq).padStart(2, '0')}] ${describeEvent(event)}`
         events.push(line)
+        // ★ 原始事件也留着（`eventsRaw`）。人读的那份（`events`）把页码揉进了句子里，
+        //   于是任何要**按页**处理事件的消费者（生成页那张画桌、以后的过程回放）
+        //   都没法从它还原出结构——只能自己再跑一遍引擎，而那一遍的顺序未必一样。
+        //   留着原始事件，`deskOf` 这一类纯函数就能拿**真的跑过的顺序**去测。
+        eventsRaw.push(event)
         process.stdout.write(line + '\n')
       },
     },
@@ -262,7 +269,11 @@ async function main(): Promise<void> {
   await mkdir(dirname(join(outDir, 'summary.json')), { recursive: true })
   await writeFile(
     join(outDir, 'summary.json'),
-    JSON.stringify({ mode, form, stats: book.stats, events, bookId: book.bookId }, null, 2),
+    JSON.stringify(
+      { mode, form, stats: book.stats, events, eventsRaw, bookId: book.bookId },
+      null,
+      2,
+    ),
     'utf8',
   )
 

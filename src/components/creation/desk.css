@@ -1,0 +1,295 @@
+/**
+ * desk.css —— 「画桌」：一页一格
+ *
+ * 用的是主题墙那一套已经建好的语言（`--surface` 卡 + `--hairline` + `--card-paper`
+ * 做未加载的底），所以这一屏与首页/工作台长同一张脸——那正是上一轮花力气换来的东西，
+ * 不能在新建的页面上丢掉。
+ *
+ * 三条刻意的判断：
+ *
+ * 1. **方格，不是图片卡**。这一屏的东西是"第几页"，页码是它的第一身份，
+ *    所以页码压在左上角而不是排在图下面（排下面会让整排读起来像一个相册）。
+ * 2. **一格的高度固定**（`aspect-ratio` + 固定的一行说明位）：
+ *    画好与没画好的格子高度一样，整排才不会随着进度一跳一跳——
+ *    20 格的排面每画完一格就重排一次，读起来像页面在抖。
+ * 3. **正在画那一格只有一圈描边**，没有 spinner、没有进度环：
+ *    我们**不知道**这一页画了多久、还要多久（引擎没报），
+ *    所以任何"转着圈"的东西都是在编一个不存在的进度。
+ */
+
+.dk {
+  margin: 0 0 22px;
+}
+
+/* ── 上面那一行 ───────────────────────────────────────────────────────── */
+
+.dk__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 4px;
+}
+
+.dk__title {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 600;
+  /* 书名还没到的时候这里写的是"正在编故事…"，那半句是灰的 */
+  color: var(--ink);
+}
+
+.dk__count {
+  flex: 0 0 auto;
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-muted);
+}
+
+.dk__count b {
+  font-size: 17px;
+  color: var(--accent);
+}
+
+.dk__stage {
+  margin: 0 0 14px;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--ink-muted);
+}
+
+/* ── 那排画框 ─────────────────────────────────────────────────────────── */
+
+.dk__frames {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dk__frame {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  /* 方框：画是 1:1 出的（`SHEET_SIZE` 那一档），框就不该是别的形状 */
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--card-paper);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+}
+
+.dk__art {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* 还没画到：虚线铅笔框。★ 用 `--card-paper` 做底（相纸色），
+   与 `.cw__mat` 那条同一理由——空格子是**物件**，不是页面的一部分 */
+.dk__blank {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 1px dashed rgba(28, 28, 36, 0.22);
+  border-radius: 10px;
+}
+
+/* ★ 正在画：一圈静态描边 + 呼吸。**没有**进度环、没有 spinner（理由见文件头第 3 条） */
+.dk__frame[data-busy='true'] {
+  box-shadow:
+    inset 0 0 0 2px var(--accent),
+    0 0 0 1px rgba(var(--accent-rgb), 0.18);
+}
+
+.dk__frame[data-busy='true'] .dk__blank,
+.dk__frame[data-busy='true'] .dk__art {
+  animation: dk-breathe 1.8s ease-in-out infinite alternate;
+}
+
+@keyframes dk-breathe {
+  from {
+    opacity: 0.72;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* 页码：压在左上角。★ 它带一层纸底，因为画可能是任何颜色——
+   没有底的话，画到浅色的那一页上页码就消失了 */
+.dk__no {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(var(--paper-rgb), 0.86);
+  color: var(--ink);
+  font-size: 11px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.dk__sound {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: rgba(var(--paper-rgb), 0.86);
+  color: var(--accent);
+}
+
+.dk__sound svg {
+  width: 13px;
+  height: 13px;
+  fill: currentColor;
+}
+
+/* 一格上的那句话。★ 它压在图的下沿，所以必须有底：
+   `--surface` 不透明 + 圆角，任何画上都读得清 */
+.dk__note {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  left: 6px;
+  margin: 0;
+  padding: 4px 7px;
+  border-radius: 7px;
+  background: var(--surface);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+
+.dk__note[data-tone='warn'] {
+  color: var(--accent);
+}
+
+.dk__note[data-tone='bad'] {
+  color: var(--danger);
+}
+
+/* ── 不属于任何一页的提醒 ─────────────────────────────────────────────── */
+
+.dk__notes {
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dk__notes li {
+  padding: 7px 11px;
+  border-left: 3px solid var(--hairline);
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--ink-muted);
+}
+
+.dk__notes li[data-tone='warn'] {
+  border-left-color: rgba(var(--accent-rgb), 0.5);
+}
+
+.dk__notes li[data-tone='bad'] {
+  border-left-color: var(--danger);
+}
+
+/* ── 做好了：收成封面 + 一条路 ────────────────────────────────────────── */
+
+.dk__done {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 16px 18px;
+  border: 1px solid var(--hairline);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--sheet-shadow);
+}
+
+.dk__cover {
+  flex: 0 0 92px;
+  width: 92px;
+  height: 92px;
+  border-radius: 8px;
+  object-fit: cover;
+  background: var(--card-paper);
+}
+
+.dk__done-title {
+  margin: 0 0 4px;
+  font-family: var(--font-serif);
+  font-size: 19px;
+  font-weight: 600;
+}
+
+.dk__done-sub {
+  margin: 0 0 10px;
+  font-size: 12.5px;
+  color: var(--ink-muted);
+}
+
+.dk__open {
+  display: inline-block;
+  padding: 9px 18px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--surface);
+  font-size: 13.5px;
+  text-decoration: none;
+}
+
+.dk__open:hover {
+  filter: brightness(1.06);
+}
+
+.dk__open:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+/* 只给读屏 */
+.dk__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ── 静止模式：每一格都是**终态** ───────────────────────────────────────
+ * ★ 不是"把动画关掉"就完事：关掉之后"正在画"那一格与"还没画到"那一格长得一模一样，
+ *   而它们说的是两件不同的事。所以这里只停**呼吸**，描边留着——
+ *   静态的一圈橙边仍然表示"这一格在画"。 */
+@media (prefers-reduced-motion: reduce) {
+  .dk__frame[data-busy='true'] .dk__blank,
+  .dk__frame[data-busy='true'] .dk__art {
+    animation: none;
+    opacity: 1;
+  }
+}
+
+/* 窄屏：格子小一点，但仍然两列以上——一格一格的"排面"是这一屏的论点，
+   掉成单列就变成了一个列表 */
+@media (max-width: 640px) {
+  .dk__frames {
+    grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+    gap: 9px;
+  }
+
+  .dk__done {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

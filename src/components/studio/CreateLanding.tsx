@@ -3,34 +3,54 @@
 /**
  * CreateLanding —— 工作台「创作」那一屏：一句话进去
  *
- * 版式照用户给的那张参考图：大标题（两边两笔手绘小装饰）→ 一行说明 →
- * 两颗胶囊（小主角 / 画风）→ 一张输入卡（下沿：提示语 + 灵感 + 提交）→ 三条建议。
+ * 版式（2026-10-15 与首页并成同一世界之后）：左对齐的标题 → 一行说明 →
+ * 两颗胶囊 → 一张纸（输入区 / 分隔线 / 提示与动作）→ **12 个主题的封面墙**。
  *
  * ★ 它**不自己造一套表单**：这一句话交给 `/create?wish=…&theme=…&card=…`，
  *   创作流里那四步（孩子 / 想讲什么 / 角色卡 / 生成）一步都不少。
  *   也就是说这一屏是**入口**，不是另一条生成路径——两条路径迟早会漂。
  *
- * 三处与参考图不同，都是刻意的：
+ * 四处与最初那版参考图不同，都是刻意的：
  *   1. 提示语写"想讲什么故事"，不写参考图那句"描述要生成的画面"——
  *      这个产品生成的是**书**，不是图。说成画面会让人以为只出一张图。
- *   2. 画风那一格是**一个事实**，不是一个下拉：产品现在只有一档画风
- *      （`DEFAULT_STYLE_FRAGMENT`，建卡时写死 warm-handdrawn）。摆一个点开只有一项的
- *      选择器，是在教用户以为这里有得挑。
+ *   2. 画风那一格**撤了**（原来是"一个事实"的只读胶囊）。撤的理由是它连事实都省了：
+ *      产品只有一档画风（`DEFAULT_STYLE_FRAGMENT`，建卡时写死 warm-handdrawn），
+ *      一个用户动不了的格子占着"可选项"的位置，只是在数这一屏还剩几个格子。
+ *      画风的事实仍写在**需要它**的地方——`/character` 那一屏的建卡说明。
  *   3. 参考图里那颗"分享/导出"样的图标没做：这一屏没有可分享的东西（书还没生成）。
  *      一颗点了没反应的按钮不如没有。
+ *   4. 原来那三句建议卡（各带一枚 emoji）已被**主题墙整块取代**：
+ *      12 个主题各一张水彩封面，点一下填进输入框。emoji 因此在这一屏彻底消失——
+ *      首页 §五 早就写过"emoji 是扁平高饱和的 clip-art，与水彩是两套画法"，
+ *      主页留着它，两屏放在一起会互相拆台。
  *
- * ★ 「小主角」那一格只列**已经存在的卡**，头像取 240 那一档（实测 10 KB）。
+ * ★ 两格都是**真控件**，一个假的都没有：小主角那一格列已经存在的卡，
+ *   声音那一格列 `DEFAULT_VOICES`。
+ *   ★ 声音这一格不新造状态：它写的是 `settings.speech.voice`，与 `/voice` 那一屏
+ *     `VoicePicker.tsx` 是**同一个字段、同一个 `patch`**。所以在这里选完，
+ *     点「开始创作」进去的那一次生成就已经是它了——不需要再往 URL 上挂一个 voice 参数
+ *     （`/create` 那一边本来就从设置里读 `env`）。一个值只有一个家。
+ *   ★ 它**不做试听**。`VoicePicker.tsx` 的文件头写着选音色这件事没法用文字判断——
+ *     那句判断没变，所以我不能在这里摆一个"看名字挑"的下拉就完事。做法是下拉底部
+ *     给一条通到 `/voice` 的路（那里每张卡都能"听一句真的"），而**不是**把试听那
+ *     ~30 行 fetch + Blob 复制第二份：一个行为两个实现，迟早有一份先烂。
+ *
+ * ★ 「小主角」那一格只列**已经存在的卡**，头像取 240 档（实测 10 KB）。
  *   上一版刻意不放头像，理由是"原图 2,772,224 字节，不该为一个 20px 的圆点拉两兆多"——
  *   那个判断没错，错的是当时没有缩略图这条路。现在有了（`lib/thumbs.ts`），判断跟着改。
  *   名字读不到时退回 childId（机器名），不编一个好听的说。
  */
 
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 
-import { nextExample, suggestions } from '@/lib/creation/example-wishes.ts'
+import { nextExample, ofTheme } from '@/lib/creation/example-wishes.ts'
 import { DEFAULT_STYLE_LABEL } from '@/lib/prompts/character-sheet.ts'
-import { THEMES } from '@/lib/themes.ts'
+import { DEFAULT_VOICES, speechReady } from '@/lib/settings/state.ts'
+import { THEMES, themeCardPath } from '@/lib/themes.ts'
+import { useEnterTimeline } from '@/lib/useEnterTimeline.ts'
+import { useSettings } from '@/components/settings/SettingsProvider.tsx'
 
 export type ChildOption = {
   cardId: string
@@ -45,26 +65,76 @@ export type ChildOption = {
 
 export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
   const router = useRouter()
+  const { settings, patch, env, openSettings } = useSettings()
+  const rootRef = useRef<HTMLElement>(null)
   const [wish, setWish] = useState('')
   /** 跟着示例句走的那条主题。用户自己打字时它保留上一次的值（清空是丢信息） */
   const [theme, setTheme] = useState<string | null>(null)
   const [exampleAt, setExampleAt] = useState(0)
-  const [picking, setPicking] = useState(false)
+  /** 哪一格的下拉开着。★ 一个状态而不是两个布尔：两格同时开着是画不出来的 */
+  const [open, setOpen] = useState<'card' | 'voice' | null>(null)
   const [picked, setPicked] = useState<string | null>(null)
-  const pickRef = useRef<HTMLDivElement>(null)
+  const cardRef = useRef<HTMLDivElement>(null)
+  const voiceRef = useRef<HTMLDivElement>(null)
+
+  /* ── 优化那句话（工单 07）───────────────────────────────────────────────
+   * ★ 四条状态而不是一条：一条的话，"正在想"和"没改成"会共用一个位，
+   *   于是失败时那句建议会消失（用户刚看到一句话又没了）。
+   * ★ 建议**不覆盖原句**。`suggest.original` 就是提出建议那一刻框里的那一句——
+   *   撤销要有东西可退，所以它必须存下来，而不是"反正用户自己记得"。 */
+  const [suggest, setSuggest] = useState<{
+    text: string
+    tooLong: boolean
+    modelId: string
+    original: string
+  } | null>(null)
+  const [thinking, setThinking] = useState(false)
+  /**
+   * ★ 防双发的判据是 **ref，不是 state**。
+   *   写成 `if (thinking) return` 是错的：React 的重渲染是异步排的，
+   *   同一帧里来的第二次点击，handler 拿到的还是旧的 `thinking`（false），
+   *   于是两个请求一起飞出去。这不是理论——2026-10-15 实测过一次：
+   *   state 版本连点两下，桩服务器收到 `SLOW-REQ#1`、`SLOW-REQ#2` 两条。
+   *   `disabled` 属性也拦不住同帧的第二下（它同样要等重渲染才生效）。
+   *   state 只负责**看起来**在忙（按钮文案与禁用态），ref 负责**真的**只有一个在飞。
+   */
+  const thinkingRef = useRef(false)
+  const [optimizeError, setOptimizeError] = useState<string | null>(null)
+  const [applied, setApplied] = useState(false)
+
+  useEnterTimeline(rootRef)
 
   const ready = wish.trim() !== ''
   const chosen = cards.find((card) => card.cardId === picked) ?? cards[0] ?? null
-  const chipList = suggestions()
+  /** 已经挑好的那条主题的中文名。★ 它是 `THEMES` 里的**枚举值**，不是用户输入——
+   *  优化那句话时它只作为上下文，优化器不许改它（改了就不是模板了） */
+  const themeLabel = THEMES.find((item) => item.key === theme)?.label ?? ''
 
-  // 弹出层：Esc 与点外面都收。与抽屉同一套习惯，不另发明一套
+  /* 音色：读的是设置里那**唯一**一份，写回也是 */
+  const voiceId = settings.speech.voice
+  const voice = DEFAULT_VOICES.find((item) => item.id === voiceId) ?? null
+  /** 缺的那一样决定了该怎么修：没有 Key/模型名要去设置，没选声音就在这颗药丸里挑 */
+  const speechOk = speechReady(settings)
+  const speechKeysReady = Boolean(settings.speech.apiKey.trim() && settings.speech.model.trim())
+
+  /* 优化用的是**文本**那一组。★ 与 `missingRequired`（"能不能出书"）分开判：
+     只配了图像的人照样能出书，但"把这句话改一改"动不了——两件事的边界不一样 */
+  const textMissing = !settings.text.apiKey.trim() || !settings.text.model.trim()
+  /* ★ 建议**过期了没有**。用户提出建议之后又自己改了原句，那条建议就是照着旧句写的；
+     照旧摆在下面而不说，等于让他拿一句对不上的话去替换。静态提示一句比偷偷清掉好：
+     清掉的话他会以为"优化失败了" */
+  const suggestStale = suggest !== null && wish !== suggest.original && wish !== suggest.text
+
+  // 弹出层：Esc 与点外面都收。两格共用这一条。与抽屉同一套习惯，不另发明一套
   useEffect(() => {
-    if (!picking) return
+    if (!open) return
     const onKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') setPicking(false)
+      if (event.key === 'Escape') setOpen(null)
     }
     const onDown = (event: MouseEvent): void => {
-      if (!pickRef.current?.contains(event.target as Node)) setPicking(false)
+      const target = event.target as Node
+      if (cardRef.current?.contains(target) || voiceRef.current?.contains(target)) return
+      setOpen(null)
     }
     window.addEventListener('keydown', onKey)
     window.addEventListener('mousedown', onDown)
@@ -72,32 +142,108 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
       window.removeEventListener('keydown', onKey)
       window.removeEventListener('mousedown', onDown)
     }
-  }, [picking])
+  }, [open])
 
   const submit = (): void => {
     if (!ready) return
+    /* ★ 没有卡就先去建卡。创作流从这一轮起**不再有第 1 步**（孩子在主页上就定了），
+       所以带着一句没有卡的话进去，创作流那边没有任何一步能补上它。
+       这不是"拦住用户"，是把他送到真正能解决这件事的那一屏。 */
+    if (!chosen) {
+      router.push('/character/new')
+      return
+    }
     const params = new URLSearchParams({ wish: wish.trim() })
     if (theme) params.set('theme', theme)
-    if (chosen) params.set('card', chosen.cardId)
+    params.set('card', chosen.cardId)
     router.push(`/create?${params.toString()}`)
   }
 
-  const rollExample = (): void => {
-    const item = nextExample(exampleAt)
-    setExampleAt(exampleAt + 1)
-    setWish(item.text)
-    setTheme(item.theme)
-  }
-
-  const applyChip = (text: string, key: string): void => {
+  /** 填一句现成的话。★ 骰子与封面墙走的是同一个动作，只是选法不同：一个替你挑，一个你自己挑 */
+  const applyWish = (text: string, key: string): void => {
     setWish(text)
     setTheme(key)
   }
 
+  /** 用建议：把框里的字换成建议那一句。★ 原句没丢——就在 `suggest.original` 里 */
+  const useSuggestion = (): void => {
+    if (!suggest) return
+    setWish(suggest.text)
+    setApplied(true)
+  }
+
+  /** 退回原句。★ 这才是真的撤销：退回去的是**提出建议时框里那一句**，不是"再优化一次" */
+  const undoSuggestion = (): void => {
+    if (!suggest) return
+    setWish(suggest.original)
+    setApplied(false)
+  }
+
+  const roll = (): void => {
+    const item = nextExample(exampleAt)
+    setExampleAt(exampleAt + 1)
+    applyWish(item.text, item.theme)
+  }
+
+  /**
+   * 让模型把那句话改得更具体。★ **只回建议，不动框里的字**——
+   * 直接覆盖是这一单最容易犯的错，用户会没法比较，也退不回去。
+   */
+  const optimize = async (): Promise<void> => {
+    if (!ready || thinkingRef.current) return
+    // 缺文本密钥时**不是报一句错就完**：缺的东西在哪里，就把哪里打开（同 `CreateFlow`）
+    if (textMissing) {
+      openSettings()
+      return
+    }
+    thinkingRef.current = true
+    setThinking(true)
+    setOptimizeError(null)
+    const original = wish.trim()
+    try {
+      const response = await fetch('/api/optimize', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          wish: original,
+          // ★ 有才传：角色的名字与主题都是**真实存在**的信息，没有就不传，
+          //   不传一个空串让模型自己编一个
+          ...(chosen?.label ? { childName: chosen.label } : {}),
+          ...(themeLabel ? { themeLabel } : {}),
+          env,
+        }),
+      })
+      const data = (await response.json()) as {
+        suggestion?: string
+        tooLong?: boolean
+        modelId?: string
+        message?: string
+      }
+      if (!response.ok || !data.suggestion) {
+        // ★ 失败就**说失败**，不退回原句假装优化过
+        throw new Error(data.message ?? `HTTP ${response.status}`)
+      }
+      setSuggest({
+        text: data.suggestion,
+        tooLong: Boolean(data.tooLong),
+        modelId: data.modelId ?? '模型',
+        original,
+      })
+      setApplied(false)
+    } catch (err) {
+      setOptimizeError(err instanceof Error ? err.message : String(err))
+    } finally {
+      // ★ 两个一起放开：ref 是闸门，state 是界面。只放一个的话，
+      //   要么按钮永远停在"正在想…"，要么下一次点击被一个早就结束的请求挡住
+      thinkingRef.current = false
+      setThinking(false)
+    }
+  }
+
   return (
-    <section className="cl">
+    <section className="cl" ref={rootRef}>
       <h1 className="cl__title">
-        {/* 两笔手绘装饰：纯装饰，读屏不念（aria-hidden）。静止模式下不飘 */}
+        {/* 两笔手绘装饰：纯装饰，读屏不念（aria-hidden）。进场时被"画"出来，静止模式下直接在场 */}
         <svg className="cl__doodle cl__doodle--spark" viewBox="0 0 40 40" aria-hidden="true">
           <path d="M14 4c1.6 6.4 4.6 9.4 11 11-6.4 1.6-9.4 4.6-11 11-1.6-6.4-4.6-9.4-11-11 6.4-1.6 9.4-4.6 11-11Z" />
           <path d="M31 24c.7 2.8 2 4.1 4.8 4.8-2.8.7-4.1 2-4.8 4.8-.7-2.8-2-4.1-4.8-4.8 2.8-.7 4.1-2 4.8-4.8Z" />
@@ -110,30 +256,37 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
       </h1>
 
       <p className="cl__sub">
-        选好小主角，把想讲的那句话写下来就能开始。画风这一版只有{DEFAULT_STYLE_LABEL}一种，
-        所有示例图都是它画的。
+        选好小主角和声音，把想讲的那句话写下来就能开始。下面这些封面都是{DEFAULT_STYLE_LABEL}
+        画的。
       </p>
 
       <div className="cl__pills">
-        <div className="cl__pick" ref={pickRef}>
+        <div className="cl__pick" ref={cardRef}>
           {cards.length > 0 ? (
             <>
               <button
                 type="button"
                 className="cl__pill"
-                onClick={() => setPicking((prev) => !prev)}
-                aria-expanded={picking}
+                onClick={() => setOpen((prev) => (prev === 'card' ? null : 'card'))}
+                aria-expanded={open === 'card'}
                 aria-haspopup="listbox"
               >
                 {/* 头像 240 档（实测 10 KB）。alt 留空：名字就在旁边，读屏不必再念一遍 */}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img className="cl__pill-face" src={chosen.faceUrl} alt="" width={24} height={24} />
                 <span className="cl__pill-text">{chosen.label ?? chosen.childId}</span>
-                <span className="cl__pill-caret" aria-hidden="true">
-                  ⌄
-                </span>
+                <svg className="cl__pill-caret" viewBox="0 0 16 16" aria-hidden="true">
+                  <path
+                    d="m4 6.5 4 4 4-4"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
               </button>
-              {picking && (
+              {open === 'card' && (
                 <ul className="cl__options" role="listbox">
                   {cards.map((card) => (
                     <li key={card.cardId}>
@@ -144,7 +297,7 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
                         className="cl__option"
                         onClick={() => {
                           setPicked(card.cardId)
-                          setPicking(false)
+                          setOpen(null)
                         }}
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -166,17 +319,81 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
               )}
             </>
           ) : (
-            <span className="cl__pill cl__pill--plain">
-              <span className="cl__pill-dot" aria-hidden="true" />
-              还没有小主角——进去第一步就是定他
-            </span>
+            /* ★ 原来是"进去第一步就是定他"——那句在第 1 步撤掉之后就不成立了，
+               所以这里直接把人送过去，而不是先送进创作流再让他自己找。
+               建的还是同一张卡（`/character/new` 用的是创作流第 1 步那份 `ChildFields`）。 */
+            <Link className="cl__pill cl__pill--new" href="/character/new">
+              <span className="cl__pill-plus" aria-hidden="true">
+                +
+              </span>
+              还没有小主角 · 先去建一个
+            </Link>
           )}
         </div>
 
-        <span className="cl__pill cl__pill--plain" title="这一版只有一档画风，所以这里不是下拉">
-          <span className="cl__swatch" aria-hidden="true" />
-          {DEFAULT_STYLE_LABEL}
-        </span>
+        {/* 声音那一格。★ 是**真下拉**，写的是设置里那唯一一份音色 */}
+        <div className="cl__pick" ref={voiceRef}>
+          <button
+            type="button"
+            className="cl__pill"
+            onClick={() => setOpen((prev) => (prev === 'voice' ? null : 'voice'))}
+            aria-expanded={open === 'voice'}
+            aria-haspopup="listbox"
+          >
+            {/* 一只喇叭。★ 内联 SVG 而不是 emoji 🔊——与本文件头那段同一判断 */}
+            <svg className="cl__pill-sound" viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M3.5 7.5h2.8L10 4.2v11.6l-3.7-3.3H3.5z" />
+              <path
+                d="M12.8 7.4a3.4 3.4 0 0 1 0 5.2M15.2 5.2a6.6 6.6 0 0 1 0 9.6"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              />
+            </svg>
+            {/* 没选过时**不预填**一个默认音色：那会让"我还没选"看起来像"已经选好了"。
+                `''` 是 DEFAULT_SETTINGS 里真的那个值，这里就把那个值念出来 */}
+            <span className="cl__pill-text">{voice?.label ?? (voiceId || '还没选声音')}</span>
+            <svg className="cl__pill-caret" viewBox="0 0 16 16" aria-hidden="true">
+              <path
+                d="m4 6.5 4 4 4-4"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+          {open === 'voice' && (
+            <ul className="cl__options cl__options--voice" role="listbox">
+              {DEFAULT_VOICES.map((item) => (
+                <li key={item.id}>
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={item.id === voiceId}
+                    className="cl__option cl__option--voice"
+                    onClick={() => {
+                      patch('speech', { voice: item.id })
+                      setOpen(null)
+                    }}
+                  >
+                    <span className="cl__option-name">{item.label}</span>
+                    <span className="cl__option-meta">{item.id}</span>
+                  </button>
+                </li>
+              ))}
+              {/* ★ 试听这条路**指过去**，不在这里重做一份：选音色没法靠文字判断，
+                  而 `/voice` 那一屏每张卡都能"听一句真的"（那里有现成的实现） */}
+              <li className="cl__options-foot">
+                <Link href="/voice" onClick={() => setOpen(null)}>
+                  先去听一句真的 →
+                </Link>
+              </li>
+            </ul>
+          )}
+        </div>
       </div>
 
       <div className="cl__card">
@@ -185,7 +402,7 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
           <textarea
             className="cl__input"
             value={wish}
-            rows={3}
+            rows={2}
             placeholder="例如：朵朵抱着月亮，轻轻走过屋顶"
             onChange={(event) => setWish(event.target.value)}
             onKeyDown={(event) => {
@@ -198,17 +415,108 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
           />
         </label>
 
+        {/* 建议区。★ 它在**框下面**、在动作栏上面：这一块只属于"这句话"，不属于整张卡 */}
+        {suggest && (
+          <div className="cl__suggest">
+            <p className="cl__suggest-head">
+              改了一版
+              <span className="cl__suggest-by">{suggest.modelId} 改的</span>
+            </p>
+            <p className="cl__suggest-text">{suggest.text}</p>
+            {suggest.tooLong && (
+              <p className="cl__suggest-note">
+                比一句话该有的长度长了一点（超了 80 字），用之前可以再删几个字。
+              </p>
+            )}
+            {suggestStale && (
+              <p className="cl__suggest-note">你后来改过原句了，这一版是照着改之前那句写的。</p>
+            )}
+            <div className="cl__suggest-acts">
+              {applied ? (
+                <button type="button" className="cl__roll" onClick={undoSuggestion}>
+                  退回原句
+                </button>
+              ) : (
+                <>
+                  <button type="button" className="cl__apply" onClick={useSuggestion}>
+                    用这句
+                  </button>
+                  <button type="button" className="cl__roll" onClick={() => setSuggest(null)}>
+                    不用
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {optimizeError && (
+          <p className="cl__warn" role="alert">
+            没改成：{optimizeError}
+          </p>
+        )}
+
         <div className="cl__bar">
-          <p className="cl__hint">一句话就够，进去之后还能改，也可以不写、直接挑一个主题。</p>
+          <div className="cl__note">
+            <p className="cl__hint">一句话就够，进去之后还能改，也可以不写、直接挑一个主题。</p>
+            {/* ★ 这颗药丸选完就能选，但**没有 Key 的时候它选了不会响**——
+                所以这里必须说出来，而且要说清缺的是哪一样：
+                两句话各自正好覆盖 `speechReady` 为假的两半（keys 齐 ⇒ 缺的只可能是音色）。
+                ★ 不写成 `role="alert"`：这不是"这一轮坏了"，是一个状态说明，
+                而且这一屏的语音只是**可选项**（没有朗读照样能出书）。
+                `/voice` 那一屏用 alert，是因为在那里"没配好"意味着用户专程来做的事做不成。 */}
+            {!speechOk && (
+              <p className="cl__warn">
+                {speechKeysReady ? (
+                  <>
+                    还没选声音——这样做出来的书<strong>没有朗读</strong>。上面那颗里挑一个，
+                    想先听听看就去
+                    <Link className="cl__link" href="/voice">
+                      「声音」那一屏
+                    </Link>
+                    。
+                  </>
+                ) : (
+                  <>
+                    语音的 Key 或模型名还没填——这样做出来的书<strong>没有朗读</strong>。
+                    <button type="button" className="cl__link" onClick={openSettings}>
+                      去补上
+                    </button>
+                  </>
+                )}
+              </p>
+            )}
+          </div>
           <div className="cl__actions">
+            {/* 优化那一颗。★ 它在**输入框的右下角**，不在主题那一行——
+                按钮长在别处就是误导（工单 07 §一：那里写的是"挑了恐龙再优化会变成另一只恐龙"）。
+                ★ 缺文本密钥时它不报错，而是把设置打开：缺的东西在哪里就把哪里打开 */}
             <button
               type="button"
-              className="cl__dice"
-              onClick={rollExample}
-              aria-label="换一句灵感"
+              className="cl__optimize"
+              onClick={() => void optimize()}
+              disabled={!ready || thinking}
+              title={
+                textMissing
+                  ? '优化要文本模型和 Key——点了先把设置打开'
+                  : ready
+                    ? '把这句话改得更具体（先给你看，不直接替换）'
+                    : '先写一句话'
+              }
+            >
+              <svg className="cl__optimize-icon" viewBox="0 0 40 40" aria-hidden="true">
+                <path d="M14 4c1.6 6.4 4.6 9.4 11 11-6.4 1.6-9.4 4.6-11 11-1.6-6.4-4.6-9.4-11-11 6.4-1.6 9.4-4.6 11-11Z" />
+                <path d="M31 24c.7 2.8 2 4.1 4.8 4.8-2.8.7-4.1 2-4.8 4.8-.7-2.8-2-4.1-4.8-4.8 2.8-.7 4.1-2 4.8-4.8Z" />
+              </svg>
+              {thinking ? '正在想…' : '优化提示词'}
+            </button>
+            <button
+              type="button"
+              className="cl__roll"
+              onClick={roll}
               title="换一句灵感（填进输入框，可以照改）"
             >
-              <svg viewBox="0 0 24 24" aria-hidden="true">
+              <svg className="cl__roll-icon" viewBox="0 0 24 24" aria-hidden="true">
                 <rect x="3" y="3" width="18" height="18" rx="5" />
                 <circle cx="8.5" cy="8.5" r="1.4" />
                 <circle cx="15.5" cy="8.5" r="1.4" />
@@ -216,36 +524,64 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
                 <circle cx="8.5" cy="15.5" r="1.4" />
                 <circle cx="15.5" cy="15.5" r="1.4" />
               </svg>
+              换一句
             </button>
             <button
               type="button"
               className="cl__go"
               onClick={submit}
               disabled={!ready}
-              aria-label="开始创作"
-              title={ready ? '开始创作' : '先写一句话'}
+              title={!ready ? '先写一句话' : chosen ? '开始创作' : '先去建一个小主角'}
             >
-              ↑
+              开始创作
+              <svg className="cl__go-icon" viewBox="0 0 20 20" aria-hidden="true">
+                <path
+                  d="M3.5 10h12m-4.5-4.5L15.5 10l-4.5 4.5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.7"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
             </button>
           </div>
         </div>
       </div>
 
-      <ul className="cl__chips">
-        {chipList.map((item) => {
-          const theme0 = THEMES.find((each) => each.key === item.theme)
+      <h2 className="cl__wallhead">或者，挑一个主题</h2>
+      <ul className="cl__wall">
+        {THEMES.map((t) => {
+          const wish0 = ofTheme(t.key)
+          const active = theme === t.key && wish === wish0?.text
           return (
-            <li key={item.theme}>
+            <li key={t.key}>
               <button
                 type="button"
-                className="cl__chip"
-                onClick={() => applyChip(item.text, item.theme)}
-                data-active={theme === item.theme && wish === item.text ? 'true' : 'false'}
+                className="cl__theme"
+                data-active={active ? 'true' : 'false'}
+                onClick={() => wish0 && applyWish(wish0.text, t.key)}
+                title={wish0?.text ?? t.label}
               >
-                <span className="cl__chip-emoji" aria-hidden="true">
-                  {theme0?.emoji ?? ''}
-                </span>
-                {item.text}
+                {/* 320 档派生小图（实测平均 11 KB，12 张合计 132 KB）。★ 不走 ?w=：
+                    静态 public/ 走不到那条通路。alt 留空：主题名就写在图下面。
+                    图缺失时这里什么都不画，卡面留一块干净的相框色，文字照样读得出来
+                    （与选择点、第三屏同一机制）
+                    ★ **刻意不加 `loading="lazy"`**：墙的第一行在 900px 高的窗口里
+                    就落在首屏（y≈613…756），对首屏内的图用 lazy 没有收益，只有风险——
+                    实测过一次干净的 1440×900 加载，12 张里 11 张停在 0×0 没被触发。
+                    132 KB 换来 12 格一定画得出来，这笔账很划算；LCP 也不受影响
+                    （LCP 是标题那行文字，它在 DOM 里排在图片前面，且文字不阻塞于图片） */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  className="cl__theme-art"
+                  src={themeCardPath(t.key)}
+                  alt=""
+                  width={320}
+                  height={180}
+                />
+                <span className="cl__theme-label">{t.label}</span>
+                <span className="cl__theme-tag">{t.tagline}</span>
               </button>
             </li>
           )

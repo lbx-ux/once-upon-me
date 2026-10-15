@@ -24,7 +24,8 @@ import { createFsStore } from '../src/lib/engine/providers/stores.ts'
 import { createCardStore } from '../src/lib/engine/character-card/store.ts'
 import { checklistOf, promptFragmentOf } from '../src/lib/engine/character-card/card.ts'
 import { toDataUrl } from '../src/lib/engine/providers/http.ts'
-import type { CharacterAnchor } from '../src/lib/engine/domain.ts'
+import type { AgeBand, CharacterAnchor } from '../src/lib/engine/domain.ts'
+import { buildChildRecord } from '../src/lib/engine/character-card/profile.ts'
 import { arg, readEnv } from './env.mts'
 
 type KidSpec = {
@@ -32,6 +33,7 @@ type KidSpec = {
   childId: string
   name: string
   reading: string
+  ageBand: AgeBand
   anchors: CharacterAnchor[]
   outfit: string
 }
@@ -45,6 +47,7 @@ const KIDS: KidSpec[] = [
     childId: 'xiaoyu',
     name: '小宇',
     reading: 'yǔ',
+    ageBand: '4-6',
     outfit: '芥黄色短袖 T 恤 + 深蓝色短裤 + 一双红色雨鞋',
     anchors: [
       { slot: 'bone', value: '圆脸、颊部饱满、下颌线软' },
@@ -60,6 +63,7 @@ const KIDS: KidSpec[] = [
     childId: 'xiaoman',
     name: '小满',
     reading: 'mǎn',
+    ageBand: '4-6',
     outfit: '藕荷色无袖连衣裙 + 白短袜 + 蓝布鞋',
     anchors: [
       { slot: 'bone', value: '方中带圆的脸、下巴短、颊部有两团肉' },
@@ -152,7 +156,32 @@ async function main(): Promise<void> {
   }
 
   await writeFile(join(out, 'kids.json'), JSON.stringify(KIDS, null, 2), 'utf8')
-  process.stdout.write(`定义与卡都在 ${out}\n`)
+
+  /* 档案（工单 03）。与 kids.json 落在**同一个根**下，理由也一样：
+     它是演示数据的副产物，不是产品的一层运行时档案。
+     ★ 记着一条已经踩过的坑（kid-names.ts 文件头）：dev 的资产根是 `.out/web`，
+       而演示数据是用默认的 `--out=.out/cards` 生成的——只拷 `cards/` 过去的话，
+       `children/` 与 `kids.json` 都得跟着走，否则界面退回 childId。
+       干脆 `--out=.out/web` 重跑一次（但那会真调用图像模型）。 */
+  const createdAt = 1791849600000 // 2026-10-13T00:00:00Z，写死：这个文件不该每次重跑都变
+  await mkdir(join(out, 'children'), { recursive: true })
+  for (const kid of KIDS) {
+    const profile = buildChildRecord({
+      childId: kid.childId,
+      name: kid.name,
+      nameReading: kid.reading,
+      ageBand: kid.ageBand,
+      lookTags: [],
+      interestTags: [],
+      createdAt,
+    })
+    await writeFile(
+      join(out, 'children', `${kid.childId}.json`),
+      `${JSON.stringify(profile, null, 2)}\n`,
+      'utf8',
+    )
+  }
+  process.stdout.write(`定义、卡与档案都在 ${out}\n`)
 }
 
 main().catch((err: unknown) => {

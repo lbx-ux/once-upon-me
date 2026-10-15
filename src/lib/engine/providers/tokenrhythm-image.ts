@@ -1,7 +1,7 @@
 /**
  * tokenrhythm-image.ts —— 图像生成适配器（同步出图、当场扣费）
  *
- * ★ 三条来自实测的硬纪律，都写进了代码，不是写在注释里等人自觉：
+ * ★ 四条来自实测的硬纪律，都写进了代码，不是写在注释里等人自觉：
  *
  * 1. **只允许白名单尺寸**。合法范围内仍有模型级白名单：`512x512` 被拒，
  *    而 `768x768` / `1280x720` / `1440x1440` / `2048x2048` 通过（模型.md §4）。
@@ -11,22 +11,29 @@
  *    `URL → 字节`，接口上不存在"只存链接"这条路。
  * 3. **超时不重试**（§10 第 8 条）。同步接口超时是"不知道有没有扣费"，
  *    重试可能翻倍。这里直接抛错，把决定权交给引擎（它会发一条 error 事件）。
- * 4. **参考图没有入口，带进来就报错，不许静默丢掉**。★ 这是实测结论，不是猜测：
+ * 4. **`generate` 这条路上没有参考图字段，带进来就报错，不许静默丢掉。**
  *    七个候选字段名（`image` / `image_url` / `reference_image` / `reference_images` /
  *    `images` / `input_image` / `content[]`）在 `wan2.7-image` 与 `qwen-image-2.0` 上
  *    **全部**被同一个错误挡回：`HTTP 400 · BAD_REQUEST · 请求包含未知字段`。
- *    探针脚本 `scripts/probe-image-reference.mts`（送假值探字段名，一次都不扣费——
- *    因为这个接口**未知字段必拒**，所以字段名可以零成本枚举）。
  *
- *    所以 ADR-0007 那条"用参考图锁脸"的链路，**在这一家上是空的**：
- *    跨页一致性目前只能靠 `promptFragmentOf(card)` 那段文字锚点。
- *    曾经这里做成可配置（`referenceField`），代价是"开了开关但字段名没填对"时
- *    参考图被悄悄丢掉、页面什么都看不出来——那比报错贵得多，
- *    症状是整本书画完才发现不像，而那时钱已经花完了。
+ * ## ★ 但参考图这条路是**有的**：`/images/edits`（2026-10-14 实测，见下）
  *
- *    ★ 未核实的一件事：**平台是否另有图生图 / 图像编辑接口**。
- *    本文件说的只是"`/images/generations` 这个接口没有参考图字段"，
- *    不等于"这家做不了图生图"。换供应商是另一回事（GPT-Image-2 已证支持参考图）。
+ * 上面第 4 条曾经被写成"这家做不了图生图"。**那是错的**，而且错得很典型：
+ * W1 只在 `/images/generations` 上枚举字段名，从没试另一条路由，
+ * 于是把"我们没找到入口"记成了"模型吃不了参考图"，
+ * 这句话还一路长进了界面文案（创作流第 1 步）。
+ *
+ * 实测（`IMAGE_MODEL=wan2.7-image`，工单 02 §一 有全表）：
+ *
+ * | 送什么 | 回什么 |
+ * | --- | --- |
+ * | `POST /images/edits` + 1×1 像素 | `400 IMAGE_INPUT_DIMENSIONS_INVALID`：**参考图宽高必须在 240～8000 像素之间** |
+ * | 同上，带 alpha 的 1440² PNG | `400 IMAGE_INPUT_ALPHA_UNSUPPORTED`：**不支持带透明通道的 PNG** |
+ * | 同上，压平白底的 1440² PNG | **`200`，15.0s，一张 2.27 MB PNG** |
+ *
+ * ★ 那两条错误码是**语义错误**（尺寸、alpha），不是"字段不认识"——
+ * 服务端真的在解析这张图。这也是 `image/normalize.ts` 存在的理由：
+ * 它把这两个 400 在送出去之前就地解决掉，于是它们**只可能是 bug**。
  *
  * ⚠️ 这个接口在官方文档里**一个字都没提**（模型.md §0），字段可能变动，
  *    所以取字段一律走 `http.ts` 的递归查找，不硬编码 `data[0].url`。
@@ -55,19 +62,27 @@ const RATIO_OF_SIZE: Record<string, string> = {
   '1280x720': '16:9',
 }
 
+/** `edits` 那条路上实测**只送过三个字段**：model / image / prompt */
+const EDIT_PATH = '/images/edits'
+const GENERATE_PATH = '/images/generations'
+
 export type TokenrhythmImageOptions = {
-  /**
-   * 支持参考图与否。**实测结论是 false**，理由见文件头第 4 条。
-   *
-   * 这个开关留着只为换供应商时少改一处：填 `1` 而这家仍不支持，
-   * `generate()` 会在带参考图时**直接报错**，不会把参考图悄悄丢掉。
-   * 曾经这里还配一个 `referenceField` 让你填字段名——删了，
-   * 因为"字段名没填对"的表现是静默降级，而不是失败。
-   */
-  supportsReference?: boolean
-  /** 一口价 0.20 元/张（实测，与尺寸无关）。回传缺 cost_cny 时用这个兜底记账 */
+  /** 一口价 0.20 元/张（实测，与尺寸无关）。回传缺 cost_cny 时用这个兜底记账
+   *  ★ `edits` 那条路扣多少**没量过**，所以现在仍按这一口价记——见工单 02 的"欠着的" */
   unitCostCny?: number
   extra?: Record<string, unknown>
+}
+
+/**
+ * 能力 = "有没有 edit 这条方法"。
+ *
+ * ★ 单独一个导出函数，是为了让这条**关系**可被证伪：测试能拿一个**没有 edit 的实现**
+ *   调它并看到 false，而"字面量 true"是没法这样测的——它只会在被漏改的那天不响。
+ * ★ 不读环境变量：那个开关（`IMAGE_SUPPORTS_REFERENCE`）是 W1 错误结论的化石，
+ *   已随工单 02 删除。
+ */
+export function supportsReferenceOf(impl: { edit?: unknown }): boolean {
+  return typeof impl.edit === 'function'
 }
 
 export function createTokenrhythmImage(
@@ -77,15 +92,79 @@ export function createTokenrhythmImage(
 ): ImageGenerator {
   const allowed = SIZES_BY_MODEL[modelId] ?? []
   const unitCostCny = opts.unitCostCny ?? 0.2
-  return {
+
+  /** 两条路共用的收尾：找 URL → 立刻下字节 → 组 ImageResponse。
+   *  分开写就会有一处忘了"URL 一小时过期"这件事 */
+  async function finish(
+    body: unknown,
+    budget: CallBudget | undefined,
+    referenceApplied: boolean,
+  ): Promise<ImageResponse> {
+    const url = findFirst(body, ['url', 'image_url'])
+    if (typeof url !== 'string' || !url.startsWith('http')) {
+      throw new EngineError(
+        'provider-call-failed',
+        '图像响应里没有可用的媒体地址（字段层级可能变了）',
+        { traceId: traceOf(body) || undefined, detail: body },
+      )
+    }
+    const expiresAt = expiresAtOf(url)
+    const { bytes, mime } = await fetchBytes(url, { signal: budget?.signal })
+    const cost = findFirst(body, ['cost_cny', 'total_cost_cny'])
+    const id = findFirst(body, ['image_id', 'id'])
+    return {
+      bytes,
+      mime,
+      modelId: String(findFirst(body, ['model']) ?? modelId),
+      costCny:
+        typeof cost === 'number' ? cost : typeof cost === 'string' ? Number(cost) : unitCostCny,
+      providerTaskId: id === null ? undefined : String(id),
+      traceId: traceOf(body) || undefined,
+      referenceApplied,
+      // 临时地址与它的失效时刻随字节一起交上去，落盘后进 AssetRef 只作排障用
+      originUrl: url,
+      originExpiresAt: expiresAt ?? undefined,
+    }
+  }
+
+  function requireKey(): void {
+    if (!deps.apiKey) {
+      throw new EngineError('provider-not-configured', 'IMAGE_API_KEY 未配置，图像能力不可用')
+    }
+  }
+
+  const edit = async (
+    req: ImageRequest & { referenceDataUrl: string },
+    budget?: CallBudget,
+  ): Promise<ImageResponse> => {
+    requireKey()
+    const body = await requestJson(deps, {
+      method: 'POST',
+      // BASE_URL 约定已含 /v1（见 registry.ts），所以这里只写资源段
+      path: EDIT_PATH,
+      // ★ 只送这三个字段：`size` 在这条路上**没测过**，不猜。
+      //   代价是产物尺寸由模型定，所以"页图也走这条路"这件事要先量再开
+      //   （见 illustrate.ts 的 referenceForPages 那一段）
+      body: { model: modelId, image: req.referenceDataUrl, prompt: req.prompt },
+      signal: budget?.signal,
+      // 实测一次 15.0s。阈值给到 3 倍它：一次抖动不该杀掉一整页
+      timeoutMs: budget?.timeoutMs ?? 45_000,
+    })
+    return finish(body, budget, true)
+  }
+
+  // ★ `supportsReference` 不在这里手填：先造一个**没有它**的实现，再从"有没有 edit"
+  //   推出来。写死 `true` 看着一样，但它和 `edit` 是两份各自独立的事实，
+  //   删掉 edit 的时候不会有任何东西变红——那正是环境变量开关（IMAGE_SUPPORTS_REFERENCE）
+  //   的病，换成一个字面量并不会好。现在删 edit，这一位自己就翻了。
+  const implementation: Omit<ImageGenerator, 'supportsReference'> & {
+    readonly supportsReference?: boolean
+  } = {
     id: `tokenrhythm-image(${modelId})`,
     modelId,
-    supportsReference: opts.supportsReference ?? false,
     supportedRatios: [...new Set(allowed.map((size) => RATIO_OF_SIZE[size] ?? 'custom'))],
     async generate(req: ImageRequest, budget?: CallBudget): Promise<ImageResponse> {
-      if (!deps.apiKey) {
-        throw new EngineError('provider-not-configured', 'IMAGE_API_KEY 未配置，图像能力不可用')
-      }
+      requireKey()
       if (allowed.length > 0 && !allowed.includes(req.size)) {
         throw new EngineError(
           'provider-call-failed',
@@ -93,73 +172,41 @@ export function createTokenrhythmImage(
             `本接口一次 200 就扣一张图的钱，拒绝拿正式跑测当参数探测`,
         )
       }
-
-      const payload: Record<string, unknown> = {
-        model: modelId,
-        // ★ 图像接口是顶层 prompt 字符串，与视频接口的 content[] 数组**不同构**，
-        //   两个接口不能共用请求构造代码（模型.md §4、§10 第 5 条）
-        prompt: req.prompt,
-        size: req.size,
-        ...(opts.extra ?? {}),
-      }
       // ★ 带参考图进来就**当场报错**，不走"那就不带参考图画一张"。
       //   被忽略的参考图会让整本书"看着像已经在锁脸了"——那是比报错贵得多的失败：
       //   症状要到 20 页画完、家长说"这不像我孩子"时才浮出来，而那时钱已经花完了。
-      //   实测依据见文件头第 4 条（七个字段名 × 两个模型全部 400「请求包含未知字段」）。
+      //   要参考图，走 `edit()`（同一家、另一条路由，实测通）。
       if (req.referenceDataUrl) {
         throw new EngineError(
           'provider-call-failed',
-          `${modelId} 所在的图像接口没有参考图字段（实测：任何未知字段都会 ` +
-            `400「请求包含未知字段」，七个候选字段名无一例外，见本文件头第 4 条）。` +
-            `本次请求带了参考图，拒绝降级成"不带参考图继续画"——` +
-            `跨页一致性目前只能靠 prompt 里的角色锚点段。` +
-            `要真用参考图，得换一家支持图生图的供应商（GPT-Image-2 已证支持）`,
+          `${GENERATE_PATH} 这条路上没有参考图字段（实测：任何未知字段都会 400「请求包含未知字段」）。` +
+            `带参考图请调 edit()；拒绝把参考图悄悄丢掉继续画`,
         )
       }
-      const referenceApplied = false
 
       const body = await requestJson(deps, {
         method: 'POST',
-        // BASE_URL 约定已含 /v1（见 registry.ts），所以这里只写资源段
-        path: '/images/generations',
-        body: payload,
+        path: GENERATE_PATH,
+        body: {
+          model: modelId,
+          // ★ 图像接口是顶层 prompt 字符串，与视频接口的 content[] 数组**不同构**，
+          //   两个接口不能共用请求构造代码（模型.md §4、§10 第 5 条）
+          prompt: req.prompt,
+          size: req.size,
+          ...(opts.extra ?? {}),
+        },
         signal: budget?.signal,
         timeoutMs: budget?.timeoutMs ?? 180_000,
       })
-
-      const url = findFirst(body, ['url', 'image_url'])
-      if (typeof url !== 'string' || !url.startsWith('http')) {
-        throw new EngineError(
-          'provider-call-failed',
-          '图像响应里没有可用的媒体地址（字段层级可能变了）',
-          {
-            traceId: traceOf(body) || undefined,
-            detail: body,
-          },
-        )
-      }
-
-      const expiresAt = expiresAtOf(url)
-      const { bytes, mime } = await fetchBytes(url, { signal: budget?.signal })
-
-      const cost = findFirst(body, ['cost_cny', 'total_cost_cny'])
-      return {
-        bytes,
-        mime,
-        modelId: String(findFirst(body, ['model']) ?? modelId),
-        costCny:
-          typeof cost === 'number' ? cost : typeof cost === 'string' ? Number(cost) : unitCostCny,
-        providerTaskId: (() => {
-          const id = findFirst(body, ['image_id', 'id'])
-          return id === null ? undefined : String(id)
-        })(),
-        traceId: traceOf(body) || undefined,
-        referenceApplied,
-        // 临时地址与它的失效时刻随字节一起交上去，落盘后进 AssetRef 只作排障用
-        originUrl: url,
-        originExpiresAt: expiresAt ?? undefined,
-      }
+      return finish(body, budget, false)
     },
+    edit,
+  }
+
+  return {
+    ...implementation,
+    // 这一行是**推导**，不是申报：`edit` 被删掉的那天它会自己变成 false
+    supportsReference: supportsReferenceOf(implementation),
   }
 }
 

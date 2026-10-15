@@ -27,6 +27,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
 
+import StudioBackdrop from '@/components/shell/StudioBackdrop.tsx'
 import { useSettings } from '@/components/settings/SettingsProvider.tsx'
 
 const COLLAPSE_KEY = 'xiaozhujue.shell.collapsed'
@@ -77,6 +78,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="shell" data-collapsed={collapsed}>
+      {/* 背景：与首页第一幕同一片天。放在 DOM 最前面、`position: fixed`，
+          所以侧栏与内容区自然压在它上面（层序与首页 `.scene-backdrop` 同一个处理） */}
+      <StudioBackdrop />
       <nav className="shell__side" aria-label="工作台">
         <Link className="shell__brand" href="/" aria-label="回首页">
           <span className="shell__brand-mark" aria-hidden="true">
@@ -150,7 +154,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             title={collapsed ? '展开侧栏' : '收起侧栏'}
           >
             <span className="shell__collapse-arrow" aria-hidden="true">
-              {collapsed ? '»' : '«'}
+              {/* 一个向左的尖角，折叠时 CSS 把它转 180°。
+                  ★ 原来这里是 `«` / `»` 两个文字字符——形状、字重、基线全跟着系统字体走 */}
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <path d="M14.5 5.5 8 12l6.5 6.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
             </span>
             <span className="shell__link-label">{collapsed ? '展开' : '收起侧栏'}</span>
           </button>

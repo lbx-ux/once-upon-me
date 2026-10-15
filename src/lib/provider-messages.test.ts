@@ -9,7 +9,7 @@
 
 import { describe, expect, it } from 'vitest'
 import { EngineError } from './engine/index.ts'
-import { isRetryable, userMessageFor } from './provider-messages.ts'
+import { isRetryable, userFailureOf, userMessageFor } from './provider-messages.ts'
 
 const withStatus = (status: number, code = ''): EngineError =>
   new EngineError('provider-call-failed', '供应商原文之类的随便一句话', {
@@ -88,5 +88,55 @@ describe('isRetryable', () => {
     expect(isRetryable(withStatus(429))).toBe(true)
     expect(isRetryable(withStatus(504))).toBe(true)
     expect(isRetryable(new EngineError('provider-call-failed', '网络错误'))).toBe(true)
+  })
+})
+
+/**
+ * `userFailureOf` 是 Route Handler 唯一的出口（一次算清文案 + 可重试性 + 状态码），
+ * 但在这之前**一条测试都没有**。工单 03 要改它的状态码分流，所以先把现状钉住。
+ *
+ * ★ 这里最容易错的一处是"状态码按错在谁分"：那几个**本地**判出来的码
+ *   （归一化、档案校验、查资产）身上没有 `httpStatus` 可读，一旦漏进兜底分支
+ *   就会被回成 502 —— 一句"平台那边超时或不可用"盖在"回第 1 步补名字"上面。
+ */
+describe('userFailureOf · 状态码按"错在谁"分', () => {
+  it('本地判出来的输入问题一律 400，不是 502（它们根本没发出请求）', () => {
+    expect(userFailureOf(new EngineError('reference-invalid', '照片太小')).status).toBe(400)
+    expect(userFailureOf(new EngineError('profile-invalid', '名字是空的')).status).toBe(400)
+    expect(userFailureOf(new EngineError('card-invalid', '缺骨相')).status).toBe(400)
+  })
+
+  it('资产找不到是 404，与输入不合格分得开', () => {
+    expect(userFailureOf(new EngineError('card-not-found', '第 3 版不在')).status).toBe(404)
+  })
+
+  it('供应商回来的状态码照旧按原样分：401/404 是 400，429/5xx 是 503', () => {
+    expect(userFailureOf(withStatus(401)).status).toBe(400)
+    expect(userFailureOf(withStatus(404)).status).toBe(400)
+    expect(userFailureOf(withStatus(429)).status).toBe(503)
+    expect(userFailureOf(withStatus(504)).status).toBe(503)
+  })
+
+  it('认不出来的走 502，且**保留供应商原文**', () => {
+    const failure = userFailureOf(withStatus(418))
+    expect(failure.status).toBe(502)
+    expect(failure.message).toContain('供应商原文之类的随便一句话')
+  })
+
+  it('文案、可重试性、状态码三者同源（不各判各的）', () => {
+    const failure = userFailureOf(new EngineError('profile-invalid', '名字是空的'))
+    expect(failure.retryable).toBe(false)
+    expect(failure.message).toContain('第 1 步')
+    expect(failure.code).toBe('profile-invalid')
+  })
+
+  it('四个"输入问题"的码各给一句不同的话（合成一句家长不知道该动哪一格）', () => {
+    const said = [
+      userFailureOf(new EngineError('reference-invalid', 'x')).message,
+      userFailureOf(new EngineError('profile-invalid', 'x')).message,
+      userFailureOf(new EngineError('card-invalid', 'x')).message,
+      userFailureOf(new EngineError('card-not-found', 'x')).message,
+    ]
+    expect(new Set(said).size).toBe(said.length)
   })
 })

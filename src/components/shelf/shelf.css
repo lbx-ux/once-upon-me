@@ -7,6 +7,14 @@
  * ★ 一处刻意的取舍：统计卡上的数字用**衬线体**且比别处大。
  *   它们是这一屏的"温度"所在（家长先看到的是"我陪他读了 42 分钟"），
  *   而这个页面没有插画可依靠——数字本身就是它的视觉主体。
+ *
+ * ★ 2026-10-15 与首页共用那片天之后，这一屏的**页头压在天空带上**（y≈45…280
+ *   全在 112vh 的天空带里）。所以三处灰字改成 `--ink-on-sky`：
+ *   `.shelf__sub`（第 1 段，灰字在那里 3.96:1）、`.shelf__local-note`（第 3 段 4.14:1）、
+ *   `.shelf__tab` 未选中态（第 3 段）。`--ink-on-sky` 十段全过（最狠 6.60:1）。
+ *   判据是 `node scripts/check-scrim.mts` 那张十带表，不是看着还行。
+ *   卡片里的灰字（`.shelf__stat-*` / `.shelf__book-*`）一个都不用改——它们各自在
+ *   `--surface` 上。
  */
 
 .home {
@@ -32,7 +40,8 @@
 .shelf__sub {
   margin: 0;
   font-size: 14px;
-  color: var(--ink-muted);
+  /* 压在天上（见文件头） */
+  color: var(--ink-on-sky);
 }
 
 .shelf__tab:focus-visible,
@@ -44,23 +53,34 @@
   outline-offset: 2px;
 }
 
-/* ── 统计卡 ────────────────────────────────────────────────────────────── */
-
+/* ── 统计条：四格，一条纸 ────────────────────────────────────────────────
+   ★ 2026-10-15 从"四张各带边框的白卡"改成**一条纸上的四格**。
+     四个浮块在天空带上读起来像四张并排的便利贴，谁也不是谁的一部分；
+     而它们本来就是同一件事的四个面（这一屏"读了多久"）。
+     一条纸 + 三道竖向发丝线说明"这四格是一组"，也把边上那层影子
+     从四处收成一处——屏幕上少三个浮层。
+   ★ 边线用 `--hairline` 而不是 `--dot`：`--dot` 是点阵纹理的墨色，
+     拿它当卡片边框是巧合不是设计（globals.css 那条写的就是这件事）。 */
 .shelf__stats {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
   margin: 24px 0 10px;
+  padding: 0;
+  border: 1px solid var(--hairline);
+  border-radius: var(--card-radius);
+  background: var(--surface);
+  box-shadow: var(--sheet-shadow);
 }
 
 .shelf__stat {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 14px 16px;
-  border: 1px solid var(--dot);
-  border-radius: var(--card-radius);
-  background: var(--surface);
+  padding: 16px 18px;
+}
+
+.shelf__stat + .shelf__stat {
+  border-left: 1px solid var(--hairline);
 }
 
 .shelf__stat-label {
@@ -92,7 +112,9 @@
   margin: 0 0 24px;
   font-size: 12px;
   line-height: 1.7;
-  color: var(--ink-muted);
+  /* 这一行在天上（见文件头）。里面那个 <b> 跟着它走、只靠字重强调——
+     不另给一个更深的颜色：那会让"重"和"更重"分不清 */
+  color: var(--ink-on-sky);
 }
 
 /* ── 继续上次创作 ─────────────────────────────────────────────────────── */
@@ -139,7 +161,9 @@
   border: none;
   border-bottom: 2px solid transparent;
   background: none;
-  color: var(--ink-muted);
+  /* 未选中态也在天上（见文件头）。★ 与选中态的区分没有丢：
+     选中是 `--ink` + 一条陶土下划线，这里是 `--ink-on-sky`，两档之间还有一倍差距 */
+  color: var(--ink-on-sky);
   font: inherit;
   font-size: 14px;
   cursor: pointer;

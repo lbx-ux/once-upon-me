@@ -42,7 +42,9 @@
   margin: 0;
   font-size: 13px;
   line-height: 1.8;
-  color: var(--ink-muted);
+  /* 这一行压在天空带第 2 段上（`scripts/check-scrim.mts`：灰字在那里 3.98:1）。
+     `--ink-on-sky` 同一段 6.63:1 */
+  color: var(--ink-on-sky);
 }
 
 /* 新建那颗：整颗填强调色。它是这一屏唯一的"造东西"动作，值得最重的视觉 */
@@ -158,7 +160,11 @@
   position: relative;
   padding: 9px;
   border-radius: 3px;
-  background: var(--paper);
+  /* ★ 用 `--card-paper`（暖相纸）而不是 `--paper`：2026-10-15 页面底色翻成冷白之后，
+     这一条规则才真正立住——**冷的是光，暖的是物件**。
+     卡纸是物件：一张裱着照片的硬卡纸理应是奶油色的，把它刷成冷白就变打印纸了，
+     而它后面那张水彩本身是暖的。 */
+  background: var(--card-paper);
   box-shadow: inset 0 0 0 1px rgba(28, 28, 36, 0.09);
 }
 
@@ -211,9 +217,26 @@
 }
 
 .cw__reading {
-  /* 读音是拼音，用衬线大字号反而难认；★ 不引 `--font-sans` 这个令牌——:root 里没有它 */
-  font-family: inherit;
+  /* 读音是拼音，跟着标题那支衬线读起来反而难认。
+     ★ 这里用 `var(--font-sans)`，而不是上一版写的 `inherit`：`inherit` 从
+       `.cw__name` 继承来的是**衬线**，于是这句注释写的"不引 --font-sans"
+       实际效果是"照样用衬线"——意图与代码相反。令牌本身是有的：
+       `@theme inline` 里声明的 `--font-sans` 会落到 `:root`
+       （编译产物里实测到 `:root{--font-sans:"PingFang SC",…}`，
+       `shelf.css` 第 79 行也一直在用它）。 */
+  font-family: var(--font-sans);
   font-size: 12px;
+  font-weight: 400;
+  color: var(--ink-muted);
+}
+
+/* 「示例」：这一张是合成角色，不是谁的孩子。★ 标在**来源**上（档案从 public/demo 读来） */
+.cw__demo {
+  padding: 1px 7px;
+  border: 1px solid var(--dot);
+  border-radius: 999px;
+  font-family: var(--font-sans);
+  font-size: 11px;
   font-weight: 400;
   color: var(--ink-muted);
 }
@@ -224,11 +247,27 @@
   color: var(--ink-muted);
 }
 
-.cw__worn {
-  margin: 0 0 10px;
+/* 「还没出图」那一格。
+   ★ 它占着与图一样大的方框（`aspect-ratio`），因为卡的高度不该随"有没有图"变——
+     两张卡并排时高度不一，看起来像加载坏了。
+   ★ 里面写的是"形象还没印出来"，**不拿一张示例图去顶**：那等于给一个不存在的数据源背书。 */
+.cw__mat-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  aspect-ratio: 1 / 1;
+  margin: 0;
+  border-radius: 2px;
+  background: var(--surface-soft);
+  color: var(--ink-muted);
   font-size: 13px;
-  line-height: 1.85;
-  color: var(--ink-soft);
+}
+
+.cw__mat-empty span {
+  font-size: 11.5px;
+  opacity: 0.85;
 }
 
 /* 「用过照片，已删除」——隐私设计 §七 那一行，要看得见，别做成灰字 */
@@ -251,7 +290,9 @@
   padding: 4px 10px;
   border: 1px dashed rgba(28, 28, 36, 0.24);
   border-radius: 999px;
-  background: var(--paper);
+  /* 同 `.cw__mat`：虚线边 + 一枚手写的标签是**物件**，跟着暖相纸走，不跟页面走。
+     文字是 `--ink-soft`（≈墨），在 `--card-paper` 上约 15:1，不在这条规矩要管的范围里 */
+  background: var(--card-paper);
   font-size: 11.5px;
   line-height: 1.6;
   color: var(--ink-soft);
@@ -309,7 +350,19 @@
   color: var(--ink-muted);
 }
 
-/* ── 卡上那颗动作 ─────────────────────────────────────────────────────── */
+/* ── 卡上那两颗动作 ───────────────────────────────────────────────────── */
+
+/* 两颗并排，间距一致；`margin-top` 移到容器上，免得第一颗多出一段 */
+.cw__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.cw__actions .cw__use {
+  margin-top: 0;
+}
 
 .cw__use {
   display: inline-flex;
@@ -325,6 +378,17 @@
   transition:
     background-color 0.2s ease,
     color 0.2s ease;
+}
+
+/* 次级那一颗（「看这一版」）：主色圈留给"用它做一本"，因为那是这一屏的终点动作 */
+.cw__use--ghost {
+  border-color: var(--dot);
+  color: var(--ink-soft);
+}
+
+.cw__use--ghost:hover {
+  background: var(--surface-soft);
+  color: var(--ink);
 }
 
 .cw__use::after {

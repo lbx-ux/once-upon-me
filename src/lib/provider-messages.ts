@@ -91,8 +91,37 @@ function byCode(error: EngineError): string | null {
         '这个模型没能写出合格的故事表（换模型时最常见的坏法）',
         '再点一次通常会好；连着两三次都不行就换一个模型——结构化的故事表不是每个模型都能稳定输出。',
       )
+    case 'profile-invalid':
+      // 与 `card-invalid` / `reference-invalid` 三分的理由在 errors.ts 那三行注释里：
+      // 档案是"他是谁"、卡是"他长什么样"、照片是"拿什么当参考"——
+      // 三件事要去三个不同的地方改。合成一句"信息不完整"，家长不知道该动哪一格。
+      return line(
+        '这个孩子的档案不完整，存不下来',
+        '回到第 1 步把名字、名字的读音、年龄档补齐——读音那一格不能空着，多音字读错孩子第一句就听得出来。',
+      )
+    case 'card-not-found':
+      return line(
+        '要找的那个形象不在了',
+        '它可能已经被删掉，或者属于另一个孩子。回到「小主角」重新选一张。',
+      )
     case 'card-invalid':
       return line('角色卡不合格，引擎拒绝开跑', '回到第 3 步改那几条被标出来的锚点。')
+    case 'invalid-request':
+      // ★ 这一句后面会接上引擎给的**具体缺什么**（`userMessageFor` 把原文附在末尾）。
+      //   所以这里不重复细节，只做一件这句话才能做的事：告诉家长**这一次没有花钱**——
+      //   `photoProblems` 在调模型之前就返回了，而他多半会怀疑"是不是已经扣了一笔"
+      return line(
+        '这次请求缺了必要的东西，所以没有开始处理',
+        '按下面那句把缺的补上再试一次。这一次没有调用模型，也没有产生费用。',
+      )
+    case 'reference-invalid':
+      // ★ 与 `card-invalid` 分开的那一条的理由在 normalize.ts 的 `@throws` 里：
+      //   这里唯一要保证的是**这句话排在前面**，而具体哪里不对（太小/太细长/
+      //   打不开）由引擎那句原文接在后面。所以这里不重复细节，只说该做什么。
+      return line(
+        '这张照片不能用作参考图',
+        '换一张更清楚的：短边至少 240 像素、接近正方形。手机原图一般都可以，截图或头像小图通常不行。',
+      )
     case 'asset-write-failed':
       return line(
         '资产没法落盘（磁盘满了或目录不可写）',
@@ -125,7 +154,16 @@ export function userMessageFor(error: unknown): string {
  * 给界面判断"这条要不要显示成可重试"：配置类错误重试一百次也一样 */
 export function isRetryable(error: unknown): boolean {
   const failure = asEngineError(error)
-  if (failure.code === 'provider-not-configured' || failure.code === 'card-invalid') return false
+  if (
+    failure.code === 'provider-not-configured' ||
+    failure.code === 'card-invalid' ||
+    failure.code === 'reference-invalid' ||
+    failure.code === 'profile-invalid' ||
+    failure.code === 'invalid-request' ||
+    failure.code === 'card-not-found'
+  ) {
+    return false
+  }
   const status = failure.httpStatus
   if (status === 401 || status === 403 || status === 404) return false
   return true
@@ -151,12 +189,31 @@ export function userFailureOf(error: unknown): {
 } {
   const failure = asEngineError(error)
   const status = failure.httpStatus
-  const ours = status === 401 || status === 403 || status === 404 || status === 422
+  // `reference-invalid` / `profile-invalid` / `card-not-found` 是**本地**判出来的
+  // （归一化、校验、查资产，根本没发出请求），所以它们没有 `httpStatus` 可读——
+  // 但它们百分之百是"调用方输入的问题"，回 502 会把它说成平台故障。
+  //
+  // ★ `card-invalid` 也补进来了（2026-10-15，工单 03）。它原来**漏在这张表外面**，
+  //   于是"锚点不合格"回的是 502：一句"平台那边超时或不可用"盖在一句
+  //   "回到第 3 步改锚点"上面（工单 02 §五 6 记着这条，当时故意没顺手改）。
+  //   现在三个"输入不合格"的码走同一条出口，是因为工单 03 又添了第四个——
+  //   留着它只会让下一个人以为那几个码之间真有区别。
+  const ours =
+    failure.code === 'reference-invalid' ||
+    failure.code === 'profile-invalid' ||
+    failure.code === 'card-invalid' ||
+    failure.code === 'invalid-request' ||
+    failure.code === 'card-not-found' ||
+    status === 401 ||
+    status === 403 ||
+    status === 404 ||
+    status === 422
   const upstream = status === 429 || (status !== undefined && status >= 500)
   return {
     code: failure.code,
     message: userMessageFor(failure),
     retryable: isRetryable(failure),
-    status: ours ? 400 : upstream ? 503 : 502,
+    // 资产没了（卡不存在）是 404，其余输入问题都是 400
+    status: failure.code === 'card-not-found' ? 404 : ours ? 400 : upstream ? 503 : 502,
   }
 }

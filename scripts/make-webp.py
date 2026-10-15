@@ -5,12 +5,13 @@ import —— 源图是外部下载物，不当作可信代码）：
 
     python -I scripts/make-webp.py <源图目录> <产出目录> [--preset <名>] [选项]
 
-四个预设（不传 --preset 就是 hero，行为与加预设之前一字不差）：
+五个预设（不传 --preset 就是 hero，行为与加预设之前一字不差）：
 
   hero         16:9  1280  ≤130KB   首屏 12 张卡片封面
   book-spread   3:2  1536  ≤220KB   绘本内页跨页（书脊在正中，主体必须避开中缝）
   book-cover    3:4  1024  ≤150KB   绘本竖版封面
   book-icon     1:1    192   ≤15KB   选择点那两枚小云图（显示只有 56px）
+  theme-card   16:9    320  ≤18KB   工作台主题墙（源就是 public/art 那 12 张，派生）
 
 例：首屏 12 张、演示书的一个封面与四个跨页、两枚选择点图标——
 
@@ -19,6 +20,22 @@ import —— 源图是外部下载物，不当作可信代码）：
         --preset book-cover --match 'rocket*' --name cover
     python -I scripts/make-webp.py <源图目录> public/book --preset book-spread --match 'spread-*'
     python -I scripts/make-webp.py <源图目录> public/book --preset book-icon --match 'choice-*'
+
+★ **只有 theme-card 这一档的源图是仓库里已有的 webp**，不是出图侧的 JPG：
+
+    python -I scripts/make-webp.py public/art public/art-cards --preset theme-card
+
+  所以 resolve_sources 收 .webp（原来只收 jpg/png，那三档的源都是出图侧的位图）。
+  `theme-card` 不裁：源与预设同为 16:9，这一步是恒等变换（与跨页那档同一条道理）。
+
+★ 曾经还有一档 `chip-icon`（1:1 / 96 / ≤6KB，12 张，2 KB 一张），2026-10-15 连着
+  `public/icons/themes/` 与 `lib/themes.ts` 的 `themeIconPath()` 一起删掉了：
+  它唯一的落点是书架那一行主题名前面的 emoji，而那个 emoji 直接删掉了——
+  上面已经有一张 72px 的同主题水彩，再挂一枚小图是**同一个主题的两张画**。
+  ★ 要再引进这一档，先答"谁读它"，别只答"它好看"：没有消费者的资产与没有消费者的表
+    是同一种东西（本项目为前者付过学费——`SUGGESTION_THEMES` 那次）。
+  ★ 顺带记下当时真量过的数：中心裁方**会切掉 16:9 画面左右各 22%**，
+  12 张逐张看过才算过。真要重做这一档，这一刀还得重新逐张看。
 
 选项：
   --match <glob>   只处理文件名匹配该 glob 的源图（不区分大小写）
@@ -53,6 +70,7 @@ PRESETS = {
     'book-spread': (3, 2, 1536, 220 * 1024),
     'book-cover':  (3, 4, 1024, 150 * 1024),
     'book-icon':   (1, 1, 192, 15 * 1024),
+    'theme-card':  (16, 9, 320, 18 * 1024),
 }
 DEFAULT_PRESET = 'hero'
 QUALITIES = [78, 74, 70, 66, 62, 58, 54]
@@ -79,7 +97,12 @@ def fit_width(im: Image.Image, target_w: int) -> tuple[Image.Image, bool]:
 
 
 def resolve_sources(src_dir: str, match: str | None) -> list[str]:
-    names = [f for f in os.listdir(src_dir) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
+    # ★ .webp 是后加的：theme-card 那一档的源就是仓库里的 public/art/*.webp
+    names = [
+        f
+        for f in os.listdir(src_dir)
+        if f.lower().endswith(('.jpg', '.jpeg', '.png', '.webp'))
+    ]
     if match:
         names = [f for f in names if fnmatch.fnmatch(f.lower(), match.lower())]
     return sorted(names)

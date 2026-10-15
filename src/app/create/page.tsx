@@ -32,14 +32,22 @@ export default async function CreatePage({
   const wish = typeof params['wish'] === 'string' ? params['wish'] : undefined
   // ★ 工作台「小主角」那一格挑的卡走这个参数：它预置第 3 步"用一张已有的卡"，
   //   不是新建一条建卡的路。卡号认不出来时创作流会照直走到第 3 步让人现出图，
-  //   不会停在一个空白上（见 CreateFlow 里 initialCardId 那条 effect）
+  //   不会停在一个空白上（见 CreateFlow 里那条 effect）
   const cardId = typeof params['card'] === 'string' ? params['card'] : undefined
+  // ★ `?child=`（工单 03 第 4 刀）：第 1 步直接选中一个已有的小主角。
+  //   两个参数都由"选中谁"这一件事消化掉——卡上带着 childId，所以它们是同一个人的两种指法
+  const childId = typeof params['child'] === 'string' ? params['child'] : undefined
   return (
     <main className="create-page">
       <nav className="create-page__back">
         <Link href="/">← 回首页</Link>
       </nav>
-      <CreateFlow initialThemeKey={themeKey} initialWish={wish} initialCardId={cardId} />
+      <CreateFlow
+        initialThemeKey={themeKey}
+        initialWish={wish}
+        initialCardId={cardId}
+        initialChildId={childId}
+      />
     </main>
   )
 }

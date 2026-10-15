@@ -180,8 +180,14 @@ export function toBookBody(
   }
 }
 
-/** 形态词：由外貌标签推。推不出来就用中性词，**不猜**（猜错会让出一张画错性别的标准像） */
-function childWordOf(lookTags: readonly string[]): string {
+/**
+ * 形态词：由外貌标签推。推不出来就用中性词，**不猜**（猜错会让出一张画错性别的标准像）
+ *
+ * ★ 导出它（工单 03 第二刀）是因为"用他的照片新建"那一屏也要这一句：
+ *   那一屏不在创作流里，但它同样要出标准像。在两处各写一遍的代价不是多几行，
+ *   是**同一个人在两屏上被叫成不同的词**——而这个词决定模型画男孩还是女孩。
+ */
+export function childWordOf(lookTags: readonly string[]): string {
   const joined = lookTags.join('')
   if (/马尾|辫子|裙子/.test(joined)) return '小女孩'
   if (/短发|球衣/.test(joined)) return '小男孩'

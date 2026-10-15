@@ -1,36 +1,79 @@
 /**
  * app-shell.css —— 工作台外壳
  *
- * 侧栏 232px、折叠后收成 72px 的图标栏。底色是暖纸 + 点阵，
- * 点阵与首页第二屏**共用同一套令牌**（`--dot` / `--dot-size`），
- * 不另取一份——那是 README §五 里"改配色只动那一块"的同一条纪律。
+ * 侧栏 232px、折叠后收成 72px 的图标栏。
+ *
+ * ★ 底色这一轮改了：原来 `.shell` 是一整块 `--paper` 平涂，工作台与首页因此
+ *   读起来像两个网站。现在天空（`StudioBackdrop`，同目录 `studio-backdrop.css`）
+ *   从侧栏底下透出来，侧栏自己只铺一层**实底半透明纸**
+ *   `rgba(var(--paper-rgb), 0.90)`。
+ *   ★ 刻意**不是毛玻璃**：`backdrop-filter` 挂在固定元素上 = 背景每变一次就要重新
+ *   采样并重绘它背后那块屏幕，而它背后正是一张满屏 fixed 大图。首页为同一件事拆过
+ *   `.to-top` 与 `.btn--ghost`（README §五，两条都留着"别再加回去"的注释）。
+ *   0.90 这一档是量的：见 `node scripts/check-scrim.mts` 的「侧栏那层纸」那一行。
  *
  * ★ 折叠不是"把宽度改成 0"：折叠后**图标还在**，标签隐藏。
  *   只剩图标时名字靠 `title` 与 `aria-label` 给读屏（组件那边写了）。
+ * ★ 侧栏宽度只有一个数：`--side-w`，改宽度只改它。
+ *   （第一版背景里还有一团径向阅读光读这个数，那一层被真机截图否掉了、已删；
+ *   变量单源这条留下——窄屏那条媒体查询原来写死 72px，是同一类错法的另一例。）
  */
 
 .shell {
+  --side-w: 232px;
   display: flex;
   min-height: 100vh;
-  background: var(--paper);
   color: var(--ink);
+  /* 背景层（`StudioBackdrop`）是 `position: absolute` 铺在**文档**上，
+     所以这一层必须是它的包含块。★ 不能是 `fixed`：理由写在 studio-backdrop.css 文件头。
+     ★ 这里刻意不加 `isolation` / `z-index`——那会凭空造一个层叠上下文。
+     但**层序不能靠这条 DOM 顺序**：`.sb` 是定位元素，而 `static` 的孩子排在它前面，
+     所以侧栏与内容区各自都得是 `position: relative` 才轮到按 DOM 顺序比。
+     侧栏漏了那一条，用户实测时整条侧栏被天空盖住（见 `.shell__side` 上那段） */
+  position: relative;
 }
 
 /* ── 侧栏 ─────────────────────────────────────────────────────────────── */
 
 .shell__side {
-  flex: 0 0 232px;
+  flex: 0 0 var(--side-w);
+  /* ★ **必须是定位元素**，两个理由各管一半，一条 `sticky` 同时解决：
+     1. **层序**。背景层 `.sb` 是 `position: absolute; z-index: 0`。
+        "同为 z-index: 0 时按 DOM 顺序分先后"这条**只在两个都已定位之间成立**——
+        `static` 的 flex 项按绘制顺序排在定位元素**之前**，于是整条侧栏被那片天盖住：
+        用户在前台浏览器实测，只剩「创作」露出来，而它是侧栏里唯一带 `position: relative`
+        的那个（当前项的书签样式）。内容区一直没出事，是因为 `.shell__main` 本来就 relative。
+     2. **可达性**。原来侧栏被 flex 拉伸到**整个文档高**，`.shell__foot` 的
+        `margin-top: auto` 于是把「模型与密钥」「收起侧栏」钉在**文档底部**而不是视口底部
+        （实测 `/home` 文档高 1224 时它在 y=1119，视口 900；`/character` 高 1627）。
+        钉成一屏高的常驻列之后，它回到视口底部，内容区照常滚。
+     ★ `align-self: flex-start` 不是装饰：默认的 `align-items: stretch` 会把项拉满容器高，
+     拉满就没有可粘的余量，sticky 等于没写。 */
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  height: 100vh;
+  /* 矮窗口下侧栏自己可滚，底部两项不会被裁掉（`height` 是硬值，必须配这一条） */
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 4px;
   padding: 20px 14px 16px;
-  background: var(--surface);
-  border-right: 1px solid var(--dot);
+  /* 实底半透明纸。★ 不用 --dot 当右边：那是点阵的墨色，在半透明纸上会把天空压成一条脏灰
+     α 从 0.90 减到 **0.78**（2026-10-15）：0.90 那一档是为了在**暖**纸上压住天，
+     而页面底色翻成冷白之后侧栏与页面同族，压住不需要那么厚。
+     "侧栏太重、和右侧割裂"就是那 12% 的差别。★ 这一档同样是量的，见 check-scrim 的侧栏行 */
+  background: rgba(var(--paper-rgb), 0.78);
+  /* 右边那条线 + 一层往内容区拖出去的柔影：这条"边"是**纸的厚度**，不是一条描边。
+     侧栏与内容区 tone 不同（那边压着一片天），靠这条线说明这是两件事，不靠颜色硬切 */
+  box-shadow:
+    inset -1px 0 0 var(--hairline),
+    18px 0 40px -32px rgba(23, 23, 29, 0.3);
   transition: flex-basis 0.22s ease;
 }
 
-.shell[data-collapsed='true'] .shell__side {
-  flex-basis: 72px;
+.shell[data-collapsed='true'] {
+  --side-w: 72px;
 }
 
 .shell__brand {
@@ -117,15 +160,33 @@
   background: var(--surface-soft);
 }
 
-/* 当前项：整块填强调色（原型就是这样，白字）。
-   ★ 不用"左边一条竖线"那种轻标记——侧栏只有四项，要一眼看出在哪 */
+/* 当前项：一张**从纸上抽出来的卡片**，不是色块。
+   ★ 原来整块填 `--accent` 白字（原型那样）——那是通用 SaaS 的读法，与首页那套
+     水彩/纸是两套语言：这一屏里所有别的东西都是纸，只有它是塑料。
+   ★ 判据一条没变：侧栏只有四项，要一眼看出在哪。所以三样东西一起报信——
+     白卡（`--surface` 压在 .90 的纸上）、陶土橙的文字与图标、左边一条橙书签。
+     `--accent` 在 `--surface` 上是 4.77:1，14px 正文级 AA 过（globals.css 那条）。 */
 .shell__link[aria-current='page'] {
+  position: relative;
+  background: var(--surface);
+  color: var(--accent);
+  font-weight: 600;
+  box-shadow: var(--sheet-shadow);
+}
+
+.shell__link[aria-current='page']::before {
+  content: '';
+  position: absolute;
+  top: 11px;
+  bottom: 11px;
+  left: 4px;
+  width: 3px;
+  border-radius: 2px;
   background: var(--accent);
-  color: var(--surface);
 }
 
 .shell__link[aria-current='page']:hover {
-  background: var(--accent);
+  background: var(--surface);
 }
 
 .shell__icon {
@@ -152,9 +213,9 @@
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
-  border: 1px solid var(--dot);
+  border: 1px solid var(--hairline);
   border-radius: 11px;
-  background: var(--surface);
+  background: none;
   color: var(--ink-muted);
   font: inherit;
   font-size: 13px;
@@ -163,14 +224,30 @@
 
 .shell__collapse:hover {
   color: var(--ink);
+  border-color: rgba(var(--accent-rgb), 0.4);
 }
 
+/* 折叠箭头是内联 SVG（组件里），这里只管尺寸。
+   ★ 原来这里放的是 `«` / `»` 两个文字字符——与首页那条"emoji 是扁平 clip-art，
+     和水彩是两套画法"同一个判断：文字字符的形状、字重、基线全跟着系统字体走，
+     换一台机器就换一笔。 */
 .shell__collapse-arrow {
+  display: grid;
+  place-items: center;
   flex: 0 0 20px;
   width: 20px;
-  text-align: center;
-  font-size: 14px;
-  line-height: 1;
+  height: 20px;
+}
+
+.shell__collapse-arrow svg {
+  width: 16px;
+  height: 16px;
+  transition: transform 0.22s ease;
+}
+
+/* 折叠后这个尖角指向右（"展开"的方向跟着状态走） */
+.shell[data-collapsed='true'] .shell__collapse-arrow svg {
+  transform: rotate(180deg);
 }
 
 /* 折叠：藏掉所有文字，只留图标（居中） */
@@ -191,7 +268,7 @@
    实测：折叠后侧栏渲染出来是 75px，不是这里写的 72px——`.shell__brand` 的
    34px 标记 + 左右各 6px padding = 46px 的 min-content 撑的
    （flex 项默认 `min-width: auto`，收缩不到内容以下）。
-   归零后最宽的孩子是 34px，小于 72 − 28(padding) − 1(border) = 43px，才是真的 72。 */
+   归零后最宽的孩子是 34px，小于 72 − 28(padding) = 44px，才是真的 72。 */
 .shell[data-collapsed='true'] .shell__brand {
   justify-content: center;
   padding-left: 0;
@@ -206,24 +283,28 @@
   position: relative;
 }
 
-/* 点阵。与 storybook-flip.css 那一处同一套令牌与画法 */
-.shell__main::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background-image: radial-gradient(circle, var(--dot) 0.75px, transparent 0.95px);
-  background-size: var(--dot-size) var(--dot-size);
-  opacity: 0.5;
-  pointer-events: none;
-}
-
+/* 内容区不再铺点阵了（原来这里有一条 `.shell__main::before`）。
+   ★ 理由是那条纹理要解决的问题已经不存在了：点阵是给**一块平涂**加层次的
+   （首页第二屏那条"书不是放在桌上、是贴在灰墙上"就是同一件事的另一处）。
+   现在这块地方上面是天、下面是阅读光，它自己有层次了——再叠一层深色网点
+   只会在云最亮的地方读出脏。要纹理，首页那两屏仍然有。 */
 .shell__main > * {
   position: relative;
 }
 
-/* 静止模式：折叠不animate，直接到位 */
+/* 键盘走到哪里都要看得见。这一条挂在壳上，四项导航 + 折叠 + 设置一起管——
+   原来每一屏各写一份一模一样的 `outline: 2px solid var(--accent)`
+   （create-landing / studio / shelf / character-wall 四处），组件里那几份先留着不删：
+   删是另一件事的迁移，按「迁移是单独一个提交」那条纪律不混进这次 */
+.shell :focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* 静止模式：折叠不 animate，直接到位（终态仍然是"转过去了"，不是"没转"） */
 @media (prefers-reduced-motion: reduce) {
-  .shell__side {
+  .shell__side,
+  .shell__collapse-arrow svg {
     transition: none;
   }
 }
@@ -231,8 +312,10 @@
 /* 窄屏：侧栏强制成图标栏（收起/展开按钮在窄屏没有意义，宽度不够放标签）。
    ★ 这一屏是家长在手机上看的，但工作台是桌面形态——手机上先保证能用，不追求好看 */
 @media (max-width: 900px) {
-  .shell__side {
-    flex-basis: 72px;
+  /* 改 `--side-w` 而不是 `flex-basis`：侧栏宽度只有一个数，别处（比如量具脚本
+     读的那个）都按这一条走 */
+  .shell {
+    --side-w: 72px;
   }
 
   .shell__link-label,

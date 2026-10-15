@@ -105,6 +105,15 @@ export type BookRequest = {
    * 不给就不配音并说明——"默认音色"是产品概念，不是引擎概念。
    */
   voiceId?: string
+  /**
+   * 每一页都带角色卡参考图去画（走 provider 的 `edit`）。
+   *
+   * ★ 默认关，且**这不是能力问题**：`/images/edits` 已实测通（工单 02）。
+   *   关着是因为开了它同时改变三件没量过的事——产物尺寸由模型定（那条路没有 `size`
+   *   字段）、单张扣费未知、以及"跨页一致性到底提升多少"这个 ADR-0007 的赌注本身。
+   *   判据与代价写在 `illustrate.ts` 的 `referenceForPages` 上。
+   */
+  referenceForPages?: boolean
 }
 
 export type RunDeps = {
@@ -163,6 +172,8 @@ export async function runBook(request: BookRequest, deps: RunDeps): Promise<Book
     referenceDataUrl,
     bookId: bookIdOf(request),
     maxAttempts: request.maxIllustrationAttempts,
+    // 默认关：见 BookRequest.referenceForPages 那段（能力有，代价没量）
+    referenceForPages: request.referenceForPages === true,
     emit: forward,
     now,
   })
@@ -317,3 +328,15 @@ function toRecord(stats: BookStats): Record<string, number> {
 
 export { createCardStore } from './character-card/store.ts'
 export type { CardStore } from './character-card/store.ts'
+
+/* ───────────────────────── 孩子档案：入口再导出（见 character-card/profile*.ts） ───────────── */
+
+export {
+  buildChildRecord,
+  displayNameOf,
+  toChildRecord,
+  validateChildRecord,
+} from './character-card/profile.ts'
+export type { ChildRecord, NewChildRecord } from './character-card/profile.ts'
+export { CHILDREN_PREFIX, createProfileStore } from './character-card/profile-store.ts'
+export type { ProfileStore } from './character-card/profile-store.ts'

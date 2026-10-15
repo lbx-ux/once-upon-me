@@ -1,0 +1,499 @@
+/* ============================================================================
+ * child-detail.css —— 形象页（`ChildDetail.tsx`）的样式
+ *
+ * 设计令牌全部来自 globals.css 的 `:root`，这里**一个裸色值都不写**。
+ * ★ 本单**没有新增令牌**：`--card-paper` 是上一版为卡片墙定的那一档，
+ *   这一屏的相纸沿用同一个值——两屏说的都是"一张卡纸"，用两个值它们就会分家。
+ *
+ * 三条与卡片墙一致的地方，都是这一屏的性质决定的：
+ * 1. **触控热区 ≥44px**（本项目的产品判断，理由见 docs/tech-selection.md §3.3）；
+ * 2. **两栏在窄屏折成一栏**：左边是"看的"、右边是"动手的"，一列时看的在上；
+ * 3. **静止模式有静止终态**：这一屏只有按钮的过渡，`prefers-reduced-motion` 下
+ *    显式关掉（不是"不播"——它本来就没有位移，只是不去动画那些颜色变化）。
+ * ========================================================================== */
+
+.cd {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 32px 20px 96px;
+  color: var(--ink);
+}
+
+.cd__head {
+  margin-bottom: 24px;
+}
+
+.cd__eyebrow {
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+
+.cd__eyebrow a {
+  color: var(--ink-muted);
+  text-decoration: none;
+}
+
+.cd__eyebrow a:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.cd__title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-family: var(--font-serif);
+  font-size: clamp(24px, 3.4vw, 32px);
+  line-height: 1.25;
+  margin: 0 0 6px;
+}
+
+.cd__reading {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 400;
+  color: var(--ink-muted);
+}
+
+/* "示例"两个字是**说明**不是标签按钮：它由数据来源决定，点不动，所以不做得像控件 */
+.cd__demo {
+  padding: 2px 8px;
+  border: 1px solid var(--dot);
+  border-radius: 999px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--ink-muted);
+}
+
+.cd__meta {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 14px;
+}
+
+.cd__body {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24px;
+}
+
+@media (min-width: 880px) {
+  .cd__body {
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+    align-items: start;
+  }
+}
+
+/* ── 左栏：形象 ─────────────────────────────────────────────────────────── */
+
+.cd__art {
+  display: block;
+  width: 100%;
+  height: auto;
+  /* 标准像是方图（1440²，`edits` 回来的是 1024²），按比例缩放，不裁 */
+  border: 1px solid var(--dot);
+  border-radius: var(--card-radius);
+  background: var(--card-paper);
+}
+
+.cd__art-meta {
+  margin: 10px 0 0;
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
+/* 这一版照着哪句话改的。★ 它不是"说明"，是**这一版的出处**，所以给它一条左侧竖线 */
+.cd__art-note {
+  margin: 10px 0 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--accent);
+  background: rgba(var(--accent-rgb), 0.06);
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.cd__left > .cd__btn {
+  margin-top: 14px;
+}
+
+.cd__empty {
+  padding: 24px 20px;
+  border: 1px dashed var(--dot);
+  border-radius: var(--card-radius);
+  background: var(--surface);
+}
+
+.cd__empty p {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.cd__empty-hint {
+  color: var(--ink-muted);
+  font-size: 13px;
+  line-height: 1.75;
+}
+
+.cd__empty .cd__btn {
+  margin-top: 6px;
+}
+
+/* ── 版本历史 ───────────────────────────────────────────────────────────── */
+
+.cd__history {
+  margin-top: 26px;
+}
+
+.cd__h2 {
+  font-size: 16px;
+  margin: 0 0 10px;
+}
+
+.cd__versions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cd__version {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--dot);
+  border-radius: var(--card-radius);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cd__version[data-active='true'] {
+  border-color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.08);
+}
+
+.cd__version-no {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.cd__version-now {
+  justify-self: start;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 11px;
+  align-self: center;
+}
+
+.cd__version-what {
+  grid-column: 1 / -1;
+  color: var(--ink-muted);
+}
+
+/* ── 右栏：卡片 ─────────────────────────────────────────────────────────── */
+
+.cd__right {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.cd__card {
+  padding: 20px 18px;
+  border: 1px solid var(--dot);
+  border-radius: var(--card-radius);
+  background: var(--card-paper);
+}
+
+.cd__hint {
+  margin: 0 0 12px;
+  color: var(--ink-muted);
+  font-size: 13px;
+  line-height: 1.75;
+}
+
+.cd__hint strong {
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+.cd__textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--dot);
+  border-radius: var(--card-radius);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.cd__textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.cd__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.cd__count {
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+.cd__btn {
+  display: inline-block;
+  min-height: 44px;
+  padding: 10px 20px;
+  border: 1px solid transparent;
+  border-radius: var(--card-radius);
+  background: var(--accent);
+  color: var(--bg);
+  font: inherit;
+  font-size: 15px;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.cd__btn--ghost {
+  background: transparent;
+  border-color: var(--dot);
+  color: var(--ink);
+}
+
+.cd__btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* 段落里那一下"打开模型与密钥"：长得像链接，但它是按钮（键盘与读屏都当按钮对待） */
+.cd__link {
+  margin-left: 6px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.cd__error {
+  margin: 10px 0 0;
+  color: var(--danger);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.cd__notice {
+  margin: 10px 0 0;
+  padding: 8px 12px;
+  border-radius: var(--card-radius);
+  background: rgba(var(--accent-rgb), 0.1);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+/* ── 锚点清单 ───────────────────────────────────────────────────────────── */
+
+.cd__anchors {
+  margin: 0 0 12px;
+}
+
+.cd__anchor {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: 10px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--dot);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.cd__anchor:last-child {
+  border-bottom: none;
+}
+
+.cd__anchor dt {
+  color: var(--ink-muted);
+}
+
+.cd__anchor dd {
+  margin: 0;
+  color: var(--ink-soft);
+}
+
+.cd__foot {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 12px;
+  line-height: 1.8;
+}
+
+.cd__foot code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.95em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(var(--accent-rgb), 0.09);
+  color: var(--ink-soft);
+}
+
+/* ── 删除（工单 03 第三刀） ─────────────────────────────────────────────── */
+
+/* ★ 它是整页最下面、字号最小的一档：删除是一个"退到不能再退"的动作，
+   不该与上面那些日常动作抢视线。所以这里没有做成红色的显眼按钮长在标题旁边 */
+.cd__danger {
+  margin-top: 40px;
+  padding-top: 20px;
+  border-top: 1px solid var(--dot);
+}
+
+.cd__danger-quiet {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.cd__danger-quiet .cd__hint {
+  margin: 0;
+  max-width: 60ch;
+}
+
+/* 危险按钮：只有**已经确认过的**那一步才是实心红的（`--danger`）。
+   第一颗按钮是 ghost 的——它的作用只是"问问要删什么"，不该长成危险的样子 */
+.cd__btn--danger {
+  border-color: transparent;
+  background: var(--danger);
+  color: var(--bg);
+}
+
+.cd__confirm {
+  padding: 18px 16px;
+  border: 1px solid var(--danger);
+  border-radius: var(--card-radius);
+  background: var(--card-paper);
+}
+
+.cd__danger-warn {
+  margin: 12px 0 0;
+  color: var(--danger);
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.cd__danger-warn strong {
+  font-weight: 600;
+}
+
+/* ── 删成之后的那一屏（终点页） ─────────────────────────────────────────── */
+
+.cd__gone {
+  max-width: 720px;
+}
+
+.cd__gone .cd__hint {
+  margin: 0 0 16px;
+  color: var(--ink-muted);
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.cd__gone .cd__btn {
+  margin-top: 20px;
+}
+
+/* ── 凭据（预演与结果共用同一个渲染） ───────────────────────────────────── */
+
+.cd__receipt {
+  margin: 10px 0 0;
+}
+
+.cd__places {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.cd__place {
+  display: grid;
+  grid-template-columns: 5.5em 1fr;
+  gap: 4px 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--dot);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.cd__place:last-child {
+  border-bottom: none;
+}
+
+/* "没删干净"那一行要**看得出来**：它是这张凭据不完整的那一处 */
+.cd__place[data-failed='true'] .cd__place-no {
+  color: var(--danger);
+}
+
+.cd__place-no {
+  color: var(--ink-muted);
+  white-space: nowrap;
+}
+
+.cd__place-what {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--ink);
+}
+
+.cd__place-at {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.92em;
+  color: var(--ink-muted);
+  word-break: break-all;
+}
+
+.cd__place-note {
+  color: var(--ink-muted);
+  font-size: 12.5px;
+  line-height: 1.7;
+}
+
+.cd__receipt-total {
+  margin: 12px 0 0;
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+/* ── 静止模式 ───────────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  /* 这一屏没有滚动驱动的动画，但要显式说清"没有"：
+     将来谁在这里加一条过渡，都得先看一眼这一段（README §五：静止终态不是「不播」） */
+  .cd__btn,
+  .cd__version,
+  .cd__link,
+  .cd__textarea {
+    transition: none;
+  }
+}

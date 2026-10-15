@@ -10,9 +10,13 @@
  *    一次 0.20 元、结果无人判定、还把"首次通过率"这个数据污染成"我们重画过"。
  *    所以 `verdict = 'unavailable'` 直接结束这一页，并明确标记"这一页没核对过"。
  *    这是**降级 B**（角色卡锁定 + 家长逐页重画）的入口，不是失败。
- * 2. **参考图没生效要当场喊**。供应商的参考图字段还是未公开状态
- *    （见 tokenrhythm-image.ts），"以为锁了脸其实没锁"的症状是整本书画完才发现不像，
- *    而那时钱已经花完了。
+ * 2. **参考图没生效要当场喊**。带不带参考图由**策略**决定（`referenceForPages`，默认关），
+ *    所以"这一页以为锁了脸其实没锁"是有可能发生的（策略开了、provider 却没有 `edit`）。
+ *    症状是整本书画完才发现不像，而那时钱已经花完了——所以 `requireReference` 一旦为真，
+ *    拿到 `referenceApplied === false` 就当场抛错，不画完再说。
+ *    ★ 这条曾经指向"供应商的参考图字段还是未公开状态"；那句话已被推翻
+ *    （`/images/edits` 实测通，见 tokenrhythm-image.ts 文件头）。但**这条纪律不跟着翻**：
+ *    要喊的从来不是"这家不支持"，而是"你说要锁脸，这一页没锁"。
  * 3. **失败的图也落盘**。家长要能看见"上一版为什么不像"，
  *    技术文档也要那批图当评测数据。删掉它们等于把过程藏起来。
  * 4. **重画次数是数据不是细节**：`firstPassCount / redrawCount` 直接喂
@@ -51,6 +55,23 @@ export type IllustrateOptions = {
   maxAttempts?: number
   /** 一致性是这本书的命：要求参考图却没生效时，宁可当场失败也不要画完 20 页再说 */
   requireReference?: boolean
+  /**
+   * **这一本书的每一页**要不要拿角色卡的参考图去画（走 provider 的 `edit` 那条路）。
+   *
+   * ★ 默认关。这不是"能力没做出来"——`edits` 已经实测通了（工单 02 §一）——
+   *   而是**三条都没量过**（第一条 2026-10-14 量到了一半，见下）：
+   *     1. `edits` 那条路**没有 `size` 字段**（实测只送过 model/image/prompt 三个），
+   *        所以产物尺寸由模型定。★ 现在知道了：**实测回来的是 1024×1024**
+   *        （`scripts/e2e-image-reference.mts`，两次 1024²、约 1.8 MB、9.4s/9.8s），
+   *        而页图是按 **1440²** 写的——也就是说开了这个开关，页图尺寸会变。
+   *        变小的那 30% 对"书里那一页"够不够，**还是没看**，所以它仍然默认关；
+   *     2. `edits` 扣多少钱没量过（generations 是一口价 0.20 元/张）；
+   *     3. 一页一页带着参考图画，跨页一致性**到底提升多少**——这正是 ADR-0007 的赌注，
+   *        要用比对器量出来，不能靠"支持了就该开"。
+   *   所以它是一个**策略开关**，与"provider 有没有这个能力"（`supportsReference`）分开。
+   *   量完之前开着它等于拿正式跑测当探测。
+   */
+  referenceForPages?: boolean
   emit: (payload: EngineEventPayload) => void
   now: () => number
 }
@@ -82,17 +103,24 @@ export async function illustrateNode(
       total: maxAttempts,
     })
 
-    const response = await opts.image.generate({
-      prompt,
-      size: DEFAULT_IMAGE_SIZE,
-      // 参考图只在供应商真的支持时才带：带一个被忽略的字段比不带更糟（见 requireReference）
-      referenceDataUrl: opts.image.supportsReference ? opts.referenceDataUrl : undefined,
-    })
+    // 走哪条路由由**策略**（referenceForPages）与**能力**（有没有 edit）同时决定。
+    // ★ 两条都是显式分支，没有"传了但被忽略"那种中间状态：那种状态的症状
+    //   是整本书画完才发现没锁脸，而那时钱已经花完了
+    const edit = opts.referenceForPages === true ? opts.image.edit : undefined
+    const response = edit
+      ? await edit.call(opts.image, {
+          prompt,
+          size: DEFAULT_IMAGE_SIZE,
+          referenceDataUrl: opts.referenceDataUrl,
+        })
+      : await opts.image.generate({ prompt, size: DEFAULT_IMAGE_SIZE })
 
     if (opts.requireReference && response.referenceApplied === false) {
       throw asEngineError(
         new Error(
-          `供应商没有应用参考图（supportsReference=${opts.image.supportsReference}）。` +
+          `这一页要求锁脸，但参考图没进请求（referenceForPages=${String(
+            opts.referenceForPages === true,
+          )}、供应商有 edit=${String(Boolean(opts.image.edit))}）。` +
             `一致性是这本书的命，拒绝在没锁脸的情况下继续画`,
         ),
       )

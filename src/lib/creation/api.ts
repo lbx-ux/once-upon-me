@@ -14,6 +14,8 @@
  */
 
 import { decodeBookFrame, type BookStreamFrame } from '@/lib/book-stream.ts'
+import type { ChildPickerItem } from '@/lib/children-list.ts'
+import type { CharacterAnchor } from '@/lib/engine/domain.ts'
 import type { EngineEvent } from '@/lib/engine/events.ts'
 import { createSseDecoder } from '@/lib/sse.ts'
 
@@ -88,6 +90,14 @@ export type CardResult = {
   referenceUrl: string
   promptFragment: string
   checklist: string[]
+  /**
+   * ★ 这一张卡**自己的**锚点，由服务端回（工单 03 第 4 刀）。
+   *
+   *   为什么不在这里用"刚发出去的那份表单值"顶：服务端会归一化
+   *   （去空、按槽位排序），而且**换一版**那条路上真正生效的是卡里那份。
+   *   客户端拿表单值当卡值，症状是"我明明没动过，它却说锚点变了"。
+   */
+  anchors: readonly CharacterAnchor[]
   modelId: string
 }
 
@@ -111,8 +121,10 @@ export type CardSummary = {
    *  ——`referenceUrl` 指的是**原图**（2.7 MB 那一档） */
   referencePath: string
   /** 锚点原样（slot + value）。这一屏不显示它们，但 `/api/cards` 回的是 `lib/cards-list.ts`
-   *  那一份统一的形状——客户端类型照着线上写，不写一个"比线上少两个字段"的假子集 */
-  anchors: { slot: string; value: string }[]
+   *  那一份统一的形状——客户端类型照着线上写，不写一个"比线上少两个字段"的假子集。
+   *  ★ 类型也不另抄一份：`slot` 是封闭表（`ANCHOR_SLOTS`），在这里写成 `string`
+   *  等于让一个拼错的槽位在客户端一路合法到运行时 */
+  anchors: readonly CharacterAnchor[]
   photoDeleted: boolean
 }
 
@@ -127,6 +139,31 @@ export async function listCards(): Promise<CardSummary[]> {
     return []
   }
 }
+
+/**
+ * 有哪些小主角（创作流第 1 步的数据源，工单 03 第 4 刀）。
+ *
+ * ★ 与 `listCards` 同一条退路：**读不到就当没有**（空表，不是错误）。
+ *   理由也一样——它是给"选一个已有的"用的，而这一屏永远有第二条路（新建一个）。
+ *   让"列出已有的"失败把整屏卡住，是把一个可选的便利做成了必经步骤。
+ * ★ 返回类型不在这里重写：它是 `/api/children` 回的那份视图，
+ *   形状的权威在 `lib/children-list.ts`（`ChildPickerItem`）——
+ *   客户端抄一份"比线上少两个字段"的假子集，第一个被裁掉的字段就会在这里悄悄丢掉。
+ *   ★ 只 **re-export 类型**（`import type`，编译后不存在）：那个模块是服务端的
+ *   （它读文件系统），值不能进客户端包，而形状必须与线上同源。
+ */
+export async function listChildren(): Promise<ChildPickerItem[]> {
+  try {
+    const response = await fetch('/api/children')
+    if (!response.ok) return []
+    const parsed = (await response.json()) as { children?: ChildPickerItem[] }
+    return parsed.children ?? []
+  } catch {
+    return []
+  }
+}
+
+export type { ChildPickerItem }
 
 /**
  * 跑一本书，边收边回调。

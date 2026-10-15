@@ -1,35 +1,54 @@
 /**
  * create-landing.css —— 工作台「创作」那一屏
  *
- * 参考图给的版式：居中大标题（两笔手绘装饰）+ 一行说明 + 两颗胶囊 +
- * 一张白卡（输入区 / 分隔线 / 提示与两颗动作钮）+ 三条建议。
+ * 2026-10-15 与首页并成同一世界之后重排：
+ *   原来是一列居中的 820px（标题/说明/胶囊/卡/三条建议），上下各一大片空，
+ *   读起来是"没做完"而不是"留白"。现在是**左对齐 + 上方留给天空**，
+ *   下面那一块空由 12 张主题封面自己填。
  *
- * ★ 卡片不用 `--card-shadow` 那个"深而紧"的投影——那是给**图片**浮在页面上用的
- *   （globals.css 里写了理由）。这里是输入卡，不是图片，用一条边框 + 一层浅投影。
- * ★ 两笔装饰是描边的 SVG，颜色走 `--accent`：它们与首页那三屏的水彩是同一支笔，
- *   静止模式下**不飘**（有静止终态，不是简单地不播）。
+ * ★ 三处刻意的判断：
+ *   1. **主按钮是首页那颗墨色药丸**，不是原来的橙色圆圈 `↑`。
+ *      首页 `.btn`（hero-orbit.css §5）是 `#1a1a20` / 52px / radius 999 / 白字 /
+ *      hover 抬起 2px。同一个动作在两屏长两个样子，是"两个网站"最省力的证据。
+ *      这里连高度、圆角、底色、hover 位移一起抄，只把横向 padding 收到 26px。
+ *   2. **卡片不用 `--card-shadow`**——那是给**图片**浮在页面上用的（globals.css 写了理由）。
+ *      这里是输入卡与封面卡，用 `--sheet-shadow`：一张纸离开桌面一点点。
+ *   3. **字阶是有比例的一组**：54 / 17 / 15 / 13 / 11.5（约 1.35 一档）。
+ *      原来是 44 / 15 / 13.5 / 12.5——这四个数之间没有关系，所以标题不像标题。
+ *
+ * ★ 压在天空上的文字只有两种颜色，各自是量出来的（见 `scripts/check-scrim.mts`）：
+ *   `--ink`（标题，最狠的一段 13.34:1）与 `--ink-on-sky`（说明那一行，最狠 6.63:1）。
+ *   `--ink-muted` **一次都不许直接压在天上**——它在天空带第 1 段只有 3.99:1。
+ *   所以 `.cl__hint` 与 `.cl__theme-tag` 都在卡片的 `--surface` 里，
+ *   `.cl__wallhead` 落在天空带以下那段纯纸（第 7 段 4.70:1，过线）。
+ *   这条不是审美，是那张十带表定的（见 studio-backdrop.css 文件头）。
+ * ★ 两笔装饰是描边 SVG，颜色走 `--accent`：它们与首页那三屏的水彩是同一支笔。
+ *   进场时被"画"出来（`lib/useEnterTimeline.ts`），静止模式下不飘也不描——直接在场。
  */
 
 .cl {
-  max-width: 820px;
+  max-width: 980px;
   margin: 0 auto;
-  padding: clamp(48px, 12vh, 120px) 20px 60px;
+  padding: clamp(48px, 9vh, 116px) clamp(22px, 4vw, 60px) 80px;
 }
 
 /* ── 标题与那两笔装饰 ─────────────────────────────────────────────────── */
 
 /* `display: table` 让这一行**抱住自己的文字**，装饰才能钉在字的左右，
-   而不是钉在 820px 的容器边上（那样在宽屏上会飘得很远） */
+   而不是钉在 980px 的容器边上（那样在宽屏上会飘得很远）。
+   左对齐之后它仍然是 table——只是不再 `margin: 0 auto` */
 .cl__title {
   position: relative;
   display: table;
-  margin: 0 auto 14px;
-  padding: 0 8px;
+  margin: 0 0 26px;
+  padding: 0 4px;
   font-family: var(--font-serif);
-  font-size: clamp(28px, 4.6vw, 44px);
+  font-size: clamp(32px, 4.2vw, 54px);
   font-weight: 600;
-  line-height: 1.35;
-  text-align: center;
+  line-height: 1.24;
+  /* 中文标题不加负字距：那套是给拉丁大写字母用的，压在中文字上只会让笔画糊在一起 */
+  letter-spacing: 0;
+  color: var(--ink);
 }
 
 .cl__doodle {
@@ -44,18 +63,21 @@
 }
 
 .cl__doodle--spark {
-  top: -14px;
-  left: -34px;
-  width: 34px;
-  height: 34px;
+  top: -18px;
+  left: -40px;
+  width: 36px;
+  height: 36px;
   animation: cl-float 7s ease-in-out infinite alternate;
 }
 
 .cl__doodle--leaf {
-  right: -38px;
-  bottom: -18px;
-  width: 38px;
-  height: 38px;
+  right: -46px;
+  /* ★ 这个数是量的，不是挑的：标题框 margin-bottom 26px，这一笔高 40px + 浮动 ±2px，
+     底边压到 -8px 才与下一行灰字留出 18px —— 原来写 -22px，真机截图里它正好横穿
+     `.cl__sub` 那行字。装饰压到正文上，再好看也是错的 */
+  bottom: -8px;
+  width: 40px;
+  height: 40px;
   /* 与另一笔错开半拍：两笔一起动像一台机器，错开像有人随手画的 */
   animation: cl-float 9s ease-in-out -3.5s infinite alternate;
 }
@@ -70,12 +92,14 @@
 }
 
 .cl__sub {
-  max-width: 46ch;
-  margin: 0 auto 26px;
-  font-size: 13.5px;
+  max-width: 44ch;
+  margin: 0 0 28px;
+  font-size: 15px;
   line-height: 1.9;
-  text-align: center;
-  color: var(--ink-muted);
+  /* ★ 不是 --ink-muted：这一行压在天空带第 3 段上，那里灰字只有 4.21:1
+     （`node scripts/check-scrim.mts`）。--ink-on-sky 同一段 7.01:1，
+     仍明显轻于标题的 14.10:1——层级靠字号与这一档的深浅一起撑 */
+  color: var(--ink-on-sky);
 }
 
 /* ── 两颗胶囊 ─────────────────────────────────────────────────────────── */
@@ -84,9 +108,8 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: center;
   gap: 12px;
-  margin-bottom: 18px;
+  margin-bottom: 14px;
 }
 
 .cl__pick {
@@ -98,7 +121,7 @@
   align-items: center;
   gap: 8px;
   padding: 9px 15px;
-  border: 1px solid var(--dot);
+  border: 1px solid var(--hairline);
   border-radius: 999px;
   background: var(--surface);
   color: var(--ink);
@@ -106,29 +129,33 @@
   font-size: 13px;
 }
 
-/* 可点的那颗（小主角）与只是说明的那颗（画风）在样式上必须分得开：
-   前者有 hover、有光标、有下拉箭头；后者三样都没有 */
+/* 可点的那两颗（小主角、声音）与只是说明的东西在样式上必须分得开：
+   前者有 hover、有光标、有下拉箭头。★ 现在是 `a.cl__pill` 也一起管——
+   「还没有小主角」那一颗从只读说明变成了通往 `/character/new` 的**动作** */
+a.cl__pill,
 button.cl__pill {
   cursor: pointer;
 }
 
+a.cl__pill:hover,
 button.cl__pill:hover {
   border-color: rgba(var(--accent-rgb), 0.5);
 }
 
-.cl__pill--plain {
-  color: var(--ink-muted);
+/* 没有卡时那颗：它是"去做一件事"，所以颜色往强调色靠，
+   与旁边那颗"已经定好了"的中性胶囊分得开 */
+.cl__pill--new {
+  color: var(--accent);
+  text-decoration: none;
 }
 
-.cl__pill-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--accent);
+.cl__pill-plus {
+  font-size: 15px;
+  line-height: 1;
 }
 
 /* 头像：240 档，实测 10 KB（原图 2.7 MB）。★ 圆的是"这是一个人"，
-   不是"这是一个应用图标"——所以它只出现在小主角那一格，画风那颗用的是方色片 */
+   不是"这是一个应用图标"——所以它只出现在小主角那一格 */
 .cl__pill-face {
   flex: 0 0 24px;
   width: 24px;
@@ -146,18 +173,22 @@ button.cl__pill:hover {
   white-space: nowrap;
 }
 
+/* 下拉箭头是内联 SVG。★ 原来这里是文字字符 `⌄`：形状、字重、基线全跟着系统字体走 */
 .cl__pill-caret {
-  font-size: 14px;
-  line-height: 1;
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
   color: var(--ink-muted);
 }
 
-/* 画风的色片：取 --accent 那一支陶土橙，它就是这一版画风的主色 */
-.cl__swatch {
-  width: 12px;
-  height: 12px;
-  border-radius: 4px;
-  background: var(--accent);
+/* 声音那颗的喇叭。★ 实心那片是喇叭身，两道弧是声波本身（描边，不填色）——
+   这一格与首页 `.btn` 里那几笔一样，是**画**出来的，不是字体给的 */
+.cl__pill-sound {
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  fill: var(--accent);
+  color: var(--accent);
 }
 
 .cl__options {
@@ -168,10 +199,10 @@ button.cl__pill:hover {
   min-width: 240px;
   margin: 0;
   padding: 6px;
-  border: 1px solid var(--dot);
+  border: 1px solid var(--hairline);
   border-radius: 14px;
   background: var(--surface);
-  box-shadow: 0 10px 26px rgba(19, 19, 28, 0.12);
+  box-shadow: var(--sheet-shadow);
   list-style: none;
 }
 
@@ -196,10 +227,7 @@ button.cl__pill:hover {
   grid-row: span 2;
 }
 
-.cl__option:hover {
-  background: var(--surface-soft);
-}
-
+.cl__option:hover,
 .cl__option[aria-selected='true'] {
   background: var(--surface-soft);
 }
@@ -214,14 +242,40 @@ button.cl__pill:hover {
   color: var(--ink-muted);
 }
 
-/* ── 输入卡 ───────────────────────────────────────────────────────────── */
+/* 声音那一格的选项：没有头像，所以不是"图上字下"那两行的排法，就是两行字。
+   ★ 机器名（`longjielidou_v3.6`）照旧念出来：音色表里就是这两个 id，
+     不换成"温暖男声"这种我编的形容词——名字对得上，去 `/voice` 才找得到那一张卡 */
+.cl__option--voice {
+  grid-template-columns: 1fr;
+  row-gap: 2px;
+}
+
+/* 面板底部那条"去听"。★ 它是一条路，不是一个选项，所以与上面两项之间有一条分隔线 */
+.cl__options-foot {
+  margin-top: 6px;
+  padding: 8px 10px 3px;
+  border-top: 1px solid var(--hairline);
+  font-size: 12px;
+}
+
+.cl__options-foot a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.cl__options-foot a:hover {
+  text-decoration: underline;
+}
+
+/* ── 输入卡：这一屏真正的那张纸 ───────────────────────────────────────── */
 
 .cl__card {
-  padding: 18px 20px 14px;
-  border: 1px solid var(--dot);
-  border-radius: var(--card-radius);
+  padding: 20px 24px 14px;
+  border: 1px solid var(--hairline);
+  border-radius: 18px;
   background: var(--surface);
-  box-shadow: 0 6px 18px rgba(19, 19, 28, 0.06);
+  box-shadow: var(--sheet-shadow);
+  transition: border-color 0.18s ease;
 }
 
 .cl__field {
@@ -234,7 +288,9 @@ button.cl__pill:hover {
   background: none;
   color: var(--ink);
   font: inherit;
-  font-size: 15px;
+  /* 17px：这一屏主角是**这句话本身**，它比正文大。
+     ★ 手机上小于 16px 的输入框会被 iOS 自动放大页面，那一下比任何动效都难受 */
+  font-size: 17px;
   line-height: 1.8;
   resize: vertical;
 }
@@ -259,116 +315,322 @@ button.cl__pill:hover {
   justify-content: space-between;
   gap: 16px;
   margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--dot);
+  padding-top: 14px;
+  border-top: 1px solid var(--hairline);
+}
+
+/* 左半边：提示语 + （没配齐时才出现的）语音那一句。
+   ★ 包一层是为了让警示只在真缺东西时占高度——它不该把这一屏顶上推下去 */
+.cl__note {
+  min-width: 0;
 }
 
 .cl__hint {
   margin: 0;
-  font-size: 12px;
-  line-height: 1.6;
+  font-size: 12.5px;
+  line-height: 1.7;
   color: var(--ink-muted);
+}
+
+/* 语音没配齐。★ 用 `--accent` 而不是 `--danger`：这一本照样能出来，只是没有朗读——
+   那是一条降级路径（`state.ts` 写着"语音缺了走没有朗读"），不是"坏了"。
+   `--danger` 只用在真坏了的地方，拿它做提醒，红就不再表示任何东西了。
+   ★ 这一行在卡片的 `--surface` 里，所以它可以是 `--ink-muted` 这一档 */
+.cl__warn {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--accent);
+}
+
+.cl__warn strong {
+  font-weight: 600;
+}
+
+/* 句子里那颗"去做点什么"：与 `cf__link` 同一套（同一条纪律：链接不该长得像按钮） */
+.cl__link {
+  margin-left: 6px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 .cl__actions {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 10px;
 }
 
-/* 灵感（骰子）：次要动作，描边圆。★ 它不是"随机生成一本书"，
-   只是把一句示例填进输入框——所以它改的是框里的字，不是直接提交 */
-.cl__dice {
-  display: grid;
-  place-items: center;
-  width: 38px;
-  height: 38px;
-  border: 1px solid var(--dot);
-  border-radius: 50%;
+/* "换一句"：次要动作，描边胶囊 + 图标。
+   ★ 原来是一颗圆里三个点——那读起来像"随机生成一本书"，
+   而它改的只是框里的字。图标语言要跟着这句说明走，所以补了文字标签 */
+.cl__roll {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 40px;
+  padding: 0 15px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
   background: var(--surface);
   color: var(--ink-muted);
+  font: inherit;
+  font-size: 13px;
   cursor: pointer;
+  transition:
+    color 0.16s ease,
+    border-color 0.16s ease;
 }
 
-.cl__dice:hover {
+.cl__roll:hover {
   border-color: rgba(var(--accent-rgb), 0.5);
   color: var(--accent);
 }
 
-.cl__dice svg {
-  width: 19px;
-  height: 19px;
+.cl__roll-icon {
+  width: 16px;
+  height: 16px;
   fill: currentColor;
   stroke: none;
 }
 
-.cl__dice svg rect {
+.cl__roll-icon rect {
   fill: none;
   stroke: currentColor;
   stroke-width: 1.6;
 }
 
-.cl__go {
-  flex: 0 0 42px;
-  width: 42px;
-  height: 42px;
-  border: none;
-  border-radius: 50%;
+/* 「优化提示词」：与「换一句」同一档尺寸、同一颗胶囊，但它是**这条动作栏里唯一
+   带强调色描边的次动作**——它做的是"把这句话改好"，而「换一句」只是换一个例子。
+   ★ 图标与标题旁那两笔装饰用的是同一条路径：一个动作与一屏的装饰出自同一支笔，
+   这比再找一枚通用 AI 图标（星星 / 魔杖）更贴这一屏 */
+.cl__optimize {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 40px;
+  padding: 0 15px;
+  border: 1px solid rgba(var(--accent-rgb), 0.45);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--accent);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition:
+    background-color 0.16s ease,
+    color 0.16s ease;
+}
+
+.cl__optimize:hover:not(:disabled) {
   background: var(--accent);
   color: var(--surface);
-  font-size: 17px;
-  line-height: 1;
+}
+
+.cl__optimize:disabled {
+  border-color: var(--hairline);
+  color: var(--ink-muted);
+  cursor: default;
+}
+
+.cl__optimize-icon {
+  width: 15px;
+  height: 15px;
+  fill: currentColor;
+}
+
+/* ── 建议那一块（工单 07）────────────────────────────────────────────────
+   它夹在输入框与动作栏之间：这一块只属于"这句话"，不属于整张卡。
+   底色用 `--surface-soft` 而不是另一张纸——它是**同一张纸上的一块批注**，
+   再叠一层投影就变成"另一个弹窗"了 */
+.cl__suggest {
+  margin: 12px 0 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--surface-soft);
+}
+
+.cl__suggest-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 6px;
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
+  color: var(--ink-muted);
+}
+
+/* 谁改的。★ 与角色卡上记模型名同一条道理：这句话不是人写的，要说得出来是谁写的 */
+.cl__suggest-by {
+  font-size: 11px;
+  opacity: 0.85;
+}
+
+.cl__suggest-text {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.75;
+  color: var(--ink);
+}
+
+.cl__suggest-note {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  line-height: 1.65;
+  color: var(--ink-muted);
+}
+
+.cl__suggest-acts {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+/* 「用这句」是这一块里唯一的动作，给它实心强调色；「不用」是 `.cl__roll` 那套描边 */
+.cl__apply {
+  height: 34px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--surface);
+  font: inherit;
+  font-size: 13px;
   cursor: pointer;
+}
+
+.cl__apply:hover {
+  filter: brightness(1.06);
+}
+
+/* 主按钮 = 首页那颗墨色药丸（hero-orbit.css 的 `.btn`）。
+   ★ 陶土橙在这一屏只做**笔画与色片**，不做主按钮：首页也是这个分工
+   （大标题里那一句、品牌英文名、卡片编号），橙色当按钮是工作台自己发明的 */
+.cl__go {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 52px;
+  padding: 0 26px;
+  border: 0;
+  border-radius: 999px;
+  background: #1a1a20;
+  color: #fff;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(23, 23, 29, 0.16);
+  transition:
+    transform 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.18s ease;
+}
+
+.cl__go:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px rgba(23, 23, 29, 0.22);
+}
+
+.cl__go:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.cl__go-icon {
+  width: 17px;
+  height: 17px;
 }
 
 .cl__go:disabled {
   background: var(--surface-soft);
   color: var(--ink-muted);
+  box-shadow: none;
   cursor: default;
 }
 
-/* ── 三条建议 ─────────────────────────────────────────────────────────── */
+/* ── 主题墙：12 张封面，一格一条 ──────────────────────────────────────── */
 
-.cl__chips {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 10px;
-  margin: 22px 0 0;
+.cl__wallhead {
+  /* ★ 46px → 36px 是量的：整屏高度只有 900 的时候，天空、标题、说明、胶囊、输入卡
+     一路排下来，主题墙只剩第一行可见。这一屏的内容密度必须让**墙露出第二行**
+     （那是"下面还有"的抓手），否则用户以为只有 5 个主题。 */
+  margin: 36px 0 14px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--ink-muted);
+}
+
+.cl__wall {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(158px, 1fr));
+  gap: 14px;
+  margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.cl__chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  max-width: 100%;
-  padding: 9px 15px;
-  border: 1px solid var(--dot);
-  border-radius: 999px;
+.cl__theme {
+  display: grid;
+  width: 100%;
+  padding: 0 0 9px;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
   background: var(--surface);
-  color: var(--ink-soft);
+  color: var(--ink);
   font: inherit;
-  font-size: 12.5px;
   text-align: left;
   cursor: pointer;
+  overflow: hidden;
+  transition:
+    transform 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.18s ease,
+    border-color 0.18s ease;
 }
 
-.cl__chip:hover {
-  border-color: rgba(var(--accent-rgb), 0.5);
+.cl__theme:hover {
+  transform: translateY(-2px);
+  border-color: rgba(var(--accent-rgb), 0.45);
+  box-shadow: var(--sheet-shadow);
+}
+
+/* 选中态：一条内描边。★ 不填色——填色会和右下角那颗主按钮抢"这才是动作" */
+.cl__theme[data-active='true'] {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.cl__theme[data-active='true'] .cl__theme-label {
   color: var(--accent);
 }
 
-/* 选中态用一条内描边，不填色：填色会和右下角那颗提交钮抢"这才是动作" */
-.cl__chip[data-active='true'] {
-  box-shadow: inset 0 0 0 1px var(--accent);
-  color: var(--accent);
+/* 320 档派生小图。★ 显式 width/height + aspect-ratio：图还没到时也占住这一块，
+   不会跳（CLAUDE.md「图没到位就留一个语义上诚实的兜底」）。
+   图缺失时这里什么都不画，只留一块相纸色的空框——不是碎图标 */
+.cl__theme-art {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  background: var(--card-paper);
 }
 
-.cl__chip-emoji {
-  font-size: 14px;
-  line-height: 1;
+.cl__theme-label {
+  padding: 9px 11px 1px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.cl__theme-tag {
+  padding: 0 11px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--ink-muted);
 }
 
 /* 只给读屏的标签：这一屏的视觉就是"一个大框"，加一个可见的 label 反而像表单 */
@@ -384,19 +646,15 @@ button.cl__pill:hover {
   border: 0;
 }
 
-.cl__pill:focus-visible,
-.cl__option:focus-visible,
-.cl__dice:focus-visible,
-.cl__go:focus-visible,
-.cl__chip:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-/* 静止模式：装饰不飘，停在关键帧的起点位置（有一个确定终态，不是"没画"） */
+/* 静止模式：装饰不飘、进场不播（终态就是 CSS 这个默认态，见 useEnterTimeline） */
 @media (prefers-reduced-motion: reduce) {
   .cl__doodle {
     animation: none;
+  }
+
+  .cl__theme,
+  .cl__go {
+    transition: none;
   }
 }
 
@@ -405,27 +663,33 @@ button.cl__pill:hover {
    第一行的头三个字和最后一行的尾巴。所以窄屏把它们挪到**行的上下方**，
    与文字错开，而不是与文字重叠 */
 @media (max-width: 720px) {
+  .cl {
+    padding-top: 40px;
+  }
+
   .cl__doodle--spark {
-    top: -32px;
-    left: 2px;
+    top: -34px;
+    left: 0;
   }
 
   .cl__doodle--leaf {
-    right: 2px;
-    bottom: -36px;
+    right: 0;
+    bottom: -38px;
   }
 
-  /* 建议卡会折成两三行。999px 的圆角在多行文字上会变成一个压扁的胶囊，
-     所以窄屏改成 16px 的圆角矩形并占满一行——三句变成三条可选的"题目"，
-     这比三个挤在一起的水滴好读 */
-  .cl__chips {
+  /* 底部那条动作栏会挤成两行：提示语让到上面，两颗按钮靠右 */
+  .cl__bar {
     flex-direction: column;
     align-items: stretch;
   }
 
-  .cl__chip {
-    width: 100%;
-    border-radius: 16px;
-    line-height: 1.7;
+  .cl__actions {
+    justify-content: flex-end;
+  }
+
+  /* 主题墙两列。158px 的下限在 375 宽的屏上会掉成一列，
+     一格 320px 的封面缩到 160 已经看不出画的是什么，不如两列 */
+  .cl__wall {
+    grid-template-columns: repeat(2, 1fr);
   }
 }

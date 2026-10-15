@@ -194,12 +194,11 @@ async function main(): Promise<void> {
   const results: CandidateRecord[] = []
   for (const [modelIndex, model] of models.entries()) {
     const label = labels[modelIndex] as string
-    const image = createTokenrhythmImage({ baseUrl, apiKey, timeoutMs: 180_000 }, model, {
-      supportsReference: env['IMAGE_SUPPORTS_REFERENCE'] === '1',
-    })
+    const image = createTokenrhythmImage({ baseUrl, apiKey, timeoutMs: 180_000 }, model)
     const record: CandidateRecord = {
       model,
       blindLabel: label,
+      // ★ 能力从适配器问出来，不再读 IMAGE_SUPPORTS_REFERENCE（那个化石已随工单 02 删掉）
       referenceApplied: image.supportsReference,
       pages: [],
     }

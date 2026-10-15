@@ -71,6 +71,14 @@ export type CardStore = {
        *   覆盖旧版（旧书的图来源被抹掉），或者从 `load` 拿到旧版自己改（拼错指纹）。
        */
       previous?: CharacterCard
+      /**
+       * 家长写下的那句「想改哪里」（工单 03）。进 `provenance.suggestion`。
+       *
+       * ★ 它进 provenance 而不是进 anchors：锚点是"他长什么样"的判据，
+       *   这句话是"这一版是怎么来的"。混进锚点会当场撞上 card.ts 文件头那条
+       *   不变式——锚点里的每一项都必须跨页不变，而"眼睛再大一点"只属于这一版。
+       */
+      suggestion?: string
     },
   ): Promise<{
     card: CharacterCard
@@ -80,6 +88,47 @@ export type CardStore = {
   load(cardId: string, revision?: number): Promise<CharacterCard | null>
   latest(cardId: string): Promise<CharacterCard | null>
   summaries(): Promise<CardSummary[]>
+  /**
+   * 这张卡的**全部**版本，按 revision 升序（工单 03 的版本历史）。
+   *
+   * ★ 与 `summaries()` 分开而不是给它加个开关：那两个问题的答案形状不一样——
+   *   一个是"每个卡现在长什么样"（跨卡，同 cardId 只留最新），
+   *   一个是"这一张卡走过哪些版本"（单卡，全都留着）。合并成一个函数加 flag，
+   *   调用方就要读文档才知道自己拿到的是哪种。
+   */
+  revisions(cardId: string): Promise<CharacterCard[]>
+  /**
+   * 这个孩子现在的形象。没有就 `null`。
+   *
+   * ★ 它**不靠"卡号 = `${childId}-sheet`"这个约定**去找：那是 `/api/cards` 建卡时
+   *   顺手拼的字符串，不是领域规则。靠约定找的话，哪天建卡改用别的命名，
+   *   所有已经建好的孩子会一起"没有形象"，而错误现场是一句
+   *   "这个孩子还没有形象"——看不出是命名改了。
+   * ★ 由 `childId` 反查也是**档案与卡之间唯一那根线的另一端**：
+   *   档案说"他是谁"，卡说"他长什么样"，两边靠 childId 对上。
+   */
+  latestForChild(childId: string): Promise<CharacterCard | null>
+  /**
+   * 把 `latest` 指回旧的一版（工单 03 的"切回这一版"）。
+   *
+   * ★ 它**只动那个一字节的指针**，不删新图、不改任何一版的内容。
+   *   语义是"从现在起用第 N 版形象"，不是"第 N 版之后那些没发生过"——
+   *   已经做出来的书仍然指着它们各自那一版（ADR-0007）。
+   * ★ 目标版不存在就抛，不写一个指不到东西的指针：那种指针的症状是
+   *   下一次 `latest()` 回 null，而界面会说"这个孩子没有形象"。
+   */
+  setLatest(cardId: string, revision: number): Promise<void>
+  /**
+   * 删掉**一张卡的全部版本**（含参考图与 `latest` 指针），返回删掉的**条数**与参考图字节数。
+   *
+   * ★ 与 `deleteChild` 分开的理由：删除的凭据要**逐位置报数**
+   *   （"每个存储位置各删了多少条"），而一张卡的条数是那笔账里的一行。
+   *   让调用方拿 `deleteChild` 去凑一行，它就得自己拼 `cards/<cardId>/` 这个前缀——
+   *   而那正是这个文件管的约定（`CARDS_PREFIX`）。
+   * ★ 返回的 `files` 是**真的删掉了几条**（`deletePrefix` 数的），不是预估：
+   *   凭据的全部意义就是不依赖预估。
+   */
+  deleteCard(cardId: string): Promise<{ files: number; bytes: number }>
   /** 级联删除一个孩子名下的全部卡与参考图，返回条数（删除凭据的数据源） */
   deleteChild(childId: string): Promise<{ cards: number; bytes: number }>
   /** 卡与其参考图是否自洽：指纹对得上、文件还在。书架页与提交前自查用 */
@@ -114,6 +163,8 @@ export function createCardStore(store: AssetStore): CardStore {
                 promptVersion: input.promptVersion,
                 cardRevision: input.previous.revision + 1,
                 generatedAt: input.now,
+                // 只有"换一版"才可能有这句话：第一版没有上一版可比
+                ...(input.suggestion ? { suggestion: input.suggestion } : {}),
               },
             }
           : fresh,
@@ -164,9 +215,27 @@ export function createCardStore(store: AssetStore): CardStore {
 
     async summaries() {
       const keys = (await store.list(`${CARDS_PREFIX}/`)).filter((key) => key.endsWith('.json'))
-      const out: CardSummary[] = []
+      // 卡号从路径取（`cards/<cardId>/r<rev>.<指纹>.json`），不必先把每个文件都读一遍
+      const cardIds = new Set<string>()
       for (const key of keys) {
-        const card = await store.readJson<CharacterCard>(key)
+        const rest = key.slice(`${CARDS_PREFIX}/`.length)
+        const slash = rest.indexOf('/')
+        if (slash > 0) cardIds.add(rest.slice(0, slash))
+      }
+
+      const out: CardSummary[] = []
+      for (const cardId of cardIds) {
+        // ★ **必须走 `load`**：它读的是 `latest` 那个指针。
+        //
+        //   这一版之前用的是"扫目录取最大 revision"——在"切回旧版"这个动作出现之前，
+        //   两者永远一致，所以看不出区别。工单 03 做了「从现在起用这一版」之后，
+        //   实测到症状：指针已经写成 1 了，页面上还说第 2 版是当前——
+        //   因为"当前版"是**一个决定**（`latest` 文件头第 2 条就是这么写的），
+        //   而"revision 最大"只是那个决定在没人改过它时的样子。
+        //
+        //   指针指不到东西时退回最大 revision：那是资产被手改过的情形，
+        //   "退一步照样能列出这张卡"比"这个孩子从此没有形象"好。
+        const card = (await this.load(cardId)) ?? (await newestRevision(store, cardId))
         if (!card) continue
         out.push({
           cardId: card.cardId,
@@ -176,13 +245,44 @@ export function createCardStore(store: AssetStore): CardStore {
           referencePath: card.reference.path,
         })
       }
-      // 同 cardId 只留最新一版：书架要的是"现在这张"，历史版靠 load(revision) 取
-      const byCard = new Map<string, CardSummary>()
-      for (const summary of out) {
-        const seen = byCard.get(summary.cardId)
-        if (!seen || seen.revision < summary.revision) byCard.set(summary.cardId, summary)
+      return out.sort((a, b) => a.cardId.localeCompare(b.cardId))
+    },
+
+    async latestForChild(childId) {
+      const mine = (await this.summaries()).find((summary) => summary.childId === childId)
+      return mine ? this.load(mine.cardId, mine.revision) : null
+    },
+
+    async revisions(cardId) {
+      const prefix = `${CARDS_PREFIX}/${cardId}/r`
+      const keys = (await store.list(prefix)).filter((key) => key.endsWith('.json'))
+      const out: CharacterCard[] = []
+      for (const key of keys) {
+        const card = await store.readJson<CharacterCard>(key)
+        if (card) out.push(card)
       }
-      return [...byCard.values()].sort((a, b) => a.cardId.localeCompare(b.cardId))
+      return out.sort((a, b) => a.revision - b.revision)
+    },
+
+    async setLatest(cardId, revision) {
+      const target = await this.load(cardId, revision)
+      if (!target) {
+        throw new EngineError('card-not-found', `第 ${revision} 版不在，指针不动`)
+      }
+      await store.put({
+        path: `${CARDS_PREFIX}/${cardId}/latest`,
+        bytes: new TextEncoder().encode(String(revision)),
+        mime: 'text/plain',
+      })
+    },
+
+    async deleteCard(cardId) {
+      // 字节在删之前读：`reference.bytes` 是建卡时记下的**参考图长度**，
+      // 删完就没人记得了，而删除凭据要报得出"各删了多少"
+      const card = (await this.load(cardId)) ?? (await newestRevision(store, cardId))
+      const bytes = card?.reference.bytes ?? 0
+      const files = await store.deletePrefix(`${CARDS_PREFIX}/${cardId}/`)
+      return { files, bytes }
     },
 
     async deleteChild(childId) {
@@ -190,11 +290,12 @@ export function createCardStore(store: AssetStore): CardStore {
       const mine = summaries.filter((summary) => summary.childId === childId)
       let cards = 0
       let bytes = 0
+      // 逐张卡删，与 `deleteCard` 同一处实现：两处各写一遍前缀，
+      // 早晚会出现"孩子那一侧删得干净、单张卡那一侧漏了 latest"
       for (const summary of mine) {
-        // 先读卡拿字节数，再删：删除凭据要报得出"各删了多少"，事后就读不到了
-        const card = await this.load(summary.cardId, summary.revision)
-        bytes += card?.reference.bytes ?? 0
-        cards += await store.deletePrefix(`${CARDS_PREFIX}/${summary.cardId}/`)
+        const one = await this.deleteCard(summary.cardId)
+        cards += one.files
+        bytes += one.bytes
       }
       return { cards, bytes }
     },
@@ -218,6 +319,19 @@ export function createCardStore(store: AssetStore): CardStore {
 async function readLatest(store: AssetStore, cardId: string): Promise<string | null> {
   const bytes = await store.read(`${CARDS_PREFIX}/${cardId}/latest`)
   return bytes ? new TextDecoder().decode(bytes).trim() : null
+}
+
+/** 兜底：指针指不到东西时（资产被手改过）退回 revision 最大的那一版 */
+async function newestRevision(store: AssetStore, cardId: string): Promise<CharacterCard | null> {
+  const keys = (await store.list(`${CARDS_PREFIX}/${cardId}/r`)).filter((key) =>
+    key.endsWith('.json'),
+  )
+  let best: CharacterCard | null = null
+  for (const key of keys) {
+    const card = await store.readJson<CharacterCard>(key)
+    if (card && (!best || best.revision < card.revision)) best = card
+  }
+  return best
 }
 
 function extensionOf(mime: string): string {

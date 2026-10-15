@@ -32,6 +32,8 @@ import type {
   ImageGenerator,
   ImageRequest,
   ImageResponse,
+  StreamBudget,
+  TextDelta,
   TextGenerator,
   TextRequest,
   TextResponse,
@@ -109,17 +111,41 @@ export function createReplayImage(store: AssetStore, manifest: ReplayManifest): 
 
 export function createReplayText(store: AssetStore, manifest: ReplayManifest): TextGenerator {
   void store
+  const lookup = (req: TextRequest): TextEntry => {
+    const entry = manifest.texts[textKey(req)]
+    if (!entry) {
+      throw new EngineError(
+        'provider-not-configured',
+        `离线回放里没有这条规划结果（指纹 ${textKey(req)}）`,
+      )
+    }
+    return entry
+  }
   return {
     id: 'replay-text',
     modelId: 'recorded',
     async complete(req: TextRequest): Promise<TextResponse> {
-      const entry = manifest.texts[textKey(req)]
-      if (!entry) {
-        throw new EngineError(
-          'provider-not-configured',
-          `离线回放里没有这条规划结果（指纹 ${textKey(req)}）`,
-        )
-      }
+      const entry = lookup(req)
+      return { text: entry.text, modelId: entry.modelId }
+    },
+
+    /**
+     * 回放的"流式"**是假的**，而且它照实说（工单 07 §一.2）。
+     *
+     * 录下来的本来就是一整段文本，没有"一段段到"这回事。这里一次把整段交出去，
+     * 并标 `streamed: false`——界面据此就知道这一轮不该演打字机。
+     *
+     * ★ **不许用定时器把它切成一段段**。那是在演示里造假，而 ADR-0003 的演示路径
+     *   的全部价值就是"屏幕上看到的是真的发生过的事"；
+     *   一个用定时器装出来的打字机效果，证的是这一页想证的反面。
+     */
+    async stream(
+      req: TextRequest,
+      _budget: StreamBudget | undefined,
+      onDelta: (delta: TextDelta) => void,
+    ): Promise<TextResponse> {
+      const entry = lookup(req)
+      if (entry.text !== '') onDelta({ text: entry.text, streamed: false })
       return { text: entry.text, modelId: entry.modelId }
     },
   }
@@ -170,6 +196,22 @@ export function recordText(
     modelId: inner.modelId,
     async complete(req: TextRequest, budget?: CallBudget): Promise<TextResponse> {
       const response = await inner.complete(req, budget)
+      manifest.texts[textKey(req)] = { text: response.text, modelId: response.modelId }
+      await onEntry(manifest)
+      return response
+    },
+    /**
+     * 录制时的流式：**原样转发**内层的 delta（包括那个 `streamed` 标志），
+     * 录下来的仍然是那段完整文本。
+     * ★ 转发标志而不是在这儿写死 `true`：标志的意思是"这串字是不是真从网络上一段段来的"，
+     *   而这里包着的内层可能是任何实现。写死就等于替它回答了一个它才知道的问题。
+     */
+    async stream(
+      req: TextRequest,
+      budget: StreamBudget | undefined,
+      onDelta: (delta: TextDelta) => void,
+    ): Promise<TextResponse> {
+      const response = await inner.stream(req, budget, onDelta)
       manifest.texts[textKey(req)] = { text: response.text, modelId: response.modelId }
       await onEntry(manifest)
       return response

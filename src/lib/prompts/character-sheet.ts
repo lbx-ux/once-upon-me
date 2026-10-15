@@ -18,10 +18,47 @@ import type { CharacterAnchor, StyleLock } from '../engine/domain.ts'
 
 export const CHARACTER_SHEET_VERSION = 'character-sheet@v1'
 
+/**
+ * 「再画一版」用的提示词版本（工单 03）。
+ *
+ * ★ 为什么另起一个版本号而不是把它并进 `character-sheet@v1`：
+ *   provenance 记的是"这张图是哪份提示词出来的"。带建议的那一份比标准像那份**多一段**，
+ *   两者出来的图不该共用一个版本号——共用之后，答辩时"这一版和上一版提示词一样吗"
+ *   就答不上来。
+ * ★ 不带建议时仍然走 `character-sheet@v1`，逐字节不变：老卡与演示卡的那一份，
+ *   今天是哪一份，明天还是哪一份。
+ */
+export const CHARACTER_REVISE_VERSION = 'character-revise@v1'
+
+/**
+ * 「用他的照片出一张形象」用的提示词版本（工单 03 的第二条路）。
+ *
+ * ★ 为什么是第三个版本号，而不是复用 `character-sheet@v1`：
+ *   这一份比标准像那份**多一段**（见 `fromPhoto`），而那一整段是决定这条路的成败的——
+ *   参考图在 `revise` 那条路上是"上一版的插画"（照着画），在这条路上是"孩子本人的照片"
+ *   （要**转成插画**，不能照抄构图）。亮出来的是同一张脸，但依据那份输入完全不同，
+ *   所以 provenance 必须分得开：答辩时"这两张的提示词一样吗"要答得上。
+ */
+export const CHARACTER_PHOTO_VERSION = 'character-photo@v1'
+
 /** 画风段。与 `docs/demo-book-art-prompts.md` 的既定描述一致（26 张成图都是这一套出来的） */
 export const DEFAULT_STYLE_FRAGMENT =
   '温暖手绘绘本插画：水彩铺色打底 + 细彩铅轮廓线收形，可见纸质纹理，' +
   '高明度低饱和的粉彩色板，柔和的左上方统一光源，阴影无硬边'
+
+/**
+ * 建卡时写进 `card.style` 的那一份（画风 + 比例）。
+ *
+ * ★ 它上提到这里，是因为建卡的路有**两条**了（从零描述 / 用他的照片，工单 03 第二刀）。
+ *   两份字面量各自写在自己的 route 里，漂的方式很安静：改了一边，另一边的孩子
+ *   画出来是另一种画风，而两张卡都"合法"——没有一处会报错。
+ * ★ 产品现在只有这一档画风（界面上它是个事实，不是下拉，见 `DEFAULT_STYLE_LABEL`）。
+ */
+export const DEFAULT_CARD_STYLE: StyleLock = {
+  key: 'warm-handdrawn',
+  promptFragment: DEFAULT_STYLE_FRAGMENT,
+  ratio: '1:1',
+}
 
 /**
  * 界面上给人看的那三个字（工作台的画风那一格）。
@@ -42,16 +79,51 @@ export type CharacterSheetInput = {
   ageLabel: string
   anchors: readonly CharacterAnchor[]
   style?: StyleLock
+  /**
+   * 家长写下的「想改哪里」（工单 03 的「再画一版」）。
+   *
+   * ★ 它**只加一段指令，不动锚点**。锚点是"他长什么样"的判据，跨页不变；
+   *   这一句只属于这一版（见 domain.ts 的 `Provenance.suggestion`）。
+   * ★ 段落位置放在锚点之后、构图之前：模型对"先定义身份、再改一处、最后说构图"
+   *   这个顺序更稳；把改动塞在锚点中间，实测容易让整张脸重新抽签。
+   */
+  revisionNote?: string
+  /**
+   * 参考图是**孩子本人的照片**（工单 03 的「用他的照片」那条路）。
+   *
+   * ★ 用一个布尔，而不是让调用方自己写这段话：这段话说的是**这张图该怎么用那张参考图**，
+   *   是产品判断，不是用户输入。做成自由文本，第一个改它的人会把"保留面部特征"删掉，
+   *   于是照片那条路安静地退化成"拿照片当风格参考"——画出来是另一个孩子，
+   *   而没有任何一处会报错。
+   * ★ 三件事必须一起说，缺一条就有一个具体的坏法：
+   *   ① **保留他的脸和发型**——不说，模型会画一个"同年龄同性别"的平均小孩；
+   *   ② **转成插画风格**——不说，会回来一张带照片质感的图，而参考图要逐页复用、
+   *      还要和插画比对（ADR-0007 验的是插画比插画）；
+   *   ③ **不要照抄照片的构图/姿势/背景**——不说，回来的是那张照片的描摹，
+   *      头身比与站姿都不是标准像要的那个形状。
+   */
+  fromPhoto?: boolean
 }
 
 export function characterSheetPrompt(input: CharacterSheetInput): string {
   const style = input.style?.promptFragment || DEFAULT_STYLE_FRAGMENT
+  const note = input.revisionNote?.trim() ?? ''
   return [
     `画一张儿童绘本的**角色标准像**：${input.name}，东亚面孔，${input.ageLabel}${input.childWord}。`,
     '',
     '【身份锚点——每一条都必须画出来，它们是后续所有页的核对依据】',
     ...input.anchors.map((anchor, index) => `${index + 1}. ${anchor.value}`),
     '',
+    ...(input.fromPhoto
+      ? [
+          '【参考图是孩子本人的照片】保留他的面部特征、发型与肤色，把它画成这张绘本的插画形象。',
+          '只借用"他是谁"，不要照抄照片的姿势、构图、背景与光线——那些由下面的构图段决定。',
+          '',
+        ]
+      : []),
+    ...(note === ''
+      ? []
+      : ['【这一版要改的地方——家长看过上一版之后提的，只改这里，别处保持与上一版一致】', note, '']),
     '【构图】竖构图居中，单人，站姿正面略偏 15 度，双手自然垂放，全身入画（头顶与脚底各留约 8% 空间）。',
     '背景是一层极淡的暖米色平涂，不放任何场景物件——这张图只负责"他是谁"。',
     '视线看向画外，表情平和带一点好奇，不做夸张表情。',

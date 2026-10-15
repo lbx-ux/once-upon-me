@@ -1,15 +1,18 @@
 import CharacterWall from '@/components/studio/CharacterWall.tsx'
-import { listCardItems } from '@/lib/cards-list.ts'
-import { loadKidNames } from '@/lib/kid-names.ts'
+import { listChildItems } from '@/lib/children-list.ts'
 
 /**
  * /character —— 小主角（工作台的第三格）
  *
- * 服务端只做取数：有哪些卡、演示名单里有没有它们的名字。
- * 卡片长什么样、动效怎么排，全在 `components/studio/CharacterWall.tsx`。
+ * 服务端只做取数：有哪些孩子、他们各长什么样。卡片长什么样、动效怎么排，
+ * 全在 `components/studio/CharacterWall.tsx`。
  *
- * ★ 两个取数各自都可能空，且**都不是错误**：一张卡都没有 = 目录还没建过；
- *   `kids.json` 读不到 = 运行时新建的卡，那本来就没有名字那一层（工单 03 的活）。
+ * ★ 工单 03 换了这一屏的取数：以前是 `listCardItems()` + `loadKidNames()`，
+ *   两个来源各说一半（卡说形象、演示名单说名字），而且都取自同一份演示副产物。
+ *   现在是**档案（他是谁）** 对 **卡（他长什么样）**，对起来的活只有一处实现
+ *   （`lib/children-list.ts`）。
+ * ★ 取数可能空，而且**不是错误**：一个新检出的仓库里 `.out/web` 什么都没有，
+ *   那时列表里只有两个**示例**（档案随仓库发布）。
  */
 
 export const dynamic = 'force-dynamic'
@@ -17,6 +20,5 @@ export const dynamic = 'force-dynamic'
 export const metadata = { title: '小主角 · 小主角' }
 
 export default async function CharacterPage() {
-  const [cards, names] = await Promise.all([listCardItems(), loadKidNames()])
-  return <CharacterWall cards={cards} names={names} />
+  return <CharacterWall items={await listChildItems()} />
 }

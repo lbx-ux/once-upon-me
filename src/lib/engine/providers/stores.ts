@@ -55,8 +55,7 @@ export function createMemoryStore(): AssetStore & { all(): string[] } {
       }
       return removed
     },
-    /** 测试辅助：不看前缀的全部路径 */
-    all(): string[] {
+    /** 测试辅助：不看前缀的全部路径 */ all(): string[] {
       return [...files.keys()].sort()
     },
   }
@@ -147,6 +146,22 @@ export async function createFsStore(root: string): Promise<AssetStore> {
     async deletePrefix(prefix: string): Promise<number> {
       const target = resolve(prefix)
       let removed = 0
+
+      // ★ 前缀可能落在一个**文件**上，而不是目录——`profileStore.delete` 就是这样调的
+      //   （`children/<childId>.json`）。这一行是 2026-10-15 补的，症状很具体：
+      //   walk 里的 `readdir(文件)` 抛 ENOENT 被吞掉 → 回 0，而下面的
+      //   `rm(target, {recursive:true})` **照样把那个文件删了**。
+      //   于是"删了 1 条"报成"删了 0 条"，而内存版对同一个输入回 1（它是键前缀匹配）。
+      //   两个实现不一致的代价不是"哪个对"：这张契约的**全部意义就是报数**
+      //   （`AssetStore.deletePrefix` 的注释：删除凭据要列明各删了多少条），
+      //   一个会把 1 报成 0 的实现让那张凭据变成假的。发现它靠的是
+      //   `scripts/e2e-delete-child.mts`：预演说 5 条、真删说 4 条，差的那一条是档案。
+      const info = await fs.stat(target).catch(() => null)
+      if (info?.isFile()) {
+        await fs.rm(target, { force: true })
+        return 1
+      }
+
       const walk = async (dir: string): Promise<void> => {
         let entries: { name: string; isDirectory(): boolean }[]
         try {

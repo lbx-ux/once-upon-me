@@ -231,6 +231,22 @@
   color: var(--ink-muted);
 }
 
+/* 这条说明里点了两处代码（路由名）与几处强调。不写这两行的话，<code> 会用浏览器
+   默认的等宽字体 + 默认黑色，在一块米色说明里跳出来像渲染坏了 */
+.cf__note strong {
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+.cf__note code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.92em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(var(--accent-rgb), 0.09);
+  color: var(--ink-soft);
+}
+
 .cf__hint {
   color: var(--ink-muted);
   font-size: 13px;
@@ -438,6 +454,150 @@
 
 .cf__log-row[data-tone='bad'] {
   color: var(--danger);
+}
+
+/* ── 第 1 步：选一个小主角（工单 03 第 4 刀） ───────────────────────────── */
+
+/* 两条路各有各的形状：`cf__pick*` 是"从列表里挑一个"，`cf__picked*` 是"挑完了的那一行摘要"。
+   ★ 两者的图**都可能是"？"**：示例孩子现在就是"有档案、没形象"（卡本体 2.7 MB/张还没发，
+   见 children-list.ts 文件头）。这里给的是**空框 + 问号**，不是拿一张示例图去顶——
+   顶一张图就是给不存在的数据源背书，而这一屏正是家长判断"这个孩子有没有形象"的地方 */
+
+.cf__pick {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  display: grid;
+  /* 与 `.cf__themes` 同一个写法：窄屏一列，宽到装得下两列就两列，不写死断点 */
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 8px;
+}
+
+.cf__pick-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px;
+  border: 1px solid var(--dot);
+  border-radius: var(--card-radius);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cf__pick-item:hover {
+  border-color: var(--accent);
+}
+
+.cf__pick-art,
+.cf__picked-art {
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid var(--dot);
+  flex: none;
+}
+
+.cf__pick-art {
+  width: 64px;
+  height: 64px;
+}
+
+.cf__picked-art {
+  width: 96px;
+  height: 96px;
+}
+
+/* "还没有形象"的兜底：与缩略图同一块地方、同一个圆角，只是虚边 + 中间一个问号。
+   ★ 问号是**说明**不是装饰，所以 `aria-hidden`——真正的意思由下面那行 meta 说出来
+   （"还没有形象，第 3 步会现出一张"），读屏念两遍是噪音 */
+.cf__pick-none,
+.cf__picked-none {
+  display: grid;
+  place-items: center;
+  flex: none;
+  border: 1px dashed var(--dot);
+  border-radius: 10px;
+  color: var(--ink-muted);
+  font-size: 22px;
+}
+
+.cf__pick-none {
+  width: 64px;
+  height: 64px;
+}
+
+.cf__picked-none {
+  width: 96px;
+  height: 96px;
+  font-size: 30px;
+}
+
+/* 名字那一块：`min-width: 0` 是必须的——名字与读音拼起来可以很长，
+   在 grid/flex 里不给收缩许可的话，长名字会把整行顶出去而不是换行 */
+.cf__pick-text,
+.cf__picked-what {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.cf__pick-name,
+.cf__picked-name {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  font-weight: 600;
+}
+
+.cf__pick-reading,
+.cf__picked-reading {
+  color: var(--ink-muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+/* "示例"是一句说明（来源决定），点不动，所以它是一个 span 而不是 chip */
+.cf__pick-demo,
+.cf__picked-demo {
+  padding: 1px 8px;
+  border: 1px solid var(--dot);
+  border-radius: 999px;
+  color: var(--ink-muted);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.cf__pick-meta,
+.cf__picked-meta {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* 挑完的那一行摘要：它占的是第 1 步的整块地方，所以给一圈底 */
+.cf__picked {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 14px;
+  border: 1px solid var(--dot);
+  border-radius: var(--card-radius);
+  background: var(--surface-soft);
+}
+
+.cf__picked-what {
+  gap: 6px;
+  /* flex 列默认 stretch：不写这行，"换一个人 / 新建一个"会拉成整行宽的大按钮 */
+  align-items: flex-start;
 }
 
 /* ── 静止模式 ───────────────────────────────────────────────────────────── */

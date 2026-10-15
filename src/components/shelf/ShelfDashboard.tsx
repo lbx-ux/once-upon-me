@@ -195,9 +195,13 @@ export default function ShelfDashboard({ books, characterCount }: ShelfDashboard
                   style={{ backgroundImage: `url(${artPath(theme.key)})` }}
                   aria-hidden="true"
                 />
-                <span className="shelf__theme-label">
-                  <span aria-hidden="true">{theme.emoji}</span> {theme.label}
-                </span>
+                {/* ★ 这里原来在名字前面挂了一枚 `theme.emoji`。2026-10-15 删掉了：
+                    上面那张 72px 的水彩就是同一个主题的画像，再挂一枚扁平高饱和的
+                    clip-art 是**同一个主题的两张画**，而且两套画法（README §五那条）。
+                    删的时候没有顺手换成派生小图——同一张画的第二个尺寸只会更花。
+                    `THEMES[].emoji` 这个字段留着：书里那套"图没到位时露出 emoji"的
+                    兜底机制还在用（`book/demoBook.ts`、`engine/domain.ts`）。 */}
+                <span className="shelf__theme-label">{theme.label}</span>
               </Link>
             ))}
           </div>
