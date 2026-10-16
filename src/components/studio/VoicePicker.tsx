@@ -17,6 +17,17 @@
  *   删除那颗从卡底的独立一行挪进了试听那一行；确认态与试听块二选一。
  *   四条起因都是那张截图量出来的数，逐条记在 `voice-picker.css` 的文件头。
  *
+ * ★ 2026-10-16 第九轮之后，用户点的这颗钮**什么也没响**：「现在这个听一句真的是假的，根本听不了」。
+ *   查下来不是代码坏了（那条路由拿真 key 打是 200 / audio/mpeg / 41,371 字节），
+ *   是**这一屏在最常见的那种状态下放不出声**：ADR-0008 定的 BYO key 只在内存里活一次请求，
+ *   刷新就没了，于是没配 key 的浏览器里三颗钮全是 `disabled`，而它看着几乎是活的。
+ *   两处一起改：
+ *   1. **预置音色的试听不再要 key**——那句语料是固定的、音色是厂商的，所以"它念这句什么样"
+ *      是个**常量**：一次生成、跟着仓库走（`lib/voices/samples.ts`，ADR-0003 的同一条做法）。
+ *      点下去放的是那份样本，不碰网络。克隆的那条只存在于用户自己的账号里，只能现场合成。
+ *   2. 剩下**真放不出来**的那些，钮上写明要什么（「先配密钥」）并按下去开「模型与密钥」；
+ *      真死的那些（音色用不了）把"能点"的信号一起收掉，不再只是字浅一档。
+ *
  * ★ 2026-10-16 第二轮按用户划掉的记号删了三处，别以为漏了：
  *   页头那句说明（`.vc__sub`）、卡脚那行（音色 id + 绑定模型，**整行**）、
  *   以及原本「用自己的声音 · 还没做」那一块——它被右上角那颗「＋新建声音」兑现了
@@ -30,13 +41,14 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 
 import type { CatalogVoice } from '@/lib/voices/catalog.ts'
+import { sampleFor } from '@/lib/voices/samples.ts'
 import { PREVIEW_LINE } from '@/lib/settings/preview-line.ts'
 import { speechReady } from '@/lib/settings/state.ts'
 import { useSettings } from '@/components/settings/SettingsProvider.tsx'
 import NewVoicePanel from './NewVoicePanel.tsx'
 
 export default function VoicePicker() {
-  const { settings, patch, env, voices, forgetVoice } = useSettings()
+  const { settings, patch, env, voices, forgetVoice, openSettings } = useSettings()
   const audioRef = useRef<HTMLAudioElement>(null)
   /** 当前那个一次性对象地址。换一段、播完、卸载都要 revoke —— 见文件头 */
   const urlRef = useRef<string | null>(null)
@@ -99,6 +111,27 @@ export default function VoicePicker() {
     tokenRef.current = token
     setError(null)
     setPlaying(voiceId)
+
+    // ★ 预置音色放的是**跟着仓库走的样本**（`lib/voices/samples.ts`）：不碰网络，
+    //   不需要 key。这一屏的存在理由是"音色没法用文字判断，必须能听"，
+    //   所以它不能是"只有配过 key 的机器才听得见"——用户报的"这个是假的"就是这个形状。
+    const sample = sampleFor(voiceId)
+    if (sample) {
+      try {
+        el.src = sample.url
+        await el.play()
+        return
+      } catch (err) {
+        if (tokenRef.current !== token) return
+        setError(
+          `样本放不出来（${sample.url}）：${err instanceof Error ? err.message : String(err)}`,
+        )
+        setPlaying(null)
+        return
+      }
+    }
+
+    // 克隆出来的那条只能现场合成：它只存在于用户自己的厂商账号里，没有样本可带
     try {
       const response = await fetch('/api/voice/preview', {
         method: 'POST',
@@ -191,6 +224,22 @@ export default function VoicePicker() {
           const selected = settings.speech.voice === voice.id
           const busy = playing === voice.id
           const openConfirm = confirming === voice.id
+          /**
+           * 随包的那份样本。★ 只有**预置**音色走这条路：样本是"厂商那个音色的这一句"，
+           * 不是"任何 id 长这样的音色"。克隆出来的 id 是厂商给的、与预置的不可能撞，
+           * 但这条判据不该靠"撞不上"——真撞上就会拿一份别人的录音当成用户自己的声音播。
+           */
+          const sample = voice.source === 'preset' ? sampleFor(voice.id) : null
+          /**
+           * ★ 没有样本、又没配 key：这颗钮**放不出这句话**（克隆的那条只能现场合成）。
+           *   但它**不是死的** —— 按下去开「模型与密钥」。一个看起来能点、点了什么都不发生的
+           *   钮就是用户说的"这个是假的"（2026-10-16 实测：旧版这颗钮 `disabled`，
+           *   而除了字浅一档，边、底、透明度与能点的那颗一模一样）。
+           * ★ 带上 `voice.usable`：音色根本用不了的时候，钮是**死的**（`disabled`），
+           *   说"先配密钥"会把病因指错——那一种是"模型对不上"，理由由卡上的 `.vc__why` 说。
+           */
+          const needsKey = voice.usable && !sample && !configured
+          const listenLabel = busy ? '正在听…' : needsKey ? '先配密钥' : '听一句真的'
           return (
             <li key={voice.id} className="vc__slot" style={{ '--vc-i': index } as CSSProperties}>
               <article className="vc__card" data-selected={selected} data-source={voice.source}>
@@ -271,34 +320,45 @@ export default function VoicePicker() {
                         type="button"
                         className="vc__listen"
                         data-playing={busy ? 'true' : 'false'}
-                        onClick={() => void preview(voice.id)}
-                        disabled={!configured || !voice.usable}
+                        data-needs-key={needsKey ? 'true' : 'false'}
+                        onClick={() => (needsKey ? openSettings() : void preview(voice.id))}
+                        disabled={!voice.usable}
                         aria-label={
                           busy
                             ? `正在听：${voice.name}`
-                            : `听一句真的：${voice.name}（就上面那一句）`
+                            : needsKey
+                              ? `先配密钥：${voice.name} 的试听要现场合成（打开模型与密钥）`
+                              : `听一句真的：${voice.name}（就上面那一句）`
                         }
                         /* ★ 2026-10-16 用户把页头那条警示（"语音还没配齐…"）划掉了。
-                       它说的那件事没有消失，只是**不再占一整行**：没配齐时这颗钮本来就是灰的，
-                       而"为什么灰"挂在它自己的 `title` 上——鼠标停一下、读屏读一下都有。
+                       它说的那件事没有消失，只是**不再占一整行**：没配齐时这颗钮的**字**就写着
+                       "先配密钥"，按下去直接开抽屉——比一条横幅短，而且只有真受影响的那张卡说。
                        ★ 别把它挪回成一整条横幅：用户划掉的正是"这一屏替用户把设置里的问题念一遍"。 */
                         title={
-                          configured
-                            ? undefined
-                            : '语音还没配齐（要 Key、模型名和音色三样）——去「模型与密钥」补上'
+                          !voice.usable
+                            ? '这个音色现在用不了，原因写在上面'
+                            : needsKey
+                              ? `「${voice.name}」是你自己录的音色，厂商那边才有它，所以试听要现场合成——先把 Key 与模型填上`
+                              : sample
+                                ? '这一份是随仓库带的样本（预生成），不需要 key；按下去听的就是它'
+                                : undefined
                         }
                       >
-                        <svg className="vc__listen-icon" viewBox="0 0 20 20" aria-hidden="true">
-                          <path d="M3.5 7.5h2.8L10 4.2v11.6l-3.7-3.3H3.5z" />
-                          <path
-                            d="M12.8 7.4a3.4 3.4 0 0 1 0 5.2M15.2 5.2a6.6 6.6 0 0 1 0 9.6"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.5"
-                            strokeLinecap="round"
-                          />
-                        </svg>
-                        {busy ? '正在听…' : '听一句真的'}
+                        {/* 只有**真会响**的时候才挂播放图标：钮上写着"先配密钥"却画一个喇叭，
+                            正是"控制与它做的事对不上"那类错 */}
+                        {needsKey ? null : (
+                          <svg className="vc__listen-icon" viewBox="0 0 20 20" aria-hidden="true">
+                            <path d="M3.5 7.5h2.8L10 4.2v11.6l-3.7-3.3H3.5z" />
+                            <path
+                              d="M12.8 7.4a3.4 3.4 0 0 1 0 5.2M15.2 5.2a6.6 6.6 0 0 1 0 9.6"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.5"
+                              strokeLinecap="round"
+                            />
+                          </svg>
+                        )}
+                        {listenLabel}
                       </button>
 
                       {/* ── 删掉它（只有我录的有）────────────────────────────────

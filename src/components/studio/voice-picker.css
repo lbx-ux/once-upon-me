@@ -418,7 +418,28 @@
   color: var(--select);
 }
 
+/**
+ * ★ 2026-10-16 用户点这颗钮，什么也没听到，说「现在这个听一句真的是假的，根本听不了」。
+ *   查明之后这一屏有两处"看着是活的、其实是死的"，两处分开治：
+ *
+ *   1. **真放不出来**（`disabled`：这个音色现在用不了，理由印在卡上的 `.vc__why` 里）——
+ *      旧版的死态只有 `color: var(--ink-muted)`：实测字只浅一档、**边还是那条 30% 的蓝、
+ *      底还是白的、透明度还是 1**，与能点的那颗几乎一样。死钮现在把"能点"的三个信号
+ *      一起收掉：边退回中性 `--hairline`、底从白落到 `--surface-soft`、字到 `--ink-muted`。
+ *      判据是**不给它任何"通电"的迹象**，而不是"字淡一点"。
+ *   2. **能响，但要先给 Key**（`[data-needs-key]`：克隆出来的那条只能现场合成）——
+ *      这颗**不是死的**：按下去开「模型与密钥」。所以它保持一颗安静的**次要钮**
+ *      的样子（白底 + `--dot` 细边，同 `.vc__cancel`），字改成「先配密钥」说清它要干什么，
+ *      并且**不挂播放图标**——钮上写"先配密钥"却画一个喇叭，就是"控制与它做的事对不上"。
+ */
+.vc__listen[data-needs-key='true'] {
+  border-color: var(--dot);
+  color: var(--ink);
+}
+
 .vc__listen:disabled {
+  border-color: var(--hairline);
+  background: var(--surface-soft);
   color: var(--ink-muted);
   cursor: default;
 }
