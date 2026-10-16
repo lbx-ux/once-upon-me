@@ -88,6 +88,35 @@ export type IllustrateOptions = {
    *   量完之前开着它等于拿正式跑测当探测。
    */
   referenceForPages?: boolean
+  /**
+   * 这一次的尝试**从第几次接着数**（缺省 0 = 从第 1 次起）。给**单页重画**用（工单 01 §3.1）。
+   *
+   * ★ 为什么不是一个好看的选项而是必须的：文件名是 `page-{n}-a{attempt}` 拼的，
+   *   重画时若从 1 重来，`a1` 会把**上一次那张**覆盖掉——而"失败的图也落盘"是这条
+   *   流水线写明的纪律（文件头第 3 条：家长要能看见"上一版为什么不像"）。
+   *   接着数之后，文件继续叫 `page-7-a4.png`，事件里的 `attempt` 也仍然是**真的第几次**。
+   *
+   * ★ 它同时改了事件里报出的**上界**：`retry` 的 `maxAttempts` 与 `stage` 的 `total`
+   *   报的是 `attemptBase + maxAttempts`。不这样的话，第 3 次重画那条事件会念成
+   *   "第 4 / 3 次"——一个自相矛盾的数字，而屏幕上没有任何东西会提示它是错的。
+   */
+  attemptBase?: number
+  /**
+   * 家长对**这一页**这一次重画的补充（"上一版哪里不对"）。见 `pagePrompt` 的 `fixNote`。
+   * ★ 它只进 prompt，**不进任何记录**：`provenance` 记的是模型、模板版本、卡版本，
+   *   而这句话是人的一句话，进不了那几个字段里的任何一个。要追"这一版为什么长这样"，
+   *   读的是 `events.jsonl` 里那几页前后的事件，不是清单。
+   */
+  fixNote?: string
+  /**
+   * 这一页的**主角称呼**（小男孩 / 小女孩 / 孩子），由 `childWordOf` 从"选的性别 + 外貌标签"
+   * 算出来。见 `pagePrompt` 的 `childWord` 那段（它是 2026-10-16 那条
+   * "8 页里既有男孩也有女孩"报障的**根因所在**：这个名字以前只进标准像，不进逐页 prompt）。
+   *
+   * ★ 由调用方给而不是在这里算：`illuminateNode` 手上只有**卡**，而卡的锚点里
+   *   一个性别词都没有（实测那张卡就是）。算得出它的是孩子那份档案。
+   */
+  childWord?: string
   emit: (payload: EngineEventPayload) => void
   now: () => number
 }
@@ -98,16 +127,42 @@ export async function illustrateNode(
 ): Promise<Illustration> {
   const threshold = opts.threshold ?? DEFAULT_THRESHOLD
   const maxAttempts = opts.maxAttempts ?? DEFAULT_MAX_ATTEMPTS
+  /** 这一次的尝试编号区间。缺省就是 1..maxAttempts（见 `attemptBase` 那段） */
+  const firstAttempt = (opts.attemptBase ?? 0) + 1
+  const lastAttempt = firstAttempt + maxAttempts - 1
   const prompt = pagePrompt({
     card: opts.card,
     page: node.imagePrompt,
     scene: node.scene,
     mood: node.mood,
+    ...(opts.fixNote ? { fixNote: opts.fixNote } : {}),
+    // ★ 身份那一行（"整本书就是这个孩子"）**总是**进 prompt；`childWord` 只是把
+    //   "那个孩子"写成"那个孩子（小男孩）"。所以这里不是"有才加"，见 `pagePrompt` 那段
+    ...(opts.childWord ? { childWord: opts.childWord } : {}),
   })
 
   let lastAsset: Illustration['asset'] | null = null
   let lastConsistency: ConsistencyResult | undefined
   let provenance: Provenance | null = null
+
+  /**
+   * 这一页这一次一共实付了多少（元），**逐次累加**。
+   *
+   * ★ 2026-10-16 补上。在这之前这一页的 `costCny` **从来没人填**：钱只进了
+   *   `illustration` 事件（给界面看的），`Illustration` 上那个字段一直是 `undefined`——
+   *   而 `summarize()` 的 `totalCostCny` 正是从 `illustrations` 里加出来的，
+   *   于是**每一本书的成本都是 0.00**。`scripts/web-run.mts` 头部把这条记成了
+   *   "已知缺口"，现在缺口补上，那段话也跟着改了。
+   *
+   * ★ 口径与 `imageCalls` 一致：**钱已经花了**，所以重画过几次就记几次，
+   *   不是"最后那一张多少钱"。只记成功的调用——抛异常的那次由
+   *   `ImageResponse` 之外的路径出去，供应商那边同样计费，但这里**没有数可记**
+   *   （拿不到回执），凭空按单价乘一笔才是编造。
+   *
+   * `undefined` 与 `0` 在这里是一件事（都没有记账），所以用 `undefined` 表示
+   *   "供应商一个价都没报"，返回时省略该字段——与 `illustrateCover` 同一个写法。
+   */
+  let spentCny: number | undefined
 
   /**
    * 重画中途停手的记录（没有就是 null）。最后并进 `consistency.reason`，见那段。
@@ -164,14 +219,14 @@ export async function illustrateNode(
     return { attempt, message: failure.message }
   }
 
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+  for (let attempt = firstAttempt; attempt <= lastAttempt; attempt += 1) {
     opts.emit({
       kind: 'stage',
       stage: 'illustrating',
       phase: 'begin',
       pageNo: node.pageNo,
       attempt,
-      total: maxAttempts,
+      total: lastAttempt,
     })
 
     // 走哪条路由由**策略**（referenceForPages）与**能力**（有没有 edit）同时决定。
@@ -192,6 +247,13 @@ export async function illustrateNode(
     } catch (err) {
       redrawStop = produceFailed(err, attempt)
       break
+    }
+
+    // ★ 先记账再判断——钱在这一行之前就已经花掉了。记在这里（而不是事件那一段）
+    //   的理由：事件那一段在下面几十行，中间有 `requireReference` 的抛与落盘失败两条出口，
+    //   从那儿记账会把"这一次已经付过钱"漏掉。
+    if (response.costCny !== undefined) {
+      spentCny = (spentCny ?? 0) + response.costCny
     }
 
     /**
@@ -327,13 +389,13 @@ export async function illustrateNode(
       break
     }
 
-    if (attempt < maxAttempts) {
+    if (attempt < lastAttempt) {
       opts.emit({
         kind: 'retry',
         stage: 'retrying',
         pageNo: node.pageNo,
         attempt,
-        maxAttempts,
+        maxAttempts: lastAttempt,
         reason: describeMiss(lastConsistency),
       })
     }
@@ -368,7 +430,9 @@ export async function illustrateNode(
 
   return {
     pageNo: node.pageNo,
-    attempt: lastConsistency?.attempt ?? 1,
+    // ★ 兜底用 `firstAttempt` 而不是写死的 1：单页重画时这一页的第 1 次是**很久以前**那次，
+    //   报成 1 会让"这一页一共画过几次"这件事在书里变得不可查（`attemptBase` 那段）
+    attempt: lastConsistency?.attempt ?? firstAttempt,
     asset,
     provenance: provenance ?? {
       modelId: opts.image.modelId,
@@ -379,6 +443,9 @@ export async function illustrateNode(
     consistency,
     // 没通过 ≠ 失败：交给人，书仍然完整（降级 B）
     needsHumanReview: lastConsistency === undefined || lastConsistency.verdict !== 'pass',
+    // 这一次这一页实付的总额（含重画）。★ 四舍五入到分：0.2 × 3 在浮点里是
+    // 0.6000000000000001，直接写进 `book.json` 会让"账目对不对"变成一道小数题
+    ...(spentCny === undefined ? {} : { costCny: Math.round(spentCny * 100) / 100 }),
   }
 }
 

@@ -2,18 +2,17 @@
  * /api/books/[bookId] —— 删掉书架上的**一本书**
  *
  * ```
- *   GET     /api/books/<bookId>   预演：回一张"将要删掉什么"的凭据（一个字节都不动）
- *   DELETE  /api/books/<bookId>   真删：回一张"删掉了什么"的凭据
+ *   DELETE /api/books/<bookId>   真删：回一张"删掉了什么"的凭据
  * ```
  *
- * ★ 形状与 `/api/children/[childId]` 一样（预演走 GET、真删走 DELETE，两者共用同一个
- *   `refuse()`），因为界面上那两步是同一件事："列出要失去什么" → "确认"。
- *   分成两个文件的话，两种拒绝（没有这一本 / 删不干净）就要么复制一段、要么再抽一层，
- *   而复制的那天起，"预演说能删、真删说没有"就会开始出现。
+ * ★ **只有一个动词了**（2026-10-16 用户第二句话）。第一版照着
+ *   `/api/children/[childId]` 做了两步：`GET` 一张"将要失去什么"的凭据（一个字节都不动）
+ *   → 界面上列出来 → 确认 → `DELETE`。用户看着那份逐行清单说
+ *   「也不要写这么多，就一个确认是否删除，还是算了」——于是预演连同那条 `GET`
+ *   一起撤掉，确认框只剩一句"删掉《X》？"。
+ *   撤掉的代价写在 `lib/book-deletion.ts` 的文件头：点确认之前不再知道"要失去多少张图"。
  *
- * ★ 预演是**按需**取的（不是书架一渲染就去数一遍）：数一遍要遍历这本书的目录与
- *   `thumbs/` 的五个档位；大多数人永远不点删除，为每一次浏览都付一次目录遍历，
- *   是把代价放在最不该放的地方（同 `/api/children/[childId]`）。
+ * ★ 凭据**仍然回**，但只在出错时被人看：正常删完，界面上什么也不留。
  *
  * ★ 拒绝的两种情形话不一样：
  *   - 盘上没有这一本 → 404。**这不只是一句客气话**：用户看到的书架是服务端渲染的，
@@ -26,7 +25,6 @@ import { createFsStore } from '@/lib/engine/index.ts'
 import {
   bookOnDisk,
   deleteBookEverywhere,
-  planBookDeletion,
   type BookDeletionDeps,
   type BookDeletionReceipt,
 } from '@/lib/book-deletion.ts'
@@ -42,40 +40,15 @@ async function depsOf(): Promise<BookDeletionDeps> {
   return { store }
 }
 
-/** 两个动词共用：不在盘上就只有一句话可说 */
-async function refuse(bookId: string, deps: BookDeletionDeps): Promise<Response | null> {
-  if (await bookOnDisk(bookId, deps)) return null
-  return Response.json({ code: 'book-not-found', message: MISSING }, { status: 404 })
-}
-
-export async function GET(
-  _req: Request,
-  { params }: { params: Promise<{ bookId: string }> },
-): Promise<Response> {
-  const { bookId } = await params
-  const deps = await depsOf()
-  const denied = await refuse(bookId, deps)
-  if (denied) return denied
-
-  try {
-    return Response.json({ receipt: await planBookDeletion(bookId, deps) })
-  } catch (err) {
-    const failure = userFailureOf(err)
-    return Response.json(
-      { code: failure.code, message: failure.message, retryable: failure.retryable },
-      { status: failure.status },
-    )
-  }
-}
-
 export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ bookId: string }> },
 ): Promise<Response> {
   const { bookId } = await params
   const deps = await depsOf()
-  const denied = await refuse(bookId, deps)
-  if (denied) return denied
+  if (!(await bookOnDisk(bookId, deps))) {
+    return Response.json({ code: 'book-not-found', message: MISSING }, { status: 404 })
+  }
 
   try {
     const receipt: BookDeletionReceipt = await deleteBookEverywhere(bookId, deps)
@@ -88,7 +61,7 @@ export async function DELETE(
       return Response.json(
         {
           code: 'asset-write-failed',
-          message: '有些位置没删干净——凭据里逐行标出来了。',
+          message: '有些位置没删干净——下面标出来了。可以再删一次或者刷新看看。',
           retryable: true,
           receipt,
         },

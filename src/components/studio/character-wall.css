@@ -281,7 +281,20 @@
  * ★ 参考图上移 25%（它的卡矮、图大），我们只用 6px：卡本来就抬了 10px，
  *   两层位移会打架，看着像"卡在抖"。这里要的只是"内容往上让一让"。 */
 .cw__show {
-  transition: transform 0.3s cubic-bezier(0.2, 0.7, 0.25, 1);
+  /* ★★ 2026-10-16：**必须 `position: relative`，而且悬停时不许用 `transform` 抬它**
+     （见下面那条 hover 规则）。这不是样式偏好，是一个**只有真点一次才看得见**的坑：
+
+     `transform` 会造出一个**层叠上下文**，于是整棵子树的 `z-index` 被关在里面。
+     `.cw__reveal` 自己是 `z-index: 2`（为了压在整卡覆盖层 `.cw__open` 的 1 之上），
+     可它住在 `.cw__show` 里——悬停时 `.cw__show` 一 `translateY`，它就成了那个笼子，
+     `.cw__reveal` 的 2 只在笼子内部有效，笼子整体却在 `.cw__open`（正 z-index）**之下**。
+     症状正是用户报的那一条："点击删除没有出现弹窗"——那一下落在了整卡覆盖层上，
+     于是**跳去了详情页**。（`查看详情` 那颗也一起失效，只是它本来就去同一个地方，
+     所以五轮没人发现。）
+     ★ 判据是 `document.elementFromPoint(按钮中心)`：修之前回 `A.cw__open`，
+     修之后回 `BUTTON.cw__del`。静态读 CSS 读不出来——`z-index: 2 > 1` 看着是对的。 */
+  position: relative;
+  transition: top 0.3s cubic-bezier(0.2, 0.7, 0.25, 1);
 }
 
 /* ── 相纸与画 ─────────────────────────────────────────────────────────── */
@@ -411,19 +424,22 @@
   opacity: 0.85;
 }
 
-/* 「用过照片，已删除」——隐私设计 §七 那一行，要看得见，别做成灰字 */
-.cw__photo {
-  /* ★ 原来写的是 `margin: -4px 0 10px`：那 -4px 是为了抵掉它上面
-     「4-6 岁 · 水彩形象 · …」那一行的 10px 下边距（2026-10-15 第四轮删掉了），
-     留在这里会变成"贴到名字底下"。现在它上面是名字，间距自己给 */
-  margin: 10px 0 0;
-  font-size: 11.5px;
-  color: var(--accent);
-}
+/* ★ 这里原来是一条 `.cw__photo`（「用过照片，已删除」→ 第 22 刀改成
+   「照照片画的，原图没留」）。2026-10-16 第 23 刀用户把那一行也划掉了，
+   规则连同 JSX 一起删——留着一个没有读者的类，下一个人会以为它还活着。 */
 
 .cw__tags {
   display: flex;
-  flex-wrap: wrap;
+  /* ★ `flex-wrap` + 内容宽度 ⇒ **每张卡的行数不一样**（2026-10-16 第 23 刀）。
+     症状是用户量的："上面是三行，下面怎么是两行了"——演示卡那三条一个字长
+     （「方中带圆的脸、下巴短、颊部有两团肉」），两枚横着放不下，落成三行；
+     新建那张的三条短一点，前两枚刚好并排，落成两行。宽度是被**文字长度**决定的，
+     于是同一面墙上出现两种节奏，看着像排版坏了。
+     ★ 改成一行一枚：`flex-direction: column` + `align-items: flex-start`
+     （不拉伸，胶囊仍按内容宽）。行数从此等于锚点数（三条就是三行），
+     与 `.cw__tag` 的字号、卡宽都无关。 */
+  flex-direction: column;
+  align-items: flex-start;
   gap: 6px;
   /* 与露出层同一格（见 `.cw__fold`）：不拉伸，标签只占自己那几行 */
   align-self: start;
@@ -540,7 +556,11 @@
    空出一段，看着像两件不相干的东西。 */
 .cw__card:hover .cw__show,
 .cw__card:focus-within .cw__show {
-  transform: translateY(-6px);
+  /* ★ `top` 而不是 `transform`：位移一样是 6px，但 `top` 不造层叠上下文，
+     于是 `.cw__reveal` 的 `z-index: 2` 真的能压过 `.cw__open`（理由见 `.cw__show` 那段）。
+     代价是这一下走**布局**而不是合成层——一张卡悬停时挪 6px，这个代价可以接受，
+     而另一条路的代价是"点了删除却跳页"。 */
+  top: -6px;
 }
 
 .cw__card:hover .cw__mat,
@@ -603,8 +623,15 @@
    ★ 示例角色的卡面上**根本不渲染它**（`CharacterWall.tsx` 按 `source` 判）。
      那只是显示层的取舍，不是守卫：服务端对示例 id 一律 403 并说明为什么。 */
 .cw__del {
+  /* ★ 2026-10-16：它从 `<a href="#delete">` 变成了 `<button>`（就地弹窗，
+     见 `WallDelete.tsx`）。样子一个像素都不变——`<button>` 默认带自己那套
+     边框/底色/字体，前四行就是把它们退回去；不改的话这颗会变成一个灰色小方块。 */
   margin-left: auto;
   padding: 4px 2px;
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
   color: var(--ink-muted);
   font-size: 12px;
   text-decoration: underline;
@@ -720,9 +747,20 @@
   }
 
   .cw__card:hover .cw__mat,
-  .cw__card:focus-within .cw__mat,
+  .cw__card:focus-within .cw__mat {
+    transform: none;
+  }
+
   .cw__card:hover .cw__show,
-  .cw__card:focus-within .cw__show,
+  .cw__card:focus-within .cw__show {
+    /* ★ 这一档里 `.cw__show` 挪的是 `top`（见上面那条），所以清的是 `top` 而不是 `transform`。
+       原来这一条与上面 `.cw__mat` / 下面 `.cw__tape` 挤在同一个选择器表里，
+       改机制时**剖开是对的**：三者的终态不是一个属性。
+       （第一次改的时候剖错了地方，把 `.cw__mat` 的 `transform: none` 吃掉了——
+       那会让触屏上缩到 0.9 的那张画再也回不来。这一行是复查时抓回来的。） */
+    top: 0;
+  }
+
   .cw__card:hover .cw__tape,
   .cw__card:focus-within .cw__tape {
     transform: none;

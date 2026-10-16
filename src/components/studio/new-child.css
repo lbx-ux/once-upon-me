@@ -5,7 +5,7 @@
  * ★ 本单**没有新增令牌**（与前两刀同一条纪律：新增令牌要改 `:root`，
  *   而那一块正被另一个会话用于首页改版）。
  *
- * 表单本身的字段样式仍然复用 `.cf__*`（`create-flow.css` 已在 globals 里全局 import）——
+ * 表单本身的字段样式仍然复用 `.cf__*`（`fields.css` 已在 globals 里全局 import，原名 `create-flow.css`）——
  * 同一个"名字/读音/年龄"在两个页面上必须是同一种输入框。
  * `.cf__pair`（名字与读音并排）也不在这个文件里：发出那个 class 的是共用的
  * `fields.tsx`，那条规则属于那一层。
@@ -22,6 +22,9 @@
  * | 次日（用户划掉那句话："这句话不要，改为分析锚点"） | 同意那句 → **「同意用这张照片分析外貌锚点、画他的第一张形象」** | 原来那句只说"交出去处理这一次"，没回答这次拿它干什么；勾本身留着（服务端的门） |
  * | 次日（用户划掉整个同意框："这个改为一个按钮『分析锚点』…没有上传按钮为白色"） | 同意勾那一行 → **一颗满宽按钮**（`.nc__analyze`，白底 / 橙底），`.nc__agree` 那几条规则删掉 | 白=还没到第一步，橙=轮到你了；"读锚点"本来就是用户想主动发起的事 |
  * | 次日（用户圈住上传框与按钮之间那条缝："有点挨的太近了"） | 按钮补 **`margin-top: 12px`**（改前两档实测都是 0） | 两块是两个控件，不是一个控件被切开；12 是这一格原本的节奏，不是新添的数 |
+ * | 同日（用户："分析锚点这个过程应该可视化一些，分析到哪一步了"） | 状态行那一句静止的字 → **`.nc__steps` 三步 + 已等几秒**（`.nc__reading`），当前那一步的点在呼吸 | 实测一次要 45 秒；一行不动的字挂 45 秒只会被当成卡死。★ 而它是**三步**不是进度条：那个请求一次性回包，中间没有真实进度可读 |
+ * | 同日（用户："画圈的这个话删除" / "画人物的时候没有反馈，应该也弄一个进度"） | 读照片那一段末尾的解释句删掉；同一套 `.nc__steps` 搬到**右上角**给"出他的第一张形象"用 | 两段等待不该长成两种样子，于是共用零件。★ 右上角那一块继承的是 `text-align: right`，所以要显式按回左边（圆点要排齐）；`align-items` 也跟着从 `center` 改成 `baseline`，免得折行时圆点落到两行中间 |
+ * | 同日（用户："…不要写成已等几秒…轮着播放" / "这一段话就不要说了，换成锚点信息和基本信息"） | `.nc__waited`（秒数）→ **`.nc__step-say`**（轮播的那句话）；`.nc__did` / `.nc__notes` / `.nc__did-note` **连同 JSX 一起删**，换成 `.nc__sheet` 那两格 | 换的是这一行**写什么**，不是它的位置与轻重（仍然比主句轻一档）。结果页那两格是"照单核对"，所以用素底 + 一列对齐的键值，不再用强调色左边框那种"念给你听"的排版 |
  *
  * ★ 于是 `.nc__modes` / `.nc__mode*` / `.nc__more*` / `.nc__consent-points`
  *   / `.nc__file*` 这几组规则**连同它们在 TSX 里的 JSX 一起删掉了**，
@@ -30,7 +33,9 @@
  *   （它只在那句被划掉的说明上用过），`.nc__problems` / `.nc__error` 留着，
  *   换了个位置、也换了排版（见那一段）。
  *
- * ★ 出图之后那一屏（`.nc__made` / `.nc__did`）这次**没动**。
+ * ★ 出图之后那一屏（`.nc__made` / `.nc__did`）在 2026-10-15 那几刀里**没动**；
+ *   2026-10-16 第 22 刀动了一次：「我们拿你那张照片做了什么」（`.nc__did` / `.nc__notes`
+ *   / `.nc__did-note`）被用户划掉，换成 `.nc__sheet` 那两格（他是谁 + 八条锚点）。
  * ========================================================================== */
 
 .nc {
@@ -340,6 +345,91 @@
   color: var(--danger);
 }
 
+/* ── 读照片那几秒（2026-10-16 第 20 刀，用户："分析锚点这个过程应该可视化一些，
+      分析到哪一步了"）──────────────────────────────────────────────────────
+ * ★ 这里是**三步 + 一个秒数**，不是进度条，而且这不是省事：那个请求一次性回包，
+ *   浏览器在它返回之前收不到任何中间消息（理由写在 TSX 的 `useElapsedSeconds` 上）。
+ *   一条按时间编出来的假进度条在这一屏上比"什么都不显示"更糟——它把"我们不知道"
+ *   说成了"我们知道到八成了"。
+ * ★ 三步的状态由两个真事件驱动：`data-done`（照片选好了）、`data-now`（请求在飞）。
+ *   第三行没有状态标记——它是"接下来会发生的事"，还没发生，就画成空圈。
+ * ★ 圆点用 `::before` 画，不用 `•` 也不是 emoji：它要**按状态换填充**，
+ *   而且这个项目里图标一律是画出来的（README 那条"不用 emoji 当图标"）。
+ * ★ 动效只有一处（当前那一步的点在呼吸），并且有静止终态：
+ *   `prefers-reduced-motion` 下把动画关掉之后，它仍然是一个**实心强调色的点**
+ *   ——状态没有丢，丢的只是"它还在动"这件事。 */
+.nc__reading {
+  margin-top: 12px;
+}
+
+.nc__steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 7px;
+  /* ★ 第 21 刀：这一块现在有**两个家**——左栏（读照片）与右上角（出图，跟着那颗按钮）。
+     `.nc__head-act` 在宽屏上写的是 `align-items: flex-end; text-align: right`，
+     所以这里显式往回按一下：每一行开头有个圆点，好几行的圆点得排在同一条竖线上，
+     而文字对齐会把每一行按各自的宽度往右推（那正是 `.nc__problems` 那条"不做列表符"
+     的来由，见它上面那段）。★ 整块仍然贴右——那是父元素的 `align-items` 管的。 */
+  text-align: left;
+}
+
+.nc__step {
+  display: flex;
+  /* ★ 从 `center` 改成 `baseline`（第 21 刀）：右上角那一档窄，长句会折成两行，
+     而 `center` 会把圆点压到两行的**中间**——屏幕上看起来像它标的是第二行。 */
+  align-items: baseline;
+  gap: 9px;
+  color: var(--ink-muted);
+  font-size: 12.5px;
+  line-height: 1.7;
+}
+
+.nc__step::before {
+  content: '';
+  flex: none;
+  align-self: baseline;
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid var(--dot);
+  border-radius: 50%;
+}
+
+.nc__step[data-done='true']::before {
+  border-color: var(--ink-muted);
+  background: var(--ink-muted);
+}
+
+/* 当前这一步：字回到正常字色（它是这一屏此刻唯一在发生的事） */
+.nc__step[data-now='true'] {
+  color: var(--ink);
+}
+
+.nc__step[data-now='true']::before {
+  border-color: var(--accent);
+  background: var(--accent);
+  animation: nc-step-breathe 1.4s ease-in-out infinite;
+}
+
+@keyframes nc-step-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+/* 轮着播的那一句（第 22 刀；在这之前这里是"已等 N 秒"的秒数）。
+   它比主句轻一档：是背景音（"还在办"），不是这句话的重点。 */
+.nc__step-say {
+  margin-left: 8px;
+  color: var(--ink-muted);
+}
+
 /* ── 「分析锚点」那颗按钮（2026-10-16 第十刀，用户："这个改为一个按钮『分析锚点』…
       上传图片之后按钮变为橙色，没有上传按钮为白色"）────────────────────────────
  * ★ 它替掉了原来那一行同意勾（`.nc__agree` 那几条规则**删掉了**，不是留着不用——
@@ -476,30 +566,61 @@
   align-items: flex-start;
 }
 
-.nc__did {
-  padding: 16px 16px 14px;
-  border-left: 3px solid var(--accent);
-  background: rgba(var(--accent-rgb), 0.06);
-  border-radius: 0 var(--card-radius) var(--card-radius) 0;
+/* ── 出图之后那两格：他是谁 + 八条锚点（2026-10-16 第 22 刀）
+ *
+ * ★ 它们替掉的是「我们拿你那张照片做了什么」那一格（用户划掉的）。
+ *   原来那格带一条强调色左边框 + 一层淡底——那是"我们做了件事，念给你听"的排版；
+ *   现在这两格是**这张卡的档案**，读法是"照单核对"，所以是素底 + 一列对齐的键值。
+ * ★ `.nc__fact` 用 `grid` 而不是 `flex`：八行的槽位名要各占同一列宽，
+ *   长短不一（「骨相」两个字符 vs 「特征记号」四个）时才不会把右边那列推得参差。
+ *   `5.5em` 按最长的那个槽位名（特征记号 + 硬/软标记）量的，不是随手写的。 */
+.nc__sheet {
+  width: 100%;
 }
 
-.nc__notes {
-  margin: 0 0 10px;
-  padding-left: 20px;
-  font-size: 13.5px;
-  line-height: 1.9;
-  color: var(--ink-soft);
-}
-
-.nc__did-note {
+.nc__meta {
   margin: 0;
-  color: var(--ink-muted);
-  font-size: 12.5px;
+  font-size: 14px;
   line-height: 1.8;
+  color: var(--ink-soft);
 }
 
-.nc__did-note strong {
+.nc__facts {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 7px;
+}
+
+.nc__fact {
+  display: grid;
+  grid-template-columns: 5.5em minmax(0, 1fr);
+  gap: 10px;
+  font-size: 13.5px;
+  line-height: 1.7;
+}
+
+.nc__fact-slot {
+  color: var(--ink-muted);
+}
+
+/* 硬/软那一颗跟着槽位名走，比它再轻一档：它是分档，不是名字的一部分 */
+.nc__fact-kind {
+  margin-left: 5px;
+  font-size: 11px;
+  color: var(--ink-muted);
+  opacity: 0.8;
+}
+
+.nc__fact-value {
   color: var(--ink-soft);
+  overflow-wrap: anywhere;
+}
+
+/* 空着的锚点：颜色退到与"还没填"同一档（与表单里的灰色占位是同一条意思） */
+.nc__fact-value[data-empty='true'] {
+  color: var(--ink-muted);
 }
 
 /* ── 静止模式 ───────────────────────────────────────────────────────────── */
@@ -514,5 +635,13 @@
   .nc__btn.nc__analyze,
   .nc__link {
     transition: none;
+  }
+
+  /* 读照片那三步里"当前"那个点在呼吸（第 20 刀）。关掉之后它仍然是一个
+     **实心强调色的点**——"轮到这一步"没有丢，丢的只是"它还在动"。
+     ★ 这条不是"不播"而是"停在终态"：`opacity` 的缺省值就是 1，
+     所以这里只要把 animation 撤掉，不用再补一条 opacity。 */
+  .nc__step[data-now='true']::before {
+    animation: none;
   }
 }

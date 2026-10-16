@@ -83,6 +83,57 @@ export const AGE_BAND_LABELS: Record<AgeBand, string> = {
 }
 
 /**
+ * 性别。★ 它在这个产品里只做一件事：决定标准像提示词里的那个**称呼**
+ * （小男孩 / 小女孩）——而那一个词直接决定模型画男孩还是画女孩。
+ *
+ * ★ 为什么 2026-10-16 才加（第 23 刀，用户："角色在增加一个选择性别的功能，
+ *   这样前端生成的图片更加准确"）：那个词原来是**从外貌标签推**的
+ *   （`childWordOf`：马尾/辫子/裙子 → 小女孩），而两组标签的控件在同一天被删掉了
+ *   （用户："上面两行要填的，和下面的差不多"）。控件一没，那条推断就基本推不出东西，
+ *   于是标准像的性别只能靠锚点里"头发长短"去猜——那是这一格该由人回答的问题。
+ *
+ * ★ 只有两档，**没有"其他/不确定"**："不选"本身就是那一档（`gender` 缺省 = 没选，
+ *   退回按标签推、再推不出就用中性的"孩子"）。加一个"其他"会把一个**必须落地成
+ *   一个词**的选择变成一句声明，而 prompt 那边消费不了它。
+ */
+export const GENDERS = ['boy', 'girl'] as const
+export type Gender = (typeof GENDERS)[number]
+
+export const GENDER_LABELS: Record<Gender, string> = {
+  boy: '男孩',
+  girl: '女孩',
+}
+
+/** 这个值是不是一档性别。★ 三个读者共用它：请求体、磁盘上读回来的记录、以及界面 */
+export function isGender(value: unknown): value is Gender {
+  return typeof value === 'string' && (GENDERS as readonly string[]).includes(value)
+}
+
+/**
+ * 称呼：**先看用户选的那一档性别**，没选才回头由外貌标签推；都推不出就用中性词，
+ * **不猜**（猜错会让出一张画错性别的标准像，或者让一本书里换性别）。
+ *
+ * ★ 2026-10-16 从 `creation/state.ts` 搬到**这里**。搬的理由是一条用户报障：
+ *   "我提供给你的是男孩子，怎么生成出来有男孩有女孩子"——查下来，这个称呼**只进了标准像**
+ *   （`character-sheet.ts` 的 `childWord`），**逐页的 prompt 里一个字都没有**：
+ *   `promptFragmentOf(card)` 只拼锚点文本，而那张卡的锚点（脸圆润/眼圆黑/黑直短发/
+ *   头戴鸭舌帽…）里也**没有一个性别词**。于是每一页都由模型自己猜，同一个孩子
+ *   在 8 页里画成了男孩也画成了女孩。
+ *   ★ 它必须能被**引擎**调用（逐页 prompt 是引擎拼的），而引擎不许 import
+ *     `lib/creation/**`——那个词与它的两个输入（`Gender` / 外貌标签）本来就都是领域概念，
+ *     所以它的家在这里。`creation/state.ts` 仍然 re-export（界面那几处不必改）。
+ * ★ 优先级写死在这里，**只有一处**：选的性别 > 标签推出来的 > 孩子。
+ */
+export function childWordOf(lookTags: readonly string[], gender?: Gender): string {
+  if (gender === 'girl') return '小女孩'
+  if (gender === 'boy') return '小男孩'
+  const joined = lookTags.join('')
+  if (/马尾|辫子|裙子/.test(joined)) return '小女孩'
+  if (/短发|球衣/.test(joined)) return '小男孩'
+  return '孩子'
+}
+
+/**
  * Step 1「孩子是谁」的输入。
  *
  * ★ 这里**不放照片**：照片是敏感素材，用完即删（隐私设计 §七），
@@ -99,6 +150,11 @@ export type ChildProfile = {
    */
   nameReading: string
   ageBand: AgeBand
+  /**
+   * 性别（2026-10-16 第 23 刀）。★ **可选**：随仓库发布的示例档案、以及这一天之前
+   *   建好的孩子都没有这一栏，而"没填"是一个合法状态——那时退回按外貌标签推。
+   */
+  gender?: Gender
   lookTags: readonly string[]
   interestTags: readonly string[]
 }
@@ -410,9 +466,40 @@ export type Book = {
    */
   errors: readonly PageFailure[]
   narrations: readonly Narration[]
+  /**
+   * 这一本是**用哪个音色**朗读的。**没有 = 这一本不配音**（工单 02/03）。
+   *
+   * ★ 为什么不能从 `narrations` 推：那个数组为空有两种完全不同的成因——
+   *   ① **不做**这件事（跑的时候关掉了朗读）；② **做了但没做成**（那一页没配上音）。
+   *   运行视图要按这个区别说不同的话（"不配音"vs"有 3 页没配上音"），
+   *   而后者在界面上是一次**该被看见的失败**。合成一个推断，失败就会被说成选择。
+   *   这与 `domain.ts` 里"缺图 vs 未核对"那条警告是同一件事，别再犯第四次。
+   *
+   * ★ 与 `Book.status` 一样由引擎**原样抄**：引擎不挑音色（"默认音色是产品概念，
+   *   不是引擎概念"，见 `BookRequest.voiceId`），它只记下调用方说了什么。
+   */
+  voiceId?: string
   createdAt: number
+  /**
+   * 这是一份**草稿**还是一本**成品**（工单 03）。
+   *
+   * ★ **缺省 = 成品**，判据写成"只有明确写着 `draft` 的才是草稿"（`isDraft`）。
+   *   盘上已经有两种没有这个字段的书：随仓库提交的预生成演示书
+   *   （`public/demo/books/`）与这个字段之前跑出来的所有运行期书。
+   *   把缺省判成草稿会让它们**凭空从书架消失**，而用户只会以为书丢了。
+   *   这是一条**迁移决定**，不是随手写的默认值——改它之前先想清楚那两种书怎么办。
+   *
+   * ★ 引擎只把它**原样抄进清单**，不定策略：草稿还是成品是产品概念，
+   *   与 `voiceId`（"默认音色是产品概念，不是引擎概念"）同一条理由。
+   */
+  status?: 'draft' | 'published'
   /** 端到端统计：#14「记录真实耗时与成本」的数据源，跑一次就有一份 */
   stats: BookStats
+}
+
+/** 只有明确写着 `draft` 的才是草稿。理由见 `Book.status` 那段（缺省 = 成品） */
+export function isDraft(book: Book): boolean {
+  return book.status === 'draft'
 }
 
 export type BookStats = {

@@ -60,10 +60,15 @@ async function readProfilesIn(dir: string): Promise<ChildRecord[]> {
 }
 
 /**
- * 全部孩子：示例在前，自己的在后（自己的按建档时间从新到旧）。
+ * 全部孩子：**自己的在前**（按建档时间从新到旧），示例在后。
  *
- * ★ "两张示例卡在最前面"是产品要求；"自己的按最近使用排序"**没有实现**——
- *   现在没有任何地方记着"上次用这张卡是什么时候"（书里记的是出处，不是使用时间）。
+ * ★ 顺序在 2026-10-16 第 23 刀翻过来了（用户："用户生成的角色要放到默认角色的前面"）。
+ *   原来写的是"两张示例卡在最前面"，当时当作产品要求；实际用起来，卡片墙上
+ *   自己刚建的那个被挤到第二排去（那一屏第一眼要看的是"我的孩子"），
+ *   示例是"先看看效果"的东西，排在后面才符合它的身份。
+ *
+ * ★ "自己的按最近使用排序"**仍然没有实现**——现在没有任何地方记着
+ *   "上次用这张卡是什么时候"（书里记的是出处，不是使用时间）。
  *   所以这一版是**建档时间倒序**，而它是个诚实的近似：家长刚建的那个就在前面。
  *   要真做"最近使用"，数据源是书架上每本书的 `createdAt` 与它的 `childId`——
  *   那是工单 03 剩下的活，写进"欠着的"。
@@ -83,7 +88,8 @@ export async function listChildren(root: string = assetRoot()): Promise<Resolved
 
   const all = [...byId.values()]
   return all.sort((a, b) => {
-    if (a.source !== b.source) return a.source === 'demo' ? -1 : 1
+    // ★ 自己的在前（第 23 刀翻过来的，理由见上面那段）：示例卡排在最后
+    if (a.source !== b.source) return a.source === 'runtime' ? -1 : 1
     if (a.source === 'demo') return a.profile.childId.localeCompare(b.profile.childId)
     return b.profile.createdAt - a.profile.createdAt
   })

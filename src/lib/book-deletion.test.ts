@@ -7,19 +7,18 @@
  *
  * 另外三组盯的是同一件事的侧面：
  * - **前缀带尾斜杠**：内存 store 是键前缀匹配，传个文件路径进去它会回 1 而 fs 版回 0；
- * - **凭据报的是真删掉的条数**，不是预演数出来的那份（这两者在"正常情况"下相等，
+ * - **凭据报的是真删掉的条数**，不是删之前枚举出来的那一份（这两者在"正常情况"下相等，
  *   而"正常情况"正是不该被假定的东西）；
  * - **顺序清单也要划掉**，否则 `shelf/order.json` 会一直记着几个已经不存在的书号。
+ *
+ * ★ 没有"预演"那一组：`planBookDeletion` 与它的 `GET` 在 2026-10-16 撤掉了
+ *   （用户："就一个确认是否删除，还是算了"）。凭据那句解释（"有什么"）没丢——
+ *   它在真删返回的凭据里，由下面 `deleteBookEverywhere` 那几组盯着。
  */
 
 import { describe, expect, it } from 'vitest'
 
-import {
-  bookTargets,
-  deleteBookEverywhere,
-  planBookDeletion,
-  type BookDeletionDeps,
-} from './book-deletion.ts'
+import { bookTargets, deleteBookEverywhere, type BookDeletionDeps } from './book-deletion.ts'
 import { createMemoryStore } from './engine/providers/stores.ts'
 import { manifestPathOf } from './engine/index.ts'
 import { loadOrder, saveOrder } from './shelf-order.ts'
@@ -84,39 +83,6 @@ describe('bookTargets', () => {
   })
 })
 
-describe('planBookDeletion', () => {
-  it('预演一个字节都不动', async () => {
-    const f = fixture()
-    await seedBook(f)
-    const receipt = await planBookDeletion(BOOK, f.deps)
-    expect(receipt.stage).toBe('plan')
-    expect(receipt.title).toBe('云朵船去旅行')
-    expect(receipt.complete).toBe(true)
-    expect(f.store.all().length).toBe(5 + THUMB_WIDTHS.length)
-  })
-
-  it('那一行解释把"有什么"说清楚（数字来自枚举，不估）', async () => {
-    const f = fixture()
-    await seedBook(f)
-    const receipt = await planBookDeletion(BOOK, f.deps)
-    expect(receipt.places[0]?.note).toBe('2 张图 + 1 段朗读 + 1 份过程日志 + 1 份清单')
-  })
-
-  it('没有缩略图时说清为什么是 0（不是含糊过去）', async () => {
-    const f = fixture()
-    await f.put(manifestPathOf(BOOK), JSON.stringify({ tree: { title: '只有清单' } }))
-    const receipt = await planBookDeletion(BOOK, f.deps)
-    expect(receipt.places[1]?.deleted).toBe(0)
-    expect(receipt.places[1]?.note).toContain('还没有被缩过')
-  })
-
-  it('书名读不出来就照实说读不出来', async () => {
-    const f = fixture()
-    await f.put(`books/${BOOK}/page-1-a1.png`)
-    expect((await planBookDeletion(BOOK, f.deps)).title).toBe('（读不出来的一本）')
-  })
-})
-
 describe('deleteBookEverywhere', () => {
   it('★ 书目录与 5 个档位的缩略图全删掉，别的书一根汗毛都不动', async () => {
     const f = fixture()
@@ -125,13 +91,34 @@ describe('deleteBookEverywhere', () => {
     await f.put(`thumbs/240/books/probe-02/page-1-a1.png.webp`)
 
     const receipt = await deleteBookEverywhere(BOOK, f.deps)
-    expect(receipt.stage).toBe('done')
     expect(receipt.complete).toBe(true)
     expect(receipt.totalFiles).toBe(5 + THUMB_WIDTHS.length)
     expect(f.store.all()).toEqual([
       'books/probe-02/book.json',
       'thumbs/240/books/probe-02/page-1-a1.png.webp',
     ])
+  })
+
+  it('凭据上那句解释把"这一本有什么"说清楚（数字来自枚举，不估）', async () => {
+    const f = fixture()
+    await seedBook(f)
+    const receipt = await deleteBookEverywhere(BOOK, f.deps)
+    expect(receipt.title).toBe('云朵船去旅行')
+    expect(receipt.places[0]?.note).toBe('2 张图 + 1 段朗读 + 1 份过程日志 + 1 份清单')
+  })
+
+  it('没有缩略图时说清为什么是 0（不是含糊过去）', async () => {
+    const f = fixture()
+    await f.put(manifestPathOf(BOOK), JSON.stringify({ tree: { title: '只有清单' } }))
+    const receipt = await deleteBookEverywhere(BOOK, f.deps)
+    expect(receipt.places[1]?.deleted).toBe(0)
+    expect(receipt.places[1]?.note).toContain('还没有被缩过')
+  })
+
+  it('书名读不出来就照实说读不出来', async () => {
+    const f = fixture()
+    await f.put(`books/${BOOK}/page-1-a1.png`)
+    expect((await deleteBookEverywhere(BOOK, f.deps)).title).toBe('（读不出来的一本）')
   })
 
   it('★ 顺序清单里那一本被划掉，别的书号与相对次序不动；文件本身留着', async () => {
@@ -164,12 +151,12 @@ describe('deleteBookEverywhere', () => {
     expect(again.places[0]?.note).toContain('盘上没有这一本了')
   })
 
-  it('★ 凭据报的是真删掉的条数：删之前偷偷塞进去的文件也数进去了', async () => {
+  it('★ 凭据报的是真删掉的条数：枚举之后偷偷塞进去的文件也数进去了', async () => {
     const f = fixture()
     await seedBook(f)
-    // 预演报 5 + 5；真删之前再塞一个，真删就该报 6 + 5
-    const plan = await planBookDeletion(BOOK, f.deps)
-    expect(plan.totalFiles).toBe(10)
+    // 枚举出来是 5 + 5；删之前再塞一个，凭据就该报 6 + 5——那个数出自 `deletePrefix`，
+    // 不是出自那一次枚举
+    expect((await bookTargets(BOOK, f.deps)).bookFiles).toBe(5)
     await f.put(`books/${BOOK}/page-2-a1.png`)
     expect((await deleteBookEverywhere(BOOK, f.deps)).totalFiles).toBe(11)
   })

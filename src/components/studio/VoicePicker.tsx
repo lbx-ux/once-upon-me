@@ -34,7 +34,9 @@
  *   （面板在 `NewVoicePanel.tsx`，样本、同意、部署状态那些规矩都在那个文件的头里）。
  *
  * ★ 「删掉它」只出现在**我录的**卡上（系统给的删不了，那是厂商的预置音色）。
- *   两步：先列出"将要失去什么"，确认后真调一次删除，成功之后给一句**报数的凭据**。
+ *   两步：先按下垃圾桶，再按「确认删掉」，成功之后给一句**报数的凭据**。
+ *   ★ 第十一轮之前第二步还会**列出"将要失去什么"两行字**，用户把那段划掉了 ——
+ *     那件事没有消失，改挂在「确认删掉」的 `title` 与 `role="alertdialog"` 的名字上。
  *   照角色墙那条判断：删除的实现只有这一份，卡面上不再各写一遍。
  */
 
@@ -280,25 +282,31 @@ export default function VoicePicker() {
 
                 {/* 肖像位。角色卡那里裱的是一张照片；音色没有形象，
                     所以这一格裱的是**你要听到的那句话**。
-                    ★ 2026-10-16 第九轮：这一块与"删掉它"的确认改成**二选一**——
-                      点了删除之后整块换成确认，而不是叠在它上面（叠着的话底下会留下
-                      一颗看不见却 Tab 得到的试听钮）。 */}
-                {openConfirm ? (
-                  <div className="vc__confirm" role="alertdialog" aria-label={`删掉 ${voice.name}`}>
-                    <p className="vc__confirm-title">删掉「{voice.name}」会失去：</p>
-                    <ul className="vc__confirm-list">
-                      <li>
-                        这条音色本身。<strong>录它的那段录音我们没有留</strong>
-                        ，所以删了就再拼不回来，只能重录。
-                      </li>
-                      <li>以后做的书不能再选它（已经做好的书照旧有声——朗读是那一本书的产物）。</li>
-                    </ul>
-                    <div className="vc__confirm-acts">
+                    ★ 2026-10-16 第十一轮：用户把确认框里那两行说明划掉了 ——
+                      「把画圈的地方去掉，直接写底下的确认删除、取消」。
+                      所以确认改成**只换掉那一格的肚子**（之前是整块替掉下半截）：
+                      少掉的只是那两行说明 —— 而它要说的那件事**没有消失**，
+                      挂在钮的 `title` 与这个 `alertdialog` 的名字上
+                      （看得见的仍然是"确认删掉"三个字，读屏与鼠标停一下都拿得到原因）。
+                    ★ 同一轮紧接着的第二句：「点击删除之后，就不要出现哗啦啦，大雨落下来这句话了」——
+                      所以**那句语料也一起让位**：确认态里这一格只剩那两个钮。
+                      理由与第 1 条同源：那是"要听的东西"，正在删的时候它已经不成立了。
+                      ★ 代价说明白：那一格的顶边会因为少了一行而往下让约 39px，于是这一张卡的
+                        分界线在确认时与左右两张错开。**不动的是整排的高度**（那一排由预置那两张定，
+                        实测 203.7 → 203.7）——错开的只有这一张卡内部那条线。 */}
+                <div className="vc__plate">
+                  {openConfirm ? (
+                    <div
+                      className="vc__confirm"
+                      role="alertdialog"
+                      aria-label={`删掉「${voice.name}」：录它时的那段录音我们没有留，删了只能重录，已经做好的书照旧有声`}
+                    >
                       <button
                         type="button"
                         className="vc__danger"
                         onClick={() => void removeVoice(voice)}
                         disabled={deleting === voice.id}
+                        title="录它时的那段录音我们没有留，删了只能重录"
                       >
                         {deleting === voice.id ? '正在删…' : '确认删掉'}
                       </button>
@@ -311,65 +319,64 @@ export default function VoicePicker() {
                         算了
                       </button>
                     </div>
-                  </div>
-                ) : (
-                  <div className="vc__plate">
-                    <p className="vc__line">“{PREVIEW_LINE}”</p>
-                    <div className="vc__actions">
-                      <button
-                        type="button"
-                        className="vc__listen"
-                        data-playing={busy ? 'true' : 'false'}
-                        data-needs-key={needsKey ? 'true' : 'false'}
-                        onClick={() => (needsKey ? openSettings() : void preview(voice.id))}
-                        disabled={!voice.usable}
-                        aria-label={
-                          busy
-                            ? `正在听：${voice.name}`
-                            : needsKey
-                              ? `先配密钥：${voice.name} 的试听要现场合成（打开模型与密钥）`
-                              : `听一句真的：${voice.name}（就上面那一句）`
-                        }
-                        /* ★ 2026-10-16 用户把页头那条警示（"语音还没配齐…"）划掉了。
+                  ) : (
+                    <>
+                      <p className="vc__line">“{PREVIEW_LINE}”</p>
+                      <div className="vc__actions">
+                        <button
+                          type="button"
+                          className="vc__listen"
+                          data-playing={busy ? 'true' : 'false'}
+                          data-needs-key={needsKey ? 'true' : 'false'}
+                          onClick={() => (needsKey ? openSettings() : void preview(voice.id))}
+                          disabled={!voice.usable}
+                          aria-label={
+                            busy
+                              ? `正在听：${voice.name}`
+                              : needsKey
+                                ? `先配密钥：${voice.name} 的试听要现场合成（打开模型与密钥）`
+                                : `听一句真的：${voice.name}（就上面那一句）`
+                          }
+                          /* ★ 2026-10-16 用户把页头那条警示（"语音还没配齐…"）划掉了。
                        它说的那件事没有消失，只是**不再占一整行**：没配齐时这颗钮的**字**就写着
                        "先配密钥"，按下去直接开抽屉——比一条横幅短，而且只有真受影响的那张卡说。
                        ★ 别把它挪回成一整条横幅：用户划掉的正是"这一屏替用户把设置里的问题念一遍"。 */
-                        title={
-                          !voice.usable
-                            ? '这个音色现在用不了，原因写在上面'
-                            : needsKey
-                              ? `「${voice.name}」是你自己录的音色，厂商那边才有它，所以试听要现场合成——先把 Key 与模型填上`
-                              : sample
-                                ? '这一份是随仓库带的样本（预生成），不需要 key；按下去听的就是它'
-                                : undefined
-                        }
-                      >
-                        {/* 只有**真会响**的时候才挂播放图标：钮上写着"先配密钥"却画一个喇叭，
+                          title={
+                            !voice.usable
+                              ? '这个音色现在用不了，原因写在上面'
+                              : needsKey
+                                ? `「${voice.name}」是你自己录的音色，厂商那边才有它，所以试听要现场合成——先把 Key 与模型填上`
+                                : sample
+                                  ? '这一份是随仓库带的样本（预生成），不需要 key；按下去听的就是它'
+                                  : undefined
+                          }
+                        >
+                          {/* 只有**真会响**的时候才挂播放图标：钮上写着"先配密钥"却画一个喇叭，
                             正是"控制与它做的事对不上"那类错 */}
-                        {needsKey ? null : (
-                          <svg className="vc__listen-icon" viewBox="0 0 20 20" aria-hidden="true">
-                            <path d="M3.5 7.5h2.8L10 4.2v11.6l-3.7-3.3H3.5z" />
-                            <path
-                              d="M12.8 7.4a3.4 3.4 0 0 1 0 5.2M15.2 5.2a6.6 6.6 0 0 1 0 9.6"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="1.5"
-                              strokeLinecap="round"
-                            />
-                          </svg>
-                        )}
-                        {listenLabel}
-                      </button>
+                          {needsKey ? null : (
+                            <svg className="vc__listen-icon" viewBox="0 0 20 20" aria-hidden="true">
+                              <path d="M3.5 7.5h2.8L10 4.2v11.6l-3.7-3.3H3.5z" />
+                              <path
+                                d="M12.8 7.4a3.4 3.4 0 0 1 0 5.2M15.2 5.2a6.6 6.6 0 0 1 0 9.6"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="1.5"
+                                strokeLinecap="round"
+                              />
+                            </svg>
+                          )}
+                          {listenLabel}
+                        </button>
 
-                      {/* ── 删掉它（只有我录的有）────────────────────────────────
+                        {/* ── 删掉它（只有我录的有）────────────────────────────────
                       ★ 两步：先列出"将要失去什么"，再动手。**不是**一颗点了就删的垃圾桶。
                       ★ 2026-10-16 第九轮它挪进了这一行钮的**最右**（`margin-left: auto`）：
                         旧版它在卡底独占一行，于是我录的那张卡底下留了 59px 空白、里面
                         只有这一枚 17px 图标，而另外两张同样位置只有 14px —— 同一款卡
                         长出了两副骨架。现在三张卡的下半截结构一模一样。
                       ★ 同一行不等于同权重：它是 32px 的透明底图标钮，点下去还有两步确认。 */}
-                      {voice.source === 'mine' ? (
-                        /* ★ 2026-10-16 用户要求把它换成一个删除图标（原来是"删掉它"三个字）。
+                        {voice.source === 'mine' ? (
+                          /* ★ 2026-10-16 用户要求把它换成一个删除图标（原来是"删掉它"三个字）。
                        ★ 只有图标就**必须**补两个东西：`aria-label`（读屏念得到）与
                          `title`（鼠标停一下能看到它是什么、以及删了会怎样）——
                          同 `CreateLanding` 那颗优化钮的处理。
@@ -377,34 +384,35 @@ export default function VoicePicker() {
                          还塞了两条竖线当桶纹，缩到 17px 之后两条 1.5 的线糊成一团，
                          整个图形读起来像个珊瑚。现在只用三笔——**盖、提手、桶身**——
                          按 24 的格子、1.6 的线宽画：小尺寸下**少一笔比多一笔好看**。 */
-                        <button
-                          type="button"
-                          className="vc__del"
-                          onClick={() => setConfirming(voice.id)}
-                          aria-label={`删掉这个音色：${voice.name}`}
-                          title={`删掉「${voice.name}」：录它时的那段录音我们没有留，删了只能重录`}
-                        >
-                          <svg className="vc__del-icon" viewBox="0 0 24 24" aria-hidden="true">
-                            <g
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="1.6"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            >
-                              {/* 盖 */}
-                              <path d="M4.6 7.4h14.8" />
-                              {/* 提手 */}
-                              <path d="M9.6 7.4V5.6A1.6 1.6 0 0 1 11.2 4h1.6a1.6 1.6 0 0 1 1.6 1.6v1.8" />
-                              {/* 桶身：往下收一点，读得出是个桶而不是个方框 */}
-                              <path d="M7.3 7.4l.82 11.1a1.8 1.8 0 0 0 1.8 1.7h4.16a1.8 1.8 0 0 0 1.8-1.7l.82-11.1" />
-                            </g>
-                          </svg>
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-                )}
+                          <button
+                            type="button"
+                            className="vc__del"
+                            onClick={() => setConfirming(voice.id)}
+                            aria-label={`删掉这个音色：${voice.name}`}
+                            title={`删掉「${voice.name}」：录它时的那段录音我们没有留，删了只能重录`}
+                          >
+                            <svg className="vc__del-icon" viewBox="0 0 24 24" aria-hidden="true">
+                              <g
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="1.6"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              >
+                                {/* 盖 */}
+                                <path d="M4.6 7.4h14.8" />
+                                {/* 提手 */}
+                                <path d="M9.6 7.4V5.6A1.6 1.6 0 0 1 11.2 4h1.6a1.6 1.6 0 0 1 1.6 1.6v1.8" />
+                                {/* 桶身：往下收一点，读得出是个桶而不是个方框 */}
+                                <path d="M7.3 7.4l.82 11.1a1.8 1.8 0 0 0 1.8 1.7h4.16a1.8 1.8 0 0 0 1.8-1.7l.82-11.1" />
+                              </g>
+                            </svg>
+                          </button>
+                        ) : null}
+                      </div>
+                    </>
+                  )}
+                </div>
               </article>
             </li>
           )

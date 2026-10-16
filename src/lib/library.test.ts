@@ -203,3 +203,26 @@ describe('listBooks', () => {
     expect(books[0]?.coverUrl).toBe('/api/assets/books/b1/cover.png?w=384')
   })
 })
+
+/**
+ * ★ 草稿 / 成品（工单 03）。
+ *
+ * 这一组钉的是**缺省值**，不是一个字段的有无：盘上已经有两种没有 `status` 的书
+ * （随仓库提交的演示书、这个字段之前跑出来的运行期书）。把它们判成草稿的话，
+ * 它们会**凭空从书架消失**——而用户只会以为书丢了。
+ */
+describe('status：缺省是成品，只有明确写着 draft 的才是草稿', () => {
+  it('没有这个字段 → 成品（老的 book.json 与演示书都靠这一条活着）', () => {
+    expect(summarize(book({ bookId: 'b1' }), NO_COVER).status).toBe('published')
+  })
+
+  it('写着 draft → 草稿', () => {
+    expect(summarize(book({ bookId: 'b1', status: 'draft' }), NO_COVER).status).toBe('draft')
+  })
+
+  it('写着 published → 成品', () => {
+    expect(summarize(book({ bookId: 'b1', status: 'published' }), NO_COVER).status).toBe(
+      'published',
+    )
+  })
+})

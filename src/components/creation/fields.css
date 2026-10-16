@@ -1,0 +1,133 @@
+/**
+ * fields.css —— 表单零件（`fields.tsx`）的样式
+ *
+ * ★ 这一份是从 `create-flow.css` 里切出来的（工单 06）。创作流那四步删掉之后，
+ *   那一份里绝大多数规则已经没有读者了：`.cf__steps` / `.cf__panel` / `.cf__nav`
+ *   是四步共用的壳，`.cf__pick*` / `.cf__picked*` 是"选一个小主角"，`.cf__log` 是
+ *   更早的文字日志——**它们跟着组件一起走**。
+ *
+ * ★ 留下的这几个之所以还在，是因为它们有第二个读者：`fields.tsx` 同时服务
+ *   `/character/new`（建小主角）与 `/character/[childId]`（改基础信息），
+ *   所以这些选项与必填项的样式是**两个入口共用的一份**（`fields.tsx` 文件头那条）。
+ *
+ * ★ class 前缀仍然是 `cf__`（"create flow"），**没有跟着改名**：
+ *   改名要同时动 `fields.tsx` 的 JSX 与 `new-child.css` 里那几条
+ *   `.nc__anchors .cf__card-form`，而它换来的只是"名字看起来更对"。
+ *   真要改，等下一次动 `fields.tsx` 的结构时顺手改，别为改名单独开一单。
+ */
+
+.cf__field {
+  display: block;
+  margin-bottom: 18px;
+}
+
+.cf__label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.cf__req {
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--accent);
+}
+
+.cf__field-hint {
+  display: block;
+  color: var(--ink-muted);
+  font-size: 13px;
+  line-height: 1.6;
+  margin-bottom: 6px;
+}
+
+.cf__field-hint--inline {
+  display: inline;
+  margin-bottom: 0;
+  font-size: 12.5px;
+  font-weight: 400;
+}
+
+.cf__input {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--dot);
+  border-radius: var(--card-radius);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+}
+
+.cf__input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* ★ 占位＝**示例**，不是值（2026-10-16 第 20 刀，用户在锚点那几格上划了线：
+   "能够分析的地方就变成黑色字体，不能分析出来的还是灰色字体"）。
+   ★ 为什么要把默认色覆盖掉：浏览器给占位的那一层灰是**每个浏览器自己挑的**
+   （Firefox 还会再叠一层 `opacity`），而"灰"在这条界面上是要**读得出意思**的
+   ——灰＝这一格还没定。所以它必须落在一个有名字、量过对比度的令牌上：
+   `--ink-muted` 在 `--surface` 上是 5.33:1（globals.css 里那一档量的），
+   过正文级 AA，又明显轻于值的 `--ink`（17.85:1）。
+   ★ `opacity: 1` 不是补丁：不写它，Firefox 会把 `--ink-muted` 再调暗一档，
+   于是同一句示例在两家浏览器上是两种灰。 */
+.cf__input::placeholder {
+  color: var(--ink-muted);
+  opacity: 1;
+}
+
+.cf__pair {
+  display: grid;
+  gap: 0 18px;
+}
+
+.cf__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cf__chip {
+  min-height: 44px;
+  padding: 8px 16px;
+  border: 1px solid var(--dot);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.cf__chip[data-active='true'] {
+  border-color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.1);
+  color: var(--accent);
+}
+
+@media (min-width: 560px) {
+  .cf__pair {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    /* ★ 两个输入框的**底边对齐**（2026-10-15 补，随本文件从 `create-flow.css` 搬过来）。
+       成因：名字没有提示、读音有一条（"多音字最容易念错…"），两格的行数因此不同，
+       并排时下面那个框就矮了一截——截图上是两个错开 30px 的输入框。
+       做法是把每格的输入推到格底（`margin-top: auto`），于是标题各自贴顶、
+       输入框底边齐平。★ 只调这一档，且只调"谁在哪儿"，两个框的字号/高度都没动。 */
+    align-items: stretch;
+  }
+
+  .cf__pair .cf__field {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .cf__pair .cf__field > .cf__input {
+    margin-top: auto;
+  }
+}

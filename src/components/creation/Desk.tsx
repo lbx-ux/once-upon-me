@@ -12,6 +12,15 @@
  * 1. **空画框就是进度，不另画一根百分比条**。`plan-ready` 说 20 页，就摆 20 个虚线框；
  *    画好一页填一个。`20 格里画好了 7 格` 是**看得见的事实**，
  *    而一根 35% 的进度条是**编出来的数**——两者在屏幕上一样宽，但只有一个是真的。
+ *    ★ **2026-10-16 改口**：用户看过这一屏之后说"正在画怎么空拉拉的，来点交互效果，
+ *      比如加个进度条这些的"，于是下面加了 `.dk__bar` 那一条。
+ *      改的**不是**这条判断，是它反对的那件事：它反对的是**编分母**（当时引擎没有
+ *      任何一条事件说得出一页画了几成，所以任何一根条都只能自己估），
+ *      而今天这根条的分子分母是 `drawnCount / total`——与那排空画框**是同一个数**
+ *      （推导在 `frames.ts` 的 `drawnRatio`，那里有测试）。
+ *      空画框留着：它说的是"哪几页"，条说的是"走到哪儿了"，两个问题不一样。
+ *    ★ 仍然**没有**的东西：没有"还剩多久"、没有 spinner、没有百分比数字。
+ *      理由见 `desk.css` 文件头第 3 条（那一条一个字没改）。
  * 2. **图取不到时留相纸色的空框，不留碎图**（CLAUDE.md「图没到位就留一个语义上诚实的兜底」）。
  *    `illustration` 事件说的 `assetPath` 与文件落盘之间可能有先后，
  *    所以 `onError` 把那一格退回空框——一块干净的 `--card-paper`，
@@ -25,11 +34,11 @@
  *   改用一圈静态描边。它不是动画驱动的东西，状态本来就是从事件来的。
  */
 
-import { useState } from 'react'
+import { useState, type CSSProperties } from 'react'
 
 import { assetUrlOf } from '@/lib/asset-url.ts'
 
-import type { DeskState, Frame } from './frames.ts'
+import { drawnCount, drawnRatio, type DeskState, type Frame } from './frames.ts'
 
 /** 一格里的图。★ 独立的组件是为了让"取不到图"这件事有一个自己的 state */
 function Figure({ frame }: { frame: Frame }) {
@@ -38,7 +47,17 @@ function Figure({ frame }: { frame: Frame }) {
   const url = frame.assetPath ? assetUrlOf(frame.assetPath, 320) : null
 
   return (
-    <div className="dk__frame" data-busy={frame.busy === 'drawing' ? 'true' : 'false'}>
+    <div
+      className="dk__frame"
+      // ★ 忙就是忙：画与配音都算。★ 而**哪一种**忙另给一个属性——
+      //   两者在屏幕上是不同的事（一个在出图、一个在出声），
+      //   合成一个 `data-busy` 就没有任何地方能区分它们了
+      data-busy={frame.busy !== null ? 'true' : 'false'}
+      data-busy-kind={frame.busy ?? undefined}
+      // ★ 这一格有没有画。**给 CSS 用的是这一个属性，不是"里面有没有 .dk__art"**：
+      //   图取不到时那一格会退回空框（下面那个 `broken`），而它仍然是"画好了"的一页
+      data-filled={url && !broken ? 'true' : 'false'}
+    >
       {url && !broken ? (
         // 原生 <img>：图经 /api/assets 出来，next/image 要另配 loader（README §五）
         // eslint-disable-next-line @next/next/no-img-element
@@ -84,40 +103,148 @@ function Figure({ frame }: { frame: Frame }) {
   )
 }
 
-export type DeskProps = {
-  desk: DeskState
-  /** 已经画好几格（`drawnCount`）。传进来而不是在这里数，是为了让它只有一处实现 */
-  drawn: number
+/**
+ * 一格底下那两颗（工单 05）。**只在整本做完之后才解锁**——用户的原话是
+ * "在此期间用户不能修改"，而这一屏要能说得出"为什么现在还点不动"。
+ *
+ * ★ 两颗按钮**各自带可见文字**，不做成图标：它们决定了"重来一次要花一次钱"，
+ *   而一个只有图标的动作在点下去之前不说清楚它做什么（`CreateLanding` 那两颗
+ *   优化/换一句之所以能只留图标，是因为它们不动钱包）。
+ */
+function FrameActions({ pageNo, actions }: { pageNo: number; actions: DeskActions }) {
+  const busyHere = actions.busy?.pageNo === pageNo
+  const busyKind = busyHere ? actions.busy?.kind : undefined
+  return (
+    <div className="dk__acts">
+      <button
+        type="button"
+        className="dk__act"
+        disabled={!actions.ready || actions.busy !== null}
+        onClick={() => actions.onRerun(pageNo, 'image')}
+      >
+        {busyKind === 'image' ? '正在重画…' : '重画'}
+      </button>
+      {actions.voiceOn && (
+        <button
+          type="button"
+          className="dk__act"
+          disabled={!actions.ready || actions.busy !== null}
+          onClick={() => actions.onRerun(pageNo, 'audio')}
+        >
+          {busyKind === 'audio' ? '正在重配…' : '重配'}
+        </button>
+      )}
+    </div>
+  )
 }
 
-export default function Desk({ desk, drawn }: DeskProps) {
+export type DeskActions = {
+  /** 整本做完了没有。没做完时两颗都是禁用的（"在此期间用户不能修改"） */
+  ready: boolean
+  /** 这一本有没有配音。没有就只留「重画」——一个点不动的「重配」是假控件 */
+  voiceOn: boolean
+  /** 正在重做的那一页。`null` = 没有 */
+  busy: { pageNo: number; kind: 'image' | 'audio' } | null
+  onRerun: (pageNo: number, kind: 'image' | 'audio') => void
+}
+
+export type DeskProps = {
+  desk: DeskState
+  /**
+   * ★ 原来还有一个 `drawn: number`（"已经画好几格"）。删掉了（2026-10-16）：
+   *   它唯一的读者是那一行 `k / N 页画好了`，而那一行整块搬去了阶段轨
+   *   （「逐页画 3 / 3」）。**一个传进来却没有读者的数字**会让下一个人以为
+   *   这一屏还在某处显示它，然后去改一个不影响任何东西的 prop。
+   *   `drawnCount()` 仍然在 `frames.ts`（阶段轨在用它），只是不再路过这里。
+   */
+  /** 不传 = 这一屏不给单页重做（每一格底下就没有那两颗按钮） */
+  actions?: DeskActions
+  /**
+   * 这一本**已经发布**了没有。它只改收尾那一块的措辞：
+   * 草稿说"每一页都做完了"（还在等你确认），成品才说"书做好了"。
+   * ★ 不说这一句的话，草稿上那句"书做好了"与底下那颗「确定生成」互相打脸。
+   */
+  published?: boolean
+  /**
+   * 这一轮**还在跑**（服务端还在出图 / 配音）。它只决定一件事：
+   * 进度条上那道走光扫不扫。
+   *
+   * ★ 为什么不是"由 `desk` 推"：画桌上没有任何一条事件说得出"这条流还开着"——
+   *   最后一条事件停在哪儿，与"后面还有没有"是两件事（一轮跑完与一轮卡住，
+   *   在事件流里长得一样）。所以这个事实由**拿着连接的那一方**（`GenerationRun`）给，
+   *   而它也是唯一知道这件事的地方。
+   */
+  live?: boolean
+}
+
+export default function Desk({ desk, actions, published = false, live = false }: DeskProps) {
+  const drawn = drawnCount(desk)
+  const ratio = drawnRatio(desk)
   return (
     <div className="dk">
-      {/* ── 上面那一行：书名 + k/N + 现在在第几段 ─────────────────────── */}
-      <header className="dk__head">
-        <p className="dk__title">{desk.title ? `《${desk.title}》` : '正在编故事…'}</p>
-        {desk.total > 0 && (
-          <p className="dk__count">
-            <b>{drawn}</b> / {desk.total} 页画好了
+      {/* ── 现在在第几段 + 走到哪儿了 ───────────────────────────────────
+          ★ 2026-10-16 删掉了原来那一行 `dk__head`（书名 + `k / N 页画好了`）。
+            两个原因，都是**屏幕上的实话**：
+            ① 书名与 `k / N` 运行视图**都已经在说**了（那是它的 h1 和阶段轨上
+               「逐页画 3 / 3」那一格）。同一句话说两遍不是冗余，是让读的人
+               怀疑这两处哪一个才对。
+            ② 更要紧的是这一行下面那条 `dk__stage`：`book-ready` 的原文是
+               「书做好了：**xiaoyu-r1-4c1007d9223a**」——引擎那句话是给日志与 MCP
+               看的（`describeEvent` 是全仓库唯一那一份），但摊在家长面前就是
+               一个内部书号。所以收尾之后**不摊它**：运行视图自己那句
+               「每一页都做完了」说得比它好，而且是给人看的。
+          ★ 运行中那句仍然要留（"正在画第 7 页"是这一屏的卖点），只是收尾之后让位。
+          ★ 2026-10-16 用户说"正在画怎么空拉拉的……比如加个进度条这些的"，
+            于是在这句话下面补了一条真的进度条（下面 `.dk__bar` 那一段）。
+            **没有另加一个数字**：`k / N` 仍然只在阶段轨上说一处（上面第 ① 条）。
+            条的长度、那条走光、以及下面的说明都在 CSS 里，判据写在 `desk.css` 文件头。 */}
+      {desk.stageLine && !desk.ready && (
+        <div className="dk__prog">
+          <p className="dk__stage" role="status">
+            {desk.stageLine}
           </p>
-        )}
-      </header>
-
-      {desk.stageLine && (
-        <p className="dk__stage" role="status">
-          {desk.stageLine}
-        </p>
+          {/* ★ 页数还不知道时（`plan-ready` 之前）**不摆这条**：
+              一根分母是 0 的条只能画成"刚起步"的样子，那是在编一个进度 */}
+          {desk.total > 0 && (
+            <div
+              className="dk__bar"
+              role="progressbar"
+              aria-label="已经画好的页数"
+              aria-valuemin={0}
+              aria-valuemax={desk.total}
+              aria-valuenow={drawn}
+              // 每一页一格刻度：这条于是与下面那排画框**数得上来是同一件事**
+              style={{ '--dk-total': desk.total } as CSSProperties}
+            >
+              <span className="dk__bar-fill" style={{ width: `${ratio * 100}%` }} />
+              {/* 走光：**只说在动**，不说还剩多久（引擎没报，见 desk.css 文件头第 3 条）。
+                  整轮跑完之后（`live` 为假）它不出现——静止的条不该还在动 */}
+              {live && <span className="dk__bar-beam" aria-hidden="true" />}
+            </div>
+          )}
+        </div>
       )}
 
       {/* ── 那排画框 ─────────────────────────────────────────────────── */}
       {desk.frames.length > 0 && (
         <ol className="dk__frames">
           {desk.frames.map((frame) => (
-            <li key={frame.pageNo}>
+            // ★ key 用**图的路径**，不是页码（2026-10-16）。理由是"这一格的图换了"
+            //   在屏幕上是一件新事：换了 key 才会重新挂载，那一下的入场动画
+            //   （`.dk__frame[data-filled='true']` 那圈闪 + `.dk__art` 的淡入）才播得出来。
+            //   按页码做 key 的话，重画之后新图是**原地换 src**，屏幕上什么都不发生——
+            //   而"我点的那一下有反应"正是用户点重画之后要看的东西
+            <li key={frame.assetPath ?? `page-${frame.pageNo}`}>
               <Figure frame={frame} />
+              {actions && <FrameActions pageNo={frame.pageNo} actions={actions} />}
             </li>
           ))}
         </ol>
+      )}
+
+      {/* 为什么现在还点不动重做。★ 禁用要给理由，不是灰着不说 */}
+      {actions && !actions.ready && (
+        <p className="dk__hint">每一页都完成之后，这里就能对单独一页重画 / 重配。</p>
       )}
 
       {/* ── 不属于任何一页的提醒（配音没接上这种）：**没有格子可去**，但丢掉
@@ -132,7 +259,9 @@ export default function Desk({ desk, drawn }: DeskProps) {
         </ul>
       )}
 
-      {/* ── 书好了：整排收成一张封面 + 一条路 ───────────────────────────── */}
+      {/* ── 整排收成一张封面 + 一条路 ─────────────────────────────────────
+             ★ 草稿也能翻开看——用户要先看过每一页才敢点「确定生成」，
+             把那一条路藏到他发布之后，等于让他闭着眼确认 */}
       {desk.ready && (
         <div className="dk__done">
           {desk.ready.coverPath && (
@@ -146,7 +275,7 @@ export default function Desk({ desk, drawn }: DeskProps) {
             />
           )}
           <div className="dk__done-text">
-            <p className="dk__done-title">书做好了</p>
+            <p className="dk__done-title">{published ? '书做好了' : '每一页都做完了'}</p>
             <p className="dk__done-sub">
               共 {desk.total} 页
               {desk.ready.stats['redrawCount']

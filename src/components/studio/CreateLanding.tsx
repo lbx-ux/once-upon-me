@@ -123,6 +123,7 @@ import { forgetThemes, peekThemes, themeArrival } from '@/lib/theme-handoff.ts'
 import { THEMES, themeCardPath, type ThemeKey } from '@/lib/themes.ts'
 import { useEnterTimeline } from '@/lib/useEnterTimeline.ts'
 import { useSettings } from '@/components/settings/SettingsProvider.tsx'
+import GenerationSetupDialog, { type SetupChoice } from './GenerationSetupDialog.tsx'
 
 export type ChildOption = {
   cardId: string
@@ -150,9 +151,14 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
   const [exampleAt, setExampleAt] = useState(0)
   /** 哪一格的下拉开着。★ 一个状态而不是两个布尔：两格同时开着是画不出来的 */
   const [open, setOpen] = useState<'card' | 'voice' | null>(null)
+  /** 「这一本要怎么做」那个弹窗开着没有（工单 04）。★ 与上面那个 `open` 分开：
+   *  那两格是页面上的弹出层，这个是**模态**，Esc 与焦点的规矩都不一样 */
+  const [setupOpen, setSetupOpen] = useState(false)
   const [picked, setPicked] = useState<string | null>(null)
   const cardRef = useRef<HTMLDivElement>(null)
   const voiceRef = useRef<HTMLDivElement>(null)
+  /** 弹窗关掉之后焦点要回的那一颗（`startRun` 那条不走——它把人带离了这一屏） */
+  const goRef = useRef<HTMLButtonElement>(null)
 
   /* ── 优化那句话（工单 07）───────────────────────────────────────────────
    * ★ 四条状态而不是一条：一条的话，"正在想"和"没改成"会共用一个位，
@@ -162,7 +168,12 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
   const [suggest, setSuggest] = useState<{
     text: string
     tooLong: boolean
-    modelId: string
+    /** ★ 建议**不覆盖原句**。这就是提出建议那一刻框里的那一句——
+     *  撤销要有东西可退，所以它必须存下来，而不是"反正用户自己记得"。
+     *  ★ 这里原来还存着 `modelId`（"这一版是哪个模型改的"），2026-10-16 删了：
+     *  用户要求"不用告诉用户是什么模型生成的"。**接口照旧返回它**，不读而已
+     *  （`/api/optimize` 那边留着它是为了"优化结果被投诉时要答得上"）。
+     *  一个读进来只为了摆在屏幕上的字段，屏幕不摆了，它就该跟着走。 */
     original: string
   } | null>(null)
   const [thinking, setThinking] = useState(false)
@@ -249,9 +260,34 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
       router.push('/character/new')
       return
     }
-    const params = new URLSearchParams({ wish: wish.trim() })
+    /* ★ 点「开始创作」不再直接跳走，先问"这一本要怎么做"（工单 04）。
+       页数与"要不要朗读"都必须在**跑之前**定下来——跑起来再问等于让人等两次。
+       确认之后才带着这两个数去 `/create`（运行视图）。 */
+    setSetupOpen(true)
+    // 那两格下拉先收起来：模态浮上来之后它们还开着的画面没有意义
+    setOpen(null)
+  }
+
+  /**
+   * 关掉弹窗，并把焦点**还给打开它的那一颗**。
+   * ★ 不还的话，Esc 之后焦点落在 `<body>` 上——读屏会从文档开头重新念一遍，
+   *   而键盘用户按一次 Tab 会回到侧栏第一项。这是模态最常被漏掉的一半。
+   */
+  const closeSetup = (): void => {
+    setSetupOpen(false)
+    goRef.current?.focus()
+  }
+
+  /** 弹窗里确认了。把这一轮的参数挂到地址上交给 `/create` */
+  const startRun = (choice: SetupChoice): void => {
+    if (!chosen) return
+    setSetupOpen(false)
+    const params = new URLSearchParams({ wish: wish.trim(), pages: String(choice.pages) })
     if (theme) params.set('theme', theme)
     params.set('card', chosen.cardId)
+    /* ★ `voice=off` 与"不带这个参数"是**同一件事**（这一本不配音），但写成显式的 off
+       更好读——而 `/create` 那边两条都当"不配音"处理（老书签里没有这个参数） */
+    params.set('voice', choice.voiceId ?? 'off')
     router.push(`/create?${params.toString()}`)
   }
 
@@ -313,7 +349,6 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
       const data = (await response.json()) as {
         suggestion?: string
         tooLong?: boolean
-        modelId?: string
         message?: string
       }
       if (!response.ok || !data.suggestion) {
@@ -323,7 +358,6 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
       setSuggest({
         text: data.suggestion,
         tooLong: Boolean(data.tooLong),
-        modelId: data.modelId ?? '模型',
         original,
       })
       setApplied(false)
@@ -558,10 +592,6 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
         {/* 建议区。★ 它在**框下面**、在动作栏上面：这一块只属于"这句话"，不属于整张卡 */}
         {suggest && (
           <div className="cl__suggest">
-            <p className="cl__suggest-head">
-              改了一版
-              <span className="cl__suggest-by">{suggest.modelId} 改的</span>
-            </p>
             <p className="cl__suggest-text">{suggest.text}</p>
             {suggest.tooLong && (
               <p className="cl__suggest-note">
@@ -658,6 +688,7 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
               是**挪到了专门管它的那一屏**。要接回来就接在**上面那颗声音药丸**旁边，
               不要另起一行小字。 */}
           <button
+            ref={goRef}
             type="button"
             className="cl__go"
             onClick={submit}
@@ -722,6 +753,12 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
           )
         })}
       </ul>
+
+      {/* 「这一本要怎么做」（工单 04）。★ 挂在最后、不在动作栏旁边：
+          它是**整屏**的模态，与那两格下拉不是一类东西 */}
+      {setupOpen && (
+        <GenerationSetupDialog wish={wish.trim()} onCancel={closeSetup} onConfirm={startRun} />
+      )}
     </section>
   )
 }

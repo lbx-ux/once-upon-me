@@ -92,14 +92,31 @@ export type EngineEvent = EventHead & EngineEventPayload
  *
  * 存在的理由只有一个：`seq` 必须每本书从 1 开始且不漏号，
  * 而散在各处写 `seq: n++` 迟早有一处忘了带。
+ *
+ * ★ `startSeq` 是给**单页重做**留的（工单 01 §3.2）。重做时事件是往**同一个**
+ *   `events.jsonl` **追加**的（`log.truncate` 只在一轮整本开始时才截断），
+ *   而序号从 1 重来的话，日志里会出现两条 `seq: 1`——`seq` 正是
+ *   "重放能重建同一串界面状态"与"SSE 断线重连后对齐"的依据。
+ *   所以调用方要按日志里已有的**最大号**接上去（`maxSeqOf`）。
+ *
+ * ★ 缺省仍是 0（下一号是 1）：整本那一轮一个字都不用改。
  */
-export function createEventFactory(clock: () => number = () => Date.now()) {
-  let seq = 0
+export function createEventFactory(clock: () => number = () => Date.now(), startSeq = 0) {
+  let seq = startSeq
   return function emit(payload: EngineEventPayload): EngineEvent {
     seq += 1
     const { stage = 'planning', ...rest } = payload
     return { seq, at: clock(), stage, ...rest } as EngineEvent
   }
+}
+
+/**
+ * 一串事件里最大的 `seq`（空的一串给 0）。**接续序号只走这一个函数**——
+ * 调用点自己写 `Math.max(...events.map(e => e.seq))` 的话，空数组会得到 `-Infinity`，
+ * 而那个值会让下一条事件拿到一个负号，界面上不会有任何东西提示这件事。
+ */
+export function maxSeqOf(events: readonly EngineEvent[]): number {
+  return events.reduce((max, event) => (event.seq > max ? event.seq : max), 0)
 }
 
 /**

@@ -138,6 +138,21 @@
   margin-top: 6px;
 }
 
+/* ★ 还没有形象时，这一格里能直接出第一张（工单 06：四步流程删掉之后，
+   这里是全站唯一一处"给一个已经存在的孩子出形象"的地方）。
+   八条锚点的样式来自全局 import 的 `fields.css`（`.cf__*`），
+   这里只补两处这一屏特有的：整块的间距，与"空框里也要说得出该写什么"那条
+   占位文字的颜色规矩（`fields.css` 的 `.cf__input::placeholder`）。 */
+.cd__first {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--hairline);
+}
+
+.cd__first .cf__field:last-of-type {
+  margin-bottom: 0;
+}
+
 /* ── 版本历史 ───────────────────────────────────────────────────────────── */
 
 .cd__history {
@@ -282,17 +297,12 @@
   cursor: default;
 }
 
-/* 段落里那一下"打开模型与密钥"：长得像链接，但它是按钮（键盘与读屏都当按钮对待） */
-.cd__link {
-  margin-left: 6px;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--accent);
-  font: inherit;
-  text-decoration: underline;
-  cursor: pointer;
-}
+/* ★ 2026-10-16（第 18 刀）：那条「长得像链接的按钮」`.cd__link` 的样式**删了**——
+   它唯一的使用者是「还差图像模型与它的 key。打开模型与密钥」那一句，用户把它划掉了。
+   这一屏现在没有任何"段落里的按钮"，所以这条规则没有读者。
+   ★ 要是将来再出现一处，**照这个形状重写一遍别改回去就用**：它当时做对的三件事是
+   `border: none` + `background: none`（长得像链接）、`font: inherit`（不跟着浏览器默认变小）、
+   以及"它是 `<button>` 不是 `<a>`"（键盘与读屏都当按钮对待）。 */
 
 .cd__error {
   margin: 10px 0 0;
@@ -324,7 +334,7 @@
 
 /* 那五格字段是**直接复用** `creation/fields.tsx` 的 `ChildFields`
    （`/character/new` 那一屏用的是同一份），class 仍是 `cf__*`，
-   样式来自全局 import 的 `create-flow.css`。这里只补一处这一屏特有的收尾，
+   样式来自全局 import 的 `fields.css`（原 `create-flow.css`）。这里只补一处这一屏特有的收尾，
    不重写字段自己的长相——重写的那天，两个入口的同一种输入框就会长成两种样子。
    ★ `.cf__field` 自带 `margin-bottom: 18px`，而它后面接的是那句实话（`.cd__hint`，
    自带 12px 上边距）：不清掉就是 30px 的空隙，把"这一格在说什么"与"改完会怎样"分开两段读 */
@@ -367,138 +377,10 @@
    与它的样式一起删了（用户："花❌的地方不要"）。换模型的路没丢：侧栏那颗一直在，
    没配模型时「再画一版」那张卡底下还有一句带按钮的实话 */
 
-/* ── 删除（工单 03 第三刀） ─────────────────────────────────────────────── */
-
-/* ★ 它是整页最下面、字号最小的一档：删除是一个"退到不能再退"的动作，
-   不该与上面那些日常动作抢视线。所以这里没有做成红色的显眼按钮长在标题旁边 */
-.cd__danger {
-  margin-top: 40px;
-  padding-top: 20px;
-  border-top: 1px solid var(--dot);
-  /* ★ `#delete` 是**角色卡上那颗「删掉他」的落点**（`/character/<id>#delete`）。
-     不留这一条的话，跳过来这一节会正好贴在视口顶边——它的上边框与"删除"那两个字
-     会被当成页面的开头，而它上面其实还有一整个孩子的形象与版本历史。
-     这一屏**没有悬浮顶栏**（`app-shell.css` 的 sticky 只挂在左侧栏上），
-     所以这是一个"留一口气"的值，不是"补一个 header 的高度"——两回事，别照抄别处的 64px。 */
-  scroll-margin-top: 24px;
-}
-
-.cd__danger-quiet {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-}
-
-.cd__danger-quiet .cd__hint {
-  margin: 0;
-  max-width: 60ch;
-}
-
-/* 危险按钮：只有**已经确认过的**那一步才是实心红的（`--danger`）。
-   第一颗按钮是 ghost 的——它的作用只是"问问要删什么"，不该长成危险的样子 */
-.cd__btn--danger {
-  border-color: transparent;
-  background: var(--danger);
-  color: var(--bg);
-}
-
-.cd__confirm {
-  padding: 18px 16px;
-  border: 1px solid var(--danger);
-  border-radius: var(--card-radius);
-  background: var(--card-paper);
-}
-
-.cd__danger-warn {
-  margin: 12px 0 0;
-  color: var(--danger);
-  font-size: 13px;
-  line-height: 1.8;
-}
-
-.cd__danger-warn strong {
-  font-weight: 600;
-}
-
-/* ── 删成之后的那一屏（终点页） ─────────────────────────────────────────── */
-
-.cd__gone {
-  max-width: 720px;
-}
-
-.cd__gone .cd__hint {
-  margin: 0 0 16px;
-  color: var(--ink-muted);
-  font-size: 14px;
-  line-height: 1.8;
-}
-
-.cd__gone .cd__btn {
-  margin-top: 20px;
-}
-
-/* ── 凭据（预演与结果共用同一个渲染） ───────────────────────────────────── */
-
-.cd__receipt {
-  margin: 10px 0 0;
-}
-
-.cd__places {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.cd__place {
-  display: grid;
-  grid-template-columns: 5.5em 1fr;
-  gap: 4px 10px;
-  padding: 7px 0;
-  border-bottom: 1px solid var(--dot);
-  font-size: 13px;
-  line-height: 1.65;
-}
-
-.cd__place:last-child {
-  border-bottom: none;
-}
-
-/* "没删干净"那一行要**看得出来**：它是这张凭据不完整的那一处 */
-.cd__place[data-failed='true'] .cd__place-no {
-  color: var(--danger);
-}
-
-.cd__place-no {
-  color: var(--ink-muted);
-  white-space: nowrap;
-}
-
-.cd__place-what {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  color: var(--ink);
-}
-
-.cd__place-at {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.92em;
-  color: var(--ink-muted);
-  word-break: break-all;
-}
-
-.cd__place-note {
-  color: var(--ink-muted);
-  font-size: 12.5px;
-  line-height: 1.7;
-}
-
-.cd__receipt-total {
-  margin: 12px 0 0;
-  color: var(--ink-soft);
-  font-size: 13px;
-}
+/* ★ 删除那一节与"删成之后的终点页"的样式（`.cd__danger*` / `.cd__gone*`）
+   在 2026-10-16 删掉了：用户把详情页底下那一节划掉（"删除的时候就在当前界面出现一个弹窗…
+   而不是还得进详情页"），删除从此只在卡片墙上（`WallDelete.tsx`）。
+   那一节没了，终点页也就再也走不到，两处的样式一起没有读者。 */
 
 /* ── 静止模式 ───────────────────────────────────────────────────────────── */
 
@@ -507,7 +389,6 @@
      将来谁在这里加一条过渡，都得先看一眼这一段（README §五：静止终态不是「不播」） */
   .cd__btn,
   .cd__version,
-  .cd__link,
   .cd__textarea {
     transition: none;
   }

@@ -12,7 +12,7 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { describeEvent } from './events.ts'
+import { createEventFactory, describeEvent, maxSeqOf } from './events.ts'
 import type { EngineEvent } from './events.ts'
 
 function shown(event: Record<string, unknown>): string {
@@ -48,5 +48,32 @@ describe('describeEvent 的页号', () => {
       choicePages: [],
     } as unknown as EngineEvent)
     expect(text).toBe('故事编好了：《云朵小船去旅行》，20 页')
+  })
+})
+
+/**
+ * ★ 序号接续（工单 01 §3.2）。
+ *
+ * 单页重做是往**同一个** `events.jsonl` **追加**的（整本那一轮开始时才 truncate），
+ * 所以整本跑完（`seq` 到 19）、再重画第 3 页时，那一批事件的序号必须从 20 接上去。
+ * 从 1 重来的话日志里会出现两条 `seq: 1`——而 `seq` 正是
+ * "重放能重建同一串界面状态"与"断线重连后对齐"的依据。
+ */
+describe('事件序号：单页重做要接着数', () => {
+  it('从 startSeq 接上去，不漏号也不撞', () => {
+    const emit = createEventFactory(() => 1, 19)
+    expect(emit({ kind: 'stage', stage: 'illustrating', phase: 'begin', pageNo: 3 }).seq).toBe(20)
+    expect(emit({ kind: 'stage', stage: 'illustrating', phase: 'begin', pageNo: 3 }).seq).toBe(21)
+  })
+
+  it('缺省仍然从 1 起（整本那一轮一个字都没改）', () => {
+    expect(createEventFactory(() => 1)({ kind: 'stage', phase: 'begin' }).seq).toBe(1)
+  })
+
+  it('★ `maxSeqOf` 对空的一串给 0，不是 -Infinity', () => {
+    // 调用点自己写 Math.max(...events.map(...)) 的话，空数组拿到的是 -Infinity，
+    // 而那个值会让下一条事件得到一个负号——屏幕上不会有任何东西提示这件事
+    expect(maxSeqOf([])).toBe(0)
+    expect(maxSeqOf([{ seq: 4 } as never, { seq: 19 } as never, { seq: 7 } as never])).toBe(19)
   })
 })

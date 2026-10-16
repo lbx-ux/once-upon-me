@@ -18,8 +18,11 @@
  *    （`book-source.ts` 的 `runtimeAssetUrl`，以 `coverUrlOf` 递进来）。
  */
 
-import { manifestPathOf, type Book } from './engine/index.ts'
+import { manifestPathOf, isDraft, type Book } from './engine/index.ts'
 import type { AssetStore } from './engine/providers/types.ts'
+
+/** 书架上那一排怎么分组。判据的那一份在 `engine/domain.ts`（`Book.status` + `isDraft`） */
+export type BookStatus = 'draft' | 'published'
 
 export type BookSummary = {
   bookId: string
@@ -30,6 +33,14 @@ export type BookSummary = {
   illustratedCount: number
   /** 这本书有没有朗读（`narrations` 非空） */
   hasNarration: boolean
+  /**
+   * 草稿还是成品（工单 03）。
+   *
+   * ★ **缺省是成品**，判据在引擎那边只有一处（`isDraft`）：盘上老的 `book.json`
+   *   与随仓库提交的演示书都**没有这个字段**，把它们判成草稿会让它们
+   *   凭空从书架消失——而用户只会以为书丢了。
+   */
+  status: BookStatus
   cardId: string
   createdAt: number
   /**
@@ -65,6 +76,9 @@ export function summarize(book: Book, coverUrl: string | null): BookSummary {
     pageCount: book.tree?.nodes?.length ?? 0,
     illustratedCount: book.illustrations?.length ?? 0,
     hasNarration: (book.narrations?.length ?? 0) > 0,
+    // ★ 判据走 `isDraft`，不在这里再写一遍 `book.status === 'draft'`：
+    //   那个函数带着"缺省 = 成品"这条**迁移决定**，抄第二份就会有一天抄漏
+    status: isDraft(book) ? 'draft' : 'published',
     cardId: book.cardId,
     createdAt: book.createdAt ?? 0,
     coverUrl,

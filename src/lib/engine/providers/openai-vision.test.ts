@@ -14,7 +14,12 @@ import { describe, expect, it } from 'vitest'
 
 import { EngineError } from '../errors.ts'
 import { createOpenAiVision } from './openai-vision.ts'
-import { anchorsFromAnalysis, lookTagsFromAnalysis, parseLooseJson } from './openai-vision.ts'
+import {
+  anchorsFromAnalysis,
+  anchorsObjectOf,
+  lookTagsFromAnalysis,
+  parseLooseJson,
+} from './openai-vision.ts'
 
 describe('parseLooseJson', () => {
   it('裸 JSON 直接解', () => {
@@ -42,6 +47,51 @@ describe('parseLooseJson', () => {
     expect(parseLooseJson('这家什么都没回')).toBeNull()
     expect(parseLooseJson('{"score":')).toBeNull()
     expect(parseLooseJson('[1,2,3]')).toBeNull()
+  })
+})
+
+/**
+ * 锚点表**放在哪个键下面**（2026-10-16）。
+ *
+ * ★ 这一组是第 19 刀那条用户报障的根因：模型把表放在 `anchor`（单数）里，
+ *   而适配器只读 `anchors`——于是 `anchorsFromAnalysis(undefined)` 回空数组，
+ *   界面上写「读到了 0 条」。**看着像"这张照片读不出东西"，而答案就在回包里。**
+ *   静默的假成功比抛错难查得多，所以这一段单独量。
+ */
+describe('anchorsObjectOf', () => {
+  it('约定好的名字优先', () => {
+    expect(anchorsObjectOf({ anchors: { 骨相: '圆脸、颊部饱满' } })).toEqual({
+      骨相: '圆脸、颊部饱满',
+    })
+    // ★ 单数也要认：实测同一份提示词、同一张照片，模型一次回 `anchors`、一次回 `anchor`
+    expect(anchorsObjectOf({ anchor: { 骨相: '圆脸、颊部饱满' } })).toEqual({
+      骨相: '圆脸、颊部饱满',
+    })
+  })
+
+  it('名字完全出乎意料时，扫顶层谁像表就是谁（模型的键名可以不在我们的清单里）', () => {
+    expect(anchorsObjectOf({ 结果: { 眼睛: '黑亮杏眼、眼尾上挑' }, note: '正面半身照' })).toEqual({
+      眼睛: '黑亮杏眼、眼尾上挑',
+    })
+  })
+
+  it('七个槽位直接铺在顶层（平铺形状）也认', () => {
+    expect(anchorsObjectOf({ 骨相: '圆脸、颊部饱满', 头发: '齐耳短发' })).toEqual({
+      骨相: '圆脸、颊部饱满',
+      头发: '齐耳短发',
+    })
+  })
+
+  it('★ 认表放宽，认槽位不放松：一份不像锚点表的 JSON 回空表，不硬凑', () => {
+    // 比对那条路的形状（`compare` 的回包）——它里面一个真槽位都没有
+    expect(anchorsObjectOf({ score: 0.8, missed: ['骨相'], reason: '眼睛没画出来' })).toEqual({})
+    // 表在，但里面全是认不出来的格子
+    expect(anchorsObjectOf({ anchors: { 表情: '在笑' } })).toEqual({ 表情: '在笑' })
+  })
+
+  it('表在但整个是空的 → 回那张空表（"模型说没读到"与"表没找到"在界面上是两句不同的话）', () => {
+    expect(anchorsObjectOf({ anchors: {}, lookTags: [] })).toEqual({})
+    expect(anchorsObjectOf({ anchors: {} })).toEqual({})
   })
 })
 
@@ -109,6 +159,122 @@ describe('anchorsFromAnalysis', () => {
     expect(anchorsFromAnalysis({ 骨相: 12, 眼睛: '黑亮杏眼、眼尾上挑' })).toEqual([
       { slot: 'eyes', value: '黑亮杏眼、眼尾上挑' },
     ])
+  })
+})
+
+/**
+ * 比对那条路的**预算**（2026-10-16）。
+ *
+ * ★ 这一组钉的是那条报障的诊断结果：用户那本书 8/8 页都判成「没法核对」，
+ *   而**判据是它自己写出来的**——模型的思考链里明明写着「待审页头发明显是齐肩中长发，
+ *   不是短发…这条严重不符」，正文却一个字都没有。原因不在提示词，
+ *   在 `compare()` 里那个**硬编码的 `max_tokens: 400`**：推理模型把 400 全花在思考上，
+ *   正文永远轮不到 → `finish_reason=length` → 解析失败 → 记「没法核对」。
+ *   一次重画都没触发过。
+ *
+ * 所以两条都要钉住：**送出去的那个数**（改回 400 这条会红），
+ * 以及**失败时那个数要出现在 reason 里**（不然"预算不够"没法验证）。
+ */
+describe('compare 的 token 预算', () => {
+  const COMPARE_REQ = {
+    checklist: ['头发：黑色直短发'],
+    referenceDataUrl: 'data:image/png;base64,AA',
+    pageDataUrl: 'data:image/png;base64,BB',
+  }
+
+  const deps = (replies: unknown[], sent: unknown[]) => ({
+    baseUrl: 'https://example.invalid/v1',
+    apiKey: 'k',
+    fetchImpl: async (_url: string | URL | Request, init?: RequestInit) => {
+      sent.push(JSON.parse(String(init?.body)))
+      const body = replies[Math.min(sent.length - 1, replies.length - 1)]
+      return new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    },
+  })
+
+  /** 推理模型的典型坏回包：思考链写满了、正文空的 */
+  const spentOnThinking = {
+    choices: [
+      {
+        finish_reason: 'length',
+        message: {
+          role: 'assistant',
+          content: '',
+          reasoning_content: '第 1 条头发：待审页的头发明显是齐肩中长发，不是短发。这条严重不符…',
+        },
+      },
+    ],
+  }
+
+  it('★ 缺省预算不是 400——那一次就是被 400 卡死的', async () => {
+    const sent: { max_tokens?: number }[] = []
+    const provider = createOpenAiVision(
+      deps([{ choices: [{ finish_reason: 'stop', message: { content: '{"score":0.9}' } }] }], sent),
+      'm',
+    )
+    await provider.compare(COMPARE_REQ)
+    expect(sent[0]?.max_tokens).toBe(4096)
+  })
+
+  it('★ `compareMaxTokens` 给了就用它（换更重的推理模型时那个旋钮要真的转得动）', async () => {
+    const sent: { max_tokens?: number }[] = []
+    const provider = createOpenAiVision(
+      deps([{ choices: [{ finish_reason: 'stop', message: { content: '{"score":0.9}' } }] }], sent),
+      'm',
+      { compareMaxTokens: 16_000 },
+    )
+    await provider.compare(COMPARE_REQ)
+    expect(sent[0]?.max_tokens).toBe(16_000)
+  })
+
+  it('★ 预算花在思考链上时，判「没法核对」**并把预算报出来**（8/8 页那次的形状）', async () => {
+    const provider = createOpenAiVision(deps([spentOnThinking], []), 'm')
+    const out = await provider.compare(COMPARE_REQ)
+    expect(out.score).toBeNull()
+    expect(out.reason).toContain('finish_reason=length')
+    expect(out.reason).toContain('正文 0 字')
+    // ★ 这一个数就是诊断的全部：没有它，家长/我们只能看到"这一页没法核对"
+    expect(out.reason).toContain('预算 4096')
+    // 并且要说清处置（加预算/换模型），不是只描述现象
+    expect(out.reason).toContain('预算不够')
+    // 思考链的末尾要留在现场——"它其实看到了"这件事只能从这里看出来
+    expect(out.reason).toContain('齐肩中长发')
+  })
+
+  it('★ 比对**不重试**（一次要送两张 1440²，重试的收益抵不上代价）', async () => {
+    const sent: unknown[] = []
+    const provider = createOpenAiVision(deps([spentOnThinking, spentOnThinking], sent), 'm')
+    await provider.compare(COMPARE_REQ)
+    expect(sent.length).toBe(1)
+  })
+
+  it('正常回包照旧读出分数（下面那条路没被上面这些改坏）', async () => {
+    const sent: unknown[] = []
+    const provider = createOpenAiVision(
+      deps(
+        [
+          {
+            choices: [
+              {
+                finish_reason: 'stop',
+                message: {
+                  content: '{"score":0.6,"missed":["头发"],"reason":"发型不一致"}',
+                },
+              },
+            ],
+          },
+        ],
+        sent,
+      ),
+      'm',
+    )
+    const out = await provider.compare(COMPARE_REQ)
+    expect(out.score).toBeCloseTo(0.6, 5)
+    expect(out.missed).toEqual(['头发'])
+    expect(out.reason).toBe('发型不一致')
   })
 })
 
@@ -255,5 +421,98 @@ describe('analyzePortrait 对坏回包的处理', () => {
     const system = String(body.messages[0]?.content)
     expect(system).not.toContain('圆脸、颊部饱满、下颌线软')
     expect(system).toContain('不许把我这些字抄进去')
+  })
+})
+
+/**
+ * 读照片这条路**认形状**（2026-10-16，第 19 刀）。
+ *
+ * ★ 这一组守的是用户那句话的前半：「ai能识别出来什么就在锚点里填上」。
+ *   它在模型侧本来就已经做到了——坏的是我们**没去回包里取**：
+ *   表叫 `anchor` 的那几次，拿到的是一份货真价实的读数，而界面报「读到了 0 条」。
+ *   所以用例喂的是**实测原样的回包**（`--dump=1` 打出来的那两句）。
+ */
+describe('analyzePortrait 认得出模型实际回的形状', () => {
+  const providerFor = (content: unknown) =>
+    createOpenAiVision(
+      {
+        baseUrl: 'https://example.invalid/v1',
+        apiKey: 'k',
+        fetchImpl: async () =>
+          new Response(
+            JSON.stringify({
+              choices: [{ finish_reason: 'stop', message: { role: 'assistant', content } }],
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          ),
+      },
+      'm',
+    )
+
+  it('★ 表叫 `anchor`（单数）＋中文槽位名 —— 实测原样，原来这一份会被整份丢掉', async () => {
+    const provider = providerFor(
+      '{"anchor":{"骨相":"圆脸、短下巴、脸颊鼓","眼睛":"圆眼、黑瞳、双眼皮","头发":"短发、齐刘海、别鸭夹' +
+        '","头身比":"看不清","肤色":"白皙、双颊泛红、肤色匀","特征记号":"面部、耳侧黄鸭夹、腮红印",' +
+        '"常服":"无袖上衣、淡紫色、圆领"},"lookTags":[],"note":"照片仅显示头部及肩部，身体部分被截断。"}',
+    )
+    const out = await provider.analyzePortrait({ photoDataUrl: 'data:image/png;base64,AA' })
+    const read = new Map(out.anchors.map((anchor) => [anchor.slot, anchor.value]))
+    // 六条读到了（七格里 `头身比` 是「看不清」，按哨兵值丢掉——那是提示词自己要求的）
+    expect(read.get('bone')).toBe('圆脸、短下巴、脸颊鼓')
+    expect(read.get('eyes')).toBe('圆眼、黑瞳、双眼皮')
+    expect(read.get('wardrobe')).toBe('无袖上衣、淡紫色、圆领')
+    expect(read.has('build')).toBe(false)
+    expect(out.anchors.length).toBe(6)
+    // note 要说得出"照片缺了什么"，因为界面那句"另外几格空着"的理由就在它里面
+    expect(out.note).toContain('头部及肩部')
+  })
+
+  it('表叫 `anchors` ＋英文槽位键（同一次实测里的另一种形状）', async () => {
+    const provider = providerFor('{"anchors":{"bone":"圆脸、下颌线软","hair":"齐耳短发"}}')
+    const out = await provider.analyzePortrait({ photoDataUrl: 'data:image/png;base64,AA' })
+    expect(out.anchors).toEqual([
+      { slot: 'bone', value: '圆脸、下颌线软' },
+      { slot: 'hair', value: '齐耳短发' },
+    ])
+  })
+
+  it('★ lookTags / note 被模型塞进表里时也要取到（取字段这一层与认表同一条纪律）', async () => {
+    const provider = providerFor(
+      '{"anchor":{"骨相":"圆脸、颊部饱满"},"look_tags":["短发","大眼睛"],"备注":"正面大头照"}',
+    )
+    const out = await provider.analyzePortrait({ photoDataUrl: 'data:image/png;base64,AA' })
+    expect(out.anchors).toEqual([{ slot: 'bone', value: '圆脸、颊部饱满' }])
+    expect(out.lookTags).toEqual(['短发'])
+    expect(out.note).toBe('正面大头照')
+  })
+
+  it('★ 解释一句"照片是半身照、这一格读不出来"的提示词必须在（用户要的是"空出来 + 提示去填"）', async () => {
+    const sent: { messages: { content: unknown }[] }[] = []
+    const provider = createOpenAiVision(
+      {
+        baseUrl: 'https://example.invalid/v1',
+        apiKey: 'k',
+        fetchImpl: async (_url: string | URL | Request, init?: RequestInit) => {
+          sent.push(JSON.parse(String(init?.body)))
+          return new Response(
+            JSON.stringify({
+              choices: [{ finish_reason: 'stop', message: { content: '{"anchors":{}}' } }],
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          )
+        },
+      },
+      'm',
+    )
+    await provider.analyzePortrait({ photoDataUrl: 'data:image/png;base64,AA' })
+    const system = String(sent[0]?.messages[0]?.content)
+    expect(system).toContain('照片**可能不是全身照**')
+    // 判据是"这一格的答案在这张照片里看得见吗"，不是"这张照片完不完整"
+    expect(system).toContain('这一格的答案在这张照片里看得见吗')
+    // ★ 反着说的那条**不能删**：实测只留"没有的就写看不清"时，模型把胸口以上的裁图
+    //   整张判成废片（连看得见的「常服」都回「看不清」），这一屏对用户就白跑了
+    expect(system).toContain('不要因为照片不完整就整张都不答')
+    // 表名那句锁（减少形状彩票，但读回来那一侧不靠它成立）
+    expect(system).toContain('固定放在顶层 `anchors`')
   })
 })

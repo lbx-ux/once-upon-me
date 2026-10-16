@@ -13,17 +13,28 @@
  * | `thumbs/<档>/books/<bookId>/` | 上面那些图的缩略缓存（5 档各一个目录） | **派生内容也是这本书**；`child-deletion.ts` 记的那个真实的漏（"删了卡没删图"）在这里是同一件事 |
  * | `shelf/order.json` | 书架上那一排的次序（`shelf-order.ts`） | 不划掉的话，这个文件会一直记着几个已经不存在的书号 |
  *
- * ## 四条与那一层逐字相同的约定
+ * ## 三条与那一层逐字相同的约定
  *
  * 1. **前缀一律以 `/` 结尾**：`deletePrefix` 在内存 store 上是键前缀匹配、在 fs store 上是
  *    目录遍历 + rm。传一个文件路径进去，两边报数不一样（内存回 1、fs 回 0），
  *    而文件照样被删掉——凭据会说"删了 0 条"而东西已经没了。
- * 2. **预演与真删报两个不同的数**（数出来的 vs `deletePrefix` 真删的），不共用。
+ * 2. **凭据报的是 `deletePrefix` 真删掉的条数**，不是删之前枚举出来的那一份。
+ *    两者在"正常情况"下相等，而"正常情况"正是不该被假定的东西。
  * 3. **每个位置各自 try/catch**：一个位置失败不阻止其它位置被删（删到一半停下，
  *    剩下的东西比删完更糟），但失败记进 `failed` → `complete: false`，
  *    界面**不许**说"删掉了"。
  * 4. **不报字节**：`AssetStore` 没有 `stat`，要算字节得把几十张页图读一遍，
  *    而用户要问的是"删干净了吗"，不是"删了多少 MB"（`child-deletion.ts` 对书那一行的原话）。
+ *
+ * ## ★ 没有"预演"这一步（2026-10-16 用户第二句话）
+ *
+ * 第一版照着 `child-deletion.ts` 做了两步：`GET` 一张"要失去什么"的凭据 → 确认 →
+ * `DELETE`。用户看着那份逐行的清单说「也不要写这么多，就一个确认是否删除，还是算了」。
+ *
+ * 于是**预演整个撤掉**（`planBookDeletion` 与那条 `GET` 都删了），确认框只剩一句话。
+ * 这一层留下的凭据**只在出错时给人看**：正常删完，界面上什么也不留。
+ * 撤掉预演的代价说清楚：用户点确认之前不再知道"要失去多少张图"——那是他自己的选择，
+ * 而"删掉了"这三个字仍然能被检查（凭据报的是真删掉的条数，且逐行标出哪个位置失败）。
  *
  * ## ★ 盘上一条文件都没有时不抛
  *
@@ -59,8 +70,6 @@ export type BookDeletionReceipt = {
   at: number
   places: DeletionPlace[]
   totalFiles: number
-  /** 这份凭据是"要删的"还是"删掉的"。界面文案要分开说，不许混 */
-  stage: 'plan' | 'done'
   /** 有没有哪个位置失败。有就是这张凭据**不完整**，界面不许说"删掉了" */
   complete: boolean
 }
@@ -71,7 +80,10 @@ export type BookDeletionDeps = {
   now?: number
 }
 
-/** 枚举出来的"该删什么"。预演与真删**共用它**，所以两边不会漏掉同一个位置 */
+/**
+ * 删之前枚举出来的"这本书有什么"。**只服务于凭据上那几句解释**（各几类、缩略图几个档位
+ * 要清、在不在顺序清单里）——真正删哪些由 `deleteBookEverywhere` 那三行决定。
+ */
 export type BookTargets = {
   bookFiles: number
   /** 这本书里各类文件各几个（凭据那句解释用，不参与删除） */
@@ -92,9 +104,8 @@ const AUDIO_EXT = /\.(?:mp3|m4a|wav)$/i
 /**
  * 这本书**在不在盘上**。路由用它回 404，这一层自己不用它做判断。
  *
- * ★ 与"预演"分开、不合并成一次遍历：预演要逐类数（图几 张、朗读几段），
- *   这里只要"有没有"——把它塞进 `bookTargets` 的返回值里，就等于说
- *   "想回 404 的人必须先把整本书数一遍"。
+ * ★ 与 `bookTargets` 分开、不合并成一次遍历：这里只要"有没有"——把它塞进
+ *   `bookTargets` 的返回值里，就等于说"想回 404 的人必须先把整本书数一遍"。
  */
 export async function bookOnDisk(bookId: string, deps: BookDeletionDeps): Promise<boolean> {
   return (await deps.store.list(`${bookDirOf(bookId)}/`)).length > 0
@@ -157,7 +168,6 @@ function receiptOf(
   targets: BookTargets,
   numbers: { book: number; thumbs: number; order: number },
   at: number,
-  stage: 'plan' | 'done',
   failures: Record<string, string>,
 ): BookDeletionReceipt {
   const places: DeletionPlace[] = [
@@ -195,30 +205,8 @@ function receiptOf(
     at,
     places,
     totalFiles: places.reduce((sum, one) => sum + one.deleted, 0),
-    stage,
     complete: Object.keys(failures).length === 0,
   }
-}
-
-/** 预演：要删什么、各多少条。**一个字节都不动**（确认框里的那句人话就是它） */
-export async function planBookDeletion(
-  bookId: string,
-  deps: BookDeletionDeps,
-): Promise<BookDeletionReceipt> {
-  const targets = await bookTargets(bookId, deps)
-  return receiptOf(
-    bookId,
-    await titleOf(bookId, deps),
-    targets,
-    {
-      book: targets.bookFiles,
-      thumbs: targets.thumbFiles,
-      order: targets.inOrder ? 1 : 0,
-    },
-    deps.now ?? Date.now(),
-    'plan',
-    {},
-  )
 }
 
 /**
@@ -259,5 +247,5 @@ export async function deleteBookEverywhere(
     return 1
   })
 
-  return receiptOf(bookId, title, targets, numbers, deps.now ?? Date.now(), 'done', failures)
+  return receiptOf(bookId, title, targets, numbers, deps.now ?? Date.now(), failures)
 }

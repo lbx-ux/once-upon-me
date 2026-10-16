@@ -7,7 +7,7 @@
  *   于是所有页面都正常，只有评委那台只有 `public/` 的机器上列表是空的。
  *   （`book-source.ts` 的 `demoAssetPathFor` 那段注释记的是同一类事故。）
  *
- * 其余三条盯的是顺序：示例在前、运行期赢同名、childId 不合法时不抛。
+ * 其余三条盯的是顺序：自己的在前、运行期赢同名、childId 不合法时不抛。
  */
 
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
@@ -58,17 +58,19 @@ describe('示例档案随仓库发布（ADR-0003 那一条）', () => {
 })
 
 describe('两个来源的顺序与优先级', () => {
-  it('示例在前，自己的在后——而且自己的按建档时间从新到旧', async () => {
+  it('★ 自己的在前（新的在前），示例在后——2026-10-16 第 23 刀翻过来的', async () => {
     const root = await tempRoot()
     await seed(root, 'kid-old', '阿早', 1000)
     await seed(root, 'kid-new', '阿新', 2000)
 
     const all = await listChildren(root)
+    // 用户原话："用户生成的角色要放到默认角色的前面"——卡片墙第一眼要看的是"我的孩子"，
+    // 示例是"先看看效果"的东西。★ 断言的是**整串**，所以顺序再被谁翻一次会红在这里。
     expect(all.map((item) => item.profile.childId)).toEqual([
-      'xiaoman',
-      'xiaoyu',
       'kid-new',
       'kid-old',
+      'xiaoman',
+      'xiaoyu',
     ])
   })
 

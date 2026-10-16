@@ -250,10 +250,10 @@ describe('提示词与出处', () => {
     for (const anchor of ANCHORS) expect(prompt).toContain(anchor.value)
   })
 
-  it('provenance 记的是 `character-photo@v1`：这条路的提示词与"从零描述"那份不是一份', async () => {
+  it('provenance 记的是 `character-photo@v2`：这条路的提示词与"从零描述"那份不是一份', async () => {
     const { deps } = await depsOf()
     const result = await cardFromPhoto(await request(), deps)
-    expect(result.card.provenance.promptVersion).toBe('character-photo@v1')
+    expect(result.card.provenance.promptVersion).toBe('character-photo@v2')
   })
 
   it('归一化做了什么，逐条回给界面（"我们处理了你的照片"那句话的原料）', async () => {

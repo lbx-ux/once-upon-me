@@ -107,7 +107,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  /* 44px 是触控热区那条线，与 `create-flow.css` 的 `.cf__chip` 同一个数 */
+  /* 44px 是触控热区那条线，与 `fields.css` 的 `.cf__chip` 同一个数 */
   min-height: 44px;
   padding: 0 18px;
   border: 1px solid var(--hairline);
@@ -149,7 +149,7 @@
 /* 选中那一颗。★ **只有那一圈变蓝，中间一直是白的**——用户 2026-10-16 的原话：
    "选中之后，四周的那一圈变成蓝色，中间不变"，补一句"我的意思是，中间一直是白色的"。
    所以这里**只留一条 `border-color`**：深浅两个字色都不许动。
-   ★ 这条规矩值得写下来，因为它与全站那套不同：`create-flow.css` 的
+   ★ 这条规矩值得写下来，因为它与全站那套不同：`fields.css` 的
      `.cf__chip[data-active='true']` 是"accent 边 + 10% accent 底 + accent 字"三件套。
      形态这一颗**故意不走那一套**——它要的是"这一颗是按下的"，
      而不是"这一颗可以点"（后者是强调色的差事，旁边那颗「开始创作」在用）。
@@ -823,22 +823,14 @@ button.cl__pill:hover {
   background: var(--surface-soft);
 }
 
-.cl__suggest-head {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin: 0 0 6px;
-  font-size: 11.5px;
-  letter-spacing: 0.04em;
-  color: var(--ink-muted);
-}
-
-/* 谁改的。★ 与角色卡上记模型名同一条道理：这句话不是人写的，要说得出来是谁写的 */
-.cl__suggest-by {
-  font-size: 11px;
-  opacity: 0.85;
-}
-
+/* ★ 这里原来还有一行抬头「改了一版 · <模型名> 改的」（`.cl__suggest-head` +
+   `.cl__suggest-by`），2026-10-16 按用户要求整行撤了："就直接显示改后的句子是什么，
+   不用告诉用户是什么模型生成的"。
+   ★ 为什么连"改了一版"这四个字也一起走掉：它是**那一行的另一半**，撤掉之后
+   剩下的那句建议底下就是两个按钮（「用这句」/「不用」/「退回原句」），
+   "这是一版改过的句子"由那两颗按钮说完了，不必再留一个没有主语的抬头。
+   ★ 死代码跟着走：`.cl__suggest-head` 的两条规则与 `.cl__suggest-by` 一并删除，
+   `Suggestion` 里那个只喂给它的 `modelId` 也删了（接口照旧返回，理由见那个 state）。 */
 .cl__suggest-text {
   margin: 0;
   font-size: 15px;
@@ -857,6 +849,24 @@ button.cl__pill:hover {
   display: flex;
   gap: 8px;
   margin-top: 10px;
+}
+
+/* ★ 用户报的"「退回原句」被折成了两行"就出在这儿。
+   `.cl__roll` 本身是**一枚 40×40 的圆图标按钮**（给「换一句」那枚骰子用的，
+   `width: 40px` + `padding: 0`）；这一块里却拿它当**字**按钮使——
+   四个字塞进 40px，只能是「退回 / 原句」两行。
+   ★ 修法是在这里把它放开，**不去改 `.cl__roll` 本身**：那边是图标，40px 是对的。
+   谁在哪儿用、按谁的身量给，这一条比改基础类干净。
+   `white-space: nowrap` 是第二道保险：真被挤到极限时它会顶出去，而不是又折行——
+   宁可挤到旁边那颗，也不要一句按钮名读成两截。
+   ★ 高度也一起对齐到「用这句」的 34px：同一行里一颗 34、一颗 40，
+   在圆的时候看不出来，放成一颗长药丸之后就是一眼的歪。 */
+.cl__suggest-acts .cl__roll {
+  width: auto;
+  height: 34px;
+  padding: 0 16px;
+  font-size: 13px;
+  white-space: nowrap;
 }
 
 /* 「用这句」是这一块里唯一的动作，给它实心强调色；「不用」是 `.cl__roll` 那套描边 */

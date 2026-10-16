@@ -177,6 +177,28 @@ export function visionProviderOf(env: Env): (VisionComparator & PortraitAnalyzer
       timeoutMs: numberOf(env, 'VISION_TIMEOUT_MS'),
     },
     visionModel,
+    {
+      /**
+       * 读照片那条路的 token 预算。
+       *
+       * ★ 2026-10-16 补的出口，起因是一次用户报障：截图里写着
+       *   `finish_reason=length · 正文 0 字 · 思考链 961 字`——预算是**推理模型**时
+       *   最先要用完的那样东西，而适配器里原来把它硬编码成 700。缺省已经提到 4096
+       *   （与文本那条路一致，见 `openai-vision.ts` 的 `DEFAULT_ANALYZE_MAX_TOKENS`），
+       *   这一格是留给"换一个更重的推理模型"的。
+       * ★ 它**不在设置抽屉里**（那一格只有 base / key / 模型名）：抽屉是本机家长用的，
+       *   而"这个模型要多大预算"是选型时才知道的事。要压它，写在 `env` 表里传进来
+       *   （脚本与 e2e 都走这条路），不要为它加一个家长看不懂的输入框。
+       */
+      analyzeMaxTokens: numberOf(env, 'VISION_MAX_TOKENS'),
+      // ★ 同一个数管两处（读数与比对）：它是**这个模型**的属性（"它一次要想多久"），
+      //   不是某一次调用的属性。原来只有读数那一格接了它，比对那一格写死 400
+      //   （见 `DEFAULT_COMPARE_MAX_TOKENS` 那段：那让 8/8 页都判成"没法核对"）。
+      //   要分开调就传 `VISION_COMPARE_MAX_TOKENS`——留这一格是因为比对的思考链更长，
+      //   将来真撞线时，改它比改一个共用的数更不容易误伤读数那条路。
+      compareMaxTokens:
+        numberOf(env, 'VISION_COMPARE_MAX_TOKENS') ?? numberOf(env, 'VISION_MAX_TOKENS'),
+    },
   )
 }
 

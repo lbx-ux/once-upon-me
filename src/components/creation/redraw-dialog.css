@@ -1,0 +1,107 @@
+/**
+ * redraw-dialog.css —— 重画（`RedrawDialog.tsx`）与重配（`RevoiceDialog.tsx`）两个弹窗的样式
+ *
+ * ★ 两份样式放**一个文件**里，因为它们讲的是同一件事的两半：那一页现在是什么样、
+ *   这一次要改成什么样。分开写的话，"上面的图多大、下面那一段留白多少"会各写一遍，
+ *   而这两个弹窗在屏幕上本来就是**同一个位置、同一个尺寸**的同一个东西。
+ *
+ * ★ 壳（遮罩 / 面板 / 标题栏 / 底栏 / 只读块 / 输入框）在 `components/dialog/dialog.css`，
+ *   这里只有这两个弹窗自己的排布。
+ */
+
+/* ── 重画：左边上一版那张图，右边原来那段提示词 ─────────────────────────── */
+
+.rdg__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 240px) minmax(0, 1fr);
+  gap: 18px;
+  margin-top: 18px;
+  /* ★ **居中对齐**（2026-10-16，用户按着截图说"图片有点偏上了"）。
+     两列的高度由"提示词那一块"决定（它有八行，还带自己的滚动条），而图是 3:2 的，
+     比它矮——默认的顶对齐于是把图钉在最上面，看起来像"图飘到上面去了"。
+     居中之后两者在一条水平中线上，右边那一段的头尾各留一点空。 */
+  align-items: center;
+}
+
+/* 上一版那张图。★ 3:2，与画桌上、与出图尺寸一致——
+   这里摆一个方的会把用户看到的"上一版"裁掉两边，而他正要点着它说哪里不对 */
+.rdg__art {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  object-fit: cover;
+  border-radius: var(--card-radius);
+  background: var(--card-paper);
+  box-shadow: var(--sheet-shadow);
+}
+
+.rdg__noart {
+  margin: 0;
+  padding: 20px 16px;
+  border: 1px dashed var(--dot);
+  border-radius: var(--card-radius);
+  color: var(--ink-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.rdg__what {
+  min-width: 0;
+}
+
+.rdg__label {
+  display: block;
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* 提示词那一块。★ 高度封顶 + 自己滚：提示词有八行左右，全摊开会把
+   "这一次哪里不对"那一格挤到弹窗外——而那一格才是这个弹窗要做的事 */
+.rdg__prompt {
+  max-height: 220px;
+  overflow: auto;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+/* ── 两个弹窗共用的"下面那一格" ─────────────────────────────────────────── */
+
+.rdg__supplement {
+  display: block;
+  margin-top: 20px;
+}
+
+/* ── 重配：那个播放器 ───────────────────────────────────────────────────── */
+
+.rvd__audio {
+  display: block;
+  width: 100%;
+  height: 44px;
+  margin-bottom: 4px;
+}
+
+.rvd__noaudio {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px dashed var(--dot);
+  border-radius: var(--card-radius);
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
+.rvd__text {
+  min-height: 108px;
+}
+
+/* 窄屏：图与提示词改成上下。★ 这两块都必须留着（一个说"现在长什么样"、
+   一个说"原来发的是什么"），所以**不藏**，只是排成一列 */
+@media (max-width: 640px) {
+  .rdg__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .rdg__art {
+    max-width: 240px;
+  }
+}

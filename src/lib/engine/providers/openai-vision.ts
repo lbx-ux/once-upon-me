@@ -47,10 +47,25 @@ const SYSTEM = [
  *      "不进 prompt"——那条管的是**送进画图**的提示词；这里是送进**视觉模型的提问**，
  *      而中文槽位名正是给人读的那一套，模型按它回答、我们再映射回槽位。
  */
-const ANALYZE_SYSTEM = [
+export const ANALYZE_SYSTEM = [
   '你在帮一个家长把孩子的照片读成"角色锚点"——这是以后每一页插画都要照着画的依据。',
   '只描述**这张照片里看得见的东西**。看不见、被挡住、不清楚的槽位，值就写「看不清」，',
   '绝对不要按常识补一个合理的猜测——编出来的一条会跟着这个孩子进每一页。',
+  // ★ 2026-10-16 加的（用户原话：「有时候用户上传的图片并不是完整的照片，可能只有是上半身，
+  //   ai能识别出来什么就在锚点里填上，识别不出来的就空出来，提示用户去填」）：
+  //   上面那句"看不见就写看不清"讲的是**模糊**，而这里要讲的是**照片里根本没有**。
+  //   两者在模型那里是不同的判断：半身照里的头身比不是"看不清"，是"这张照片不含这个信息"。
+  //   不明说，模型会按"一个小孩大概什么样"把全身比例补出来——那是最坏的一种错，
+  //   因为它看上去是一条正常锚点。
+  // ★ 但这一句必须带下面那条**反着说的**才成立。实测（`--photo=.out/probe/halfbody.jpg`）：
+  //   只写"照片里没有的就写看不清"，模型会把整张照片**判成废片**——那张胸口以上的裁图里
+  //   明明看得见衣服上沿，它连「常服」都回了「看不清」。少读一格不是安全，是这一屏
+  //   对用户白跑一次（而他的照片多半就是半身照）。判据只有一条：这一格看不看得见。
+  '照片**可能不是全身照**：大头照、半身照、侧脸、背影都有可能。判断只看一件事：',
+  '**这一格的答案在这张照片里看得见吗**。看不见的（全身的比例、背后的样子），',
+  '值一律写「看不清」，**不要**按一个同龄孩子常见的样子替它补——那一条会跟着他进每一页。',
+  '★ 反过来也**不要因为照片不完整就整张都不答**：看得见的那几格照旧要一条条读出来，',
+  '一格都别少（只拍到胸口，衣服的上半截还是看得见的）。',
   // ★ 2026-10-16：这里原来举的例子是「圆脸、颊部饱满、下颌线软」——而它**就是**
   //   `DEFAULT_ANCHORS.bone` 那一行（第 3 步的预填示例）。实测两次里有一次模型把它
   //   **原样抄了回来**（`.out/vision-raw-2.log`：回来的骨相是「圆脸、颊部饱满、下颌线圆润」，
@@ -59,12 +74,20 @@ const ANALYZE_SYSTEM = [
   '每条一句中文短语：**形状 + 两处细节**，十来个字，例如「〈形状〉、〈细节〉、〈细节〉」',
   '——尖括号只是占位，**不许把我这些字抄进去**。',
   '不写情绪、不写场景、不写"很可爱"这类评价。',
+  // ★ 2026-10-16：那把"锁"在这一句里。模型**每次自己挑一种形状**回（同一张照片、同一份提示词，
+  //   一次是 `anchors` + 中文槽位名，下一次是 `anchor` + 英文槽位键），而只认一种就是
+  //   「读到了 0 条」那一类静默的假成功。读回来那一侧已经放宽了（见 `anchorsObjectOf`），
+  //   这里再把餐具摆明一次：**减少彩票，但不靠它成立**。
+  '锚点表**固定放在顶层 `anchors` 这个键下面**（就是下面的样子，别改名、别套一层）。',
   '只输出 JSON：{"anchors":{"骨相":"…","眼睛":"…","头发":"…","头身比":"…","肤色":"…",',
   '"特征记号":"…","常服":"…"},"lookTags":["从给定的标签里挑，看不出来就空数组"],"note":"一句中文"}',
   // ★ 「补充」（`extra`）**不在**要读的槽位里：它是家长自己写的那一格。
   //   这一句必须写出来——原来 user 那一段用 `ANCHOR_SLOTS` 列出了**八个**槽位（含「补充」），
   //   而这里的 JSON 范例只有**七个**键，两处互相矛盾。实测模型照着七个回（没有输出补充）。
   '「补充」那一格**不用你读**：那是家长自己写的一句话，不要输出它。',
+  // ★ note 那一格里要说清"这张照片缺了什么"。它是**给家长的一句解释**：
+  //   界面上"另外几格空着"的原因写在那里，而家长看不懂的是"为什么空"。
+  'note 里写一句：这张照片是什么（比如"正面半身照"），以及**哪些槽位因此读不出来**。',
 ].join('\n')
 
 /**
@@ -78,9 +101,82 @@ const ANALYZE_SYSTEM = [
  *   它就不知道要读哪几格。
  */
 
+/**
+ * 适配器的两个可拧的旋钮。★ 形状照着 `OpenAiTextOptions` 抄，理由与它一样：
+ *   参数**随模型走**，不写在调用点里——写在那里就等于把一个模型参数钉死成一个产品参数。
+ *
+ * ★ 2026-10-16 补上来的原因是一条用户报障（截图：`/character/new` 上
+ *   「模型这次没按格式把照片读出来……finish_reason=length · 正文 0 字 · 思考链 961 字」）。
+ *   同一个坑文本那条路 10-13 已经踩过（`openai-text.ts` 的 `DEFAULT_TEXT_MAX_TOKENS`），
+ *   视觉这条路当时漏了：预算被硬编码成 700。
+ */
+export type OpenAiVisionOptions = {
+  /** 读照片的 token 预算。缺省见 `DEFAULT_ANALYZE_MAX_TOKENS` */
+  analyzeMaxTokens?: number
+  /**
+   * **比对**（`compare`）的 token 预算。缺省见 `DEFAULT_COMPARE_MAX_TOKENS`。
+   *
+   * ★ 2026-10-16 补上这一格，起因是另一条用户报障（"我提供给你的是男孩子，
+   *   怎么生成出来有男孩有女孩子"）。表面看是画错了，查下去发现**比对那一跳整个是哑的**：
+   *   `compare()` 的 `max_tokens` 被硬编码成 **400**，而比对模型是推理模型，
+   *   思考链本身就要几百上千 token——8 页**每一页**的判定都是
+   *   `finish_reason=length · 正文 0 字 · 思考链 638 字` → `verdict: 'unavailable'`
+   *   → 不重画。于是书里那句"没法核对"看着像"这道工序没接上"，
+   *   实际是"这道工序每次都撞线"。
+   *   ★ 同一个坑 `analyze` 那条路当天上午刚踩过（700 → 4096，见那一格的注释），
+   *     `compare` 漏了——**两处都是"预算"这一个旋钮，改完要一起看**。
+   * ★ 更值得记的是：那个模型的**思考链里其实把话说了**。用户书里第 5 页的原文：
+   *   "待审页头发明显是齐肩中长发，不是短发，鬓角也长。这条严重不符"——
+   *   它看见了，只是没轮到写正文，于是那句话被当成"没法核对"丢掉了。
+   */
+  compareMaxTokens?: number
+  /** 供应商特有的额外字段（关思考之类的参数名各家不一致，在这里补，不改接口） */
+  extra?: Record<string, unknown>
+}
+
+/**
+ * 读照片的 token 预算。**缺省与文本那条路一致（4096）**，因为它是同一类调用：
+ * 送出去的是一张图 + 一段提示词，要回来的是一段结构化文本，而模型多半是推理模型。
+ *
+ * ★ 原来这里是 **700**，它是坏的——但坏法要说准，2026-10-16 的实测把两种坏法分开了：
+ *
+ *   · **在聚合站这条路上（`kimi-k2.6`），700 并没有截断**。实测 700 → `finish_reason=stop`、
+ *     正文 283 字、思考链 5066 字、`completion_tokens 3391`（其中 `reasoning_tokens 3234`）
+ *     ——这家**不理 `max_tokens`**。所以我**没有**在本地复现出用户那一次；
+ *     下面那条"截断"是**用户自己那台机器的配置**出来的（设置抽屉里的 base/key/模型是本机的）。
+ *   · **在会理 `max_tokens` 的端点上，700 就是必然截断**：思考链要几千 token，
+ *     700 还没想完就撞线，`finish_reason=length` + 正文 0 字。
+ *     用户截图里那一行正是这个样子（思考链 961 字 ≈ 700 token，正文 0 字）
+ *     ——预算恰好是 700 时才会出现的形态。
+ *
+ * 所以 700 → 4096 是**按第二类证据**改的，不是"本地复现了"。实测细节与结论
+ * 见 `scripts/probe-vision-budget.mts` 与 `03-character-profile.md` 第 19 刀。
+ * ★ 它仍然是**下界不是够用线**：换一家更重的推理模型就调 `VISION_MAX_TOKENS`
+ *   （或把 `opts.analyzeMaxTokens` 传进来）。真撞线时 `describeUnreadable`
+ *   会把每一次的预算都报出来，所以"加了多少还是不够"当场看得见。
+ */
+const DEFAULT_ANALYZE_MAX_TOKENS = 4096
+
+/**
+ * **比对**的 token 预算。缺省与 `analyze` 同一个数（4096），理由也是同一条：
+ * 它送出去的是"两张图 + 一张清单"，要回来的是一段结构化 JSON，
+ * 而模型多半是推理模型——**思考链先花掉预算，正文才轮到**。
+ *
+ * ★ 这里原来是硬编码的 **400**，等于把这条校验变成一个永远返回"没法核对"的空转。
+ *   实测（用户那本 8 页的书，每一页都长这样）：
+ *   `比对的模型没有按 JSON 回答（试了 1 次；finish_reason=length · 正文 0 字 ·
+ *    思考链 638 字）`——8/8 页 `verdict: 'unavailable'`，**一次重画都没触发**。
+ * ★ 4096 是**下界不是够用线**：比对的思考链比读数更长（要逐条锚点比对），
+ *   换一家更重的推理模型就调 `VISION_COMPARE_MAX_TOKENS` / `VISION_MAX_TOKENS`。
+ *   真撞线时 reason 里会把预算报出来（`describeUnreadable` 的 `budgets`），
+ *   所以"加了多少还是不够"当场看得见。
+ */
+const DEFAULT_COMPARE_MAX_TOKENS = 4096
+
 export function createOpenAiVision(
   deps: HttpDeps,
   modelId: string,
+  opts: OpenAiVisionOptions = {},
 ): VisionComparator & PortraitAnalyzer {
   return {
     id: `openai-vision(${modelId})`,
@@ -103,6 +199,9 @@ export function createOpenAiVision(
         { type: 'text', text: '上面是待审页。按清单逐条核对后只输出 JSON。' },
       ]
 
+      /** 这一次用的预算。★ 报错时要把它带出去——不带的话，"预算不够"这四个字无从验证 */
+      const maxTokens = opts.compareMaxTokens ?? DEFAULT_COMPARE_MAX_TOKENS
+
       const body = await requestJson(deps, {
         method: 'POST',
         path: '/chat/completions',
@@ -114,7 +213,9 @@ export function createOpenAiVision(
           ],
           // 判定要稳定，不要发挥。温度 0 是这里唯一的选项。
           temperature: 0,
-          max_tokens: 400,
+          // ★ 原来是写死的 400（见 `DEFAULT_COMPARE_MAX_TOKENS` 那段：它让 8/8 页
+          //   都判成"没法核对"，一次重画都没触发）
+          max_tokens: maxTokens,
         },
         signal: budget?.signal,
         // ★ 缺省 300s，不是 90s。这个调用一次要送**两张 1440×1440 的 data URL**
@@ -136,7 +237,9 @@ export function createOpenAiVision(
           // ★ 这里**不**替它试第二次（读数可以重试，比对不行：比对一次要送两张 1440² 的图，
           //   而且它的产物是一个"没核对"的标记，重试的收益抵不上那次调用的代价）。
           //   但失败的原因照旧要说清，走的与读数同一条 `describeUnreadable`。
-          reason: describeUnreadable(reply, 1, '比对'),
+          //   ★ 预算要**传进去**：不传的话那句"预算不够"的排障提示里，恰恰没有那个数
+          //     （用户那本书的 8 条 reason 就都没带它，只有"思考链 638 字"）。
+          reason: describeUnreadable(reply, 1, '比对', [maxTokens]),
           modelId,
           traceId: traceOf(body) || undefined,
         }
@@ -207,10 +310,20 @@ export function createOpenAiVision(
        *   等于把这一次重试交给家长手动做。现在引擎自己做掉。
        */
       const ATTEMPTS = 2
+      /**
+       * 第二次的预算倍数。**只在"上一次被截断"时用得上**（见循环尾那一段）：
+       * 预算够却答歪了，加钱只会更歪；而 `finish_reason=length` 就是差钱。
+       */
+      const RETRY_BUDGET_FACTOR = 4
+      const analyzeMaxTokens = opts.analyzeMaxTokens ?? DEFAULT_ANALYZE_MAX_TOKENS
+      /** 每一次实际用掉的预算。★ 它要进错误消息——"试了两次"不说清是**多大的两次**，等于没说 */
+      const budgets: number[] = []
+      let maxTokens = analyzeMaxTokens
       let reply: Reply | null = null
       let parsed: Record<string, unknown> | null = null
       let traceId = ''
       for (let attempt = 1; attempt <= ATTEMPTS && !parsed; attempt += 1) {
+        budgets.push(maxTokens)
         const body = await requestJson(deps, {
           method: 'POST',
           path: '/chat/completions',
@@ -222,7 +335,8 @@ export function createOpenAiVision(
             ],
             // 读数，不是创作。温度 0 与比对那条同一个理由
             temperature: 0,
-            max_tokens: 700,
+            max_tokens: maxTokens,
+            ...(opts.extra ?? {}),
           },
           signal: budget?.signal,
           // 只送**一张**图（比对那条送两张），所以缺省比 300s 短一档
@@ -231,18 +345,25 @@ export function createOpenAiVision(
         reply = readReply(body)
         parsed = parseLooseJson(reply.text)
         traceId = traceOf(body) || traceId
+        // 正文一个字都没写出来 + 被截断 ⇒ 下一次把预算放大再试
+        if (!parsed && reply.text.trim() === '') maxTokens *= RETRY_BUDGET_FACTOR
       }
 
       if (!parsed) {
-        throw new EngineError('provider-bad-response', describeUnreadable(reply, ATTEMPTS))
+        throw new EngineError(
+          'provider-bad-response',
+          describeUnreadable(reply, ATTEMPTS, '读照片', budgets),
+        )
       }
 
+      // 表先找出来（模型每次换个地方放），再从表里认槽位。两件事分开的理由见 anchorsObjectOf
+      const table = anchorsObjectOf(parsed)
+      const lookTags = fieldOf(parsed, table, LOOK_TAG_KEYS)
+      const note = fieldOf(parsed, table, ['note', '备注', '说明'])
       return {
-        anchors: anchorsFromAnalysis(parsed['anchors']),
-        lookTags: lookTagsFromAnalysis(parsed['lookTags']),
-        ...(typeof parsed['note'] === 'string' && parsed['note'].trim() !== ''
-          ? { note: parsed['note'].trim() }
-          : {}),
+        anchors: anchorsFromAnalysis(table),
+        lookTags: lookTagsFromAnalysis(lookTags),
+        ...(typeof note === 'string' && note.trim() !== '' ? { note: note.trim() } : {}),
         modelId,
         ...(traceId ? { traceId } : {}),
       }
@@ -276,6 +397,68 @@ const UNREAD_MARKERS = [
   'n/a',
   'unknown',
 ]
+
+/**
+ * 模型把锚点表放在哪个键下面。**约定是 `anchors`，但实测它每次自己挑**：
+ * 同一张照片、同一份提示词，一次回 `{"anchors":{…}}`（中文槽位名），
+ * 下一次回 `{"anchor":{…}}`（英文槽位键）。所以两个名字都进候选。
+ */
+const ANCHOR_CONTAINER_KEYS = ['anchors', 'anchor'] as const
+
+/** `lookTags` 也一样（实测放在顶层，但没有理由赌它永远放顶层） */
+const LOOK_TAG_KEYS = ['lookTags', 'look_tags', 'tags'] as const
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+/**
+ * 从模型的整份 JSON 里找出**锚点那张表**。
+ *
+ * ★ 这一层是 2026-10-16 补的，起因是一次**静默的假成功**：模型把表放在 `anchor`
+ *   （单数）里，而我们只读 `anchors`，于是 `anchorsFromAnalysis(undefined)` 回了一个
+ *   空数组——界面上写「读到了 0 条」，看着像"这张照片读不出东西"，
+ *   而模型的答案其实**就在回包里**（实测原文见 `03-character-profile.md` 第 19 刀）。
+ *   用户报的「我试了好几次，都出现这个问题了」里，有一部分就是它。
+ *
+ * ★ 放宽的是**认表**，不是**认槽位**：候选表要交给 `anchorsFromAnalysis`，
+ *   里面认得出至少一个真槽位才算数。所以一份随便的 JSON（比如比对那条路的
+ *   `{score, missed, reason}`）不会被这里误认成锚点表——找不到就是空表，
+ *   而"空表"与"表里有几格是看不清"在界面上是两句不同的话（见 NewChild.tsx）。
+ *
+ * ★ 顺序是有理由的：先是约定好的那两个名字（它们是提示词写明的形状），
+ *   再退到"扫一遍顶层，谁像表就是谁"（模型的键名可以完全出乎意料），
+ *   最后才把**整份 JSON 当成一张平铺的表**（模型把七个槽位直接铺在顶层）。
+ */
+export function anchorsObjectOf(parsed: Record<string, unknown>): unknown {
+  const named = ANCHOR_CONTAINER_KEYS.map((key) => parsed[key]).filter(isRecord)
+  const nested = Object.values(parsed).filter(isRecord)
+  const candidates = [...named, ...nested, parsed]
+  return candidates.find((table) => anchorsFromAnalysis(table).length > 0) ?? named[0] ?? {}
+}
+
+/**
+ * 取一个字段：**顶层找不到就往被挑中的那张表里再看一眼**。
+ *
+ * ★ 理由与 `anchorsObjectOf` 同源——模型把 `lookTags` / `note` 放哪一层也不固定。
+ *   多看一层不会放进脏数据：这两个字段各有自己的判据
+ *   （标签只留 `LOOK_TAGS` 里有的、note 只认非空字符串）。
+ */
+function fieldOf(
+  parsed: Record<string, unknown>,
+  table: unknown,
+  keys: readonly string[],
+): unknown {
+  for (const key of keys) {
+    if (parsed[key] !== undefined) return parsed[key]
+  }
+  if (isRecord(table)) {
+    for (const key of keys) {
+      if (table[key] !== undefined) return table[key]
+    }
+  }
+  return undefined
+}
 
 /**
  * 模型回的锚点表 → 我们认识的槽位。**坏输入丢掉，不抛**。
@@ -435,14 +618,26 @@ function findString(body: unknown, key: string): string {
  *   · 正文 0 字 → 说清是"想了但没写"，并把**思考链的末尾**带上（那才是当时的现场）；
  *   · 正文有字但解析不了 → 照旧带正文前 120 字；
  *   · 连思考链都没有 → 直说，那说明这个回包本身就是空的。
+ *
+ * ★ 2026-10-16 加了两样，都是"这句话不够用"逼出来的：
+ *   ① **每一次的预算**（`budgets`）。"试了两次"而不说多大，等于没说——
+ *      700 试两次还是 700 那两次，与"第一次 700、第二次 2800"是完全不同的两件事；
+ *   ② `finish_reason=length` 时给出**处置**。它是"差钱"不是"不会"，
+ *      而这两件事的下一步动作正好相反（一个是加预算/换模型，一个是改提示词）。
  */
-export function describeUnreadable(reply: Reply | null, attempts: number, what = '读照片'): string {
+export function describeUnreadable(
+  reply: Reply | null,
+  attempts: number,
+  what = '读照片',
+  budgets: readonly number[] = [],
+): string {
   if (!reply) return `${what}的模型没有回任何内容。`
   const blank = reply.text.trim() === ''
   const facts = [
     reply.finishReason ? `finish_reason=${reply.finishReason}` : '',
     blank ? '正文 0 字' : `正文 ${reply.text.length} 字`,
     reply.reasoning ? `思考链 ${reply.reasoning.length} 字` : '',
+    budgets.length > 0 ? `预算 ${budgets.join(' → ')}` : '',
     reply.refusal ? `refusal=${reply.refusal}` : '',
   ].filter((bit) => bit !== '')
   const scene = blank
@@ -450,7 +645,12 @@ export function describeUnreadable(reply: Reply | null, attempts: number, what =
       ? `它思考的末尾：${reply.reasoning.slice(-160)}`
       : '回包里连思考链都没有（这一条是空回包）'
     : `正文前 120 字：${reply.text.slice(0, 120)}`
-  return `${what}的模型没有按 JSON 回答（试了 ${attempts} 次；${facts.join(' · ')}）。${scene}`
+  const remedy =
+    reply.finishReason === 'length'
+      ? '这一条是**预算不够**（不是"这家不会出 JSON"）：这个模型把预算花在思考链上，正文没轮到。' +
+        '处置是把它换成一个非推理的多模态模型，或把它的 token 预算调大。'
+      : ''
+  return `${what}的模型没有按 JSON 回答（试了 ${attempts} 次；${facts.join(' · ')}）。${scene}${remedy}`
 }
 
 /**

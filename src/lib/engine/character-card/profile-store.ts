@@ -76,7 +76,8 @@ export function createProfileStore(store: AssetStore): ProfileStore {
       for (const key of keys) {
         const record = toChildRecord(await store.readJson<unknown>(key))
         // 半截 JSON 由 readJson 回 null；形状不对的（人手改过、旧 schema）在这里挡掉，
-        // 界面上"少一个孩子"比"整页崩掉"好——与 kid-names.ts 的退路同一条纪律
+        // 界面上"少一个孩子"比"整页崩掉"好——与 `children-source.ts` 读预生成档案
+        // 那条路同一条纪律（`kid-names.ts` 在 2026-10-16 删掉之前也是这么写的）
         if (!record) continue
         out.push(record)
       }

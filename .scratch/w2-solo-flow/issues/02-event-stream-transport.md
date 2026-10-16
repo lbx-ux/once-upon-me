@@ -146,7 +146,8 @@ token 级增量满足不了这条（重放时打字机动画没有意义，而�
    模块级变量不跨路由共享。症状本来会是"连点两次都开跑、日志交叉写入、成品被覆盖"，
    而并发保护那行代码看上去完全正确。改成挂 `globalThis`（`Symbol.for` 做键）后实测
    `running:true` 与 409 都对了。理由写进了 `books-runtime.ts` 的文件头。
-2. **`BookStats.totalCostCny` 恒为 0**（**没修，另开工单**）。起因是我拿它当
+2. **`BookStats.totalCostCny` 恒为 0**（**2026-10-16 已修**，结在
+   `.scratch/solo-run-flow/issues/08-rerun-dialogs.md`）。起因是我拿它当
    "per-request Env 生效"的探针（送一个不同的单张成本，看账目跟谁走），结果两种取值都对不上。
    查下来：`illustrate.ts` 返回 `Illustration` 时**没有带上 `costCny`**，
    而 `index.ts` 的 `summarize()` 是在 sum `item.costCny ?? 0`。所以每本书的
@@ -154,6 +155,10 @@ token 级增量满足不了这条（重放时打字机动画没有意义，而�
    "机器读数常年是 0，打出来是**假数**"——当时只是决定不打印，没往上游查。
    ★ 探针的教训同 README §五 第三类：**拿一个恒零的量当判据，是拿更弱的事实回答更强的问题**。
    已换成"送空值 → 看行为变不变"。
+   ★ 缺口后来补上了：`illustrateNode` 现在按次累加实付金额，判据钉在
+   `illustrate.test.ts` 的「这一页这一次实付了多少」那一组。
+   但那条探针**不换回去**——它要问的是"per-request Env 生不生效"，
+   而成本成了**另一个**可测的量，想验它该新起一条探针，不是让这条兼职。
 
 ### 顺带改到的三处（不属于这一单，但为它服务）
 

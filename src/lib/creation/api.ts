@@ -17,6 +17,9 @@ import { decodeBookFrame, type BookStreamFrame } from '@/lib/book-stream.ts'
 import type { ChildPickerItem } from '@/lib/children-list.ts'
 import type { CharacterAnchor } from '@/lib/engine/domain.ts'
 import type { EngineEvent } from '@/lib/engine/events.ts'
+// ★ `import type`：`run-pages.ts` 是服务端模块（它读 `book.json` 的形状），
+//   编译后这一行不存在，客户端包里不会出现它（与 `ChildPickerItem` 那条同一写法）
+import type { RunPageView } from '@/lib/run-pages.ts'
 import { createSseDecoder } from '@/lib/engine/sse.ts'
 
 export type ApiFailure = { code: string; message: string; retryable: boolean }
@@ -221,6 +224,118 @@ export function createBook(
       }
     }
   })()
+}
+
+/**
+ * 重做**一页**（工单 01）。
+ *
+ * ★ 与 `createBook` 走同一个解码器、同一种帧——所以运行视图那边只有一个事件处理器。
+ *   分开写一个"单页版"的解析，两条路的差异就会从第一天起生根。
+ *
+ * ★ 它**不是**"重跑整本"：服务端按页号找那一页、只做那一页、把结果替换回清单。
+ *   重跑整本会再花一遍钱，还会把用户已经满意的 19 页一起换掉。
+ */
+export type RerunOptions = {
+  kind: 'image' | 'audio'
+  env: Record<string, string | undefined>
+  voiceId?: string
+  /** 重画：家长写的"这一次哪里不对"，会接在提示词后面（见 `prompts/image.ts`） */
+  fixNote?: string
+  /** 重配：改过的正文，一句一段。★ 它改的是**书里那一页的字**，不只是录音 */
+  body?: readonly string[]
+}
+
+export function rerunPage(
+  bookId: string,
+  pageNo: number,
+  options: RerunOptions,
+  onFrame: (frame: BookStreamFrame) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  return (async () => {
+    let response: Response
+    try {
+      response = await fetch(`/api/books/${encodeURIComponent(bookId)}/pages/${pageNo}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          kind: options.kind,
+          env: options.env,
+          ...(options.voiceId ? { voiceId: options.voiceId } : {}),
+          ...(options.fixNote ? { fixNote: options.fixNote } : {}),
+          ...(options.body ? { body: options.body } : {}),
+        }),
+        ...(signal ? { signal } : {}),
+      })
+    } catch (err) {
+      if (signal?.aborted) return
+      throw new ApiError({
+        code: 'network',
+        message: `连不上服务端（${err instanceof Error ? err.message : String(err)}）`,
+        retryable: true,
+      })
+    }
+
+    if (!response.ok || !response.body) {
+      const text = await response.text()
+      let message = `服务端回了 HTTP ${response.status}`
+      let code = `http-${response.status}`
+      try {
+        const parsed = JSON.parse(text) as { code?: string; message?: string }
+        if (parsed.message) message = parsed.message
+        if (parsed.code) code = parsed.code
+      } catch {
+        /* 非 JSON：用状态码兜底 */
+      }
+      throw new ApiError({ code, message, retryable: !NO_RETRY_CODES.has(code) })
+    }
+
+    const decoder = createSseDecoder()
+    const reader = response.body.getReader()
+    const textDecoder = new TextDecoder()
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      for (const sse of decoder.push(textDecoder.decode(value, { stream: true }))) {
+        const frame = decodeBookFrame(sse)
+        if (frame) onFrame(frame)
+      }
+    }
+  })()
+}
+
+/**
+ * 这一本每一页现在长什么样（工单 08）——运行视图上那两个弹窗要的东西。
+ *
+ * ★ 形状的权威在 `lib/run-pages.ts`（服务端那个纯函数算的就是它），这里只搬类型，
+ *   客户端**不重写一份**子集：抄一份"比线上少两个字段"的假类型，
+ *   第一个被裁掉的字段就会在这里悄悄丢掉（`api.ts` 文件头第 2 条）。
+ */
+export async function listRunPages(bookId: string): Promise<RunPageView[]> {
+  const response = await fetch(`/api/books/${encodeURIComponent(bookId)}/pages`)
+  if (!response.ok) {
+    throw new ApiError({
+      code: `http-${response.status}`,
+      message: '读不回这一本每一页的内容',
+      retryable: true,
+    })
+  }
+  const parsed = (await response.json()) as { pages?: RunPageView[] }
+  return parsed.pages ?? []
+}
+
+/**
+ * 「确定生成」：草稿 → 成品（工单 03）。
+ *
+ * ★ 它改的是一件**只有重新读盘才看得到**的事：清单上的 `status`。
+ *   所以回的是凭据，调用方自己决定要不要 `router.refresh()` 去看新样子。
+ * ★ 幂等：已经发布的再点一次也是 200，不是一句红字。
+ */
+export async function publishBook(bookId: string): Promise<{ bookId: string; status: string }> {
+  return postJson<{ bookId: string; status: string }>(
+    `/api/books/${encodeURIComponent(bookId)}/publish`,
+    {},
+  )
 }
 
 /**

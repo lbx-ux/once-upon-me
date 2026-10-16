@@ -1,8 +1,9 @@
 /**
  * profile.test.ts —— 档案那一层（工单 03）
  *
- * 这一层是"他是谁"的**唯一**出处（`kid-names.ts` 的文件头写着它会被替换掉，
- * 而不是再长第二份真相）。所以这里盯的是四件事：
+ * 这一层是"他是谁"的**唯一**出处——2026-10-16 起真的只剩这一份了：`/home` 那道
+ * 最后的缝也换了过来（原来读 `kids.json`），那个文件与它的读取器一并删掉。
+ * 所以这里盯的是四件事：
  *
  * 1. **childId 会被当成路径的一段用**——界面上它来自 `/character/[childId]`
  *    那一段 URL。目录穿越要挡在数据层，见下面那条测试。
@@ -133,6 +134,26 @@ describe('toChildRecord · 从磁盘读回来的那一份是全函数', () => {
 
   it('合法的原样读回来', () => {
     expect(toChildRecord(base())).toEqual(buildChildRecord(base()))
+  })
+
+  it('★ 性别（第 23 刀）：有就往返、没有就**不出现这个键**、认不出来的当没这一栏', () => {
+    // ① 有就写下去、读回来还在（这是上面那条"写下去再读回来必须相等"的具体一档）
+    expect(toChildRecord(buildChildRecord({ ...base(), gender: 'girl' }))).toEqual(
+      buildChildRecord({ ...base(), gender: 'girl' }),
+    )
+    // ② 没有这一栏 = 合法的"还没选"（示例档案与这一天之前建的孩子都是这样）。
+    //    ★ 判据落在"键存不存在"上而不是"值是不是 undefined"：
+    //    `JSON.stringify` 不写 undefined 的键，而 `toEqual` 分得清
+    //    `{gender: undefined}` 与 `{}` —— 少了后面那一半，
+    //    一次真实的磁盘往返就可能悄悄多出一个键
+    expect(Object.hasOwn(buildChildRecord(base()), 'gender')).toBe(false)
+    expect(Object.hasOwn(buildChildRecord({ ...base(), gender: undefined }), 'gender')).toBe(false)
+    // ③ 磁盘上那个词我们不认识（别人手改过、或者以后加了第三档）→ 当没这一栏，
+    //    **不抛**：多一个不认识的词不该让整条档案读不出来
+    //    （与这个函数"缺项一律回 null / 补数组"的整体口径一致）
+    const stranger = toChildRecord({ ...base(), gender: 'other' })
+    expect(stranger).not.toBeNull()
+    expect(Object.hasOwn(stranger ?? {}, 'gender')).toBe(false)
   })
 })
 

@@ -1,0 +1,217 @@
+/**
+ * dialog.css —— 模态壳（`Dialog.tsx`）的样式
+ *
+ * ★ 三个模态共用这一份：运行视图上那两个（重画 / 重配）与 `/home` 上那个
+ *   （"这一本要怎么做"）。它们**必须长得一样**——同一个产品里两个对话框
+ *   各有各的圆角与内边距，读起来像两个团队做的。
+ *
+ * ★ 位置：**屏幕正中**。改过一次（2026-10-16，用户按着截图说"放到屏幕中间"）：
+ *   原来贴底（`align-items: flex-end`），理由是"手机上拇指够得到那两颗按钮"。
+ *   那个理由只在窄屏成立，而这一屏的主场是桌面——贴底之后按钮落在窗口最下沿，
+ *   视线要先往下再往上；居中则是"读完这一张纸，动作就在纸里"。
+ *
+ * ★ `max-height` 与 `overflow: auto` 必须在：**矮窗口（手机横屏、浏览器开着一堆
+ *   工具栏）里这张纸比屏幕高**，不给自己留滚动条就会被上下裁掉，
+ *   而裁掉的正好是底下那两颗按钮。
+ */
+
+.dlg__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(23, 23, 29, 0.34);
+}
+
+.dlg {
+  width: 100%;
+  max-height: min(88vh, 720px);
+  overflow: auto;
+  padding: 22px;
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--card-shadow);
+}
+
+/* 焦点落在面板上时不画那圈描边（它是容器，不是一个可操作的东西） */
+.dlg:focus {
+  outline: none;
+}
+
+.dlg__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.dlg__title {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 21px;
+  font-weight: 600;
+}
+
+.dlg__close {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--ink-muted);
+  cursor: pointer;
+}
+
+.dlg__close svg {
+  width: 16px;
+  height: 16px;
+}
+
+.dlg__close:hover,
+.dlg__close:focus-visible {
+  color: var(--accent);
+}
+
+.dlg__acts {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 26px;
+  padding-top: 18px;
+  border-top: 1px solid var(--hairline);
+}
+
+/* ── 底栏那两颗的通用样子 ────────────────────────────────────────────────
+   ★ 只有**样子**在壳里，谁是哪一颗留给各自的模态：重画那个的主按钮是"重画"，
+   "这一本要怎么做"的是"开始创作"。共用的判据只有一条——左边那颗是退路、
+   右边那颗是走。 */
+
+.dlg__ghost {
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-muted);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.dlg__ghost:hover,
+.dlg__ghost:focus-visible {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.dlg__go {
+  min-height: 46px;
+  padding: 0 24px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--ink);
+  color: #fff;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.dlg__go:disabled {
+  cursor: default;
+  opacity: 0.42;
+}
+
+/* 破坏性的那颗（"确认删掉"）。★ 它长得和 `.dlg__go` 一样、只换颜色：
+   一个动作**看起来**像主按钮但结果是不可逆的，这里就必须自己说出来。
+   工单 03 的删除弹窗是第一个用它的——那一刀之前这套样子住在 `child-detail.css`
+   的 `.cd__btn--danger` 里，而它现在归这里：底栏那两颗的样子是**模态的壳**的事
+   （与上面那条 `.dlg__ghost` 同一条理由）。 */
+.dlg__danger {
+  min-height: 46px;
+  padding: 0 24px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #fff;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.dlg__danger:disabled {
+  cursor: default;
+  opacity: 0.42;
+}
+
+/* ── 弹窗里那几样共用的小零件 ───────────────────────────────────────────── */
+
+/* 一段说明。★ 它比正文小一档、比 `--ink-muted` 稍深：弹窗里的说明是**要做的事**，
+   不是标注（标注可以淡，说明书不能） */
+.dlg__hint {
+  margin: 10px 0 0;
+  color: var(--ink-muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.dlg__hint--warn {
+  color: var(--danger);
+}
+
+/* 段落里的那颗按钮（"点这里去配"这种）。长得像链接，但它**是** `<button>`——
+   键盘与读屏都该当按钮对待（这条原来写在 `.cd__link` 的注释里，那一处删了，规矩搬过来） */
+.dlg__link {
+  margin-left: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* 只读的一块（"原来的提示词"、这一页的正文） */
+.dlg__readonly {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--card-radius);
+  background: var(--surface-soft);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 可编辑的多行框（重配那段正文） */
+.dlg__textarea {
+  display: block;
+  width: 100%;
+  min-height: 96px;
+  padding: 12px 14px;
+  border: 1px solid var(--dot);
+  border-radius: var(--card-radius);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.75;
+  resize: vertical;
+}
+
+.dlg__textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}

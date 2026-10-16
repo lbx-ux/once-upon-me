@@ -1,6 +1,7 @@
 @import 'tailwindcss';
 @import '../components/account/profile-home.css';
 @import '../components/auth/login.css';
+@import '../components/dialog/dialog.css';
 @import '../components/scene/scene-backdrop.css';
 @import '../components/hero/hero-orbit.css';
 @import '../components/hero/hero-typewriter.css';
@@ -8,14 +9,17 @@
 @import '../components/booklist/booklist-wall.css';
 @import '../components/booklist/booklist-reader.css';
 @import '../components/highlights/highlights-reel.css';
-@import '../components/creation/create-flow.css';
+@import '../components/creation/fields.css';
 @import '../components/creation/desk.css';
+@import '../components/creation/generation-run.css';
+@import '../components/creation/redraw-dialog.css';
 @import '../components/reader/reader-book.css';
 @import '../components/settings/settings-drawer.css';
 @import '../components/shelf/shelf.css';
 @import '../components/shell/app-shell.css';
 @import '../components/shell/studio-backdrop.css';
 @import '../components/studio/create-landing.css';
+@import '../components/studio/generation-setup-dialog.css';
 @import '../components/studio/character-wall.css';
 @import '../components/studio/child-detail.css';
 @import '../components/studio/new-child.css';
@@ -279,27 +283,20 @@ body {
 }
 
 /* ----------------------------------------------------------------------------
- * 页面层：创作流（/create）
+ * 页面层：`/create` 那一块**没有页面级规则了**（工单 06）
  *
- * 只放"页面级"的两条规则，交互样式在 components/creation/create-flow.css。
- * ★ 这一页**故意不继承首页的桌面兜底**：首页那条 `min-width: 1280px` 写在
- *   `.home-hero` 上而不是 body 上（理由见那一节），所以创作流在手机上是单列正常流。
+ * 这里原来住着 `.create-page` / `.create-page__back` 两条：一条给整页一个最小高度，
+ * 一条给左上角那颗"← 回首页"。四步流程删掉、`/create` 变成运行视图之后，
+ * 两条都**没有读者**了——运行视图自己就是 `<section class="gr">`，
+ * 而它没有"回首页"那颗按钮（底部那条里的「改故事，重做一本」才是出口，
+ * 它比"回首页"更准确：用户想干的是重做，不是回首页）。
+ *
+ * ★ 撤掉它们之后**不补一条看着差不多的规则**：`.gr` 自己给了内外边距
+ *   （`generation-run.css` 文件头那三处数字），补第二条只会让两者互相打架。
+ * ★ 那一条仍然成立的判断留着：**这一页不继承首页的桌面兜底**——
+ *   首页那条 `min-width: 1280px` 写在 `.home-hero` 上而不是 body 上，
+ *   所以这一页在手机上是单列正常流。
  * -------------------------------------------------------------------------- */
-.create-page {
-  min-height: 100vh;
-}
-
-.create-page__back {
-  max-width: 880px;
-  margin: 0 auto;
-  padding: 20px 20px 0;
-  font-size: 14px;
-}
-
-.create-page__back a {
-  color: var(--ink-muted);
-  text-decoration: none;
-}
 
 .create-page__back a:hover {
   color: var(--accent);

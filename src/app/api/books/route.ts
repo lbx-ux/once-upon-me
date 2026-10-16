@@ -178,6 +178,12 @@ export async function POST(req: Request): Promise<Response> {
     ...(body.wish ? { wish: body.wish } : {}),
     form: body.form,
     ...(body.pages !== undefined ? { pages: body.pages } : {}),
+    // ★ 配音这一条曾经**整条没接**：`CreateBookBody` 上没有 voiceId、`toBookBody()`
+    //   也不传，于是引擎收到的永远是 undefined，走那条非致命 error
+    //   （"没指定音色，这本书没有朗读"）。工单 02 把它接上。
+    ...(body.voiceId ? { voiceId: body.voiceId } : {}),
+    // ★ 草稿 / 成品由**调用方**声明，引擎原样抄进清单（`BookRequest.status` 那段）
+    ...(body.status ? { status: body.status } : {}),
   }
   const bookId = bookIdOf(request)
 

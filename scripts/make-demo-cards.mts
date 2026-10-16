@@ -271,8 +271,8 @@ async function main(): Promise<void> {
   /**
    * ★ 背景档写进 `promptVersion`。provenance 那句话是"这张图是哪份提示词出来的"，
    *   而白底那一份与相纸那一份**不是同一份提示词**——共用 `character-card@v1`
-   *   会导致答辩时"这张图和那张图的提示词一样吗"答不上来（与 `character-revise@v1`
-   *   当初另起版本号是同一条理由）。
+   *   会导致答辩时"这张图和那张图的提示词一样吗"答不上来（与 `character-revise`
+   *   当初另起版本号是同一条理由）。★ 别把版本号改写成"当前那个"：它是历史。
    */
   const promptVersion = `character-card@v1${bg === 'white' ? '+bg-white' : ''}`
   process.stdout.write(
@@ -343,13 +343,21 @@ async function main(): Promise<void> {
     process.stdout.write(`  派生的角色段：${promptFragmentOf(card)}\n\n`)
   }
 
-  await writeFile(join(out, 'kids.json'), JSON.stringify(KIDS, null, 2), 'utf8')
+  /* ★ 2026-10-16：这里原来还写一份 `kids.json`（`{cardId, childId, name, reading,
+     outfit, anchors}`），**删了**——它的唯一读者是 `lib/kid-names.ts`，而那个文件
+     连同它的测试已经删掉了：`/home` 的名字改成读**档案那一层**（`children-source.ts`），
+     演示名单不再需要第二份真相。
+     ★ 那些字段没有丢，它们本来就在这个文件上面的 `KIDS` 里；`outfit` 与 `anchors`
+     今天没有任何读者（`anchors` 的活口是卡本体的 `promptFragment`）。
+     哪天真要它们，从 `KIDS` 里再生成，而不是留一个没人读的产物占着资产根——
+     上一版 `docs/` 与工单里那些"`kids.json` 没跟着拷"的教训，正是它作为
+     **隐式依赖**留下的学费。
+     ★ 下面那份 `children/` 还照写不误：**它才是现在被读的那一份**。 */
 
-  /* 档案（工单 03）。与 kids.json 落在**同一个根**下，理由也一样：
-     它是演示数据的副产物，不是产品的一层运行时档案。
-     ★ 记着一条已经踩过的坑（kid-names.ts 文件头）：dev 的资产根是 `.out/web`，
+  /* 档案（工单 03）。它是演示数据的副产物，不是产品的一层运行时档案。
+     ★ 记着一条已经踩过的坑：dev 的资产根是 `.out/web`，
        而演示数据是用默认的 `--out=.out/cards` 生成的——只拷 `cards/` 过去的话，
-       `children/` 与 `kids.json` 都得跟着走，否则界面退回 childId。
+       `children/` 得跟着走，否则界面退回 childId（`/home` 的名字就是从读这儿来的）。
        干脆 `--out=.out/web` 重跑一次（但那会真调用图像模型）。
 
      ★ 但**示例档案已经有了就别写第二份**（2026-10-15 第五轮加的）。

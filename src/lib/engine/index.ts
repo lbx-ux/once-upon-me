@@ -32,13 +32,15 @@ import type {
   ChildProfile,
   Illustration,
   Narration,
+  StoryNode,
 } from './domain.ts'
+import { childWordOf } from './domain.ts'
 import { linearOrder } from './tree.ts'
-import { createEventFactory, type EngineEventPayload } from './events.ts'
+import { createEventFactory, type EngineEvent, type EngineEventPayload } from './events.ts'
 import { EngineError } from './errors.ts'
 import { planStory } from './plan.ts'
-import { illustrateAll, illustrateCover } from './illustrate.ts'
-import { narrateAll } from './narrate.ts'
+import { illustrateAll, illustrateCover, illustrateNode } from './illustrate.ts'
+import { narrateAll, narrateNode, nextTakeNo } from './narrate.ts'
 import { cardDigest, validateCard } from './character-card/card.ts'
 import { digest } from './digest.ts'
 import { toDataUrl } from './providers/http.ts'
@@ -56,6 +58,14 @@ export type {
   ChildProfile,
   ConsistencyResult,
   Cover,
+  /*
+   * ★ `Gender` 是**类型**，与上面那几个常量（`GENDERS` / `GENDER_LABELS` /
+   *   `isGender`）是同一件事的两半。原来只有那一半被导出来了，
+   *   于是服务端那句 `ListChildPickerItem.gender?: Gender` 只能改从
+   *   `domain.ts` 直接取——为了让一层不同的 import 路径而在同一个文件里
+   *   开两扇门，还不如把类型也导出来（`.test.ts` 用的是同一条）。
+   */
+  Gender,
   Illustration,
   Narration,
   Provenance,
@@ -66,7 +76,7 @@ export type {
 } from './domain.ts'
 export { EngineError, asEngineError } from './errors.ts'
 export type { EngineEvent, EngineEventPayload } from './events.ts'
-export { STAGE_LABELS, describeEvent, isDisplayable } from './events.ts'
+export { STAGE_LABELS, describeEvent, isDisplayable, maxSeqOf } from './events.ts'
 export { buildTree, choicePagesOf, linearOrder, pathOf } from './tree.ts'
 export {
   ANCHOR_LABELS,
@@ -74,8 +84,13 @@ export {
   ANCHOR_STRENGTH,
   AGE_BANDS,
   BOOK_FORMS,
+  GENDERS,
+  GENDER_LABELS,
   MOODS,
   FORM_LABELS,
+  childWordOf,
+  isDraft,
+  isGender,
 } from './domain.ts'
 export {
   checklistOf,
@@ -86,6 +101,12 @@ export {
   validateCard,
 } from './character-card/card.ts'
 export { buildCard, attachReferenceDigest } from './character-card/card.ts'
+/**
+ * 单页重配要用到的那两个（工单 01）。`narrateNode` 是循环体的那一份实现，
+ * `nextTakeNo` 决定新录音落到哪个文件名——两者都是**判据**，不是实现细节：
+ * 路由自己拼文件名的那天起，"第三版会不会覆盖第二版"就只有真跑一本书才知道了。
+ */
+export { narrateNode, nextTakeNo, narrationTextOf } from './narrate.ts'
 export { createProviders, describeProviders } from './providers/registry.ts'
 export { createFsStore, createMemoryStore } from './providers/stores.ts'
 export { emptyManifest, loadManifest, auditManifest } from './providers/replay.ts'
@@ -113,8 +134,17 @@ export type BookRequest = {
    *   关着是因为开了它同时改变三件没量过的事——产物尺寸由模型定（那条路没有 `size`
    *   字段）、单张扣费未知、以及"跨页一致性到底提升多少"这个 ADR-0007 的赌注本身。
    *   判据与代价写在 `illustrate.ts` 的 `referenceForPages` 上。
+   *
+   * ★ 单页重画（`rerunPage`）**不读这个字段**，理由写在那个函数里——它没有地方可读。
    */
   referenceForPages?: boolean
+  /**
+   * 这一轮做出来的是一份**草稿**还是一本**成品**（工单 03）。
+   *
+   * ★ 引擎**原样抄进清单**，不定策略：与 `voiceId` 同一条理由——
+   *   "草稿还是成品"是产品概念，不是引擎概念。不传就是缺省（= 成品，见 `domain.ts`）。
+   */
+  status?: 'draft' | 'published'
 }
 
 export type RunDeps = {
@@ -175,6 +205,12 @@ export async function runBook(request: BookRequest, deps: RunDeps): Promise<Book
     maxAttempts: request.maxIllustrationAttempts,
     // 默认关：见 BookRequest.referenceForPages 那段（能力有，代价没量）
     referenceForPages: request.referenceForPages === true,
+    // ★ 身份那一行（"整本书就是这个孩子（小男孩）"）——2026-10-16 那条
+    //   "提供的是男孩子，生成出来有男有女"的报障：这个称呼原先只进标准像的 prompt，
+    //   逐页那条路一个字都没有（卡的锚点里也没有性别词），于是每一页都由模型自己猜。
+    //   算它的是**这一层**：手上同时有 gender 与 lookTags 的地方只有这里
+    //   （`ChildProfile`），而卡那一边两样都没有
+    childWord: childWordOf(request.child.lookTags, request.child.gender),
     emit: forward,
     now,
   })
@@ -253,7 +289,13 @@ export async function runBook(request: BookRequest, deps: RunDeps): Promise<Book
     // 没配音时是空数组，不填一个假的占位（CLAUDE.md「没有的东西直说没有」）。
     // 有配音时，`narrations` 就是"哪些页有录音"的唯一记录
     narrations,
+    // 这一本用哪个音色朗读。★ 它是"不做"与"没做成"的分界：`narrations` 为空时，
+    //   有这个字段是"做了但没配上音"，没有才是"这一本不配音"（见 `Book.voiceId`）
+    ...(request.voiceId ? { voiceId: request.voiceId } : {}),
     createdAt: startedAt,
+    // 原样抄，不定策略（见 `BookRequest.status`）。不传就是**不写这个字段**，
+    // 而不是写一个 `undefined`——盘上的清单要能一眼看出"这是那本没标过的旧书"
+    ...(request.status ? { status: request.status } : {}),
     stats,
   }
 
@@ -268,6 +310,269 @@ export async function runBook(request: BookRequest, deps: RunDeps): Promise<Book
     bookId: book.bookId,
     path: manifestPath,
     stats: toRecord(stats),
+  })
+  return book
+}
+
+/**
+ * 单页重做（工单 01）—— 用户看完整本之后，对某一页点「重画」或「重配」。
+ *
+ * ★ 为什么不是"重跑整本"：20 页重画一遍再付一次钱，还会把已经满意的 19 页一起换掉。
+ *   而 `illustrateNode` 本来就是按页导出的，`book.json` 里也存着 `tree.nodes`，
+ *   所以缺的只是"单页接起来 + 写回清单"这一层。
+ *
+ * ★ **调用方把清单与卡读出来递进来**：引擎不决定"清单在哪儿、卡在哪儿"，
+ *   与 `runBook` 收 `deps.providers` 而不是自己读 `process.env` 是同一条边界。
+ *   返回的是新的 `Book`（已经落盘的那一份），不是"成功/失败"。
+ */
+export type PageRerunRequest = {
+  book: Book
+  card: CharacterCard
+  pageNo: number
+  /**
+   * 重画时家长写的那句补充（"上一版哪里不对"）。不写就是纯重画。
+   * ★ 它只影响**画面**：`pagePrompt` 把它接在页级描述之后。
+   */
+  fixNote?: string
+  /**
+   * 重配时**改过的正文**（一句一段）。不给就照原来那份念。
+   *
+   * ★ 它改的是**书里的正文本身**，不只是录音：正文是阅读器上那几段字，
+   *   改了它，书里那一页的字也跟着变。这是刻意的——用户看到的是"这段录音念的是什么"，
+   *   改错字、改一句话，本来就该两边一起改。
+   * ★ 代价要写明白：**图不会跟着重画**。画面是按**原来**那段正文出的
+   *   （`imagePrompt` 由规划给出，与 `body` 是两条线），改完之后可能图文对不上。
+   *   所以要改的不只是错别字时，该做的是重画那一步。
+   */
+  body?: readonly string[]
+  /** 重配用哪个音色。不给就沿用这一页原来那份录音的音色 */
+  voiceId?: string
+  /**
+   * 这一页的**主角称呼**（小男孩 / 小女孩 / 孩子）。
+   *
+   * ★ 重画必须与第一次跑用**同一行 prompt**，否则 `provenance.promptVersion` 一样、
+   *   实际的提示词却不同——同一本书里的两页就不可比了（`imagePage@v3` 那一段说的
+   *   正是"版本号是可比性的界"，界要真的成立）。
+   * ★ 由**路由**给（它按 `book.childId` 读一次档案）。引擎这一层手上只有卡与书，
+   *   两样都没有性别与外貌标签。
+   */
+  childWord?: string
+}
+
+export type RerunDeps = {
+  providers: ProviderBundle
+  onEvent?: (event: EngineEvent) => void
+  /**
+   * 事件序号**从哪儿接着数**（工单 01 §3.2）。
+   *
+   * ★ 重做是往**同一个** `events.jsonl` 追加的（整本那一轮开始时才 `truncate`），
+   *   所以调用方要给 `maxSeqOf(日志里已有的事件)`。不给（= 0）的话日志里会出现
+   *   两条 `seq: 1`，而 `seq` 正是重放重建界面状态的依据。
+   */
+  startSeq?: number
+  now?: () => number
+}
+
+/** 这一页在这本书的故事表里。找不到就是 `page-not-found`（见 errors.ts 那条注释） */
+function nodeFor(book: Book, pageNo: number): StoryNode {
+  const node = linearOrder(book.tree).find((each) => each.pageNo === pageNo)
+  if (!node) {
+    throw new EngineError(
+      'page-not-found',
+      `这本书里没有第 ${pageNo} 页（一共 ${book.tree.nodes.length} 页）`,
+    )
+  }
+  return node
+}
+
+/**
+ * 按页号**替换**那一条。★ 是替换不是追加：`frames.ts` 判据 1 记着同一个教训——
+ * 写成分页追加的话，20 页的书重画 3 页会变成 23 页。
+ * 排序保持升序（清单按页号读起来才顺，阅读器也按它取）。
+ */
+function replaceByPage<T extends { pageNo: number }>(items: readonly T[], next: T): T[] {
+  const kept = items.filter((item) => item.pageNo !== next.pageNo)
+  return [...kept, next].sort((left, right) => left.pageNo - right.pageNo)
+}
+
+function rerunForward(deps: RerunDeps): (payload: EngineEventPayload) => void {
+  if (!deps.onEvent) return () => undefined
+  const emit = createEventFactory(deps.now ?? (() => Date.now()), deps.startSeq ?? 0)
+  return (payload) => deps.onEvent?.(emit(payload))
+}
+
+/**
+ * 重画一页。
+ *
+ * 四条刻意的处置，每条都对应一种真的会错的做法：
+ *
+ * 1. **`attemptBase` 接着数**，不是从 1 重来。文件名是 `page-{n}-a{attempt}` 拼的，
+ *    从 1 重来会把上一次那张**覆盖掉**——而"失败的图也落盘"是这条流水线写明的纪律
+ *    （`illustrate.ts` 文件头第 3 条：家长要能看见"上一版为什么不像"）。
+ * 2. **这一页从 `errors` 里摘掉**：它以前"没做出来"，现在做出来了。
+ *    `errors` 的口径是"这一页没有图"，留着它就是一句假话。
+ * 3. **stats 只累加，不重算**：`imageCalls` / `elapsedMs` / `totalCostCny` 加上这一次的，
+ *    `firstPassCount` / `redrawCount` **原样不动**。理由是那两个数说的是
+ *    "这本书第一次跑完时一次通过了几页"，把**人事后的干预**算进去，
+ *    等于把人的判断记成模型的成绩（§10.1 的 r_redraw 与 #2 都从它们算）。
+ * 4. **`referenceForPages` 按 `false` 走**。★ 这是个已知的缺口，不是随手写的：
+ *    那本书原本开没开参考图**没有记在清单里**（`Illustration.provenance` 只记了
+ *    模型、提示词版本、卡版本），而界面这一路从来没开过（只有脚本会开）。
+ *    真要让脚本跑的书也重画成同一套，该补的是 `Book` 上的一个字段——
+ *    不是在这里猜一个值。
+ */
+export async function rerunPage(request: PageRerunRequest, deps: RerunDeps): Promise<Book> {
+  const { providers } = deps
+  const now = deps.now ?? (() => Date.now())
+  const forward = rerunForward(deps)
+  const node = nodeFor(request.book, request.pageNo)
+  const previous = request.book.illustrations.find((item) => item.pageNo === request.pageNo)
+
+  const referenceBytes = await providers.store.read(request.card.reference.path)
+  if (!referenceBytes) {
+    throw new EngineError(
+      'asset-write-failed',
+      `角色卡参考图读不到：${request.card.reference.path}。没有参考图就没有锁脸与比对，拒绝重画`,
+    )
+  }
+
+  const startedAt = now()
+  const illustration = await illustrateNode(node, {
+    image: providers.image,
+    vision: providers.vision,
+    store: providers.store,
+    card: request.card,
+    referenceDataUrl: toDataUrl(referenceBytes, request.card.reference.mime),
+    bookId: request.book.bookId,
+    attemptBase: previous?.attempt ?? 0,
+    referenceForPages: false,
+    ...(request.childWord ? { childWord: request.childWord } : {}),
+    ...(request.fixNote?.trim() ? { fixNote: request.fixNote.trim() } : {}),
+    emit: forward,
+    now,
+  })
+
+  /**
+   * 这一次真的又付了钱，所以成本**累加**（不是"换成新的那一份"——
+   * 上一次那一笔也已经花掉了）。`attempt` 是**全局**编号，
+   * 所以这一次用掉几次 = 新的 attempt − 上一次的 attempt。
+   */
+  const attemptsUsed = illustration.attempt - (previous?.attempt ?? 0)
+  const book: Book = {
+    ...request.book,
+    illustrations: replaceByPage(request.book.illustrations, illustration),
+    errors: request.book.errors.filter((item) => item.pageNo !== request.pageNo),
+    stats: {
+      ...request.book.stats,
+      elapsedMs: request.book.stats.elapsedMs + (now() - startedAt),
+      imageCalls: request.book.stats.imageCalls + attemptsUsed,
+      totalCostCny: round2(request.book.stats.totalCostCny + (illustration.costCny ?? 0)),
+    },
+  }
+  return saveRerun(book, request.card, providers, forward)
+}
+
+/**
+ * 重配一页。
+ *
+ * ★ 落一份**新文件**（`takeNo` = 旧路径里那个号 + 1），旧录音留着——
+ *   与"失败的图也落盘"是同一条纪律。只是这里的价值不同：录音没有"像不像"可比，
+ *   所以它只值一条注释，不值一次比对。
+ * ★ 只替换这一页那一条：共读版的主干页会**共用同一份录音**（`narrate.ts` 规则 1），
+ *   按 `voiceId:textHash` 去重的话会把别的页一起改掉。单页重配**不去重**——
+ *   用户点的是"这一页"，改的就只能是这一页。
+ */
+export async function rerunNarration(request: PageRerunRequest, deps: RerunDeps): Promise<Book> {
+  const { providers } = deps
+  const voice = providers.voice
+  if (!voice) {
+    throw new EngineError(
+      'provider-not-configured',
+      '配音能力没接上（TTS_API_KEY / TTS_MODEL 未配置），重配不了',
+    )
+  }
+  const now = deps.now ?? (() => Date.now())
+  const forward = rerunForward(deps)
+  const original = nodeFor(request.book, request.pageNo)
+  const previous = request.book.narrations.find((item) => item.pageNo === request.pageNo)
+  const voiceId = request.voiceId ?? previous?.voiceId
+  if (!voiceId) {
+    throw new EngineError('invalid-request', '没说要重配成哪一个音色（voiceId）')
+  }
+
+  /**
+   * 改过正文就用改过的那份，并把书里那一页的正文一起换掉。
+   * ★ 空行丢掉、空白行不许留：`narrateNode` 拿到空串会去要一段空白音频，
+   *   而厂商那边要么报错要么回一段静音——两种都不会在界面上说清"这一页没有正文了"。
+   *   所以**在这里就拒绝**，让用户看到他删空了。
+   */
+  const body = request.body?.map((line) => line.trim()).filter((line) => line !== '')
+  if (request.body && (body ?? []).length === 0) {
+    throw new EngineError('invalid-request', '这一页的正文被改空了——至少留一句话')
+  }
+  const node = body ? { ...original, body } : original
+
+  const startedAt = now()
+  const { narration } = await narrateNode(node, {
+    voice,
+    voiceId,
+    store: providers.store,
+    bookId: request.book.bookId,
+    emit: forward,
+    takeNo: nextTakeNo(previous?.asset.path),
+  })
+
+  const book: Book = {
+    ...request.book,
+    // 改过正文就把它写回故事表里（见 `PageRerunRequest.body` 那段：改的是书本身）
+    ...(body
+      ? {
+          tree: {
+            ...request.book.tree,
+            nodes: request.book.tree.nodes.map((item) =>
+              item.pageNo === request.pageNo ? node : item,
+            ),
+          },
+        }
+      : {}),
+    narrations: replaceByPage(request.book.narrations, narration),
+    // 重配可能换了一个音色，而"这一本用哪个音色"要跟着走——
+    // 不然界面上写着 A、书里每一页都是 B（`Book.voiceId` 那段）
+    voiceId,
+    stats: {
+      ...request.book.stats,
+      elapsedMs: request.book.stats.elapsedMs + (now() - startedAt),
+    },
+  }
+  return saveRerun(book, request.card, providers, forward)
+}
+
+/**
+ * 重做之后把清单写回去，并发一条 `book-ready`。
+ *
+ * ★ `cardDigest` 要跟着写：`runBook` 收尾写的就是 `{...book, cardDigest}`，
+ *   重做时漏掉它的话，清单上那个字段会**原地消失**——
+ *   而它正是"这本书是拿哪一版卡画的"的记录（ADR-0007 的可复用靠它）。
+ * ★ 再发一条 `book-ready` 不是多余：重放这一串日志的人（刷新、书架点「继续做」）
+ *   要能在**重做之后**仍然读到"这本书是完整的"。
+ */
+async function saveRerun(
+  book: Book,
+  card: CharacterCard,
+  providers: ProviderBundle,
+  forward: (payload: EngineEventPayload) => void,
+): Promise<Book> {
+  const manifestPath = manifestPathOf(book.bookId)
+  await providers.store.putJson({
+    path: manifestPath,
+    value: { ...book, cardDigest: cardDigest(card) },
+  })
+  forward({
+    kind: 'book-ready',
+    stage: 'assembling',
+    bookId: book.bookId,
+    path: manifestPath,
+    stats: toRecord(book.stats),
   })
   return book
 }

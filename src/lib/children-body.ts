@@ -14,10 +14,14 @@
  *   这一层不重写一遍——重写的那份迟早比引擎宽松或比引擎苛刻。
  */
 
+import { isGender, type Gender } from '@/lib/engine/domain.ts'
+
 export type ChildBody = {
   name: string
   nameReading: string
   ageBand: string
+  /** 性别（2026-10-16 第 23 刀）。★ 可选：老档案与示例没有这一栏（见 `domain.ts` 的 `Gender`） */
+  gender?: Gender
   lookTags: string[]
   interestTags: string[]
 }
@@ -36,10 +40,13 @@ export function parseChildBody(raw: unknown): { body?: ChildBody; problems: stri
     return { problems: ['请求体要是一个 JSON 对象'] }
   }
   const source = raw as Record<string, unknown>
+  const gender = text(source['gender'])
   const body: ChildBody = {
     name: text(source['name']),
     nameReading: text(source['nameReading']),
     ageBand: text(source['ageBand']),
+    // 空串 = 没选（合法）；写了但不是那两档 → 下面报问题，别把脏值传下去
+    ...(isGender(gender) ? { gender } : {}),
     lookTags: textList(source['lookTags']),
     interestTags: textList(source['interestTags']),
   }
@@ -50,5 +57,6 @@ export function parseChildBody(raw: unknown): { body?: ChildBody; problems: stri
   if (body.name === '') problems.push('孩子的名字还没填')
   if (body.nameReading === '') problems.push('名字的读音还没确认')
   if (body.ageBand === '') problems.push('年龄档没选')
+  if (gender !== '' && !isGender(gender)) problems.push('性别只认「boy」或「girl」')
   return problems.length > 0 ? { problems } : { body, problems: [] }
 }

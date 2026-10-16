@@ -12,7 +12,7 @@
  *   校验本身（`stepProblems`）不在这里，它仍然在 `lib/creation/state.ts`：
  *   这里是**长相**，那里是**判据**，两个入口都从那里 import。
  *
- * ★ class 名仍然是 `cf__*`（创作流那一套）：`create-flow.css` 在 `globals.css` 里
+ * ★ class 名仍然是 `cf__*`（创作流那一套）：`fields.css`（2026-10-16 从 `create-flow.css` 切出来）在 `globals.css` 里
  *   全局 import，两屏共用同一批字段样式，于是/new 那一屏的输入框与创作流里长得一模一样。
  *   换成一套新名字的代价是：同一种输入框在两个页面上慢慢变成两种样子。
  */
@@ -25,9 +25,31 @@ import {
   ANCHOR_LABELS,
   ANCHOR_SLOTS,
   ANCHOR_STRENGTH,
+  GENDER_LABELS,
+  GENDERS,
+  type AnchorSlot,
 } from '@/lib/engine/domain.ts'
-import { anchorsWith } from '@/lib/creation/default-anchors.ts'
+import { anchorsWith, DEFAULT_ANCHORS } from '@/lib/creation/default-anchors.ts'
 import type { ChildForm } from '@/lib/creation/state.ts'
+
+/**
+ * 每一格的**示例文字**（灰字，坐在空框里）。
+ *
+ * ★ 2026-10-16 第 20 刀（用户："用户进入的时候，这里锚点里面的字都是灰色的，等待模型
+ *   分析出来后，能够分析的地方就变成黑色字体，不能分析出来的还是灰色字体"）：
+ *   这一段文字**以前是预填值**（`value`），现在是占位（`placeholder`）。同一个字串、
+ *   同一个来源（`DEFAULT_ANCHORS`），换的只是它的**身份**——它不是这孩子的一条锚点，
+ *   是"这一格该细到什么程度"的示范。
+ * ★ 换身份这件事是有后果的，两处都是好的：① 灰=空，用户不会再以为自己已经填过了；
+ *   ② 示例值**再也不会被当成锚点交上去**（留着它的坏法是安静的：卡上会变成
+ *   "照片里的脸 + 示例里那个孩子的雨鞋"，而它看起来完全正常）。
+ */
+const EXAMPLE_TEXT: ReadonlyMap<AnchorSlot, string> = new Map(
+  DEFAULT_ANCHORS.map((anchor) => [anchor.slot, anchor.value]),
+)
+
+/** 「补充」那一格的示例文字不来自 `DEFAULT_ANCHORS`（它预填的是空值，见那个文件） */
+const EXTRA_EXAMPLE = '比如：左手腕内侧有一道浅疤、眉毛比一般人淡'
 
 /**
  * ★ 2026-10-16：这里原来 re-export 了 `INTEREST_TAGS` / `LOOK_TAGS`（这两组标签住在
@@ -133,6 +155,16 @@ export function toggle(list: readonly string[], value: string): string[] {
  *   （`NewChild.tsx` 把 `payload.lookTags` 并进表单），存档与卡片墙也照旧读它。
  *   所以"控件没了"不等于"字段废了"——字段、清单、判据、prompt 全都留着。
  *
+ * ★ 2026-10-16 第 23 刀加了**性别**那一行（用户："角色在增加一个选择性别的功能，
+ *   这样前端生成的图片更加准确"）。它排在这一条的**末尾**而不是名字旁边：
+ *   它是"选一下"的一行，与「年龄」同类，摆在四个输入框后面比插进名字与读音之间顺。
+ *   ★ 它为什么不是可有可无的备注：这个值只做一件事——定下标准像提示词里那个**称呼**
+ *   （小男孩 / 小女孩），而那个词决定模型画男孩还是画女孩。在此之前它是**从外貌标签推**的
+ *   （`childWordOf` 看马尾/辫子/裙子），而两组标签的控件在同一个星期被删掉了，
+ *   于是那条推断基本推不出东西。详见 `domain.ts` 的 `GENDERS`。
+ *   ★ 两个选项、点一下就完事，所以它是**必填**（`childProblems` 那条）：
+ *   让模型去猜这一格，是不必要地把一张脸的性别交给"头发长短"这一个词。
+ *
  * ★ `pairName`（2026-10-15）：把**名字与读音并排**。默认不开，创作流那一屏的输出
  *   因此一个字节都没变——它那一列本来就窄，两格并排会挤。
  *   ★ 这一格值得单独说一句：`placeholder` 是「比如：小宇」而不是「小宇」。
@@ -230,6 +262,19 @@ export function ChildFields({
         </div>
       </Field>
 
+      {/* 性别（第 23 刀，理由见上面那条注释）。★ 两档都点不动"取消"：
+          这一格是必填，选中的芯片再点一下仍然是它——`onPatch` 不是 `toggle`。
+          `Chip` 那个组件在年龄那一行是同样用法（单选，不是多选） */}
+      <Field label="性别" required>
+        <div className="cf__chips">
+          {GENDERS.map((gender) => (
+            <Chip key={gender} active={child.gender === gender} onClick={() => onPatch({ gender })}>
+              {GENDER_LABELS[gender]}
+            </Chip>
+          ))}
+        </div>
+      </Field>
+
       {extra}
     </>
   )
@@ -251,6 +296,12 @@ export function ChildFields({
  *   ★ 保留那两个词是因为它**不是修辞**：它决定这一条会不会进一致性核对
  *     （`card.ts` 的 `promptFragmentOf` 只对硬锚点生成"是否一致"那一行），
  *     也决定空着算不算错（`checkAnchors`）。删掉它，家长就不知道"常服可以变"。
+ *
+ * ★ 2026-10-16 第 20 刀：这一组格子的**初始值是空的**，示例文字下沉成占位（灰）。
+ *   预填值本身没删，`DEFAULT_ANCHORS` 一个字没动——它换了个位置出现（见 `EXAMPLE_TEXT`）。
+ *   ★ 这条改动**只由 `/character/new` 的初始 state 决定**（那一屏不预填了），
+ *   组件这边只是"空框也说得出该写什么"。要是哪天有第二屏也想预填，
+ *   把值填进去就回到旧样子，这里一行都不用改。
  */
 export function AnchorFields({
   anchors,
@@ -275,10 +326,12 @@ export function AnchorFields({
           <input
             className="cf__input"
             value={bySlot.get(slot) ?? ''}
-            /* ★ 只有"补充"这一格给占位：其余七格有预填值，空框不会出现 */
-            placeholder={
-              slot === 'extra' ? `比如：左手腕内侧有一道浅疤、眉毛比一般人淡` : undefined
-            }
+            /* ★ 八格**全都**有占位文字（2026-10-16 第 20 刀；在那之前只有「补充」这一格
+               有，因为其余七格永远有预填值、空框不会出现——而 `/character/new` 现在
+               不预填了，于是空框是常态，没有占位就是一个没有说明的白框）。
+               ★ 占位是**灰的**、值是**黑的**，这条分界就是用户要的那件事：
+               灰格子＝还没定（等你填），黑格子＝已经有锚点了。 */
+            placeholder={slot === 'extra' ? EXTRA_EXAMPLE : EXAMPLE_TEXT.get(slot)}
             onChange={(event) => onChange(anchorsWith(anchors, slot, event.target.value))}
           />
         </Field>

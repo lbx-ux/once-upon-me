@@ -15,7 +15,7 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { narrateAll, narrationTextOf } from './narrate.ts'
+import { narrateAll, narrateNode, narrationTextOf, nextTakeNo } from './narrate.ts'
 import { createMemoryStore } from './providers/stores.ts'
 import type { EngineEventPayload } from './events.ts'
 import type { StoryNode } from './domain.ts'
@@ -144,5 +144,105 @@ describe('narrationTextOf · 正文怎么拼', () => {
     expect(narrationTextOf(node(1, ['哗啦啦，大雨落下来。', '地上变成亮晶晶的河。']))).toBe(
       '哗啦啦，大雨落下来。地上变成亮晶晶的河。',
     )
+  })
+})
+
+/**
+ * ★ 单页重配（工单 01 §五）。
+ *
+ * 两件事是新的，各自对应一种"只有真跑一本书才会发现"的坏法：
+ * 1. **带页码的 stage**：原来整本只发不带页码的那一对，于是没有任何东西说得清
+ *    "这一页正在配音"——`frames.ts` 的 `Frame.busy = 'voicing'` 就是从它推的。
+ * 2. **`takeNo`**：重配落一份**新文件**。从 1 重来的话会把上一版录音覆盖掉，
+ *    而"失败的产物不许被覆盖"是这条流水线写明的纪律。
+ */
+describe('narrateNode · 单页重配', () => {
+  it('★ 合成前后各发一条**带页码**的 stage（这样才说得出"这一页正在配音"）', async () => {
+    const { voice } = fakeVoice()
+    const events: EngineEventPayload[] = []
+    const store = await createMemoryStore()
+    await narrateNode(node(4, ['月亮落在屋顶上。']), {
+      voice,
+      voiceId: 'v1',
+      store,
+      bookId: 'book-1',
+      emit: (payload) => events.push(payload),
+    })
+    expect(events.filter((e) => e.kind === 'stage').map((e) => ({ ...e }))).toEqual([
+      { kind: 'stage', stage: 'narrating', phase: 'begin', pageNo: 4 },
+      { kind: 'stage', stage: 'narrating', phase: 'end', pageNo: 4 },
+    ])
+  })
+
+  it('★ 合成失败时收尾那条也照发（否则那一格永远停在"正在配音"上转）', async () => {
+    const { voice } = fakeVoice('炸了。')
+    const events: EngineEventPayload[] = []
+    const store = await createMemoryStore()
+    await expect(
+      narrateNode(node(1, ['炸了。']), {
+        voice,
+        voiceId: 'v1',
+        store,
+        bookId: 'book-1',
+        emit: (payload) => events.push(payload),
+      }),
+    ).rejects.toThrow('上游 500')
+    expect(events.at(-1)).toMatchObject({ kind: 'stage', phase: 'end', pageNo: 1 })
+  })
+
+  it('★ takeNo 落的是另一份文件，旧录音不被覆盖', async () => {
+    const { voice } = fakeVoice()
+    const store = await createMemoryStore()
+    const first = await narrateNode(node(2, ['天亮了。']), {
+      voice,
+      voiceId: 'v1',
+      store,
+      bookId: 'book-1',
+      emit: () => undefined,
+    })
+    const second = await narrateNode(node(2, ['天亮了。']), {
+      voice,
+      voiceId: 'v1',
+      store,
+      bookId: 'book-1',
+      takeNo: nextTakeNo(first.narration.asset.path),
+      emit: () => undefined,
+    })
+    expect(first.narration.asset.path).toBe('books/book-1/page-2-a1.mp3')
+    expect(second.narration.asset.path).toBe('books/book-1/page-2-a2.mp3')
+    // 两份都在盘上：旧的那份没有因为重配而消失
+    expect(await store.read(first.narration.asset.path)).not.toBeNull()
+  })
+
+  it('单页重配**不跨页去重**：用户点的是"这一页"，改的就只能是这一页', async () => {
+    // 与 `narrateAll` 的规则 1 相反，这是刻意的：共读版的主干页会共用同一份录音，
+    // 按 voiceId:textHash 去重会把别的页一起改掉
+    const { voice, texts } = fakeVoice()
+    const store = await createMemoryStore()
+    await narrateNode(node(1, ['同一句。']), {
+      voice,
+      voiceId: 'v1',
+      store,
+      bookId: 'book-1',
+      emit: () => undefined,
+    })
+    await narrateNode(node(2, ['同一句。']), {
+      voice,
+      voiceId: 'v1',
+      store,
+      bookId: 'book-1',
+      emit: () => undefined,
+    })
+    expect(texts).toHaveLength(2)
+  })
+})
+
+describe('nextTakeNo', () => {
+  it('认得出第几版；认不出来就从 1 起', () => {
+    expect(nextTakeNo('books/b/page-7-a1.mp3')).toBe(2)
+    expect(nextTakeNo('books/b/page-7-a12.wav')).toBe(13)
+    expect(nextTakeNo(undefined)).toBe(1)
+    // 这个名字不是我们这一套（手放进去的、或别的来源）——不猜，从 1 起
+    expect(nextTakeNo('books/b/narration.mp3')).toBe(1)
   })
 })

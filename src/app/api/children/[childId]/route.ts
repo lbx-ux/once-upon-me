@@ -145,6 +145,11 @@ export async function PATCH(
       name: body.name,
       nameReading: body.nameReading,
       ageBand: body.ageBand as AgeBand,
+      // ★ 性别（第 23 刀）。★ 这一条**必须传**：`profiles.save` 写的是**整条**记录，
+      //   不传就等于"这一次改档案把性别擦掉了"。实测过一次同类事故的不是这个字段，
+      //   但形状一样——`updatedAt` 那条注释就在下面。
+      //   ★ 没选就不带这个键：`buildChildRecord` 那边也是"有才写"（见那里的注释）
+      ...(body.gender ? { gender: body.gender } : {}),
       lookTags: body.lookTags,
       interestTags: body.interestTags,
       createdAt: Date.now(),

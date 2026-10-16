@@ -52,9 +52,14 @@
  *      DOM 次序真的变了。★ 然后**重载一次**再查一遍——重载那一步才是"写进盘里了"
  *      的证据；只看 DOM 变了，证明的只是"本地状态改了"。
  *   ⑫ **真删一本**（只删 `probe-` 那本，且专挑**有封面**的那一本——只有它的图被真缩过，
- *      才会把"删了卡没删图"那条老路走一遍）：确认框先列出"要失去什么"（行数 ≥ 2、
- *      第一行 > 0、缩略图那一行报的是真条数），确认之后那一本从架上与 `/api/books`
- *      里一起消失、另外几本照旧，而且**页面上什么回执都不留**（用户："书架底下什么也不要留"）。
+ *      才会把"删了卡没删图"那条老路走一遍）：确认框**只有一句话**（框里一个数字都没有、
+ *      没有逐行清单，两颗按钮是「算了」/「确认删掉」）→ 先走一遍**「算了」**（框收了、
+ *      书还在、接口里也在）→ 再确认，那一本从架上与 `/api/books` 里一起消失、
+ *      另外几本照旧，而且**页面上什么回执都不留**（用户："书架底下什么也不要留"）。
+ *      ★ 判据是"它有多短"而不是"它写了什么"：旧版那张表上有 11 条 / 18 条那两个数，
+ *        还有三个位置名——2026-10-16 用户看完说「也不要写这么多，就一个确认」。
+ *        这一节顺便留一张 `shelf-confirm-1440.png`（旧版那张是他画了红叉发过来的，
+ *        回话时得有新的一张）。
  *   ⑬ 键盘那一格真有（`←/→`）：聚焦那一本、发一次真的 `ArrowRight`，
  *      次序换过来、读屏那一句也报了第几位、而且**服务端那份也跟着变了**。
  *
@@ -157,8 +162,12 @@ type ProbeResult = {
   probeIds: string[]
   /** 有封面的那几本（`data-ready`）：删除那一节专挑它们，好把"缩略图缓存"那一行也走成真的 */
   readyIds: string[]
-  /** 确认框的行（每行一句人话） */
-  confirmRows: string[]
+  /** 确认框里那一整段字（一句话版本；逐行清单只在删到一半失败时才出现） */
+  confirmText: string | null
+  /** 那句话里《》中间的书名（"问的是哪一本"就是它） */
+  confirmTitle: string | null
+  /** 确认框上那几颗按钮各写着什么（`['算了', '确认删掉']`） */
+  confirmButtons: string[]
   hasConfirm: boolean
   /** 页面自己那一行提示（顺序没存上 / 数不出要删什么…）。★ 它本该是空的 */
   notice: string | null
@@ -253,7 +262,15 @@ const PAGE_PROBE = `(() => {
     readyIds: order.filter(
       (id) => !!document.querySelector('li[data-book-id="' + id + '"] .shelf__cover[data-ready]'),
     ),
-    confirmRows: [...document.querySelectorAll('.shelf__places li')].map((li) => li.innerText),
+    confirmText: confirmEl ? confirmEl.innerText : null,
+    confirmTitle: (() => {
+      const lead = confirmEl ? confirmEl.querySelector('.shelf__confirm-lead') : null
+      const m = lead ? new RegExp('《(.+?)》').exec(lead.innerText) : null
+      return m ? m[1] : null
+    })(),
+    confirmButtons: confirmEl
+      ? [...confirmEl.querySelectorAll('button')].map((b) => b.innerText)
+      : [],
     hasConfirm: !!confirmEl,
     notice: document.querySelector('.shelf__notice')
       ? document.querySelector('.shelf__notice').innerText
@@ -441,7 +458,9 @@ async function main(): Promise<void> {
 
     console.log('──── 1440×1000 ────')
     await load(1440, 1000)
-    const wide = (await evaluate(PAGE_PROBE)) as ProbeResult
+    let wide = (await evaluate(PAGE_PROBE)) as ProbeResult
+    /** 最后一次读到的封面请求（轮询时每轮更新；见下面那段的理由） */
+    let lastCovers: { url: string; status: number }[] = wide.covers
     console.log(JSON.stringify(wide, null, 2))
 
     check(!wide.missing, '书架容器在')
@@ -499,19 +518,30 @@ async function main(): Promise<void> {
     // ③④ 封面那条网络请求：只有 URL 走对了才会长这样。
     //   ★ 两个来源取并集（CDP 的 Network 事件 + 页面的 resource timeline）——
     //     冷编译那一趟 CDP 那条链路会整条丢，只剩一处证据时这条判据是假红。
-    const cdpCovers = events
-      .filter((e) => e.method === 'Network.responseReceived')
-      .map((e) => e.params)
-      .filter((p) => /\/api\/assets\/.*cover/i.test(p?.response?.url ?? ''))
-      .map((p) => ({
-        url: p?.response?.url?.replace(BASE, '') ?? '',
-        status: p?.response?.status ?? 0,
-      }))
-    const coverReqs = [
-      ...new Map(
-        [...cdpCovers, ...wide.covers].map((c) => [`${c.status} ${c.url}`, c] as const),
-      ).values(),
-    ]
+    //   ★★ 而且要**等**：`/api/assets/[...path]` 那条路由在被第一次问到之前是没编译的，
+    //     冷的那一趟封面请求要好几秒才回来。等一次固定的 1800ms 会把"还没拿到"
+    //     读成"根本没拉"（2026-10-16 实测：同一个 URL，前一秒空、后一秒两条 200）。
+    //     所以这里轮询到有证据为止，而不是判一次。
+    const readCovers = (): { url: string; status: number }[] => {
+      const cdpCovers = events
+        .filter((e) => e.method === 'Network.responseReceived')
+        .map((e) => e.params)
+        .filter((p) => /\/api\/assets\/.*cover/i.test(p?.response?.url ?? ''))
+        .map((p) => ({
+          url: p?.response?.url?.replace(BASE, '') ?? '',
+          status: p?.response?.status ?? 0,
+        }))
+      return [
+        ...new Map([...cdpCovers, ...lastCovers].map((c) => [`${c.status} ${c.url}`, c])).values(),
+      ]
+    }
+    let coverReqs = readCovers()
+    for (let i = 0; i < 40 && coverReqs.length === 0; i += 1) {
+      await sleep(500)
+      wide = (await evaluate(PAGE_PROBE)) as ProbeResult
+      lastCovers = wide.covers
+      coverReqs = readCovers()
+    }
     console.log(
       '封面请求：',
       coverReqs.map((c) => `${c.status} ${c.url}`),
@@ -684,24 +714,62 @@ async function main(): Promise<void> {
       check(planned.hasConfirm, '确认框出来了')
       if (planned.notice) console.log(`   页面自己说的话：${planned.notice}`)
       console.log(`   刚被点过的是：${planned.active}`)
+      // ★ 判据是"它有多短"。旧版那张表写着「这本书 11 条 / 缩略图缓存 18 条 / 顺序记录 没有」
+      //   ——三个位置名 + 两个"多少条"。一句话版本里这些**一个都不该有**，
+      //   所以查的不是"有没有出现某句话"，而是"那几个数在不在"（真做才不同）。
+      //   ★ 数 `N 条` 那种数，不是"框里一个数字都没有"：书名自己就带数字
+      //     （探针夹子叫「探针样书 01」）——判据写宽一格就会假红
+      const text = planned.confirmText ?? ''
+      console.log(`   确认框：${JSON.stringify(text)}`)
+      check(!/[0-9]+\s*条/.test(text), '确认框里没有"多少条"那种数（旧版是 11 条 / 18 条）')
       check(
-        planned.confirmRows.length >= 2,
-        `它先把"要失去什么"列出来：${planned.confirmRows.length} 行 —— ${planned.confirmRows[0] ?? ''}`,
+        !text.includes('缩略图') && !text.includes('顺序记录') && !text.includes('会失去'),
+        '没有逐行清单（旧版那三行位置名一个都不在）',
       )
+      check(text.includes(`《${planned.confirmTitle}》`), '它说清问的是哪一本（书名在这句话里）')
       check(
-        !/没有/.test(planned.confirmRows[0] ?? ''),
-        `第一行的数不是"没有"：${planned.confirmRows[0] ?? ''}`,
+        JSON.stringify(planned.confirmButtons) === JSON.stringify(['算了', '确认删掉']),
+        `两颗按钮就是「算了」与「确认删掉」：${JSON.stringify(planned.confirmButtons)}`,
       )
-      // ★ 派生内容也在清单里，而且报的是真的条数（封面被缩过 → 至少一条）
-      const thumbRow = planned.confirmRows.find((row) => row.includes('缩略图')) ?? ''
-      check(
-        thumbRow.includes('条') && !thumbRow.includes('没有'),
-        `缩略图缓存那一行报的是真条数：${thumbRow.split('\n')[1] ?? thumbRow}`,
-      )
-      check(await clickOn('.shelf__danger'), '点得到「确认删掉」')
-      await sleep(1500)
 
-      const after = await probe()
+      // ★ 留一张证据图：用户是**拿着一张截图**提这个要求的（旧版那张逐行清单上画了个红叉），
+      //   回话时给他新那一张。先滚到框上再拍——`shoot` 会把视口改成 1440×1000，
+      //   而确认框在书架下面，不滚的话截到的是书。
+      await evaluate(
+        `(() => { const el = document.querySelector('.shelf__confirm'); if (el) el.scrollIntoView({ block: 'center' }) })()`,
+      )
+      await sleep(300)
+      await shoot('shelf-confirm-1440.png', 1440, 1000)
+
+      // ★ 「还是算了」那条路（用户点名的那半句）：点了它，框收起来、**书还在架上**。
+      //   没有这一条的话，一颗永远删下去的「算了」也能让上面那些判据全绿
+      await clickOn('.shelf__cancel')
+      await sleep(400)
+      const cancelled = await probe()
+      check(!cancelled.hasConfirm, '点「算了」框就收了')
+      check(cancelled.order.includes(victim), `点「算了」之后《${victim}》还在架上`)
+      const afterCancel = (await evaluate(
+        `fetch('/api/books').then((r) => r.json()).then((d) => d.books.map((b) => b.bookId))`,
+      )) as string[]
+      check(afterCancel.includes(victim), '接口里也还在（「算了」一个字节都没删）')
+
+      check(await clickOn(`li[data-book-id="${victim}"] .shelf__remove`), '再点一次 ✕')
+      await sleep(400)
+      check((await probe()).hasConfirm, '确认框又出来了')
+      check(await clickOn('.shelf__danger'), '点得到「确认删掉」')
+
+      // ★★ **等它真的消失**，别等一个固定的毫秒数：`DELETE /api/books/<id>` 这条路由
+      //    在这之前从没被问过（`GET` 预演撤掉之后这里就是第一次），冷编译要好几秒——
+      //    固定 1500ms 会把"还在编译"读成"没删掉"（2026-10-16 实测就是这一条假红）。
+      let after = await probe()
+      for (let i = 0; i < 40 && after.order.includes(victim); i += 1) {
+        await sleep(500)
+        after = await probe()
+      }
+      if (after.order.includes(victim)) {
+        console.log(`   它没走。确认框上那句话：${JSON.stringify(after.confirmText ?? '')}`)
+        console.log(`   页面自己说的话：${after.notice ?? '(空)'}`)
+      }
       check(!after.order.includes(victim), `《${victim}》从架上没了`)
       check(
         after.order.length === probeIds.length - 1,

@@ -30,7 +30,7 @@
  * 所以这里只做一件事：**给那份领域类型加上"存在磁盘上"需要的三个数**。
  */
 
-import { AGE_BANDS, type AgeBand, type ChildProfile } from '../domain.ts'
+import { AGE_BANDS, isGender, type AgeBand, type ChildProfile } from '../domain.ts'
 import { EngineError } from '../errors.ts'
 
 /**
@@ -68,6 +68,9 @@ export function buildChildRecord(input: NewChildRecord): ChildRecord {
     name: input.name.trim(),
     nameReading: input.nameReading.trim(),
     ageBand: input.ageBand,
+    // ★ 有才写（2026-10-16 第 23 刀）：写一个 `gender: undefined` 会让"写下去再读回来"
+    //   这件事多出一个键，而 `profile.test.ts` 那条往返相等正是盯着这个的
+    ...(input.gender ? { gender: input.gender } : {}),
     lookTags: input.lookTags.map((tag) => tag.trim()).filter((tag) => tag !== ''),
     interestTags: input.interestTags.map((tag) => tag.trim()).filter((tag) => tag !== ''),
     createdAt: input.createdAt,
@@ -132,6 +135,9 @@ export function toChildRecord(raw: unknown): ChildRecord | null {
     name: text(source['name']),
     nameReading: text(source['nameReading']),
     ageBand: source['ageBand'] as AgeBand,
+    // ★ 读回来这一侧是**容忍**的（与这个函数的整体口径一致）：认不出来就当没这一栏，
+    //   不抛——档案里多一个我们不认识的词，不该让整个列表读不出来
+    ...(isGender(source['gender']) ? { gender: source['gender'] } : {}),
     lookTags: textList(source['lookTags']),
     interestTags: textList(source['interestTags']),
     createdAt: numberOf(source['createdAt']),

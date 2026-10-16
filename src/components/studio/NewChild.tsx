@@ -4,13 +4,20 @@ import NextLink from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 
-import { ANCHOR_LABELS, ANCHOR_SLOTS, READ_SLOTS } from '@/lib/engine/domain.ts'
+import {
+  AGE_BAND_LABELS,
+  GENDER_LABELS,
+  ANCHOR_LABELS,
+  ANCHOR_SLOTS,
+  ANCHOR_STRENGTH,
+  READ_SLOTS,
+} from '@/lib/engine/domain.ts'
 import { checkAnchors } from '@/lib/engine/character-card/card.ts'
 import type { CharacterAnchor } from '@/lib/engine/domain.ts'
 import {
+  childProblems,
   childWordOf,
   initialState,
-  stepProblems,
   toCardBody,
   type CreationState,
 } from '@/lib/creation/state.ts'
@@ -66,8 +73,18 @@ import { useSettings } from '@/components/settings/SettingsProvider.tsx'
  *    那个孩子从此在「角色卡」里不存在，他的形象变成一张谁也归不到名下的图。
  *    反过来（有档案、没形象）是一个**正常状态**，界面本来就会如实显示。
  * 4. **"我们做了什么"要具体。** 归一化会改那张照片（转正、压平、缩放），
- *    所以出图之后要把 `processed.notes` 逐条念出来。**不许写一句笼统的
- *    "已安全处理"**——那种话等于没说，而家长交出来的是一张他孩子的照片。
+ *    **不许写一句笼统的"已安全处理"**——那种话等于没说，而家长交出来的是一张他孩子的照片。
+ *    ★ 2026-10-16 第 22 刀：**那一段话被用户划掉了**（"这一段话就不要说了，换成锚点信息
+ *      和基本信息"）。所以这条约定今天的样子是：
+ *      - 服务端照旧把每一步记下来（`photo-card.ts` 的 `notes`，逐条、具体）；
+ *      - **屏幕上不再念**——`/api/cards/photo` 的 `processed.notes` 现在没有任何读者，
+ *        `Result` 上那个字段也跟着删了（留着就是一个看着还活的死字段）；
+ *      - ★ 到第 23 刀，**屏幕上一句都没有了**：卡片墙上那句「照照片画的，原图没留」
+ *        也被用户划掉了（见 `CharacterWall.tsx` 那一段注释）。也就是说
+ *        "我们怎么处理了那张照片"这件事今天在界面上不可见——这是用户连着两次
+ *        划掉它换来的结果，记在这里免得下一个人以为还有一处留着。
+ *      要把逐条那一段（或那句话）请回来，得连一个放它的地方一起想（详情页最顺），
+ *      别塞回这一屏；"不许笼统"那条纪律**仍然成立**，它管的是将来任何一句。
  * 5. **校验一句都不在这里写。** 孩子那三格走 `stepProblems`（与创作流同一份），
  *    照片那几格走 `photoFormProblems`（与路由同一份），锚点走引擎的 `checkAnchors`。
  *
@@ -83,6 +100,9 @@ import { useSettings } from '@/components/settings/SettingsProvider.tsx'
  * | 次日（用户："照片上传完之后，应该有一个预览的照片"） | 左栏那格上传框里**画照片本身**（`useLocalShot` 的本地地址），`＋` 只在没选时站着 | 上一刀把话删到只剩一行文件名，可那一行字**认不出选的是哪张**——省字省到把"看到了什么"也省掉了，这一刀补回来的是**图**，不是话 |
  * | 次日（用户划掉那句话："这句话不要，改为分析锚点"） | 同意那句话 → **「同意用这张照片分析外貌锚点、画他的第一张形象」** | 原来那句说的是"交出去处理这一次"，没回答**这次拿它干什么**；而这个勾的第一个后果就是跑 `analyzePhoto`。★ 两件事都写上：它同时是出图那条请求的门，只写"分析锚点"会让家长以为照片不会被用来画 |
  * | 次日（用户划掉整个同意框："这个改为一个按钮『分析锚点』…没有上传按钮为白色"） | 同意勾那一行 → **一颗「分析锚点」按钮**（`.nc__analyze`）：没照片白底、有照片橙底；**选完照片不再自动读**，读由这一按发起 | 用户四次划的都是这一格；而"读锚点"本来是一件**用户想主动发起**的事，它之前被绑在"勾同意"上——勾一下既表示同意又顺手跑了分析，两件事挤在一个控件里 |
+ * | 同日（用户："这里锚点里面的字都是灰色的…能分析的地方就变成黑色字体" / "分析锚点这个过程应该可视化一些" / "画线的那句话不要了"） | 八条锚点的**初始值清空**（示例文字下沉成灰色占位）；读的等待从一行字变成**三步 + 已等几秒**；读数那三句里的"我把那几格清空了…你补一下"删掉 | 灰＝还没定、黑＝已经有锚点，这一条分界同时把"示例值被当成锚点交上去"这个旧账销掉（照片那条路原来要专门清一次空）。等待那一段是 45 秒，见 `useElapsedSeconds`——它是**三步**不是进度条，因为没有真实进度可读 |
+ * | 同日（用户："画圈的这个话删除" / "画人物的时候没有反馈，应该也弄一个进度"） | 读照片那一段末尾那句"没有进度条可显示…"删掉；**出图**那几十秒也给了三步（右上角，与按钮同住） | 用户在那一句上画了圈。★ 删的是**那句话**不是那条判断："为什么不给百分比"的理由留在注释里。出图那条路同样是**两次真请求**（存档案 → 出图），所以照抄一套三步是诚实的，不是凑数 |
+ * | 同日（用户："这个等待的过程不要写成已等几秒，应该写成，正在加急处理中…轮着播放" / "这一段话就不要说了，换成锚点信息和基本信息"） | 两处等待里的**秒数换成轮着播的四句话**（`useRotatingLine`）；结果那一屏的「我们拿你那张照片做了什么」整格换成**他是谁 + 八条锚点**（`.nc__sheet`） | 秒数是这一屏上唯一的真读数，换成语气句是有代价的——所以那几句话立了一条纪律：**只说"还在办"，不说"办到哪儿了"**（注释里写着哪几句不许说）。被划掉的那格有两件东西各有去处，见文件头第 4 条 |
  *
  * ★ 顺带修了一个**同一屏自相矛盾**：`fields.tsx` 的占位文字原来是「小宇」/「yǔ」，
  *   看着像已经填好的值，于是"名字格里写着小宇、下面却说你还没填名字"
@@ -94,12 +114,97 @@ type Result = {
   cardId: string
   revision: number
   imageUrl: string
-  /** 照片那条路才有：归一化对它做了什么 */
-  notes: readonly string[]
+  /* ★ 这里原来还有一个 `notes`（照片那条路归一化做了什么）。
+     2026-10-16 第 22 刀删掉：念它的那一格被用户划掉了，于是它成了一个
+     **只写不读**的字段。服务器照旧算它、照旧回它（`/api/cards/photo` 的
+     `processed.notes`），只是这一屏不再接——理由见文件头第 4 条。 */
 }
 
 /** 读照片那一步的结果。★ 与 `error` 分开：读不出来**不影响**出图那条路 */
 type ReadNote = { tone: 'ok' | 'bad'; text: string }
+
+/**
+ * 八格都在、值全空。顺序是 `ANCHOR_SLOTS` 的声明序（与 `normalizeAnchors` 的输出一致，
+ * 于是这张卡的指纹不会因为"谁先填的"而不同）。
+ *
+ * ★ 缺格会让 `checkAnchors` 报「缺骨相」——所以空是"空值"，不是"没这一格"。
+ */
+function blankAnchors(): CharacterAnchor[] {
+  return ANCHOR_SLOTS.map((slot) => ({ slot, value: '' }))
+}
+
+/**
+ * 去掉句尾那一个终止符。
+ *
+ * ★ 存在的理由只有一条：模型那句 `note` **自带句号**（"…身体部分被截断。"），
+ *   而我们把它拼进一句话的中间，于是屏幕上出现「…读不出来。。」两个句号连排
+ *   （2026-10-16 第 20 刀的用户截图里就是这个）。拼句子这一侧负责把接缝弄干净。
+ */
+function trimPeriod(text: string): string {
+  return text.trim().replace(/[。．！？!?]$/, '')
+}
+
+/**
+/**
+ * 等待时轮着播的几句话（2026-10-16 第 22 刀，用户："这个等待的过程不要写成已等几秒，
+ * 应该写成，正在加急处理中，然后你在想几句这样的话，轮着播放"）。
+ *
+ * ★ 它替掉的是**秒数**（第 20 刀加的"已等 N 秒"）。换掉的是一条**真的**读数，
+ *   换成几句话——这件事值得写清楚，因为它是这一屏上唯一一处"不报实情"的地方：
+ *   秒数说的是事实（确实等了这么久），而「正在加急处理中」是一句**语气**。
+ *   所以这几句有一条纪律：**只说"还在办"，不说"办到哪儿了"**。
+ *   - 可以说：加急、在画、快好了——它们不承诺任何具体的进度或时刻；
+ *   - 不许说：「已经画好 80%」「还剩 10 秒」「正在检查五官」——那几句要么是编的进度，
+ *     要么是在讲模型内部的状态，而我们**看不到**它（这个请求一次性回包，见下面那段）。
+ * ★ 播的节奏：每句 8 秒，走完一轮从头来（`% lines.length`）。45 秒的读数大约走
+ *   一轮半，24 秒的出图走三轮——不会快到像在闪，也不会慢到像卡住。
+ * ★ 它进不了读屏：外面那层 `role="status"` 会在开始时念一次三步，
+ *   而这句每 8 秒换一次，不 `aria-hidden` 就是每 8 秒打断一次用户。
+ */
+const ROTATE_MS = 8000
+
+/** 读照片那几秒（`POST /api/cards/analyze-photo`，实测约 45 秒） */
+const READ_LINES = [
+  '正在加急处理中',
+  '正在一格一格地看这张照片',
+  '正在把看到的东西记下来',
+  '快好了，再等一小会儿',
+] as const
+
+/** 出图那几十秒（`POST /api/cards` / `/api/cards/photo`，实测约 24 秒） */
+const DRAW_LINES = [
+  '正在加急处理中',
+  '正在铺底色',
+  '正在一点点上色',
+  '快好了，再等一小会儿',
+] as const
+
+/**
+ * 轮着播一句。
+ *
+ * ★ 为什么会走到"只能播话"这一步：这两个请求都是**一次性回包**（不是流式），
+ *   在它返回之前浏览器这边收不到任何中间消息——不知道模型读到第几格了、
+ *   也不知道它在想还是在写。所以这一屏上**不许**出现百分比进度条：
+ *   那会是一条按时间编出来的假进度，而这个项目里假的东西比没有更糟（README §五）。
+ * ★ `active` 变 false 时回到第一句：下一次点按钮要重新从「正在加急处理中」开始，
+ *   而不是接着上一轮的中间。
+ */
+function useRotatingLine(lines: readonly string[], active: boolean): string {
+  const [index, setIndex] = useState(0)
+
+  useEffect(() => {
+    if (!active) {
+      setIndex(0)
+      return
+    }
+    const timer = setInterval(() => {
+      setIndex((current) => (current + 1) % lines.length)
+    }, ROTATE_MS)
+    return () => clearInterval(timer)
+  }, [active, lines])
+
+  return lines[index] ?? lines[0] ?? ''
+}
 
 /**
  * 选好的那张照片本身（2026-10-16，用户："照片上传完之后，应该有一个预览的照片"）。
@@ -135,7 +240,25 @@ export default function NewChild() {
   const router = useRouter()
   const { env } = useSettings()
 
-  const [state, setState] = useState<CreationState>(() => initialState())
+  const [state, setState] = useState<CreationState>(() => {
+    const start = initialState()
+    /**
+     * 八条锚点**从空开始**（2026-10-16 第 20 刀，用户："用户进入的时候，这里锚点里面的
+     * 字都是灰色的，等待模型分析出来后，能够分析的地方就变成黑色字体，不能分析出来的
+     * 还是灰色字体，这样方便用户知道填什么"）。
+     *
+     * ★ 以前这里填的是 `DEFAULT_ANCHORS`（小宇那一份示范），理由是"让家长知道这一格
+     *   该写什么"。那段文字**还在**，只是换了身份：它现在是每一格的占位（灰字，
+     *   见 `fields.tsx` 的 `EXAMPLE_TEXT`）——同一句示范，但它不再是**这个孩子**的一条锚点。
+     * ★ 换掉的理由是一条会花钱的旧账：预填值会被原样交上去。照片那条路上"读不出来的
+     *   那几格"原来要专门清空一次（第 19 刀），否则卡上就是**照片里的脸 + 小宇的雨鞋**，
+     *   而它看起来完全正常。现在那几格本来就是空的，没有可清的东西——
+     *   于是那一句"我把那几格清空了（原来是小宇的示例值…）"也一起删掉了（用户划掉的）。
+     * ★ 代价要说清：**不传照片时，这八格得自己填**（五条硬锚点不填，「出他的第一张形象」
+     *   会当场报「外貌锚点：骨相是空的」）。这是这一刀新出现的约束，不是顺手改的。
+     */
+    return { ...start, card: { ...start.card, anchors: blankAnchors() } }
+  })
   const [photo, setPhoto] = useState<File | null>(null)
   /** 那一张照片的本地预览地址（见上面的 `useLocalShot`）。★ 只用来**看**，不走网络 */
   const shot = useLocalShot(photo)
@@ -147,6 +270,16 @@ export default function NewChild() {
   /** 正在读那张照片 */
   const [reading, setReading] = useState(false)
   const [readNote, setReadNote] = useState<ReadNote | null>(null)
+  /** 读照片那几秒轮着播的那一句（见 `useRotatingLine`） */
+  const waitLine = useRotatingLine(READ_LINES, reading)
+  /**
+   * 出图那一路走到哪一步了（2026-10-16 第 21 刀）。
+   * ★ `profile` = 正在 `POST /api/children`；`image` = 档案已经存下，正在出图。
+   *   只有两个值——它**不是**一个状态机，只是"第一个请求回来了没有"这一个事实。
+   */
+  const [stage, setStage] = useState<'profile' | 'image'>('profile')
+  /** 出图那几十秒轮着播的那一句。★ 只在真正出图那一步开始播（存档案那一下不该算进来） */
+  const drawLine = useRotatingLine(DRAW_LINES, busy && stage === 'image')
 
   const anchors = state.card.anchors
   const patchChild = (patch: Partial<CreationState['child']>) =>
@@ -162,13 +295,13 @@ export default function NewChild() {
   const usePhoto = photo !== null
 
   // 判据来自引擎与 photo-rules，这里只负责把它们**摆出来**
-  const childProblems = stepProblems(state, 'child')
+  const childProblemsNow = childProblems(state.child)
   const anchorProblems = checkAnchors(anchors).map((problem) => `外貌锚点：${problem}`)
   const photoProblemsLocal = usePhoto
     ? photoFormProblems({
         name: state.child.name,
         ageBand: state.child.ageBand,
-        childWord: childWordOf(state.child.lookTags),
+        childWord: childWordOf(state.child.lookTags, state.child.gender),
         anchors,
         // ★ `File.size`：判"太大/没选"只需要一个数，不必先把文件读进内存
         photoBytes: photo?.size ?? 0,
@@ -234,19 +367,45 @@ export default function NewChild() {
             : current.child,
       }))
       setReadNote({
-        tone: 'ok',
+        tone: read.size === 0 ? 'bad' : 'ok',
         text:
-          missing.length === 0
-            ? // ★ 数的是**读出来的**那一档（七条），不是八个槽位：`READ_SLOTS` 不含「补充」，
-              //   而那一格本来就留给家长。写成"填好了八条"会让家长以为补充那格被填过。
-              `按这张照片读好了七条锚点和外貌标签${
-                payload.note ? `（${payload.note}）` : ''
-              }——都是建议，你可以改；「补充」那一格留给你自己加。`
-            : `读到了 ${read.size} 条，另外 ${missing.length} 条（${missing
-                .map((slot) => ANCHOR_LABELS[slot])
-                .join(
-                  '、',
-                )}）没读出来，我把那几格清空了：它们原来是小宇的示例值，留着会画成别人。你补一下。`,
+          /**
+           * ★ 三条话是**三种不同的处境**（2026-10-16，第 19 刀），不能合成一句：
+           *   ① 七条全读到 → 说"读好了七条"，并把模型那句 note 附上（它说的是这张照片是什么）；
+           *   ② 读到几条 → 说清"另外几条**这张照片里读不出来**"，而不是含糊的"没读出来"。
+           *      用户原话是「有时候用户上传的图片并不是完整的照片，可能只有是上半身，
+           *      ai能识别出来什么就在锚点里填上，识别不出来的就空出来，提示用户去填」——
+           *      半身照的头身比不是故障，是这张照片**不含**这个信息，所以那句话要让家长
+           *      看出来"空着是对的"，而不是"这个功能坏了"。
+           *   ③ **一条都没读到** → 这不是"这张照片有一部分看不到"，是**这一次读数整个没用**。
+           *      原来它会走 ② 那句，读起来像"读到了一些、只是少几条"，而屏幕上其实一个空表。
+           *      这一档要给出下一步（换一张 / 自己填），tone 也要是 bad。
+           */
+          read.size === 0
+            ? '这张照片一条锚点也没读出来。换一张更清楚的（能看清脸的那种）再试一次，或者直接在右边自己填——锚点填了就能画。'
+            : missing.length === 0
+              ? // ★ 数的是**读出来的**那一档（七条），不是八个槽位：`READ_SLOTS` 不含「补充」，
+                //   而那一格本来就留给家长。写成"填好了八条"会让家长以为补充那格被填过。
+                `按这张照片读好了七条锚点和外貌标签${
+                  payload.note ? `（${trimPeriod(payload.note)}）` : ''
+                }——都是建议，你可以改；「补充」那一格留给你自己加。`
+              : /**
+                 * ★ 这一句原来还有后半截：「…我把那几格清空了（原来是小宇的示例值，
+                 *   留着会画成别人），你补一下。」——2026-10-16 第 20 刀，用户在那半句上
+                 *   画了线（"画线的那句话不要了"）。删它是**对的**，不只是因为它长：
+                 *   八格初始值现在是空的（见上面 `blankAnchors`），**没有可清的东西**，
+                 *   那句话说的是一个不再发生的事。空着的那几格自己就在说明自己
+                 *   （灰示例文字坐在里面），不需要再念一遍。
+                 * ★ 顺带修掉一个标点：模型那句 `note` 自带句号，拼进来之后
+                 *   屏幕上会出现「…读不出来。。我把…」两个句号连排。
+                 */
+                `读到了 ${read.size} 条；另外 ${missing.length} 条（${missing
+                  .map((slot) => ANCHOR_LABELS[slot])
+                  .join('、')}）这张照片里读不出来${
+                  // 模型那句 note 说的正是"这张照片是什么、缺了什么"（提示词里要求的），
+                  // 所以它该出现在"哪几格空着"这一句旁边，而不是只在全读到那一档里
+                  payload.note ? `——${trimPeriod(payload.note)}` : ''
+                }。`,
       })
     } catch {
       setReadNote({ tone: 'bad', text: '网络断了，这张照片没读出来。' })
@@ -258,6 +417,8 @@ export default function NewChild() {
   async function submit(): Promise<void> {
     setBusy(true)
     setError(null)
+    // ★ 每按一次都从第一步起（第 21 刀）：上一轮停在哪一步不能带到这一轮
+    setStage('profile')
     try {
       // ① 先建档案。childId 由**服务端**生成——它是路径的一段，不该由客户端给
       const profileResponse = await fetch('/api/children', {
@@ -267,6 +428,10 @@ export default function NewChild() {
           name: state.child.name,
           nameReading: state.child.nameReading,
           ageBand: state.child.ageBand,
+          // ★ 性别（第 23 刀）：`children-body.ts` 认它、`profile.ts` 存它、
+          //   `childWordOf` 用它定称呼。**没选就不发这个键**——服务端把"对象里没有
+          //   这一栏"与"这一栏是空串"分开看（`isGender` 只认 boy/girl）
+          ...(state.child.gender ? { gender: state.child.gender } : {}),
           lookTags: state.child.lookTags,
           interestTags: state.child.interestTags,
         }),
@@ -280,6 +445,8 @@ export default function NewChild() {
         return
       }
       const childId = profilePayload.childId
+      // ★ 档案到手了 —— 这一行就是界面上"第 1 步变成已完成"的那一刻（第 21 刀）
+      setStage('image')
 
       // ② 再出形象。两条路的分叉只在这里
       const made = usePhoto
@@ -326,7 +493,6 @@ export default function NewChild() {
         cardId: payload.cardId,
         revision: payload.revision ?? 1,
         imageUrl: payload.referenceUrl,
-        notes: [],
       },
     }
   }
@@ -340,7 +506,7 @@ export default function NewChild() {
     form.set('childId', childId)
     form.set('name', state.child.name)
     form.set('ageBand', state.child.ageBand)
-    form.set('childWord', childWordOf(state.child.lookTags))
+    form.set('childWord', childWordOf(state.child.lookTags, state.child.gender))
     form.set('anchors', JSON.stringify(anchors))
     // ★ 只有显式写 'true' 才算同意（服务端也是这么读的，见 route.ts）。
     //   第十刀之后写它的是**按「出他的第一张形象」这一下**——照片挂在表单上、
@@ -356,7 +522,6 @@ export default function NewChild() {
       cardId?: string
       revision?: number
       referenceUrl?: string
-      processed?: { notes?: string[]; width?: number; height?: number }
       message?: string
     }
     if (!response.ok || !payload.cardId || !payload.referenceUrl) {
@@ -370,7 +535,6 @@ export default function NewChild() {
         revision: payload.revision ?? 1,
         // ★ 地址由服务端给（参考图的名字带内容指纹，客户端拼不出来，只能拼一个会 404 的假路径）
         imageUrl: payload.referenceUrl,
-        notes: payload.processed?.notes ?? [],
       },
     }
   }
@@ -379,7 +543,7 @@ export default function NewChild() {
   //   也说），所以这里按内容去重。两个判据各自都对，谁也不该为了对方少说一句——
   //   它们的分工是"创作流那一步要什么"与"照片这条路要什么"，
   //   而这个界面恰好同时受两者约束（实测过一次：名字那一条印了两遍）
-  const problems = [...new Set([...childProblems, ...anchorProblems, ...photoProblemsLocal])]
+  const problems = [...new Set([...childProblemsNow, ...anchorProblems, ...photoProblemsLocal])]
 
   if (result) {
     return (
@@ -402,23 +566,58 @@ export default function NewChild() {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img className="nc__made-art" src={result.imageUrl} alt={`${state.child.name}的形象`} />
           <div className="nc__made-side">
-            {result.notes.length > 0 ? (
-              <div className="nc__did">
-                <h2 className="nc__h2">我们拿你那张照片做了什么</h2>
-                <ul className="nc__notes">
-                  {result.notes.map((note) => (
-                    <li key={note}>{note}</li>
-                  ))}
-                </ul>
-                {/* ★ 这里**没有**"你的照片已经安全删除"这种话。真实情况是：
-                    原图从头到尾只在这台服务器的一次请求里待过，我们没有任何一处写过它。
-                    说"已删除"会让人以为它曾经躺在某个地方——那句话是错的，见 nc__did-note */}
-                <p className="nc__did-note">
-                  原图<strong>从来没有被存下来</strong>——它只在这一次请求的内存里待过，
-                  变成上面这张插画之后就没了。卡里存的、以后每一页要用的，都是这张插画。
-                </p>
-              </div>
-            ) : null}
+            {/* ── 这一版卡里记着什么（2026-10-16 第 22 刀，用户："这一段话就不要说了，
+                   换成锚点信息和基本信息"，划掉的是原来那一格「我们拿你那张照片做了什么」）
+                ★ 划掉的那一格有两件东西，分别有去处，不是"删了就算了"：
+                  ① 归一化做了哪几步（`result.notes`）——那是**这一次请求的日志**，
+                     出完图它就不改变这一版卡的内容了；同一个 `processed.notes`
+                     在 `ChildDetail` 的处理记录里还有一份。
+                  ② 「原图从来没有被存下来」——那句隐私话当时搬去了卡片墙
+                     （`.cw__photo`，第 23 刀也被用户划掉了，见 `CharacterWall.tsx`）。
+                     换句话说：这一屏删掉它之后，这件事在界面上就再也没有落点。
+                ★ 换上来的是这张卡**现在的样子**：他是谁 + 八条锚点。
+                  判据是"这一屏说的是'他出来了'，那么紧接着该看见的是他成了什么样"，
+                  而锚点是以后每一页照着画的那份依据——它比请求日志更该站在这儿。 */}
+            <div className="nc__sheet">
+              <h2 className="nc__h2">他是谁</h2>
+              <p className="nc__meta">
+                {state.child.name} · 念 {state.child.nameReading} ·{' '}
+                {AGE_BAND_LABELS[state.child.ageBand]}
+                {/* 性别（第 23 刀）：它是"基本信息"里的一员，而且它**就是**那个
+                    决定这张脸画成男孩还是女孩的值——结果屏上说得出这一句，
+                    "画偏了"的时候才有东西可核对。没选就不显示（老档案） */}
+                {state.child.gender ? ` · ${GENDER_LABELS[state.child.gender]}` : ''}
+              </p>
+            </div>
+            <div className="nc__sheet">
+              <h2 className="nc__h2">外貌锚点</h2>
+              <ul className="nc__facts">
+                {/* ★ 按 `ANCHOR_SLOTS` 的**声明序**列，不按 state 里的顺序：
+                    `anchorsWith` 是"删掉那一条再 push 到末尾"，所以改过几格的表单，
+                    它的数组顺序就是**用户敲字的顺序**（实测过一次：补充跑到了第一行）。
+                    表单那边一直是这么做的（`AnchorFields` 先建 Map），这里是同一条纪律。 */}
+                {ANCHOR_SLOTS.map((slot) => {
+                  const value = anchors.find((anchor) => anchor.slot === slot)?.value ?? ''
+                  const empty = value.trim() === ''
+                  return (
+                    <li className="nc__fact" key={slot}>
+                      <span className="nc__fact-slot">
+                        {ANCHOR_LABELS[slot]}
+                        <span className="nc__fact-kind">
+                          {ANCHOR_STRENGTH[slot] === 'hard' ? '硬' : '软'}
+                        </span>
+                      </span>
+                      {/* ★ 空着的照样列出来，写成「（空着）」而不是干脆不显示：
+                          那是一句"以后每一页不会按它画"的实话，也是给家长的一个去处
+                          （「补充」那一格本来就常年空着）。 */}
+                      <span className="nc__fact-value" data-empty={empty ? 'true' : undefined}>
+                        {empty ? '（空着）' : value}
+                      </span>
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
             <NextLink className="nc__btn nc__btn--primary" href={`/character/${result.childId}`}>
               去他的形象页 →
             </NextLink>
@@ -465,6 +664,38 @@ export default function NewChild() {
           >
             {busy ? '正在画…' : '出他的第一张形象'}
           </button>
+          {/* ── 出图那几十秒（2026-10-16 第 21 刀，用户："画人物的时候没有反馈，
+                 应该也弄一个进度"）──────────────────────────────────────────
+              ★ 与读照片那一处**同一套零件**（`.nc__steps` / `nc__step` / `nc__step-say`）：
+                同一屏上两段等待不该长成两种样子。位置跟着按钮走——它在这一屏的右上角，
+                判据与错误也都住在这里，所以这一颗按钮的"正在干什么"也归这儿。
+              ★ 三步对应**两次真的请求**加一次跳转：`POST /api/children`（存档案）→
+                `POST /api/cards`（或 `/cards/photo`，出图）→ 换成结果那一屏。
+                哪一步是"现在"由 `stage` 说了算——第一个请求通常一百毫秒就回来了，
+                但它是**真的**一步（它失败的话这一屏要停在它上面），所以照样画出来。
+              ★ 仍然**没有百分比**：出图那条请求同样是一次性回包，中间读不到进度。
+                上面那行解释为什么没有进度条的那句话被用户划掉了（"这个话删除"），
+                于是这里一个字都不写——理由留在这一段注释里，屏幕上是三步 + 秒数。 */}
+          {busy ? (
+            <ol className="nc__steps" role="status">
+              <li
+                className="nc__step"
+                data-now={stage === 'profile' ? 'true' : undefined}
+                data-done={stage === 'image' ? 'true' : undefined}
+              >
+                {stage === 'image' ? '档案存好了' : '正在存他的档案'}
+              </li>
+              <li className="nc__step" data-now={stage === 'image' ? 'true' : undefined}>
+                {stage === 'image' ? '正在画他的第一张形象' : '画他的第一张形象'}
+                {stage === 'image' ? (
+                  <span className="nc__step-say" aria-hidden="true">
+                    {drawLine}
+                  </span>
+                ) : null}
+              </li>
+              <li className="nc__step">画好了给你看</li>
+            </ol>
+          ) : null}
           {tried && problems.length > 0 ? (
             <ul className="nc__problems" role="status">
               {problems.map((problem) => (
@@ -569,10 +800,44 @@ export default function NewChild() {
               void analyzePhoto(photo)
             }}
           >
-            分析锚点
+            {/* ★ 读的时候按钮自己也要说话（第 20 刀）：它被 `disabled` 了，
+                而一颗字面不变的按钮按不动，读起来就是"按钮坏了"——
+                这一颗得说清它正在干那件事 */}
+            {reading ? '正在读…' : '分析锚点'}
           </button>
 
-          {reading ? <p className="nc__photo-state">正在读这张照片…</p> : null}
+          {/* ── 读照片那几秒：三步 + 已等几秒（2026-10-16 第 20 刀，用户："分析锚点这个
+                 过程应该可视化一些，分析到哪一步了"）─────────────────────────────
+              ★ 原来这里是**一行静止的字**（"正在读这张照片…"）。实测一次要 **45 秒**
+                （`scripts/e2e-analyze-photo.mts`：45.4 s，模型先产 2400+ token 的思考链
+                再写正文），一行不动的字挂 45 秒，用户只会以为它卡死了。
+              ★ 三步里**只有两步是事件**：照片选好了（`photo` 在手）、请求在飞（`reading`）。
+                第三步是把读到的填进右栏——那是**接下来会发生的事**，写出来是因为
+                用户此刻最想知道的正是"等这么久，等的是什么"。
+              ★ **没有百分比**：见 `useElapsedSeconds` 上面那段——这个请求是一次性回包，
+                中间没有任何真实进度可读。按时间编一条进度条，比不显示更糟。
+                ★ 第 21 刀：这里原来还写过一句「这一步没有进度条可显示——模型先想完，
+                  再一次性写出结果，通常 30–60 秒。」，用户把它划掉了（"画圈的这个话删除"）。
+                  **删的是那句话，不是那条判断**：屏幕上从此不提"有没有进度条"这件事，
+                  而"为什么不给百分比"的理由留在这段注释里，下一个人照样看得见。
+              ★ 秒数那一格 `aria-hidden`：它每秒都变，进了读屏会把整句念一遍又一遍。
+                外面那层 `role="status"` 负责在开始读的时候念一次。 */}
+          {reading ? (
+            <div className="nc__reading" role="status">
+              <ol className="nc__steps">
+                <li className="nc__step" data-done="true">
+                  照片已选好{photo ? `（${megaOf(photo.size)}）` : ''}
+                </li>
+                <li className="nc__step" data-now="true">
+                  模型正在读这张照片
+                  <span className="nc__step-say" aria-hidden="true">
+                    {waitLine}
+                  </span>
+                </li>
+                <li className="nc__step">把读到的填进右边那几格</li>
+              </ol>
+            </div>
+          ) : null}
           {!reading && readNote ? (
             <p className="nc__photo-state" data-tone={readNote.tone} role="status">
               {readNote.text}
@@ -602,8 +867,13 @@ export default function NewChild() {
                 删了它，家长看到几个空框只会以为坏了。 */}
             {usePhoto ? (
               <p className="nc__note">
-                下面几格是按你那张照片读的，<strong>读不准的直接改</strong>；
-                读不出来的格子我留空了（用得着的自己补，用不着的空着也行）。
+                下面几格是按你那张照片读的，<strong>读不准的直接改</strong>；照片里没有的
+                {/*
+                  ★ 括号必须贴在同一行里（2026-10-16）：JSX 会把换行折成一个空格，
+                  「照片里没有的\n（半身照的…）」在屏幕上就多出一个**半角空格**，
+                  中文里那个缝看得见（第 19 刀用 headless 探针量到的）。
+                */}
+                {'（半身照的头身比、大头照的常服）我留空了——用得着的自己补，用不着的空着也行。'}
               </p>
             ) : null}
             {/* ★ 第六刀（用户："怎么这么长啊"）：**没有**折回去，改成宽屏排两列

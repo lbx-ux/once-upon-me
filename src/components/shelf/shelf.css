@@ -109,6 +109,161 @@
    柜身那层内边距是**套在里面**的第二层。
    不补一个"看起来差不多"的 padding：那是在把撤掉的东西偷偷加回来。 */
 
+/* ── 草稿那一排（工单 03）─────────────────────────────────────────────────
+   摆在书架**上面**，而且**长得不像一本书**：它是横排的一行，没有木板的影子、
+   没有书脊。刻意的——"还没做完的"与"做好的"是两件事，装成同一排会让人以为
+   草稿也能点开读、也能拖动排序。 */
+
+.shelf__drafts {
+  margin-bottom: clamp(18px, 2.4vw, 28px);
+}
+
+.shelf__sub {
+  margin: 0 0 10px;
+  font-family: var(--font-serif);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink-muted);
+}
+
+/* 那一栏是干什么的（2026-10-16 加）。★ 一句话，不是一段说明：
+   用户从运行视图点「退出」过来，要能一眼认出"刚才那一本在这里" */
+.shelf__drafts-hint {
+  margin: -4px 0 12px;
+  color: var(--ink-muted);
+  font-size: 12.5px;
+  line-height: 1.7;
+}
+
+.shelf__draftlist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.shelf__draft {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 8px 8px 10px;
+  border: 1px solid var(--hairline);
+  /* ★ 虚线边：与末位那本"新建故事"的虚线书是同一句话——"这里还差一点" */
+  border-style: dashed;
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.shelf__draft-open {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.shelf__draft-open:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 8px;
+}
+
+/* 小方封面。★ 这里**不是** `.shelf__cover` 那套竖版 3:4 的书——
+   草稿还没成书，给它一个书的样子是在提前兑现 */
+.shelf__cover--draft {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border-radius: 6px;
+  box-shadow: none;
+}
+
+.shelf__cover--draft::after {
+  content: none;
+}
+
+.shelf__draft .shelf__label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  height: auto;
+  padding: 0;
+  border: none;
+  background: none;
+  text-align: left;
+}
+
+.shelf__meta-muted {
+  color: var(--ink-muted);
+}
+
+/* 「继续编辑 →」：草稿那一条的动作。★ 用强调色而不是灰字——
+   同一行里"正在编辑"是状态，"继续编辑"是这一张卡**能做的事**，两者不该同色 */
+.shelf__meta-go {
+  color: var(--accent);
+}
+
+/* 那一张卡上的两颗（2026-10-16）。★ 顺序与轻重都有讲究：
+   「制作为绘本」在前、用实心，因为它是那一栏里**唯一往前走的**动作；
+   「删除」在后、只用描边——它把一本书从盘上抹掉，不该长得像主按钮。
+   ★ 两颗都在这张卡**外面**（卡片本身是一个去 `/create` 的链接）：
+     做成链接里面的按钮，点"删除"会先跳走再问，那是这一屏最不能出的错 */
+.shelf__draft-acts {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  padding-left: 4px;
+}
+
+.shelf__make,
+.shelf__discard {
+  flex: none;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    color 0.2s ease,
+    opacity 0.2s ease;
+}
+
+.shelf__make {
+  border: 1px solid transparent;
+  background: var(--accent);
+  color: var(--surface);
+}
+
+.shelf__make:hover,
+.shelf__make:focus-visible {
+  filter: brightness(1.08);
+}
+
+.shelf__discard {
+  border: 1px solid var(--dot);
+  background: transparent;
+  color: var(--ink-muted);
+}
+
+.shelf__discard:hover,
+.shelf__discard:focus-visible {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ★ 禁用态只降透明度、不改颜色：这两颗禁用的唯一原因是"另一颗正在发请求"，
+   那是几十毫秒的事，变色会让这一栏闪一下 */
+.shelf__make:disabled,
+.shelf__discard:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
 /* ── 那一排排书 ─────────────────────────────────────────────────────────── */
 
 .shelf__rack {
@@ -383,13 +538,17 @@
   transform: scale(1.03);
 }
 
-/* ── 确认框：先列出要失去什么 ─────────────────────────────────────────────
+/* ── 确认框：一句话 ───────────────────────────────────────────────────────
+   ★ 用户的第二句话（2026-10-16）：「也不要写这么多，就一个确认是否删除，还是算了」。
+   所以框里只有「删掉《X》？」「删了就找不回来了。」和两颗按钮——**一个数字都没有**。
+   ★ 宽度跟着那句话收：`460px` 而不是 620——一句话铺在 620 里，右半边全是空的，
+   读起来像"这里本来还有别的东西"（而那正是刚被撤掉的那张清单）。
    ★ 底是 `--surface` 而**不是** `--card-paper`：这一屏刚刚因为"暖色硬边压在天空
    背景上太硬"撤掉过一整块暖纸（`.scratch/shelf-on-sky/`），再摆一块回来是同一件事。
    危险感由那圈 `--danger` 的细边与实心按钮承担，不靠底色。
    ★ 它是**临时**的（删成之后就没了，用户："书架底下什么也不要留"） */
 .shelf__confirm {
-  max-width: 620px;
+  max-width: 460px;
   margin-top: 26px;
   padding: 18px 16px;
   border: 1px solid var(--danger);
@@ -403,6 +562,8 @@
   font-weight: 600;
 }
 
+/* ★ 这一串只服务**删到一半失败**那一屏：成功时确认框里没有清单，页面底下也没有回执。
+   留着它是因为失败时必须说清"哪个位置没删干净"——那不是记录，是必须说的话 */
 .shelf__places {
   margin: 0;
   padding: 0;

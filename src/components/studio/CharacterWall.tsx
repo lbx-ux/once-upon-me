@@ -1,6 +1,7 @@
 import NextLink from 'next/link'
 import type { CSSProperties } from 'react'
 
+import WallDelete from '@/components/studio/WallDelete.tsx'
 import { assetUrlOf } from '@/lib/asset-url.ts'
 import type { ChildWallItem } from '@/lib/children-list.ts'
 import { dayKeyOf } from '@/lib/reading-log.ts'
@@ -32,8 +33,10 @@ import { dayKeyOf } from '@/lib/reading-log.ts'
  *     「这张卡凭什么算「同一个人」」那一格（同名的内容在那里有一份完整实现）；
  *   - **年龄与画风/模型** → 年龄在详情页的「改基础信息」里可读可改；
  *     画风是产品**唯一**那一档（`DEFAULT_STYLE_LABEL`），写在卡上等于印一句永远一样的话。
- *   ★ 唯一一处**没去处**的是 `.cw__photo`（「用过照片，已删除」）——它留着，
+ *   ★ 唯一一处**没去处**的是 `.cw__photo`（「用过照片，已删除」）——当时留着，
  *     因为它是隐私那一条的可见凭据，不是说明文字。
+ *     ★ 2026-10-16 第 23 刀它也没了（用户划掉了改版后的那句）：这一屏现在只剩
+ *     「一张脸 + 一个名字 + 三条锚点」，与这条判断一致。
  *   ★ 卡片因此变成"一张脸 + 一个名字 + 三条锚点"，判断依据是**用户看这一屏要的是认人**，
  *     不是读档案。要读档案有详情页，那也是整张卡可点的去向。
  *
@@ -71,12 +74,17 @@ import { dayKeyOf } from '@/lib/reading-log.ts'
  *   卡上不放铅笔，是因为一个 27px 的名字旁边摆一支笔，会让人以为改的是**卡**，
  *   而卡改的是锚点、走的是"提建议再画一版"那条完全不同的路。
  *
- * ★ 垃圾桶这一轮有了，但它是**一颗链到详情页的入口**，不是就地确认。
- *   删除这件事的三步（列出"将要失去什么"→ 确认 → 给一张报数的凭据）
- *   在 `lib/child-deletion.ts` + `ChildDetail.tsx` 里已经完整，
- *   这里搬第二份实现只会让两份迟早说不同的数。
- *   ★ 示例角色的卡面上**不渲染这一颗**（`source === 'demo'`）；
- *     服务端那侧对示例 id 一律 403 并说明理由，那才是守卫。
+ * ★ 垃圾桶（2026-10-16 改）：它现在是**就地弹窗**，不再链去详情页。
+ *   用户的原话："现在的删除是点击删除之后进入人物详细页才能删除，改一下，
+ *   用户在卡片那点击删除之后，就直接出现一个弹窗，询问用户是否删除"。
+ *   ★ 一屏之隔换来了同一件事只写一遍：确认框与凭据住在 `DeleteChildDialog.tsx`
+ *   （`WallDelete.tsx` 只是那颗按钮 + 开关状态），而详情页底下那一节用的是
+ *   **同一个组件**——"两份会说不同的数"这条担心是靠**先把它抽出来**解决的，
+ *   不是靠"这次先拷一份"。
+ *   ★ 示例角色的卡面上**仍然不渲染这一颗**（`source === 'demo'`）；
+ *     服务端那侧对示例 id 一律 403 并说明理由，那才是守卫
+ *     （★ 而 `DeleteChildDialog` 会把那句 403 的原话显示出来——
+ *     本机覆盖过同 id 档案时这颗会露出来，点开也有一句解释，不是无声拒绝）。
  *
  * ★ `＋新建角色` 现在指 `/character/new` 了（工单 03 第二刀）。它以前指 `/create`，
  *   理由是"建卡本来就在创作流里，不新造第二条路"——**那个理由已经不成立**：
@@ -186,7 +194,14 @@ export default function CharacterWall({ items }: CharacterWallProps) {
                       {source === 'demo' ? <span className="cw__demo">示例</span> : null}
                     </h2>
 
-                    {card?.photoDeleted ? <p className="cw__photo">用过照片，已删除</p> : null}
+                    {/* ★ 2026-10-16 第 23 刀：这一行**整块删了**。
+                       它是「用过照片，已删除」（第 22 刀改成「照照片画的，原图没留」，
+                       用户还是划掉："照照片画的，原图没留这句话不要"）。
+                       ★ 于是那句隐私话在界面上**没有落点**了——第 22 刀把 `NewChild`
+                       结果页那段"原图从来没有被存下来"删掉时，我把它搬到了这里；
+                       现在这一行也没了。**判据一个字没动**（`photoDeleted` 照旧在
+                       `cards-list.ts` 里算、照旧传进来，只是不再显示）。
+                       要再放回去，先想清楚放哪儿——别再用"刚好这张卡上有这一行"来决定。 */}
 
                     {/* ── 同一格里叠着的两层：三条锚点 与 悬停才露出来的那一层 ────
                         ★ 两层共用**一个网格格**（见 `.cw__fold`），所以这一格的高度
@@ -245,19 +260,17 @@ export default function CharacterWall({ items }: CharacterWallProps) {
                               首页 `/home` 那颗角色卡选择器选完人就 `params.set('card', …)`
                               （`CreateLanding.tsx:171`），走的正是同一个 `/create?card=`；
                               而没有形象的孩子，详情页里那条「去出一张形象」也还在。 */}
-                          {/* 删除的**入口**。★ 两步确认与那张凭据只在详情页有一份实现
-                              （`ChildDetail.tsx` + `lib/child-deletion.ts`）：这里再做一个就地确认，
-                              这一屏就得变成客户端组件、`DeletionReceipt` 要搬第二份——
-                              同一个行为两份实现，迟早一份说"删 8 条"另一份说"删 7 条"。
+                          {/* 删除的入口（2026-10-16 起**就地弹窗**，见文件头那一条）。
+                            ★ 只有这一颗是客户端组件：整面墙还是服务端组件，
+                              于是墙上其他一切都不为这个动作多付一字节的 JS。
                             ★ 示例角色的卡面上**不渲染这一颗**（用户提的正是"系统提供的不给删除"）。
                               但这是显示层的取舍，不是守卫：服务端 `refuse()` 对示例 id 一律 403，
                               并说明"他的档案在 public/demo/ 里，硬删会让下一次列目录他回来但没有形象"。
                               `source` 与那个守卫不完全等价（本机可能覆盖过同 id 的档案），
-                              那种情形这颗会露出来、点进去被拒绝并说明——**比在卡上再编一个判断可靠**。 */}
+                              那种情形这颗会露出来、点开被拒绝并**显示服务端那句原话**——
+                              比在卡上再编一个判断可靠。 */}
                           {source === 'demo' ? null : (
-                            <a className="cw__del" href={`/character/${profile.childId}#delete`}>
-                              删掉他
-                            </a>
+                            <WallDelete childId={profile.childId} name={profile.name} />
                           )}
                         </div>
                       </div>

@@ -43,7 +43,7 @@ export default async function ReaderPage({ params }: { params: Promise<{ bookId:
             或者这一轮被中断了（刷新会打断那条连接）。
           </p>
           <p className="reader-page__actions">
-            <Link href="/create">回创作流做一本</Link>
+            <Link href="/home">回「创作」做一本</Link>
             <Link href="/">回首页</Link>
           </p>
         </div>
@@ -54,7 +54,7 @@ export default async function ReaderPage({ params }: { params: Promise<{ bookId:
   return (
     <main className="reader-page">
       <nav className="reader-page__back">
-        <Link href="/create">← 再做一本</Link>
+        <Link href="/home">← 再做一本</Link>
       </nav>
       <ReaderBook
         bookId={bookId}

@@ -12,9 +12,32 @@
  * 2. **一格的高度固定**（`aspect-ratio` + 固定的一行说明位）：
  *    画好与没画好的格子高度一样，整排才不会随着进度一跳一跳——
  *    20 格的排面每画完一格就重排一次，读起来像页面在抖。
- * 3. **正在画那一格只有一圈描边**，没有 spinner、没有进度环：
- *    我们**不知道**这一页画了多久、还要多久（引擎没报），
- *    所以任何"转着圈"的东西都是在编一个不存在的进度。
+ * 3. **没有任何东西声称"还剩多久"**。这一条**一个字没改**，2026-10-16 补的那些动效
+ *    也不许破它——引擎不报"这一页画了几成"，所以：
+ *    · 没有 spinner、没有进度环：转圈转的是**一个未知的剩余量**；
+ *    · 进度条（`.dk__bar`）走的是"**已经画好的格数** / 总格数"（`drawnRatio`），
+ *      不是对剩余量的估计——它与那排空画框是同一个数的两种画法；
+ *    · 条上那道走光（`.dk__bar-beam`）与格子上那道扫光（`.dk__frame::after`）
+ *      **只说"在动"**，不随任何数字变宽变窄。它们要证的只有一件事：
+ *      这条流还开着——而这件事是真的（`live` 由拿着连接的那一方给，见 `Desk.tsx`）。
+ *    ★ 2026-10-16：用户看过这一屏之后说"正在画怎么空拉拉的，来点交互效果，
+ *      比如加个进度条这些的"。上面几条就是"加动效"与这条纪律之间的分界线——
+ *      **动的可以加，编的不行**。
+ * 4. **画好的那一格会自己"落"下来**（`::before` 那圈闪 + `.dk__art` 的淡入）。
+ *    它回答的是用户点完「重画」之后的那句"我点的那一下有反应吗"，
+ *    所以只在**这一格的图真的换了**时播——`Desk.tsx` 拿图的路径当 key，正是为了这个。
+ * 5. **凡是不在纸里的字，一律 `--ink-on-sky`**（2026-10-16）。这一屏从这一天起
+ *    跟着 `/create` 铺上首页那片天（`app/create/layout.tsx`），而画桌上有几句话
+ *    （进度条上面那句、那一排"什么时候能重画"的提示、不属于任何一页的提醒、
+ *    每格底下那两颗按钮）**落在天空带里、又不在任何一张纸里**——
+ *    十带表里 `--ink-muted` 在那几段是 3.97–4.43:1，破 AA。
+ *    `--ink-on-sky` 在天上是 6.60+、在纸上 8.30，所以它两头都站得住，
+ *    而这些元素纵坐标随内容长短走，正是"不能按位置挑颜色"的那种。
+ *    ★ 反过来说：**纸里的字一个都没动**（`.dk__note` / `.dk__done-sub` 仍在
+ *      `--surface` 卡里，`--ink-soft` / `--ink-muted` 在纸上是量过的 5.33 / 4.67）。
+ *
+ * ★ 这些动效在 `prefers-reduced-motion` 下**全部停在终态**（文件末尾那一段）：
+ *   条是满的、光是灭的、格子是落定的——不是"不播所以停在起始位置"。
  */
 
 .dk {
@@ -23,48 +46,96 @@
 
 /* ── 上面那一行 ───────────────────────────────────────────────────────── */
 
-.dk__head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 4px;
-}
-
-.dk__title {
-  margin: 0;
-  font-family: var(--font-serif);
-  font-size: 20px;
-  font-weight: 600;
-  /* 书名还没到的时候这里写的是"正在编故事…"，那半句是灰的 */
-  color: var(--ink);
-}
-
-.dk__count {
-  flex: 0 0 auto;
-  margin: 0;
-  font-size: 13px;
-  color: var(--ink-muted);
-}
-
-.dk__count b {
-  font-size: 17px;
-  color: var(--accent);
+.dk__prog {
+  margin: 0 0 14px;
 }
 
 .dk__stage {
-  margin: 0 0 14px;
+  margin: 0 0 9px;
   font-size: 12.5px;
   line-height: 1.7;
-  color: var(--ink-muted);
+  /* ★ 同上（`generation-run.css` 的 `.gr__sub`）：这句话也在天空带里。
+     实测（1440×900，`.gr__sub` 之下那一格就是它）：同一槽位上的 `.dk__hint`
+     落在 y≈287 ⇒ **第 3 段**，而 `--ink-muted` 在那里是 4.15:1。
+     而 `--ink-on-sky` 在纸上是 8.30:1，滚出天空带之后它也不会变得读不清 */
+  color: var(--ink-on-sky);
+}
+
+/* 进度条。★ 长度 = 已经画好的格数 / 总格数（推导与测试都在 `frames.ts` 的 `drawnRatio`），
+   所以它与下面那排空画框**是同一个数**——不是另算的一个百分比 */
+.dk__bar {
+  position: relative;
+  height: 6px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--surface-soft);
+}
+
+.dk__bar-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 999px;
+  background: var(--accent);
+  /* 一格画完到下一格开始之间，条是"跳"一下的——补 0.45s 让它自己走过去。
+     它动的是**已经发生的那个数**，所以这不是"动画做出来的进度" */
+  transition: width 0.45s ease-out;
+}
+
+/* 每一页一格刻度，压在填充色**上面**（所以画好的那一段也数得出格）。
+   `--dk-total` 由 `Desk.tsx` 内联给（那是这一本的真页数） */
+.dk__bar::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background-image: repeating-linear-gradient(
+    to right,
+    transparent 0,
+    transparent calc(100% / var(--dk-total, 1) - 1px),
+    rgba(var(--paper-rgb), 0.9) calc(100% / var(--dk-total, 1) - 1px),
+    rgba(var(--paper-rgb), 0.9) calc(100% / var(--dk-total, 1))
+  );
+  pointer-events: none;
+}
+
+/* ★ 那道走光。**它只说"在动"**：它不随画好的格数变宽变窄，也不加速，
+   所以它说不出一页画了几成（文件头第 3 条）。
+   ★ 为什么是 `--beam` 而不是 `--accent`：令牌表里那句"冷的是光，暖的是物件"——
+     这道光是**装饰**（"这一块是活的"），不是"要你看见"（那是 --accent 的差事）。
+     顺带它也让"橙色的那一段"永远只表示**已经画好的页数**这一件事。 */
+.dk__bar-beam {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: linear-gradient(
+    100deg,
+    rgba(var(--beam-rgb), 0) 34%,
+    rgba(var(--beam-rgb), 0.55) 50%,
+    rgba(var(--beam-rgb), 0) 66%
+  );
+  background-size: 260% 100%;
+  animation: dk-scan 2.3s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes dk-scan {
+  from {
+    background-position: 150% 0;
+  }
+  to {
+    background-position: -70% 0;
+  }
 }
 
 /* ── 那排画框 ─────────────────────────────────────────────────────────── */
 
 .dk__frames {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
-  gap: 12px;
+  /* ★ 最小格宽 2026-10-16 从 148 抬到 220（用户："画面放大一点"）。
+     它是"每格至少多宽"，一行能摆几格由容器宽决定——所以配合 `.gr` 放宽到 1240，
+     一屏从七八格变成四五格，每一格大了一圈 */
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 18px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -72,12 +143,42 @@
 
 .dk__frame {
   position: relative;
-  aspect-ratio: 1 / 1;
-  /* 方框：画是 1:1 出的（`SHEET_SIZE` 那一档），框就不该是别的形状 */
+  /* ★ **3:2 横版**，不是 1:1（2026-10-16 改）。这一条原来写的是"画是 1:1 出的"
+     ——那句话在 2026-10-15 出图改成 1536×1024 之后就不成立了，而框没跟着改。
+     后果是每一页都被 `object-fit: cover` **裁成方的**：真正跑出来的一页是
+     1536×1024（3:2），在画桌上左右各被切掉四分之一，而屏幕上没有任何东西提示这件事。
+     实测那本书的四张页图全在 `.out/web/books/.../page-*-a*.png`，读 PNG 头就是 1536×1024。 */
+  aspect-ratio: 3 / 2;
   border-radius: 10px;
   overflow: hidden;
   background: var(--card-paper);
   box-shadow: inset 0 0 0 1px var(--hairline);
+}
+
+/* ★ 画好的那一格"落下来"：一圈橙边闪一下就退掉，图自己淡入（`.dk__art` 那条）。
+   ★ 为什么用 `::before` 而不是去动 `.dk__frame` 自己的 `box-shadow`：
+     那一条要留给"正在画"的描边（下面），而**动画会盖掉普通声明**——
+     两者抢同一个属性的话，"刚落下的图"与"正在画"会互相吃掉对方的边框。
+   ★ 只在**挂载**时播一次，而挂载只发生在"这一格的图换了"（`Desk.tsx` 拿图的路径当 key）。
+     `both` 让它停在 `opacity: 0`——闪完就彻底消失，不留一层常驻的边 */
+.dk__frame[data-filled='true']::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border-radius: 10px;
+  box-shadow: inset 0 0 0 2px var(--accent);
+  animation: dk-land-ring 1.1s ease-out both;
+  pointer-events: none;
+}
+
+@keyframes dk-land-ring {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
 }
 
 .dk__art {
@@ -85,6 +186,18 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+  animation: dk-land 0.5s ease-out both;
+}
+
+@keyframes dk-land {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 /* 还没画到：虚线铅笔框。★ 用 `--card-paper` 做底（相纸色），
@@ -97,16 +210,80 @@
   border-radius: 10px;
 }
 
-/* ★ 正在画：一圈静态描边 + 呼吸。**没有**进度环、没有 spinner（理由见文件头第 3 条） */
+/* ★ 正在画：一圈静态描边 + 呼吸 + 一道扫过去的走光。
+   **仍然没有**进度环、没有 spinner（理由见文件头第 3 条）——
+   那道走光不是"转圈的等"，它只说"这一格在动"，不携带任何"还剩多少"的意思 */
 .dk__frame[data-busy='true'] {
   box-shadow:
     inset 0 0 0 2px var(--accent),
     0 0 0 1px rgba(var(--accent-rgb), 0.18);
+  /* 正在忙的那一格**抬起来一点**，视线自然落过去（20 格的排面里这一点很重要）。
+     它是状态不是动画，所以静止模式下同样保留 */
+  transform: translateY(-2px);
+}
+
+/* ★ 扫过那一格的光。底色是 `--beam`（冷的那一支 = "光"，见令牌表那条法律），
+   所以它与"已经画好的页数"那一段橙色永远不会被读成同一件事 */
+.dk__frame[data-busy-kind='drawing']::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: linear-gradient(
+    105deg,
+    rgba(var(--beam-rgb), 0) 42%,
+    rgba(var(--beam-rgb), 0.2) 50%,
+    rgba(var(--beam-rgb), 0) 58%
+  );
+  background-size: 300% 100%;
+  animation: dk-sweep 2.8s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes dk-sweep {
+  from {
+    background-position: 140% 0;
+  }
+  to {
+    background-position: -140% 0;
+  }
 }
 
 .dk__frame[data-busy='true'] .dk__blank,
 .dk__frame[data-busy='true'] .dk__art {
   animation: dk-breathe 1.8s ease-in-out infinite alternate;
+}
+
+/* ★ 正在**配音**那一格（工单 01 新加的那一档）与"正在画"的区别有两条：
+   ① **画面不呼吸**。理由是这两件事在屏幕上不是同一件——
+      重画时那一格上还挂着**上一版**的图（它说的是"这张即将被换掉"），
+      所以让它呼吸是对的；而配音时那张图**已经是终稿**了，
+      让它一闪一闪会读成"这张图还没好"。
+   ② **那道扫光也没有**（`::after` 只挂在 `drawing` 上）：扫光是"这一格正在被重画"
+      那件事的记号，配音时它扫过去，读起来像"这张图正在重做"。
+   活动感由外圈那道描边 + 下面这圈**慢慢扩散的晕**承担。 */
+.dk__frame[data-busy-kind='voicing'] .dk__blank,
+.dk__frame[data-busy-kind='voicing'] .dk__art {
+  animation: none;
+}
+
+.dk__frame[data-busy-kind='voicing'] {
+  animation: dk-halo 1.7s ease-in-out infinite alternate;
+}
+
+/* 晕：从 1px 扩到 6px 并淡出。★ 两帧都写着 inset 那道 2px 的橙边——
+   不写的话动画会把外圈描边整个替掉（动画盖普通声明），那一格会看着像没在忙 */
+@keyframes dk-halo {
+  from {
+    box-shadow:
+      inset 0 0 0 2px var(--accent),
+      0 0 0 1px rgba(var(--accent-rgb), 0.2);
+  }
+  to {
+    box-shadow:
+      inset 0 0 0 2px var(--accent),
+      0 0 0 6px rgba(var(--accent-rgb), 0);
+  }
 }
 
 @keyframes dk-breathe {
@@ -190,7 +367,8 @@
   border-left: 3px solid var(--hairline);
   font-size: 12.5px;
   line-height: 1.7;
-  color: var(--ink-muted);
+  /* 不在纸里，且在天空带里（文件头第 5 条） */
+  color: var(--ink-on-sky);
 }
 
 .dk__notes li[data-tone='warn'] {
@@ -270,13 +448,42 @@
 
 /* ── 静止模式：每一格都是**终态** ───────────────────────────────────────
  * ★ 不是"把动画关掉"就完事：关掉之后"正在画"那一格与"还没画到"那一格长得一模一样，
- *   而它们说的是两件不同的事。所以这里只停**呼吸**，描边留着——
- *   静态的一圈橙边仍然表示"这一格在画"。 */
+ *   而它们说的是两件不同的事。所以这里只停**呼吸**与那两道**光**，描边留着——
+ *   静态的一圈橙边仍然表示"这一格在画"。
+ * ★ 2026-10-16 补的那几条同样按这条规矩收尾，**每一条都停在终态**，不是起始位置：
+ *   · 走光与扫光：`display: none`（光没了，不需要停在哪一帧）；
+ *   · 落下那一圈闪：停在 `opacity: 0`（＝它演完之后的样子），否则会留一层常驻的边；
+ *   · 图的淡入：停在"完全显形、没有缩放"；
+ *   · 进度条：宽度**照旧是真的那个数**，只是不再补 0.45s 走过去。 */
 @media (prefers-reduced-motion: reduce) {
   .dk__frame[data-busy='true'] .dk__blank,
   .dk__frame[data-busy='true'] .dk__art {
     animation: none;
     opacity: 1;
+  }
+
+  .dk__frame[data-busy-kind='drawing']::after,
+  .dk__bar-beam {
+    display: none;
+  }
+
+  .dk__frame[data-busy-kind='voicing'] {
+    animation: none;
+  }
+
+  .dk__frame[data-filled='true']::before {
+    animation: none;
+    opacity: 0;
+  }
+
+  .dk__art {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  .dk__bar-fill {
+    transition: none;
   }
 }
 
@@ -292,4 +499,57 @@
     flex-direction: column;
     align-items: flex-start;
   }
+}
+
+/* ── 一格底下那两颗（工单 05）─────────────────────────────────────────────
+   ★ 它们**只在整本做完之后**才可点。禁用的样子与别处一致（`opacity`），
+     而"为什么还不能点"那句写在整排下面的 `.dk__hint` 上——
+     一格说一句的话，20 页上会印 20 遍同一句话。 */
+
+.dk__acts {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.dk__act {
+  flex: 1;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--dot);
+  border-radius: 999px;
+  background: transparent;
+  /* 不在纸里（这两颗挂在每格**下面**，不在 `.dk__frame` 那张纸里）、
+     而在天空带里（文件头第 5 条）。★ 它的纵坐标随格子宽度走：一格 220px（宽屏）
+     时它落在第 6 段附近（`--ink-muted` 4.55 刚好过线），窄屏一格 112px 时
+     落到第 5 段（4.43，破线）——这条是**按画框几何推的**，不是像上面 `.dk__stage`
+     那样量出来的（要量它得真跑一本书让这两颗出现）。这正是"不能按位置挑颜色"的例子 */
+  color: var(--ink-on-sky);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    color 0.2s ease,
+    opacity 0.2s ease;
+}
+
+.dk__act:not(:disabled):hover,
+.dk__act:not(:disabled):focus-visible {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.dk__act:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.dk__hint {
+  margin: 14px 0 0;
+  /* 不在纸里、在天空带里（文件头第 5 条）：实测它在 1440×900 下落在第 3 段，
+     而 `--ink-muted` 在那里是 4.15:1 */
+  color: var(--ink-on-sky);
+  font-size: 13px;
+  line-height: 1.7;
 }

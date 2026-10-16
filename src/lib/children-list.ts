@@ -24,6 +24,7 @@ import {
   type ChildRecord,
   type AgeBand,
   type CharacterAnchor,
+  type Gender,
 } from './engine/index.ts'
 
 export type ChildListItem = {
@@ -128,7 +129,7 @@ export type CardRevisionView = {
   /** 768 那一档：这一屏显示的是不到 400 CSS px 的相纸，要两倍屏够用（见 CharacterWall 的注释） */
   imageUrl: string
   modelId: string
-  /** `character-sheet@v1` / `character-revise@v1`。历史上这一版是哪份提示词出来的 */
+  /** `character-sheet@v2` / `character-revise@v2` / `character-photo@v2`（`@v1` 是旧卡）。历史上这一版是哪份提示词出来的 */
   promptVersion: string
   /** 家长写下的「想改哪里」。第一版没有（没有上一版可比） */
   suggestion?: string
@@ -159,6 +160,20 @@ export type ChildPickerItem = {
   name: string
   nameReading: string
   ageBand: AgeBand
+  /**
+   * 性别（2026-10-16）。
+   *
+   * ★ 它必须**过这道窄投影**，而这不是"顺手多带一个字段"：
+   *   这道投影是 `/home` 那张卡 → `/create` 那一屏的**唯一**通路
+   *   （`create/page.tsx` 从 `listChildPicker` 反查孩子，再把 `RunForm` 交给运行视图），
+   *   所以它掉一个字段的表现是——用户在 `/home` 上明明点了「男孩」，
+   *   请求体里却什么都没有，模型退回按头发长短猜。
+   *   这正是那条报障（「我提供给你的是男孩子，怎么生成出来有男孩有女孩子」）
+   *   在**界面这条路上**最后的漏点：`toBookBody` 与 `parseCreateBody` 两头都补好了，
+   *   中间这一格不补，整条路还是不通。
+   * ★ 与 `ChildProfile.gender` 一致，**可选**：老档案与示例孩子都没有这一栏。
+   */
+  gender?: Gender
   lookTags: readonly string[]
   interestTags: readonly string[]
   source: ChildSource
@@ -194,6 +209,9 @@ export async function listChildPicker(root: string = assetRoot()): Promise<Child
     name: item.profile.name,
     nameReading: item.profile.nameReading,
     ageBand: item.profile.ageBand,
+    // 有才带（与请求体那三处同一条写法）：老档案没有这一栏，
+    // 带一个 undefined 下去会让"没选"与"选了空"分不出来
+    ...(item.profile.gender ? { gender: item.profile.gender } : {}),
     lookTags: item.profile.lookTags,
     interestTags: item.profile.interestTags,
     source: item.source,

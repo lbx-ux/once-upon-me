@@ -39,7 +39,12 @@ export type CardListItem = {
   /** 锚点原样带着（slot + value）。角色页要按部位列，`checklist` 是已经拼给人读的句子 */
   anchors: readonly CharacterAnchor[]
   modelId: string
-  /** 用过照片、且已删。隐私设计里这一条要能被界面看见 */
+  /**
+   * 用过照片、且原图没留。隐私设计里这一条要能被界面看见。
+   * ★ 界面上那句话是 `CharacterWall` 的「照照片画的，原图没留」（2026-10-16 第 22 刀改的，
+   *   原来写「用过照片，已删除」——用户读成了"刚发生了一次删除"，而它是**每一张
+   *   照片卡都有的状态**）。改的只是那几个字，这个字段与它的判据一个字没动。
+   */
   photoDeleted: boolean
 }
 

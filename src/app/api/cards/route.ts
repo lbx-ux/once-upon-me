@@ -39,9 +39,11 @@ import {
 import { imageProviderOf } from '@/lib/engine/providers/registry.ts'
 import {
   ageLabelOf,
+  CHARACTER_SHEET_VERSION,
   characterSheetPrompt,
   DEFAULT_CARD_STYLE,
 } from '@/lib/prompts/character-sheet.ts'
+import { whitened } from '@/lib/whiten-backdrop.ts'
 import { assetRoot } from '@/lib/books-runtime.ts'
 import { assetUrlOf } from '@/lib/asset-url.ts'
 import { EngineError } from '@/lib/engine/errors.ts'
@@ -192,7 +194,9 @@ export async function POST(req: Request): Promise<Response> {
 
   let generated
   try {
-    generated = await image.generate({ prompt, size: SHEET_SIZE })
+    // ★ 出图之后把底刷成纯白（2026-10-16 第 23 刀）：模型逼不到 #FFFFFF，
+    //   而卡片墙上一排三张必须同一种底，理由与量法写在 `whiten-backdrop.ts` 文件头
+    generated = await whitened(await image.generate({ prompt, size: SHEET_SIZE }))
   } catch (err) {
     const failure = userFailureOf(err)
     // 出图失败**不改卡**：这一版没做成，旧版仍然是旧版（ADR-0007 的"不覆盖"）
@@ -225,7 +229,11 @@ export async function POST(req: Request): Promise<Response> {
       referenceBytes: generated.bytes,
       referenceMime: generated.mime,
       modelId: generated.modelId,
-      promptVersion: 'character-sheet@v1',
+      // ★ 版本号也从那个文件取（2026-10-16 第 21 刀）。这一行原来是**写死的字面量**
+      //   `'character-sheet@v1'`——上面那句"不在这里就地写字面量"当时只管着 `style`，
+      //   而版本号正是同一类东西：提示词改到 `@v2`（背景改白底）的那一次，
+      //   卡上照旧会被盖上 `@v1`，于是"这张图是哪份提示词出的"答出来是错的。
+      promptVersion: CHARACTER_SHEET_VERSION,
       now: Date.now(),
       // 「换一版」= 新 revision，不覆盖旧版（ADR-0007）
       ...(previous ? { previous } : {}),

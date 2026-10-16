@@ -116,6 +116,11 @@ function byCode(error: EngineError): string | null {
         '要找的那个形象不在了',
         '它可能已经被删掉，或者属于另一个孩子。回到「小主角」重新选一张。',
       )
+    case 'page-not-found':
+      return line(
+        '这本书里没有这一页',
+        '多半是这本书在别处重跑过、页数变了。刷新一下这一页，按现在摆出来的那几格重做。',
+      )
     case 'card-invalid':
       return line('角色卡不合格，引擎拒绝开跑', '回到第 3 步改那几条被标出来的锚点。')
     case 'invalid-request':
@@ -172,7 +177,8 @@ export function isRetryable(error: unknown): boolean {
     failure.code === 'reference-invalid' ||
     failure.code === 'profile-invalid' ||
     failure.code === 'invalid-request' ||
-    failure.code === 'card-not-found'
+    failure.code === 'card-not-found' ||
+    failure.code === 'page-not-found'
   ) {
     return false
   }
@@ -216,6 +222,7 @@ export function userFailureOf(error: unknown): {
     failure.code === 'card-invalid' ||
     failure.code === 'invalid-request' ||
     failure.code === 'card-not-found' ||
+    failure.code === 'page-not-found' ||
     status === 401 ||
     status === 403 ||
     status === 404 ||
@@ -225,7 +232,14 @@ export function userFailureOf(error: unknown): {
     code: failure.code,
     message: userMessageFor(failure),
     retryable: isRetryable(failure),
-    // 资产没了（卡不存在）是 404，其余输入问题都是 400
-    status: failure.code === 'card-not-found' ? 404 : ours ? 400 : upstream ? 503 : 502,
+    // 资产没了（卡、页）是 404，其余输入问题都是 400
+    status:
+      failure.code === 'card-not-found' || failure.code === 'page-not-found'
+        ? 404
+        : ours
+          ? 400
+          : upstream
+            ? 503
+            : 502,
   }
 }

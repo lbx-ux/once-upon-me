@@ -1,0 +1,132 @@
+/**
+ * generation-setup-dialog.css —— 「这一本要怎么做」那个模态（`GenerationSetupDialog.tsx`）
+ *
+ * ★ 遮罩、面板、标题栏、底栏那几颗按钮的**样子与关闭规矩都在
+ *   `components/dialog/dialog.css`**（运行视图上那两个弹窗用同一份）。
+ *   这里只剩这一个弹窗**自己**的东西：那句话、页数那四档、朗读那个开关。
+ *
+ * ★ 位置改过一次（2026-10-16，用户按着截图说"放到屏幕中间"）：原来贴底，
+ *   理由是"手机上拇指够得到那两颗按钮"。那条推理只在窄屏成立，而这一屏的主场是桌面。
+ *   位置现在只有一处实现（`.dlg__backdrop`），这里不再重复说一遍。
+ */
+
+/* 那句话再念一遍。★ 它是**只读**的（要改回上面那张纸去改）——
+   做成输入框会让人以为在这里改了就算改过 */
+.gsd__wish {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border-left: 2px solid var(--hairline);
+  color: var(--ink-muted);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.gsd__group {
+  margin: 22px 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.gsd__label {
+  padding: 0;
+  margin-bottom: 10px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.gsd__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.gsd__chip {
+  min-width: 66px;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--dot);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.gsd__chip[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.1);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* ── 那个开关 ───────────────────────────────────────────────────────────── */
+
+.gsd__switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 44px;
+}
+
+.gsd__switch-text {
+  font-size: 14px;
+}
+
+.gsd__switch {
+  position: relative;
+  flex: none;
+  width: 56px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--dot);
+  border-radius: 999px;
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.gsd__knob {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--dot);
+  transition:
+    transform 0.2s ease,
+    background 0.2s ease;
+}
+
+.gsd__switch[aria-checked='true'] {
+  border-color: var(--accent);
+}
+
+.gsd__switch[aria-checked='true'] .gsd__knob {
+  background: var(--accent);
+  transform: translateX(24px);
+}
+
+/* ★ 缺语音能力那一档：开关停在关的位置，而且**看得出来点它会去别处**
+   （下划线 + 手型），不是一个静默的禁用件 */
+.gsd__switch[data-off='true'] {
+  border-style: dashed;
+}
+
+.gsd__switch[data-off='true'] .gsd__knob {
+  background: var(--ink-muted);
+}
+
+/* 静止模式：旋钮不滑，直接到位 */
+@media (prefers-reduced-motion: reduce) {
+  .gsd__knob {
+    transition: none;
+  }
+}
+
+/* ★ 底栏那两颗（`.dlg__ghost` / `.dlg__go`）**不在这里**：它们的样子在
+   `components/dialog/dialog.css`，三个模态共用同一份。
+   这一份原来还有 `.gsd__acts` / `.gsd__ghost` / `.gsd__go` 三条，
+   收进壳里之后就没有读者了——留着它们只会让下一个人以为这个弹窗的按钮
+   还有一套自己的样式，然后去改一个不影响任何东西的规则。 */

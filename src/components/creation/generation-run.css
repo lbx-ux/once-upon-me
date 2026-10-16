@@ -1,0 +1,300 @@
+/**
+ * generation-run.css —— 运行视图（`GenerationRun.tsx`）
+ *
+ * 版式：阶段轨在最上、画桌在中间、底部一条贴着窗口下沿的**只读输入条**。
+ * 底部那一条是 `position: sticky`（不是 `fixed`）：它要跟文档一起滚到底，
+ * 而这一屏的内容会随着页数长得很高——`fixed` 的话，20 页的书滚到中间时
+ * 输入条会一直压在画框上，而它此时没有任何要说的话。
+ *
+ * 三处数字的来处：
+ *   1. 内容宽度 `min(1080px, 100%)`——与 `/home` 那张纸、`Desk` 那一排同一档，
+ *      换页时画框的宽度不会跳。
+ *   2. 底部给 `padding-bottom`，当输入条 `sticky` 到那个位置时它正好贴住下沿。
+ *   3. 阶段轨四格等宽（`repeat(4, minmax(0,1fr))`），**不是 auto-fill**：
+ *      四格的顺序就是流水线的顺序，少一格能看出来，多一格不存在。
+ */
+
+.gr {
+  /* ★ 定位元素，**不是**为了给谁当包含块：这一屏从 2026-10-16 起铺着
+     `StudioBackdrop`（`app/create/layout.tsx` 的 `.sb-host`），而 `.sb` 是
+     `position: absolute; z-index: 0`——`static` 的孩子按绘制顺序排在定位元素
+     **之前**，所以不写这一句的话整屏内容会被那片天盖住。
+     `app-shell.css` 的 `.shell__side` 上那段记的正是这个坑（用户实测时整条侧栏
+     只剩当前项露出来）。同为定位元素之后，层序回到"按 DOM 顺序"：`.sb` 在前。 */
+  position: relative;
+  width: min(1240px, 100%);
+  margin: 0 auto;
+  padding: clamp(24px, 3vh, 40px) clamp(20px, 3vw, 40px) 0;
+}
+
+/* ── 阶段轨 ─────────────────────────────────────────────────────────────── */
+
+.gr__rail {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 24px;
+  padding: 20px 22px;
+  list-style: none;
+  border: 1px solid var(--hairline);
+  border-radius: var(--card-radius);
+  background: var(--surface);
+  box-shadow: var(--sheet-shadow);
+}
+
+.gr__node {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* 格与格之间那条连线。★ 画在**左边**那一格上（`::before` 从自己的圆心起、
+   到下一格的圆心止），于是"走过没走过"这件事只需要看左边那一个节点 */
+.gr__node::before {
+  content: '';
+  position: absolute;
+  top: 16px;
+  left: calc(50% + 20px);
+  width: calc(100% - 40px);
+  height: 2px;
+  background: var(--hairline);
+}
+
+.gr__node:last-child::before {
+  content: none;
+}
+
+.gr__node[data-state='done']::before {
+  background: rgba(var(--accent-rgb), 0.35);
+}
+
+.gr__dot {
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 2px solid var(--dot);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--ink-muted);
+  font-size: 15px;
+  line-height: 1;
+}
+
+.gr__name {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 14.5px;
+  color: var(--ink-muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* 那一格上的 `k / N`。★ 它是**真数**（已画好的格数 / 总格数），
+   所以给它的字重与颜色都比格名重一档——它是要读的那个数 */
+.gr__note {
+  font-size: 13.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.gr__node[data-state='now'] .gr__dot {
+  border-color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.1);
+  color: var(--accent);
+  /* ★ 正在做的那一格：那一圈**慢慢往外扩、淡掉**（2026-10-16）。
+     它说的只有一件事——"这一格在做"，与进度无关：
+     扩到多大都不表示做了几成（`--beam` 是"光"那一支，见令牌表那条法律）。
+     ★ 四格里同时只可能有两格是 `now`（比如"逐页画"与"装订"接上的那一瞬），
+       两处一起扩也不会撞在一起——它们分在不同的列里 */
+  animation: gr-ping 1.9s ease-out infinite;
+}
+
+@keyframes gr-ping {
+  from {
+    box-shadow: 0 0 0 0 rgba(var(--beam-rgb), 0.32);
+  }
+  to {
+    box-shadow: 0 0 0 8px rgba(var(--beam-rgb), 0);
+  }
+}
+
+/* 静止模式：停在终态（没有那一圈在扩），而"正在做"这件事由**颜色**说——
+   橙边 + 橙字本来就在，不靠动画 */
+@media (prefers-reduced-motion: reduce) {
+  .gr__node[data-state='now'] .gr__dot {
+    animation: none;
+  }
+}
+
+.gr__node[data-state='now'] .gr__name {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.gr__node[data-state='done'] .gr__dot {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.gr__node[data-state='done'] .gr__name {
+  color: var(--ink);
+}
+
+/* ★ 「不做」（关掉朗读时的配音）画成**虚线**，与「没做成」的橙色分开：
+   虚线说的是"这一格空着是安排好的"，而不是"它坏了" */
+.gr__node[data-state='skipped'] .gr__dot {
+  border-style: dashed;
+}
+
+.gr__node[data-state='partial'] .gr__dot {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.gr__node[data-state='partial'] .gr__name {
+  color: var(--danger);
+}
+
+/* ★ 读屏那一句。视觉上不占位（与仓库其余 `sr-only` 同一套做法） */
+.gr__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+
+/* ── 标题那几行 ─────────────────────────────────────────────────────────── */
+
+.gr__title {
+  margin: 0 0 6px;
+  font-family: var(--font-serif);
+  font-size: clamp(26px, 3.4vw, 36px);
+  font-weight: 600;
+}
+
+.gr__sub {
+  margin: 0 0 20px;
+  /* ★ 2026-10-16 从 `--ink-muted` 改成 `--ink-on-sky`：这一屏开始铺首页那片天
+     （`app/create/layout.tsx`），而这一行住在天空带**最上面几段**里
+     （标题下面 ≈220px；十带表见 `studio-backdrop.css` 文件头，那段里
+     `--ink-muted` 是 3.97–4.17:1，破 AA，`--ink-on-sky` 是 6.60+）。
+     与 `/voice` 的 `.vc__sub`、`/account` 的 `.pf__sub` 同一条规矩。 */
+  color: var(--ink-on-sky);
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.gr__error {
+  margin: 0 0 18px;
+  padding: 12px 14px;
+  border: 1px solid rgba(var(--accent-rgb), 0.35);
+  border-radius: var(--card-radius);
+  background: rgba(var(--accent-rgb), 0.07);
+  color: var(--danger);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+/* ── 底下那一条（只读那句话 + 那颗按钮） ─────────────────────────────────── */
+
+.gr__composer {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  margin-top: 26px;
+  /* 它左右要顶到窗口边（否则滚动时画框会从它两侧露出来），
+     所以负边距吃掉 `.gr` 的左右留白，再在里面自己补回来 */
+  margin-inline: -20px;
+  padding: 0 20px calc(14px + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(to bottom, rgba(244, 248, 249, 0), var(--paper) 14px);
+}
+
+.gr__composer-inner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 14px 14px 20px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--card-radius);
+  background: var(--surface);
+  box-shadow: var(--sheet-shadow);
+}
+
+.gr__story {
+  margin: 0;
+  max-height: 3.4em;
+  overflow: auto;
+  color: var(--ink-muted);
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.gr__composer-acts {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ★ 「退出」是一颗**离开这一屏**的按钮，但它**不丢东西**（这一本已经是一份草稿，
+   在书架的「正在编辑」里等着）——所以它是文字链接的样子，不是第二颗主按钮。
+   ★ 2026-10-16 它原来叫 `.gr__restart`（「改故事，重做一本」）：名字与话都在说
+     "丢掉重来"，而那不是它做的事。改名与改话是同一件事的两半，别只改一半。 */
+.gr__exit {
+  padding: 8px 10px;
+  color: var(--ink-muted);
+  font-size: 13px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.gr__exit:hover,
+.gr__exit:focus-visible {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.gr__primary {
+  min-height: 50px;
+  padding: 0 26px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--ink);
+  color: #fff;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.gr__primary[data-tone='done'] {
+  background: var(--accent);
+}
+
+.gr__primary:disabled {
+  cursor: default;
+  opacity: 0.42;
+}
+
+/* 静止模式下那颗"创作中"没有任何动效可言，它本来就只是一个禁用态 */
+
+@media (max-width: 560px) {
+  .gr__composer-inner {
+    grid-template-columns: 1fr;
+  }
+
+  .gr__composer-acts {
+    justify-content: space-between;
+  }
+
+  .gr__name {
+    font-size: 11px;
+  }
+}

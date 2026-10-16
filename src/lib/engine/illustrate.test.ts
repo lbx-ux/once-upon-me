@@ -293,3 +293,171 @@ describe('illustrateNode · 出图/落盘失败时不许丢掉已经画好的图
     await expect(run(scriptedVision([0.3]), { store: broken })).rejects.toThrow(/ENOSPC/)
   })
 })
+
+/**
+ * ★ `attemptBase`（工单 01 §3.1）——单页重画时**接着数**，不从 1 重来。
+ *
+ * 两种坏法都被这一节挡住：
+ * 1. 文件名是 `page-{n}-a{attempt}` 拼的。从 1 重来会把**上一次那张**覆盖掉，
+ *    而"失败的图也落盘、家长要能看见上一版为什么不像"是 `illustrate.ts` 文件头第 3 条。
+ * 2. `retry` 那句话是"第 {attempt} / {maxAttempts} 次"。只抬 `attempt` 不抬上界的话，
+ *    它念出来是"第 4 / 3 次"——一个自相矛盾的数，而屏幕上没有任何东西会提示它是错的。
+ */
+describe('illustrateNode · attemptBase（单页重画接着数）', () => {
+  async function rerunOnce(attemptBase: number, vision: VisionComparator | null) {
+    const events: { kind: string; attempt?: number; maxAttempts?: number; total?: number }[] = []
+    const store = await createMemoryStore()
+    const result = await illustrateNode(NODE, {
+      image: fakeImage(),
+      vision,
+      store,
+      card: CARD,
+      referenceDataUrl: 'data:image/png;base64,AAAA',
+      bookId: 'book-test',
+      attemptBase,
+      maxAttempts: 3,
+      emit: (payload) =>
+        events.push({
+          kind: payload.kind,
+          ...('attempt' in payload ? { attempt: payload.attempt } : {}),
+          ...('maxAttempts' in payload ? { maxAttempts: payload.maxAttempts } : {}),
+          ...('total' in payload ? { total: payload.total } : {}),
+        }),
+      now: () => 0,
+    })
+    return { result, events, store }
+  }
+
+  it('★ 缺省从 1 起（整本那一轮一个字都没改）', async () => {
+    const { result, events } = await rerunOnce(0, null)
+    expect(result.attempt).toBe(1)
+    expect(events[0]).toMatchObject({ kind: 'stage', attempt: 1, total: 3 })
+  })
+
+  it('★ attemptBase = 3 时，第一次尝试就是第 4 次，上界也跟着抬到 6', async () => {
+    const { result, events } = await rerunOnce(3, null)
+    expect(result.attempt).toBe(4)
+    expect(events[0]).toMatchObject({ kind: 'stage', attempt: 4, total: 6 })
+  })
+
+  it('★ 落盘的文件名接着数（不覆盖上一版那张）', async () => {
+    const store = await createMemoryStore()
+    await illustrateNode(NODE, {
+      image: fakeImage(),
+      vision: null,
+      store,
+      card: CARD,
+      referenceDataUrl: 'data:image/png;base64,AAAA',
+      bookId: 'book-test',
+      emit: () => undefined,
+      now: () => 0,
+    })
+    await illustrateNode(NODE, {
+      image: fakeImage(),
+      vision: null,
+      store,
+      card: CARD,
+      referenceDataUrl: 'data:image/png;base64,AAAA',
+      bookId: 'book-test',
+      attemptBase: 1,
+      emit: () => undefined,
+      now: () => 0,
+    })
+    const first = await store.read('books/book-test/page-1-a1.png')
+    const second = await store.read('books/book-test/page-1-a2.png')
+    expect(first).not.toBeNull()
+    expect(second).not.toBeNull()
+  })
+
+  it('重画那一条 `retry` 念得出"第 5 / 6 次"，不是"第 5 / 3 次"', async () => {
+    // 比对一直判不过 → 触发 retry。上界必须是 attemptBase + maxAttempts
+    const alwaysFail: VisionComparator = {
+      id: 'fake-vision',
+      modelId: 'fake-vision',
+      async compare() {
+        return { score: 0.1, missed: [], reason: '不像', modelId: 'fake-vision' }
+      },
+    }
+    const { events } = await rerunOnce(3, alwaysFail)
+    const retries = events.filter((event) => event.kind === 'retry')
+    expect(retries.length).toBeGreaterThan(0)
+    expect(retries[0]).toMatchObject({ attempt: 4, maxAttempts: 6 })
+  })
+})
+
+/**
+ * 钱的账 —— 这一页这一次**实付了多少**（2026-10-16 补的字段）
+ *
+ * ★ 在这一组测试之前，`Illustration.costCny` **从来没人填**：钱只进了 `illustration`
+ *   事件（那是给界面看的），而 `summarize()` 的 `totalCostCny` 是从 `illustrations`
+ *   里加出来的——于是**每一本书的成本都记成 0.00**，`scripts/web-run.mts` 的账目核对
+ *   拿一个恒为 0 的和去对照单价，永远"对得上"。这正是"没测成不许记成测出来"那条
+ *   教训的另一种长相：**假的和比没有和更危险**。
+ *
+ * 判据选在这里而不是 `summarize` 那边：这一个字段是那份和的**唯一来源**，
+ * 把它钉住了，上层那三行 reduce 就没有可错的地方。
+ */
+describe('illustrateNode · 这一页这一次实付了多少', () => {
+  /** 供应商一个价都不报的那种 provider（`costCny` 缺省） */
+  function pricingImage(costCny: number | undefined): ImageGenerator {
+    return {
+      ...fakeImage(),
+      async generate() {
+        return {
+          bytes: new Uint8Array([1, 2, 3, 4]),
+          mime: 'image/png',
+          modelId: 'fake-image',
+          referenceApplied: false,
+          ...(costCny === undefined ? {} : { costCny }),
+        }
+      },
+    }
+  }
+
+  it('一次就过：记一次的钱', async () => {
+    const { result } = await run(null)
+    expect(result.costCny).toBeCloseTo(0.2)
+  })
+
+  it('★ 重画两次都算钱：这一页带回来的是 3 次的和，不是最后那张的价', async () => {
+    // 钱是按**次**花的，而"最后一版多少钱"这种口径会让重画看起来是免费的——
+    // 而 r_redraw 这个指标本来就是拿重画次数说成本的
+    const alwaysFail: VisionComparator = {
+      id: 'fake-vision',
+      modelId: 'fake-vision',
+      async compare() {
+        return { score: 0.1, missed: [], reason: '不像', modelId: 'fake-vision' }
+      },
+    }
+    const { result, calls } = await run(alwaysFail)
+    expect(calls).toHaveLength(3) // 画满 3 次
+    expect(result.costCny).toBeCloseTo(0.6)
+  })
+
+  it('★ 供应商不报价时省略这个字段，不写成 0 —— "没记账"与"记了 0 元"不是一件事', async () => {
+    const result = await illustrateNode(NODE, {
+      image: pricingImage(undefined),
+      vision: null,
+      store: createMemoryStore(),
+      card: CARD,
+      referenceDataUrl: 'data:image/png;base64,AAAA',
+      bookId: 'book-test',
+      emit: () => undefined,
+      now: () => 0,
+    })
+    expect(result.costCny).toBeUndefined()
+  })
+
+  it('浮点不写成 0.6000000000000001 那种东西进 book.json', async () => {
+    const alwaysFail: VisionComparator = {
+      id: 'fake-vision',
+      modelId: 'fake-vision',
+      async compare() {
+        return { score: 0.1, missed: [], reason: '不像', modelId: 'fake-vision' }
+      },
+    }
+    const { result } = await run(alwaysFail)
+    // 小数位不超过两位——`book.json` 里那个数是要给人对账的
+    expect(String(result.costCny)).toMatch(/^\d+(\.\d{1,2})?$/)
+  })
+})

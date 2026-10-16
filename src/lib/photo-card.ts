@@ -50,6 +50,7 @@ import {
   DEFAULT_CARD_STYLE,
 } from './prompts/character-sheet.ts'
 import { photoProblems, type PhotoCardRequest } from './photo-rules.ts'
+import { whitened } from './whiten-backdrop.ts'
 
 export type PhotoCardDeps = {
   store: AssetStore
@@ -114,11 +115,15 @@ export async function cardFromPhoto(
   })
 
   const usedAt = deps.now ?? Date.now()
-  const generated = await edit.call(deps.image, {
-    prompt,
-    size: '1440x1440',
-    referenceDataUrl: referenceDataUrlOf(normalized),
-  })
+  // ★ 出图之后把底刷成纯白（2026-10-16 第 23 刀）：模型逼不到 #FFFFFF，
+  //   而卡片墙上一排三张必须同一种底，理由与量法写在 `whiten-backdrop.ts` 文件头
+  const generated = await whitened(
+    await edit.call(deps.image, {
+      prompt,
+      size: '1440x1440',
+      referenceDataUrl: referenceDataUrlOf(normalized),
+    }),
+  )
 
   if (generated.referenceApplied !== true) {
     // 与 illustrate.ts / revise 同一条纪律：说了要照着照片画而没照，宁可当场失败，

@@ -76,9 +76,10 @@
  *    用户以为存上了，下次打开发现书跳回原位，而中间什么都没提示。
  *
  * ★ 删完之后**页面上什么也不留**（用户的原话："书架底下什么也不要留"）。
- *   那一次删除的"凭据"只活在确认框里，成功了就随着确认框一起消失——
- *   这里不做"最近删除"、不做回执行。（删到一半失败是例外：那不是"留下的记录"，
- *   是必须说的话，见 `shelf__confirm` 那个分支。）
+ *   确认框本身也只有**一句话**（用户的第二句话，2026-10-16：「也不要写这么多，
+ *   就一个确认是否删除，还是算了」）——它不列"要失去什么"，因为那一张"预演"的凭据
+ *   连同服务端那条 `GET` 一起撤了。这里不做"最近删除"、不做回执行。
+ *   （删到一半失败是例外：那不是"留下的记录"，是必须说的话，见 `shelf__confirm` 那个分支。）
  */
 
 import Link from 'next/link'
@@ -87,6 +88,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react'
 
 import type { BookSummary } from '@/lib/library.ts'
+import { publishBook } from '@/lib/creation/api.ts'
 import { moveTo } from '@/lib/shelf-order.ts'
 
 export type ShelfDashboardProps = {
@@ -109,14 +111,17 @@ type DeletionPlaceView = {
   failed?: string
 }
 
-type DeletionReceiptView = {
-  bookId: string
-  title: string
+/** `DELETE` 回来的那张凭据里，界面用得到的部分 */
+type ReceiptView = {
   places: DeletionPlaceView[]
-  totalFiles: number
-  stage: 'plan' | 'done'
   complete: boolean
 }
+
+/**
+ * 正要删的那一本。★ 只有这两个字段：确认框只问一句话，
+ * 而书名**本地就有**（`BookSummary.title`），不必为了问一句话去问服务端。
+ */
+type PendingDelete = { bookId: string; title: string }
 
 /** 拖动的暂态。★ 存在 ref 里而不是 state 里：每 move 一次都重渲染一次就够慢了，
  *  再把"这次拖到哪儿"也塞进渲染循环，等于让 React 替一个手势记账 */
@@ -144,7 +149,12 @@ export default function ShelfDashboard({ books }: ShelfDashboardProps) {
   const [editing, setEditing] = useState(false)
   /** 正在被拖的那一本 + 它的位移（含拖动期间页面滚动的那一部分）。`null` = 没在拖 */
   const [drag, setDrag] = useState<{ bookId: string; dx: number; dy: number } | null>(null)
-  const [confirming, setConfirming] = useState<DeletionReceiptView | null>(null)
+  const [confirming, setConfirming] = useState<PendingDelete | null>(null)
+  /**
+   * 删到一半没删干净的位置。★ 它**只在失败时**有东西——成功时这一屏什么也不留
+   * （用户的"书架底下什么也不要留"）。
+   */
+  const [failed, setFailed] = useState<DeletionPlaceView[] | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   /** 读屏播报（挪了一格之后要能听见自己挪到第几位了） */
@@ -182,15 +192,31 @@ export default function ShelfDashboard({ books }: ShelfDashboardProps) {
 
   const byId = useMemo(() => new Map(books.map((book) => [book.bookId, book])), [books])
   /**
+   * ★ 草稿**不进那一排**（工单 03）。
+   *
+   * 那一排是"我做过什么"，而它整套交互都建立在"每一本都读得完"上：
+   * 点开是阅读器、拖动是给成品排序。一本还没做完的书塞进去，会得到一个
+   * 点开就跳到"这本书还没做完"的阅读器、以及一个给草稿排位的位置——
+   * 而"下一篇要接着做的是哪一本"根本不是这一排要回答的问题。
+   *
+   * 所以草稿单独一排摆在上面，带着它自己那两个动作（继续做 / 不要了）。
+   * ★ **它不离场**：藏起来的话，一本被放弃的草稿会占着盘、却没有任何入口找回来。
+   */
+  const drafts = useMemo(() => books.filter((book) => book.status === 'draft'), [books])
+  const published = useMemo(() => books.filter((book) => book.status !== 'draft'), [books])
+
+  /**
    * 摆出来的那一列。★ 末尾那一段不是多余的防御：`router.refresh()` 之后`books` 先变、
    * 上面那个 effect 后跑（effect 在绘制**之后**），中间那一帧 `order` 还是旧的那一份——
    * 只认 `order` 的话，新做的那一本会先闪一下不见。补上"order 里没提到的"就没有这一帧。
    */
   const shown = useMemo(() => {
-    const listed = order.map((id) => byId.get(id)).filter((book): book is BookSummary => !!book)
+    const listed = order
+      .map((id) => byId.get(id))
+      .filter((book): book is BookSummary => !!book && book.status !== 'draft')
     const seen = new Set(listed.map((book) => book.bookId))
-    return [...listed, ...books.filter((book) => !seen.has(book.bookId))]
-  }, [order, byId, books])
+    return [...listed, ...published.filter((book) => !seen.has(book.bookId))]
+  }, [order, byId, published])
 
   async function putOrder(next: string[]): Promise<void> {
     const before = savedRef.current
@@ -325,32 +351,49 @@ export default function ShelfDashboard({ books }: ShelfDashboardProps) {
     void putOrder(next)
   }
 
-  /* ── 删 ─────────────────────────────────────────────────────────────── */
+  /* ── 制作 ───────────────────────────────────────────────────────────── */
 
   /**
-   * 第一步：去问"删掉这本书会失去什么"。★ 这一步**一个字节都不动**。
-   * 确认框里那句"要失去什么"是取回来的，不是我们写死的——数在服务端
-   * （同 `ChildDetail.tsx` 的 `askDeletion`）。
+   * 「制作为绘本」：草稿 → 成品。
+   *
+   * ★ 它打的是**运行视图那颗「确定生成」同一个接口**（`POST /api/books/<id>/publish`，
+   *   幂等）。不是第二条路径——两条路径的差别只在于用户在哪儿按的那一下，
+   *   而"一本书是什么时候从草稿变成成品的"这件事只该有一种答案。
+   * ★ **不问一句"确定吗"**：这一步不销毁任何东西（书还在，只是换了那一栏），
+   *   而删除那一边要问——两边都弹框会让"要不要紧"这件事失去区分度。
+   * ★ 成功之后 `router.refresh()` 让服务端重读清单：那一本会从这一栏挪到下面的书架上，
+   *   用户看得见后果。`announce` 那句是给读屏的（这一屏本来就有那条 live region）。
    */
-  async function askDeletion(bookId: string): Promise<void> {
+  async function makeBook(bookId: string, title: string): Promise<void> {
+    if (busy) return
     setBusy(true)
     setError(null)
     try {
-      const response = await fetch(`/api/books/${encodeURIComponent(bookId)}`)
-      const payload = (await response.json().catch(() => null)) as {
-        receipt?: DeletionReceiptView
-        message?: string
-      } | null
-      if (!response.ok || !payload?.receipt) {
-        setError(payload?.message ?? '数不出要删什么。')
-        return
-      }
-      setConfirming(payload.receipt)
-    } catch {
-      setError('连不上服务端，没能问出要删什么。')
+      await publishBook(bookId)
+      setAnnounce(`《${title}》做好了，挪到下面书架上。`)
+      router.refresh()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
     } finally {
       setBusy(false)
     }
+  }
+
+  /* ── 删 ─────────────────────────────────────────────────────────────── */
+
+  /**
+   * 问一句：**删掉《X》？** ★ 这一步**不发任何请求**。
+   *
+   * 第一版这里去 `GET` 一张"删掉这本书会失去什么"的凭据（`ChildDetail.tsx` 那个形状，
+   * 数在服务端），确认框把三行位置逐行列出来。2026-10-16 用户看着那份清单说
+   * 「也不要写这么多，就一个确认是否删除，还是算了」——于是那一张凭据连同服务端那条
+   * `GET` 一起撤了（见 `lib/book-deletion.ts` 文件头）。**一句话不需要服务端算任何东西**，
+   * 书名本地就有。
+   */
+  function askDeletion(bookId: string, title: string): void {
+    setError(null)
+    setFailed(null)
+    setConfirming({ bookId, title })
   }
 
   /**
@@ -366,13 +409,21 @@ export default function ShelfDashboard({ books }: ShelfDashboardProps) {
     try {
       const response = await fetch(`/api/books/${encodeURIComponent(bookId)}`, { method: 'DELETE' })
       const payload = (await response.json().catch(() => null)) as {
-        receipt?: DeletionReceiptView
+        receipt?: ReceiptView
         message?: string
       } | null
-      if (payload?.receipt) {
-        setConfirming(payload.receipt.complete ? null : payload.receipt)
-        if (payload.receipt.complete) router.refresh()
-        else setError(payload.message ?? '有些位置没删干净，凭据里标出来了。')
+      const receipt = payload?.receipt
+      if (receipt?.complete) {
+        setConfirming(null)
+        setFailed(null)
+        router.refresh()
+        return
+      }
+      if (receipt) {
+        /* 删到一半失败：确认框**留着**，把没删干净的那几行标出来。
+           ★ 这一屏是唯一会看见"位置清单"的地方——它不是"留下的记录"，是必须说的话 */
+        setFailed(receipt.places.filter((one) => one.failed))
+        setError(payload?.message ?? '有些位置没删干净，凭据里标出来了。')
         return
       }
       setError(payload?.message ?? '没删掉。')
@@ -412,6 +463,70 @@ export default function ShelfDashboard({ books }: ShelfDashboardProps) {
       <p className="sr-only" role="status" aria-live="polite">
         {announce}
       </p>
+
+      {/* ★ 草稿那一栏（工单 03）。它在上、成品的架子在下——因为它是**还没做完**的东西，
+          而"接着做哪一本"是进这一屏最先要看见的。编辑模式下不渲染：
+          排书架那套交互（拖动、✕）是给成品用的，草稿的次序没有意义。
+          ★ 2026-10-16 用户："用户点击退出之后，这个待编辑就放到书架上，状态设为「正在编辑」，
+            然后用户可以选择是删除还是制作为绘本；书架应该增加一栏，用于存放编辑的书籍。"
+            所以这一栏从「还没做完」改名为「正在编辑」，一张卡上给**三**个出口：
+            继续编辑（整张卡本身就是那个链接）/ 制作为绘本 / 删除。
+          ★ 磁盘上那个状态字仍然是 `draft`，**没有**跟着改成 `editing`：
+            它是迁移判据（`engine/domain.ts` 的 `Book.status`：缺省 = 成品），
+            改它等于让所有老书重新分堆。改的只是**这一屏叫它什么**。 */}
+      {drafts.length > 0 && !editing && (
+        <section className="shelf__drafts" aria-labelledby="shelf-drafts-head">
+          <h2 className="shelf__sub" id="shelf-drafts-head">
+            正在编辑
+          </h2>
+          <p className="shelf__drafts-hint">
+            在运行视图里点过「退出」的书放在这里。可以接着编辑，也可以直接制作为绘本。
+          </p>
+          <ul className="shelf__draftlist">
+            {drafts.map((book) => (
+              <li key={book.bookId} className="shelf__draft">
+                <Link className="shelf__draft-open" href={`/create?book=${book.bookId}`}>
+                  <span
+                    className="shelf__cover shelf__cover--draft"
+                    style={book.coverUrl ? { backgroundImage: `url(${book.coverUrl})` } : undefined}
+                    data-ready={book.coverUrl ? 'true' : undefined}
+                  />
+                  <span className="shelf__label">
+                    <span className="shelf__name">{book.title}</span>
+                    {/* ★ 「正在编辑」是一句**说明**，不是一个标签：它说的是这本书现在的状态，
+                        点不动。而"继续编辑"是那一下点击本身，所以它写在下一行 */}
+                    <span className="shelf__meta">
+                      {book.pageCount} 页 · 正在编辑
+                      {/* ★ 把动作**写出来**，不留给人猜：整张卡是一个链接，而"正在编辑"
+                          只说了状态、没说点它会怎样。一句「继续编辑」比一个箭头有用——
+                          会读的人先知道要去哪儿，读屏念到的也是这句话 */}
+                      <span className="shelf__meta-go">继续编辑 →</span>
+                    </span>
+                  </span>
+                </Link>
+                <div className="shelf__draft-acts">
+                  <button
+                    type="button"
+                    className="shelf__make"
+                    disabled={busy}
+                    onClick={() => void makeBook(book.bookId, book.title)}
+                  >
+                    制作为绘本
+                  </button>
+                  <button
+                    type="button"
+                    className="shelf__discard"
+                    disabled={busy}
+                    onClick={() => askDeletion(book.bookId, book.title)}
+                  >
+                    删除
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <ul
         className="shelf__rack"
@@ -509,7 +624,7 @@ export default function ShelfDashboard({ books }: ShelfDashboardProps) {
                   className="shelf__remove"
                   data-nodrag=""
                   aria-label={`移除《${book.title}》`}
-                  onClick={() => void askDeletion(book.bookId)}
+                  onClick={() => askDeletion(book.bookId, book.title)}
                 >
                   <span aria-hidden="true">✕</span>
                 </button>
@@ -524,7 +639,7 @@ export default function ShelfDashboard({ books }: ShelfDashboardProps) {
             摆在那儿会让人试着拖它，而它没有位置可言 */}
         {!editing && (
           <li className="shelf__slot">
-            <Link className="shelf__book shelf__book--new" href="/create">
+            <Link className="shelf__book shelf__book--new" href="/home">
               <span className="shelf__cover shelf__cover--new">
                 <span className="shelf__plus" aria-hidden="true">
                   ＋
@@ -538,31 +653,37 @@ export default function ShelfDashboard({ books }: ShelfDashboardProps) {
         )}
       </ul>
 
-      {/* 确认框：**先列出要失去什么，再问**（不是"确定吗"）。数字来自服务端那一次预演 */}
+      {/* 确认框：**一句话**（用户："也不要写这么多，就一个确认是否删除，还是算了"）。
+          它不再列"要失去什么"——预演那一步整个撤掉了，见 `lib/book-deletion.ts` 文件头。
+          逐行的位置只在**删到一半失败**时出现（`failed` 非空），那时它是必须说的话 */}
       {confirming && (
         <section className="shelf__confirm" aria-label="确认删除" ref={confirmRef}>
-          <p className="shelf__confirm-lead">删掉《{confirming.title}》会失去：</p>
-          <ul className="shelf__places">
-            {confirming.places.map((one) => (
-              <li key={one.place} data-failed={one.failed ? 'true' : 'false'}>
-                <strong>{one.place}</strong>
-                <span className="shelf__place-no">
-                  {one.failed ? '没删干净' : one.deleted > 0 ? `${one.deleted} 条` : '没有'}
-                </span>
-                {one.note ? <span className="shelf__place-note">{one.note}</span> : null}
-                {one.failed ? <span className="shelf__place-note">（{one.failed}）</span> : null}
-              </li>
-            ))}
-          </ul>
+          <p className="shelf__confirm-lead">删掉《{confirming.title}》？</p>
           <p className="shelf__confirm-warn">删了就找不回来了。</p>
+          {failed && failed.length > 0 && (
+            <ul className="shelf__places">
+              {failed.map((one) => (
+                <li key={one.place} data-failed="true">
+                  <strong>{one.place}</strong>
+                  <span className="shelf__place-no">没删干净</span>
+                  <span className="shelf__place-note">{one.note ?? one.at}</span>
+                  {one.failed ? <span className="shelf__place-note">（{one.failed}）</span> : null}
+                </li>
+              ))}
+            </ul>
+          )}
           <div className="shelf__confirm-actions">
             <button
               type="button"
               className="shelf__cancel"
-              onClick={() => setConfirming(null)}
+              onClick={() => {
+                setConfirming(null)
+                setFailed(null)
+                setError(null)
+              }}
               disabled={busy}
             >
-              取消
+              算了
             </button>
             <button
               type="button"

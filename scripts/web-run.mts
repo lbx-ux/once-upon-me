@@ -27,6 +27,10 @@
  *    （`illustrate.ts` 的返回值里没有 `costCny`），所以那个和恒为 0 ——
  *    拿一个恒零的量当判据，等于拿更弱的事实回答更强的问题。
  *    换成"送空值 → 看行为变不变"，送真值、看回值。
+ *    ★ 2026-10-16：那个缺口**已经补上**（`illustrateNode` 现在按次累加实付金额，
+ *    见 `illustrate.test.ts` 的「这一页这一次实付了多少」那一组）。但这条探针
+ *    **不换回去**：它要问的是"per-request Env 生不生效"，而成本现在成了**另一个**
+ *    可测的量——想验它该新起一条探针，不是让这条兼职。
  *
  * 另外顺手验两件不属于"跑通"但属于"不许撒谎"的事：
  *   · 日志里出现半行时，重放接口要**跳过并报数**（不是崩，也不是静默吞掉）
@@ -36,7 +40,7 @@
  *   而它不进输出（口径见 scripts/env.mts 文件头）。
  */
 
-import { mkdir, readFile, writeFile, rm } from 'node:fs/promises'
+import { mkdir, readdir, readFile, writeFile, rm } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 
 import { describeEvent } from '../src/lib/engine/events.ts'
@@ -61,6 +65,13 @@ const PROVIDER_KEYS = [
   'VISION_API_KEY',
   'VISION_BASE_URL',
   'VISION_TIMEOUT_MS',
+  // ★ 语音这一组（2026-10-16 补）。原来这个白名单里没有 TTS_*，于是探针跑出来的书
+  //   永远走"没指定音色，这本书没有朗读"那条非致命事件——那**不是**探针的判据，
+  //   是它根本没把语音那张表递过去。`--voice=` 要用得上它们
+  'TTS_MODEL',
+  'TTS_API_KEY',
+  'TTS_BASE_URL',
+  'TTS_VOICE',
 ] as const
 
 const PROBE_ENV = arg('probe-env', '0') === '1'
@@ -70,6 +81,22 @@ async function main(): Promise<void> {
   const pages = Number(arg('pages', '2'))
   const theme = arg('theme', '第一次离开家也不怕')
   const cardId = arg('card', 'xiaoyu-r1')
+  /**
+   * 这一本做出来是草稿还是成品（工单 03）。
+   * ★ **缺省是"不传这个字段"**，不是 `'published'`：缺省 = 成品那条迁移决定
+   *   （`engine/domain.ts` 的 `Book.status`）说的是"盘上没有这个字段的老书算成品"，
+   *   不是"探针默认替调用方声明它是成品"。
+   */
+  const bookStatus = arg('status', '')
+  /**
+   * 用哪个音色朗读（工单 02）。不给 = 这一本不配音。
+   * ★ `--voice=env` 表示"用 `.env.local` 里那个"——探针不打印密钥，也不该为了拿到
+   *   一个音色 id 把它印出来（那个 id 本身不是密钥，但"读一份文件里的一行再打印"
+   *   这件事一旦成了习惯，下一次读到隔壁那一行就没人会停一下）。
+   */
+  const voiceArg = arg('voice', '')
+  /** 跑完之后重画第几页（工单 01）。0 = 不做这件事 */
+  const rerunPageNo = Number(arg('rerun', '0'))
   const outDir = resolve(arg('out', `.out/web-run/${Date.now()}`))
   const assetRoot = resolve(arg('assets', '.out/web'))
 
@@ -89,6 +116,11 @@ async function main(): Promise<void> {
   // 所以"这一轮的每一页都未核对"只可能来自请求体那张表
   if (PROBE_ENV) providers['VISION_MODEL'] = ''
 
+  const voice = voiceArg === 'env' ? (providers['TTS_VOICE'] ?? '') : voiceArg
+  if (voiceArg === 'env' && voice === '') {
+    throw new Error('--voice=env，但 .env.local 里没有 TTS_VOICE')
+  }
+
   const body = {
     child: {
       childId: 'xiaoyu',
@@ -102,12 +134,18 @@ async function main(): Promise<void> {
     theme,
     form: 'solo',
     pages,
+    ...(bookStatus ? { status: bookStatus } : {}),
+    ...(voice ? { voiceId: voice } : {}),
     mode: 'live',
     env: providers,
   }
 
   await mkdir(outDir, { recursive: true })
-  process.stdout.write(`web-run · POST ${base}/api/books · pages=${pages} · 输出 ${outDir}\n\n`)
+  process.stdout.write(
+    `web-run · POST ${base}/api/books · pages=${pages}` +
+      ` · status=${bookStatus || '(不传)'} · voice=${voice || '(不配音)'}` +
+      ` · rerun=${rerunPageNo || '(不重画)'} · 输出 ${outDir}\n\n`,
+  )
 
   const response = await fetch(`${base}/api/books`, {
     method: 'POST',
@@ -196,6 +234,84 @@ async function main(): Promise<void> {
       illustration[0]?.kind === 'illustration' ? illustration[0].modelId : '（没出图）'
     process.stdout.write(`模型 id 来自请求体那张表：${modelId}（--probe-env=1 可验它的优先级）\n`)
   }
+
+  /* ── 单页重画（工单 01）：只重做那一页，而且**接着数** ──────────────── */
+
+  if (rerunPageNo > 0) {
+    const dir = join(assetRoot, 'books', bookId)
+    const filesBefore = await readdir(dir)
+    const bookBefore = JSON.parse(await readFile(join(dir, 'book.json'), 'utf8')) as {
+      illustrations: { pageNo: number; attempt: number; asset: { path: string } }[]
+      stats: { imageCalls: number }
+    }
+    const pageBefore = bookBefore.illustrations.find((item) => item.pageNo === rerunPageNo)
+    const seqBefore = log.events.length === 0 ? 0 : log.events[log.events.length - 1]!.seq
+
+    const rerunResponse = await fetch(`${base}/api/books/${bookId}/pages/${rerunPageNo}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind: 'image', env: providers }),
+    })
+    const rerunFrames: BookStreamFrame[] = []
+    if (rerunResponse.ok && rerunResponse.body) {
+      const decoder2 = createSseDecoder()
+      const reader2 = rerunResponse.body.getReader()
+      const textDecoder2 = new TextDecoder()
+      for (;;) {
+        const { done, value } = await reader2.read()
+        if (done) break
+        for (const sse of decoder2.push(textDecoder2.decode(value, { stream: true }))) {
+          const frame = decodeBookFrame(sse)
+          if (frame) rerunFrames.push(frame)
+        }
+      }
+    } else {
+      process.stdout.write(
+        `✗ 重画接口 HTTP ${rerunResponse.status}：${await rerunResponse.text()}\n`,
+      )
+    }
+
+    const rerunEvents = rerunFrames.flatMap((f) => (f.kind === 'engine' ? [f.event] : []))
+    const logAfter = parseEventLog(await readFile(join(dir, 'events.jsonl'), 'utf8'))
+    const seqs = logAfter.events.map((event) => event.seq)
+    const noDup = new Set(seqs).size === seqs.length
+    const continued = seqs.length > 0 && Math.min(...seqs.slice(seqBefore)) > seqBefore
+
+    const filesAfter = await readdir(dir)
+    const added = filesAfter.filter((name) => !filesBefore.includes(name))
+    const keptOld = pageBefore
+      ? filesAfter.includes(pageBefore.asset.path.split('/').pop() ?? '')
+      : false
+
+    const bookAfter = JSON.parse(await readFile(join(dir, 'book.json'), 'utf8')) as {
+      illustrations: { pageNo: number; attempt: number; asset: { path: string } }[]
+      stats: { imageCalls: number }
+    }
+    const pageAfter = bookAfter.illustrations.find((item) => item.pageNo === rerunPageNo)
+
+    process.stdout.write(
+      `\n单页重画第 ${rerunPageNo} 页：\n` +
+        `　　　这一页的图 ${pageBefore?.asset.path ?? '(没有)'} → ${pageAfter?.asset.path ?? '(没有)'}\n` +
+        `　　　attempt ${pageBefore?.attempt ?? '?'} → ${pageAfter?.attempt ?? '?'}` +
+        `（**接着数**，不是从 1 重来）\n` +
+        `　　　新增文件 ${added.join(' / ') || '(没有)'} · 上一版那张还在：${keptOld ? '是 ✓' : '★ 被覆盖了'}\n` +
+        `　　　事件序号：重画前最大 ${seqBefore} · 重画后 ${seqs.length} 条` +
+        ` · 无重复 ${noDup ? '✓' : '★ 有'} · 接续 ${continued ? '✓' : '★ 从 1 重来了'}\n` +
+        `　　　imageCalls ${bookBefore.stats.imageCalls} → ${bookAfter.stats.imageCalls}` +
+        ` · 重画那一帧 ${rerunEvents.length} 条事件\n`,
+    )
+  }
+
+  /* ── 清单上那两个新字段（工单 02/03）───────────────────────────────── */
+
+  const manifest = JSON.parse(
+    await readFile(join(assetRoot, 'books', bookId, 'book.json'), 'utf8'),
+  ) as { status?: string; voiceId?: string; narrations?: unknown[] }
+  process.stdout.write(
+    `\n清单：status=${manifest.status ?? '(没有这个字段 → 缺省 = 成品)'}` +
+      ` · voiceId=${manifest.voiceId ?? '(没有 → 这一本不配音)'}` +
+      ` · narrations ${manifest.narrations?.length ?? 0} 条\n`,
+  )
 
   /* ── 密钥不许出现在两个地方 ─────────────────────────────────────────── */
 

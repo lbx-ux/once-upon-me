@@ -88,6 +88,9 @@ export async function POST(req: Request): Promise<Response> {
       nameReading: body.nameReading,
       // 年龄档的合法值由引擎判（`validateChildRecord` 读 `AGE_BANDS`），这里不抄
       ageBand: body.ageBand as AgeBand,
+      // ★ 性别（第 23 刀）：`parseChildBody` 已经把它验过一遍（只认 boy/girl），
+      //   没选就**不带这个键**——"有才写"这条口径与 `buildChildRecord` 那边一致
+      ...(body.gender ? { gender: body.gender } : {}),
       lookTags: body.lookTags,
       interestTags: body.interestTags,
       createdAt: Date.now(),
