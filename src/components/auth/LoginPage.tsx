@@ -311,7 +311,11 @@ export default function LoginPage({ next }: { next?: string | undefined }) {
                     className="login__input"
                     type="tel"
                     name="phone"
-                    placeholder="13800138000"
+                    /* ★ 不放占位号码（用户 2026-10-16 要求）。
+                       原来这里是 `13800138000`——那是演示账号，把它当占位符
+                       会让人以为"这就是我的号"或者"系统已经填好了"。
+                       `+86` 前缀与上面那行「手机号」已经把该说的说完了，
+                       占位再写一遍是重复，写一个具体号码则是误导。 */
                     autoComplete="tel-national"
                     inputMode="numeric"
                     maxLength={11}
