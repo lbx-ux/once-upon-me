@@ -40,10 +40,21 @@ import { maskPhone, safeNext, type AuthUser } from '@/lib/auth/state.ts'
 type Step = 'login' | 'set-password'
 type Mode = 'code' | 'password'
 
+/**
+ * ★ 登录名有两种，判据与后端**逐字一样**（`AccountRules`）：
+ * 11 位、1 开头的是手机号（能收短信），其它 6–11 位数字是**短账号**（只能密码登录）。
+ * 演示账号 `123456` 就是后一种。★ 这一层判一遍只是为了让界面说得早一点
+ * （比如那颗"获取验证码"该不该亮），**真正的规则在服务端**——两边不一致时，
+ * 以服务端那句错为准。
+ */
+const ACCOUNT_PATTERN = /^\d{6,11}$/
 const PHONE_PATTERN = /^1\d{10}$/
 const CODE_PATTERN = /^\d{6}$/
-/** 与 `client.ts` 那边的频控口径一致；它只是体验，不是防线（真频控在服务端） */
+/** 与后端同一条口径（`app.sms.same-phone-seconds`）；它只是体验，不是防线 */
 const RESEND_SECONDS = 60
+/** 演示账号。★ 印在登录页上是**给评委用的**（用户 2026-10-16 要的），
+ *  它也是这个站上唯一一个口令公开的账号——风险与停掉它的办法写在 README §五 */
+const DEMO_ACCOUNT = '123456'
 
 function EyeIcon() {
   return (
@@ -103,6 +114,11 @@ export default function LoginPage({ next }: { next?: string | undefined }) {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [countdown, setCountdown] = useState(0)
   const [hasSentCode, setHasSentCode] = useState(false)
+  /**
+   * 开发模式那句"没有真正发送"。★ 它必须显示出来：本地那一档不发真短信，
+   * 而一个悄悄不发的通道会让人在生产上也以为它在发（后端就是按这个口径回的）。
+   */
+  const [codeHint, setCodeHint] = useState('')
 
   const [phoneError, setPhoneError] = useState('')
   const [codeError, setCodeError] = useState('')
@@ -130,13 +146,21 @@ export default function LoginPage({ next }: { next?: string | undefined }) {
   }, [countdown])
 
   const validatePhone = (value = phone): boolean => {
-    if (!PHONE_PATTERN.test(value)) {
-      setPhoneError('请输入 11 位大陆手机号')
+    if (!ACCOUNT_PATTERN.test(value)) {
+      setPhoneError('请输入 11 位手机号，或 6 位以上的账号')
       return false
     }
     setPhoneError('')
     return true
   }
+
+  /**
+   * 这个登录名能不能收短信。
+   * ★ 短账号（比如演示账号 `123456`）收不到——这是**结构上**的：
+   * 后端判据是"它是不是一个手机号"。所以那颗按钮要早一点把这件事说清，
+   * 而不是让人点下去、等一条永远不来的短信。
+   */
+  const canReceiveSms = PHONE_PATTERN.test(phone)
 
   const switchMode = (nextMode: Mode): void => {
     setMode(nextMode)
@@ -146,6 +170,10 @@ export default function LoginPage({ next }: { next?: string | undefined }) {
 
   const onSendCode = async (): Promise<void> => {
     if (!validatePhone() || sendingCode) return
+    if (!canReceiveSms) {
+      setPhoneError('这个账号不是手机号，收不到短信——请切到「密码登录」')
+      return
+    }
     setSendingCode(true)
     const result = await sendCode(phone)
     setSendingCode(false)
@@ -155,6 +183,7 @@ export default function LoginPage({ next }: { next?: string | undefined }) {
     }
     setHasSentCode(true)
     setCountdown(RESEND_SECONDS)
+    setCodeHint(result.hint ?? '')
   }
 
   /** 两次输入一致吗。★ 边输边算，「确认」那一栏还空着的时候不报错 */
@@ -189,6 +218,8 @@ export default function LoginPage({ next }: { next?: string | undefined }) {
 
     setSubmitting(true)
     if (mode === 'password') {
+      // ★ 这里**不判密码长度**：长度是"自己设密码"那一步的规则，而登录只比对哈希。
+      //   判在这里的话，演示账号那个 6 位的口令会当场被自己人挡在门外
       const result = await loginWithPassword(phone, loginPassword)
       setSubmitting(false)
       if (!result.ok) {
@@ -228,7 +259,8 @@ export default function LoginPage({ next }: { next?: string | undefined }) {
     if (!checkPasswordsMatch()) return
 
     setSubmitting(true)
-    const result = await setPasswordRequest(phone, newPassword)
+    // ★ 只把密码递过去：手机号在那张票里（cookie），这一层拿不到也不需要
+    const result = await setPasswordRequest(newPassword)
     setSubmitting(false)
     if (!result.ok) {
       setNewPasswordError(result.message)
@@ -237,7 +269,7 @@ export default function LoginPage({ next }: { next?: string | undefined }) {
     finish(result.user)
   }
 
-  /** 「换个号码」：回第一步，并把上一个号码的痕迹清掉（验证码、密码、倒计时） */
+  /** 「换个号码」：回第一步，并把上一个号码的痕迹清掉（验证码、密码、倒计时、那句开发模式提示） */
   const changePhone = (): void => {
     setStep('login')
     setPhone('')
@@ -247,6 +279,7 @@ export default function LoginPage({ next }: { next?: string | undefined }) {
     setConfirmPassword('')
     setHasSentCode(false)
     setCountdown(0)
+    setCodeHint('')
     setPhoneError('')
     setCodeError('')
     setLoginPasswordError('')
@@ -301,11 +334,17 @@ export default function LoginPage({ next }: { next?: string | undefined }) {
               onSubmit={onSubmitLogin}
             >
               <label className="login__field" htmlFor="phone">
-                <span className="login__label">手机号</span>
+                {/* ★ 「手机号 / 账号」而不是「手机号」：这一栏现在也收短账号
+                    （演示账号 `123456` 就是），写着"手机号"会让人以为它不认 */}
+                <span className="login__label">手机号 / 账号</span>
                 <span className="login__box">
-                  <span className="login__prefix" aria-hidden="true">
-                    +86
-                  </span>
+                  {/* ★ `+86` 只在它看起来是手机号时出现。
+                      原来它是常驻的，而"一个 +86 前缀挂在 `123456` 前面"是明确错的 */}
+                  {canReceiveSms || phone === '' ? (
+                    <span className="login__prefix" aria-hidden="true">
+                      +86
+                    </span>
+                  ) : null}
                   <input
                     id="phone"
                     className="login__input"
@@ -314,8 +353,7 @@ export default function LoginPage({ next }: { next?: string | undefined }) {
                     /* ★ 不放占位号码（用户 2026-10-16 要求）。
                        原来这里是 `13800138000`——那是演示账号，把它当占位符
                        会让人以为"这就是我的号"或者"系统已经填好了"。
-                       `+86` 前缀与上面那行「手机号」已经把该说的说完了，
-                       占位再写一遍是重复，写一个具体号码则是误导。 */
+                       演示账号现在写在下面的页脚里，一句说明而不是一个假输入 */
                     autoComplete="tel-national"
                     inputMode="numeric"
                     maxLength={11}
@@ -382,7 +420,9 @@ export default function LoginPage({ next }: { next?: string | undefined }) {
                       <button
                         className="login__send"
                         type="button"
-                        disabled={countdown > 0 || sendingCode}
+                        /* ★ 短账号时直接禁用：它收不到短信（后端那条判据是结构性的），
+                           让人点下去、等一条永远不来的短信是最坏的一种"能用" */
+                        disabled={countdown > 0 || sendingCode || !canReceiveSms}
                         onClick={() => void onSendCode()}
                       >
                         {countdown > 0
@@ -398,6 +438,14 @@ export default function LoginPage({ next }: { next?: string | undefined }) {
                   {codeError ? (
                     <p id="code-error" className="login__error" aria-live="polite">
                       {codeError}
+                    </p>
+                  ) : null}
+                  {/* ★ 开发模式那句（后端回的 `hint`）原样显示：
+                      "没有真正发送"这件事必须说出来，否则本地测试时
+                      人会一直等一条不会来的短信 */}
+                  {codeHint ? (
+                    <p className="login__error login__error--hint" role="status">
+                      {codeHint}
                     </p>
                   ) : null}
                 </div>
@@ -552,6 +600,13 @@ export default function LoginPage({ next }: { next?: string | undefined }) {
             就已经定了（侧栏把当前路径编码进去），登录页再说一遍只是把一句已经成立的事
             讲第二遍。真想知道去哪儿，地址栏里写着 */}
         <p className="login__foot">以他为主角、用你的声音朗读的定制绘本</p>
+        {/* ★ 演示账号印在这里（用户 2026-10-16 要的：给评委一个能进的号）。
+            文案要**如实**说清它不是手机号——否则有人会去点「获取验证码」，
+            而那个号永远收不到短信（后端不发：它不是手机号）。
+            ★ 它也是这个站上唯一一个口令公开的账号：风险与停掉它的办法写在 README §五 */}
+        <p className="login__demo">
+          演示账号 <b>{DEMO_ACCOUNT}</b> / <b>{DEMO_ACCOUNT}</b>（用「密码登录」进，收不到短信）
+        </p>
       </section>
 
       <figure className="login__art">

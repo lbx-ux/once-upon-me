@@ -125,6 +125,9 @@ const eslintConfig = [
     //   算进来，问题数从「0 error / 2 warning」变成 **1631 error / 19534 warning**——
     //   真问题的信号被彻底淹掉，闸门从此等于没有。
     //   `.out/` 里有生成的产物与一次性探针，本来就该忽略（它是 gitignored 的草稿区）。
+    //   ★ `server/**` 是 2026-10-16 加的：那是 Java 那一半（`server/`），
+    //   它有自己的闸门（`mvn test`）。ESLint 读不了 .java，却会去读它 `target/` 里的
+    //   yml/json —— 与 `.next-preview` 那次同一个形状。
     ignores: [
       'node_modules/**',
       '.next*/**',
@@ -132,6 +135,7 @@ const eslintConfig = [
       'build/**',
       '.out/**',
       '.claude/**',
+      'server/**',
       'next-env.d.ts',
     ],
   },

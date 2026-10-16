@@ -1,80 +1,68 @@
 /**
  * auth/state.ts —— 「谁在用」这件事里**与后端无关**的那一半
  *
- * 与 `lib/settings/state.ts` 同一层、同一条分工：这一层只管
- * **形状 + 本机存取 + 几个纯函数**，不碰网络、不碰 React。
- * 真接口那一段全在隔壁 `client.ts` 里，接后端时只动那一个文件。
+ * 与上一版相比，这个文件**去掉了一大半**，而那正是它该有的样子：
+ * 在册号码表、账号底账（首次登录时间 + 昵称）、"哪些号码设过密码"、
+ * 演示账号常量——那些都是在浏览器里替后端记账。后端落地之后它们全都不需要了：
+ * 库里的那一行就是账，而 cookie 里的票就是"此刻这个人是谁"。
  *
- * ★ 三条判断，每条都有理由：
+ * ★ 剩下三个纯函数，恰好是"浏览器这一侧真正独有"的三件事：
+ *   · `maskPhone`  —— 显示用的打码（服务端不该关心我们怎么把它显示出来）
+ *   · `safeNext`   —— `?next=` 的白名单（防的是把人送到站外，纯前端的一条判据）
+ *   · `parseUser`  —— **读回来的东西一律不信**：接口回的东西也可能变形状
+ *     （比如后端某次改动少了一个字段），而界面拿一个缺字段的对象去渲染
+ *     会以"某个地方显示了 undefined"的形式出现，那是最难查的一类。
  *
- * 1. **存储对象是参数，不是全局**。`loadUser(storage?)` 默认拿 `window.localStorage`，
- *    但**可以由调用方传进来**——因为 `vitest.config.mts` 跑的是 `environment: 'node'`，
- *    那里根本没有 localStorage。把存储当参数，这一层就能在 node 里真测
- *    （同一个理由让 `lib/shelf-order.ts` 收一个 `AssetStore`）。
- * 2. **读回来的东西一律不信**。`parseUser()` 逐字段验形状，坏数据返回 `null`
- *    而不是抛——localStorage 是用户能手改的地方，也是旧版本能留下的地方。
- *    与 `mergeStored()` 那句"不信任存储内容，而不是信任写入口"是同一条。
- * 3. ★ **本机那份"哪些号码设过密码"的表里，只有号码，没有密码**。
- *    这是个模拟（见 `client.ts`），但"把口令明写进 localStorage"即使只是模拟
- *    也是坏示范——这个仓库的读者会照抄。所以表里存的是一件**事实**
- *    （"这个号码在册"），不是一个**凭据**。
+ * ★ 存储对象是参数、`localStorage` 那套东西整体退场的理由：**cookie 是唯一真相**。
+ * 从前 `AuthProvider` 首屏要先渲染"未登录"再补读 localStorage（那个"闪一下"
+ * 写在它的文件头里）；现在身份在服务端 cookie 里，服务端第一次就渲染对了——
+ * 那一条待办（"等后端落地，这件事会自然消失"）到今天就消了。
  */
 
-/** 一个登录着的人。字段刻意少：前端此刻只需要这几件能显示出来的东西 */
+/** 四个能力开关。形状与 Java 的 `Permissions`、与 BFF 的 `permissions` 逐字段一样 */
+export type Permissions = {
+  text: boolean
+  image: boolean
+  vision: boolean
+  speech: boolean
+}
+
+export const NO_PERMISSIONS: Permissions = {
+  text: false,
+  image: false,
+  vision: false,
+  speech: false,
+}
+
+/** 一个登录着的人。字段与 BFF 回的 `user` 对齐 */
 export type AuthUser = {
-  /**
-   * ★ 本地模拟的 id 长这样：`local-13800138000`。
-   *   刻意做成**看得出是本地造的**——真后端会返回一个不透明 id，
-   *   在那之前，"这个人在这个站上还不存在"这件事应该写在数据里，而不是藏起来。
-   */
+  /** 服务端的主键（字符串：JS 的 number 装不下 BIGINT 的全精度） */
   userId: string
-  phone: string
+  /** 登录名：11 位手机号，或一个短账号（演示账号 `123456` 是后者） */
+  account: string
+  /** 手机号。★ 短账号没有它，所以是 `null` 而不是空串 */
+  phone: string | null
   /**
    * 昵称。★ **空串是合法值**，意思是"还没起过"，不是"缺数据"。
-   *   界面上它要长成一句能读的兜底（打码手机号），不是一块空白。
+   * 界面上它要长成一句能读的兜底（打码手机号），不是一块空白。
    */
   nickname: string
-  /** 首次登录时间，ISO 8601。显示时按本地时区格式化 */
+  /** 默认头像的 id。空串 = 还没挑过（界面上是那个"头像空着"的圈） */
+  avatar: string
+  role: string
+  /** 首次登录时间，带时区的 ISO 8601（服务端补的 `+08:00`） */
   createdAt: string
+  permissions: Permissions
 }
-
-/** localStorage 的最小接口。★ 只要这三个方法——测试里给一个 Map 就够了 */
-export type AuthStorage = {
-  getItem(key: string): string | null
-  setItem(key: string, value: string): void
-  removeItem(key: string): void
-}
-
-export const USER_STORAGE_KEY = 'xiaozhujue.auth.user'
-export const REGISTERED_STORAGE_KEY = 'xiaozhujue.auth.registered'
 
 /**
- * 演示用的已有账号（参考稿里那个 `13800138000`）。
+ * 手机号打码：`13800138000` → `138****8000`。
  *
- * ★ 它**不写进存储**，是每次 `isRegistered()` 现算的一部分。
- *   写进去的话，第一次访问就会往用户的盘上留一条他没做过的记录，
- *   而且以后想把演示账号换掉就得写迁移。现在换一行常量就换完了。
+ * ★ 不是 11 位就**原样返回**（短账号、`null`、坏数据都一样），不套一个假的星号形状：
+ * 往一个认不出来的字符串上盖四个 `*` 会让它看起来像"打码过了"，而它只是坏数据。
  */
-export const DEMO_REGISTERED_PHONE = '13800138000'
-
-/**
- * 浏览器那份存储。**服务端与隐私模式一律给 `null`**——
- * `typeof window === 'undefined'` 是 SSR 那一半，`try` 是拿不到 `localStorage` 的
- * 沙箱 iframe（连读这个属性都会抛）。
- */
-export function browserStorage(): AuthStorage | null {
-  if (typeof window === 'undefined') return null
-  try {
-    return window.localStorage
-  } catch {
-    return null
-  }
-}
-
-/** 手机号打码：`13800138000` → `138****8000` */
-export function maskPhone(phone: string): string {
-  // ★ 不是 11 位就**原样返回**，不套一个假的星号形状：
-  //   往一个认不出来的字符串上盖四个 `*` 会让它看起来像"打码过了"，而它只是坏数据
+export function maskPhone(phone: string | null | undefined): string {
+  if (typeof phone !== 'string') return ''
   return /^\d{11}$/.test(phone) ? `${phone.slice(0, 3)}****${phone.slice(7)}` : phone
 }
 
@@ -94,155 +82,79 @@ export function safeNext(value: string | undefined | null): string | null {
   return value
 }
 
-/* ── 存储读写 ──────────────────────────────────────────────────────────────
-   下面三个小函数是本文件唯一的 try/catch 所在。隐私模式、配额满、被禁用的存储，
-   症状都是"抛"，而结论都是同一句：**这次会话照常能用，只是下次要重来**。 */
+/** 这个人能不能开始做一本书：**文本 + 图像**。★ 这两条是那件事的最小集合 */
+export function canCreate(permissions: Permissions): boolean {
+  return permissions.text && permissions.image
+}
 
-function readRaw(storage: AuthStorage | null, key: string): unknown {
-  if (!storage) return null
-  try {
-    const raw = storage.getItem(key)
-    return raw === null ? null : (JSON.parse(raw) as unknown)
-  } catch {
-    return null
+/**
+ * 缺哪几个能力（给那句"没有权限"的提示用）。
+ *
+ * ★ 有它才能说出**缺什么**，而不是笼统地"你没有权限"——管理员看到这句话时
+ * 需要知道该勾哪一个，而"联系管理员"的前提是他能一眼答上"勾哪个"。
+ */
+export function missingForCreate(permissions: Permissions): string[] {
+  const missing: string[] = []
+  if (!permissions.text) missing.push('文字')
+  if (!permissions.image) missing.push('图像')
+  return missing
+}
+
+function parsePermissions(raw: unknown): Permissions | null {
+  if (!raw || typeof raw !== 'object') return null
+  const value = raw as Record<string, unknown>
+  const keys = ['text', 'image', 'vision', 'speech'] as const
+  // ★ 四个都要是布尔：缺一个就当整份认不出来——半个权限表比没有更坏，
+  //   它会让"能不能生成"变成一个看调用顺序的答案
+  for (const key of keys) {
+    if (typeof value[key] !== 'boolean') return null
+  }
+  return {
+    text: value['text'] as boolean,
+    image: value['image'] as boolean,
+    vision: value['vision'] as boolean,
+    speech: value['speech'] as boolean,
   }
 }
 
-function writeRaw(storage: AuthStorage | null, key: string, value: unknown): void {
-  if (!storage) return
-  try {
-    storage.setItem(key, JSON.stringify(value))
-  } catch {
-    /* 存不下就算了（见上） */
-  }
-}
-
-function removeRaw(storage: AuthStorage | null, key: string): void {
-  if (!storage) return
-  try {
-    storage.removeItem(key)
-  } catch {
-    /* 同上 */
-  }
-}
-
-/** 读回来的一坨 → `AuthUser`，认不出来就是 `null`（不抛） */
+/**
+ * 读回来的一坨 → `AuthUser`，认不出来就是 `null`（不抛）。
+ *
+ * ★ `account` 要过一遍形状：没有它，界面上那句"打码手机号"会拿一个垃圾字符串去展示，
+ * 而 `maskPhone()` 会把它原样吐出来——看着像坏了，其实只是存进去时就没验。
+ */
 export function parseUser(raw: unknown): AuthUser | null {
   if (!raw || typeof raw !== 'object') return null
-  const { userId } = raw as Record<string, unknown>
-  // ★ `phone` 要过一遍格式：没有它，界面上那句"打码手机号"会拿一个垃圾字符串去展示，
-  //   而 `maskPhone()` 会把它原样吐出来——看着像坏了，其实只是存进去时就没验
-  if (typeof userId !== 'string' || !userId) return null
-  const profile = parseProfile(raw)
-  if (!profile) return null
-  return { userId, ...profile }
-}
+  const value = raw as Record<string, unknown>
 
-/**
- * ★ 默认参数写 `= browserStorage()` 而不是 `= window.localStorage`：
- *   默认值在这里**求值一次、当场**，所以服务端渲染时拿到的是 `null`，
- *   不会因为"解析到这个函数时 window 还不存在"而抛。
- */
-export function loadUser(storage: AuthStorage | null = browserStorage()): AuthUser | null {
-  return parseUser(readRaw(storage, USER_STORAGE_KEY))
-}
+  const userId = value['userId']
+  const account = value['account']
+  const nickname = value['nickname']
+  const avatar = value['avatar']
+  const role = value['role']
+  const createdAt = value['createdAt']
+  const phone = value['phone']
+  const permissions = parsePermissions(value['permissions'])
 
-export function saveUser(user: AuthUser, storage: AuthStorage | null = browserStorage()): void {
-  writeRaw(storage, USER_STORAGE_KEY, user)
-}
-
-export function clearUser(storage: AuthStorage | null = browserStorage()): void {
-  removeRaw(storage, USER_STORAGE_KEY)
-}
-
-/**
- * 本机记着"设过密码"的那些号码（**不含**演示账号，那个是 `isRegistered()` 现算的）。
- * 认不出来的条目一律丢掉，只留 11 位数字串。
- */
-export function loadRegistered(storage: AuthStorage | null = browserStorage()): string[] {
-  const raw = readRaw(storage, REGISTERED_STORAGE_KEY)
-  if (!Array.isArray(raw)) return []
-  return raw.filter((item): item is string => typeof item === 'string' && /^\d{11}$/.test(item))
-}
-
-/** 这个号码在册吗（= 它设过密码，所以可以走密码登录） */
-export function isRegistered(
-  phone: string,
-  storage: AuthStorage | null = browserStorage(),
-): boolean {
-  return phone === DEMO_REGISTERED_PHONE || loadRegistered(storage).includes(phone)
-}
-
-/** 把号码记进册。已经在了就原样返回，不重复写 */
-export function addRegistered(
-  phone: string,
-  storage: AuthStorage | null = browserStorage(),
-): string[] {
-  const current = loadRegistered(storage)
-  if (current.includes(phone)) return current
-  const next = [...current, phone]
-  writeRaw(storage, REGISTERED_STORAGE_KEY, next)
-  return next
-}
-
-/* ── 账号底账：首次登录时间 + 昵称 ──────────────────────────────────────────
-   ★ 它**单独一张表**，就为了一件事：**登出不该把它忘掉**。
-
-   `AuthUser`（上面那份）是"**此刻**这个人是谁"——登出就该清，它是一次会话。
-   而"这个号码第一次是什么时候来的、他给自己起了什么名字"是**这个账号的底账**，
-   与此刻有没有人在用无关。（这与上面那张在册表同一个道理：登出不会让一个号码
-   忘掉自己设过密码。）
-
-   两张混在一张里的症状，是**实测出来的**、不是推想的：设了昵称「小满」→ 退出登录 →
-   用密码登回来，名字没了，而且「首次登录」那个字段被刷成了刚才那一刻——
-   一个写着"首次"的字段每次登录都变。
-
-   ★ 真后端那边这两件东西存在服务端、跟着账号走，这整张表会连同
-   `client.ts` 里那段补齐逻辑一起删掉。 */
-
-export type AuthProfile = {
-  phone: string
-  nickname: string
-  createdAt: string
-}
-
-export const PROFILES_STORAGE_KEY = 'xiaozhujue.auth.profiles'
-
-function parseProfile(raw: unknown): AuthProfile | null {
-  if (!raw || typeof raw !== 'object') return null
-  const { phone, nickname, createdAt } = raw as Record<string, unknown>
-  if (typeof phone !== 'string' || !/^\d{11}$/.test(phone)) return null
-  // ★ 昵称是空串时照样认——空串是"还没起过"，不是坏数据（同 `parseUser`）
+  if (typeof userId !== 'string' || userId === '') return null
+  if (typeof account !== 'string' || !/^\d{6,11}$/.test(account)) return null
+  // ★ 昵称是空串时照样认——空串是"还没起过"，不是坏数据（与后端那条同名判断同一个口径）
   if (typeof nickname !== 'string') return null
+  if (typeof avatar !== 'string') return null
+  if (typeof role !== 'string') return null
   if (typeof createdAt !== 'string') return null
-  return { phone, nickname, createdAt }
-}
+  // ★ 手机号可空，但**给了就必须是个号**：一个 `"abc"` 会让打码那一格吐出原样
+  if (phone !== null && (typeof phone !== 'string' || !/^\d{11}$/.test(phone))) return null
+  if (!permissions) return null
 
-/** 整张底账。认不出来的条目一律丢掉，不抛 */
-export function loadProfiles(storage: AuthStorage | null = browserStorage()): AuthProfile[] {
-  const raw = readRaw(storage, PROFILES_STORAGE_KEY)
-  if (!Array.isArray(raw)) return []
-  const profiles: AuthProfile[] = []
-  for (const item of raw) {
-    const profile = parseProfile(item)
-    if (profile) profiles.push(profile)
+  return {
+    userId,
+    account,
+    phone: phone as string | null,
+    nickname,
+    avatar,
+    role,
+    createdAt,
+    permissions,
   }
-  return profiles
-}
-
-/** 这个号码的底账，没有就是 `null` */
-export function loadProfile(
-  phone: string,
-  storage: AuthStorage | null = browserStorage(),
-): AuthProfile | null {
-  return loadProfiles(storage).find((profile) => profile.phone === phone) ?? null
-}
-
-/** 写一个号码的底账。同一个号码只留一份（新的覆盖旧的） */
-export function saveProfile(
-  profile: AuthProfile,
-  storage: AuthStorage | null = browserStorage(),
-): void {
-  const rest = loadProfiles(storage).filter((item) => item.phone !== profile.phone)
-  writeRaw(storage, PROFILES_STORAGE_KEY, [...rest, profile])
 }

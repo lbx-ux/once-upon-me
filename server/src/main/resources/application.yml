@@ -1,0 +1,73 @@
+spring:
+  application:
+    name: xiaozhujue-api
+
+  # ★ 默认 profile 是 local（H2 文件库）：clone 下来 `mvn spring-boot:run` 就能跑，
+  #   不需要先装一个 MySQL。生产用 SPRING_PROFILES_ACTIVE=prod（systemd 里写死）。
+  profiles:
+    default: local
+
+  # 建表脚本。★ mode=always 是**故意的**：这份 DDL 全是 `IF NOT EXISTS`，重复执行无害，
+  #   而它换来的是"部署时忘了灌表"这个失败模式直接不存在
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:db/schema.sql
+
+server:
+  port: 8080
+  # ★ 只监听回环。公网那一侧由 Nginx 出面，Java 自己一个字节都不直接对外
+  #   （安全组里 8080 也是关着的，两处都不给）
+  address: 127.0.0.1
+  # 错误体自己写（见 support/GlobalExceptionHandler），不暴露 Spring 默认那份
+  error:
+    whitelabel:
+      enabled: false
+
+mybatis-plus:
+  configuration:
+    # 下划线列名 → 驼峰属性（created_at → createdAt）。显式写出来，
+    # 免得"本地能跑、服务器上字段全 null"这种最难查的一类
+    map-underscore-to-camel-case: true
+  global-config:
+    banner: false
+
+app:
+  jwt:
+    # 生产必须给（缺失就启动失败，见 JwtService）；本地留空会自动生成一把随机的
+    secret: ${APP_JWT_SECRET:}
+    # 会话 7 天。★ 这一轮**没有** token 黑名单（登出只删 cookie），
+    #   所以这个数就是"被撤销的权限最迟多久失效"的上界——写进 README §五
+    ttl-hours: 168
+    # 验证码通过之后那张"已核验"票的有效期，只够用来设一次密码
+    ticket-minutes: 5
+  # BFF 与 Java 之间那把共享令牌（`X-Internal-Token`）。★ 它是弱保险不是防线：
+  #   公网是明文 HTTP，真正挡住陌生人的是"Java 只听回环"
+  internal-token: ${APP_INTERNAL_TOKEN:}
+  admin:
+    # 管理员的登录名与初始密码（只在"库里还没有管理员"时用来建号）。★ 留空就跳过建号，
+    #   绝不自己编一个默认口令——那会变成一个人人都知道的入口
+    account: ${APP_ADMIN_ACCOUNT:}
+    password: ${APP_ADMIN_PASSWORD:}
+  sms:
+    # 是否真发短信。★ 默认 true：这一轮要的就是真通道；
+    #   想不花钱地跑一遍流程时把它设成 false（假发的码是 123456，
+    #   且接口会如实回报"开发模式，未真正发送"）
+    enabled: ${APP_SMS_ENABLED:true}
+    # 这两个是**号码认证服务**里「赠送签名」的名字与「赠送模板」的 CODE。
+    # ★ 默认值就是本机实测能发出的那一对（2026-10-16，真短信到手机、核验 PASS）；
+    #   换账号时要一起换，换成短信服务那边的签名/模板**不行**——那两套不通用
+    sign-name: ${APP_SMS_SIGN_NAME:恒创联众}
+    template-code: ${APP_SMS_TEMPLATE_CODE:100001}
+    access-key-id: ${APP_SMS_ACCESS_KEY_ID:}
+    access-key-secret: ${APP_SMS_ACCESS_KEY_SECRET:}
+    # 频控三个窗口（见 SmsRateLimiter）。★ 这些数是"开放注册之后不至于被刷爆"的下限，
+    #   不是体验参数——改小只会让人发不出码
+    same-phone-seconds: 60
+    same-phone-hourly: 3
+    same-phone-daily: 10
+    same-ip-hourly: 5
+    same-ip-daily: 20
+    global-daily: 300
+    # 新用户能不能自助注册。管理页上可以随时关掉它
+    registration-open: true

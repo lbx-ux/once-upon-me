@@ -1,0 +1,36 @@
+# ── 测试那一档：内存库 + 假短信 ────────────────────────────────────────────
+#
+# ★ 内存库（`mem:`）而不是文件库：每个测试类跑完不该在盘上留下东西，
+#   而"上一个测试留下的用户"正是那种会让第二次跑出不一样结果的脏。
+#   DB_CLOSE_DELAY=-1 让库在最后一个连接关掉之后仍然活着——Spring 的
+#   连接池会反复开关连接，少了它，表会在某个中间时刻被清掉。
+#
+# ★ `app.sms.enabled=false`：测试**不许**真发短信（那是钱，而且 CI 上没有网络）。
+#   开发模式那一份实现（码固定 123456）让整条注册链路照样测得完。
+spring:
+  datasource:
+    url: jdbc:h2:mem:xiaozhujue-test;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+
+app:
+  sms:
+    enabled: false
+    # ★ 按 IP 的那两层在这里放得很宽，理由很具体：MockMvc 发出来的请求**同源**
+    #   （都是 127.0.0.1），照真实的上限（5/小时）跑，测试之间会按真实规则
+    #   把对方挡掉——于是"某个测试单独跑是绿的、一起跑就红"，而那不是代码的错。
+    #   按 IP 这条规则本身**照样被测**：`AuthFlowIntegrationTest#ipLayerIsEnforced`
+    #   给每个请求塞一个自己的 X-Forwarded-For，走的是真判据。
+    #   （按号的那三层**不放宽**：它们互相独立，本来就该按真值验。）
+    same-ip-hourly: 10000
+    same-ip-daily: 10000
+  # 测试里给一个固定的密钥：JwtService 就不会去生成那把随机的，
+  # 而"签出来的票能被验回来"这件事才是被测的东西
+  jwt:
+    secret: test-only-secret-at-least-32-bytes-long!!
+  internal-token: ""
+
+logging:
+  level:
+    com.onceuponme.api: INFO

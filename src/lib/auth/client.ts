@@ -1,59 +1,80 @@
 /**
- * auth/client.ts —— ★ **「接后端」那条缝就是这一个文件**
+ * auth/client.ts —— ★ **「接后端」那条缝就是这一个文件**（今天就是那一天）
  *
- * 参考稿的 README 建议了四个接口，这里就是那四个（加一个改昵称的），
- * 一个不多一个不少：
+ * 上一版的文件头是这么写的：
  *
- *   sendCode(phone)                   → POST /auth/send-code
- *   verifyCode(phone, code)           → POST /auth/verify-code   （返回 isNewUser）
- *   setPassword(phone, password)      → POST /auth/set-password  （只在已验证的会话里可调）
- *   loginWithPassword(phone, password)→ POST /auth/login-password
- *   updateNickname(user, nickname)    → PATCH /auth/me
+ *   > 现在**全是本地模拟，一个请求都不发**。接后端时把每个函数体换成 `fetch`，
+ *   > 连返回类型一起换，**上层一行都不用改**。
  *
- * ★ 现在**全是本地模拟，一个请求都不发**。接后端时把每个函数体换成 `fetch`，
- *   连返回类型一起换（下面那几个 `type` 就是契约），**上层一行都不用改**——
- *   页面、Provider、侧栏全都只认这五个函数的签名，不认它们内部干了什么。
+ * 这一天到了。这里是**换成了什么样**，以及换的时候**判断没变的地方**：
  *
- * ── 模拟规则（要自洽，不能每个号码每次都被当成新用户）──────────────────────
+ * ── 一个字都没变的 ────────────────────────────────────────────────────────
  *
- * 1. 验证码：**任意 6 位数字都通过**（真实短信通道不在这一轮里）。
- * 2. 号码在册（设过密码）→ 验证码通过后直接登录；不在册 → 进「设置密码」。
- * 3. 设置密码成功后，这个号码进本机那张"在册表"（`state.ts`，**只记号码**）。
- * 4. 密码登录：在册 → 密码 ≥ 8 位就通过；不在册 → 回一句
- *    **「这个号码还没设过密码，先用验证码登录」**——这是一句真话，
- *    也正是真后端会说的话，所以它不是在糊弄。
- * 5. `13800138000` 是在册的（参考稿那个演示已有账号），走验证码能直接进。
- * 6. ★ **本地一个密码都不存**。表里那件事实是"这个号码在册"，不是一个凭据。
- *    即使只是模拟，把口令明写进 localStorage 也是坏示范——这个仓库的读者会照抄。
+ * · 函数名与它们的分工：`sendCode` / `verifyCode` / `setPassword` /
+ *   `loginWithPassword` / `updateNickname`。
+ * · **失败一律带一句能读给人看的话**（`AuthFail.message`），上层直接显示，
+ *   不自己编文案。★ 现在那句话是**后端说的**（BFF 原样透传 Java 的 message），
+ *   所以"验证码不对"与"发得太频，请等 60 秒"是后端才分得清的两件事。
+ * · `verifyCode` 通过之后才谈得上"新用户还是老用户"（`CodeVerdict` 的两个 kind）。
+ * · 演示账号 `123456` 能用密码直接进（这一轮它从"前端常量"变成了后端里的一个账号）。
  *
- * ── 一处刻意造出来的东西 ─────────────────────────────────────────────────
+ * ── 变了的 ────────────────────────────────────────────────────────────────
  *
- * `MOCK_LATENCY_MS`：每个函数都先等一会儿。真接口**一定**是异步的，
- * 而一个立刻 resolve 的模拟会让界面上"正在发验证码""正在登录"那些 pending 态
- * **一次都走不到**——那些态于是永远没被验过，接后端那天才第一次出问题。
- * 这个数是这一层唯一凭空写下的东西，接后端时连同它一起删掉。
+ * · **票不再经过这个文件**。会话与那张"设密码的票"都在 httpOnly cookie 里，
+ *   由 BFF 下发，JS 读不到——上一版那句"本地一个口令都不存"现在升级成
+ *   "**连令牌都不在这层出现**"。
+ * · `setPassword(password)` **不再收手机号**：号码从票里读。上一版靠一个模块级变量
+ *   `verifiedPhone` 记着"刚才验过哪个号"，现在这件事由票本身保证（它是签过名的）。
+ * · `MOCK_LATENCY_MS` 连同那整套模拟规则**删掉了**。那个常数存在的理由是
+ *   "让 pending 态真的会发生"——现在请求真的要几十到几百毫秒，理由自己成立了。
+ *   ★ 而 60 秒倒计时仍然是**体验**，不是防线：真频控在后端（三层 + 每日硬顶）。
  */
 
-import {
-  addRegistered,
-  browserStorage,
-  isRegistered,
-  loadProfile,
-  loadUser,
-  saveProfile,
-  type AuthStorage,
-  type AuthUser,
-} from './state.ts'
+import { readResult, unreachable, type Result } from './response.ts'
+import { parseUser, type AuthUser, type Permissions } from './state.ts'
 
-/** 手机号：11 位大陆号 */
-const PHONE_PATTERN = /^1\d{10}$/
-/** 验证码：6 位数字 */
-const CODE_PATTERN = /^\d{6}$/
-/** 密码下限。★ 与界面上那句「至少 8 位」是同一个数，改要一起改 */
+/**
+ * 打一次 BFF（**同源、相对路径**）。
+ *
+ * ★ 这里**不能**用 `backend.ts` 那个 `backendFetch`：那个是服务端用的，
+ * 它会拼上 `BACKEND_URL`（Java 的地址）。浏览器照着打过去的话，
+ * ① 后端地址进了浏览器，② **绕过 BFF 的 cookie**（httpOnly cookie 跨源不发），
+ * ③ 撞 CORS。2026-10-16 就是被 `client.test.ts` 里那条
+ * "打到 BFF 的 /api/auth/send-code" 逮出来的——它在服务端看起来一切正常。
+ */
+async function call<T>(path: string, body: unknown): Promise<Result<T>> {
+  let response: Response
+  try {
+    response = await fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify(body),
+      // ★ 不缓存：登录态相关的东西命中一份旧响应，症状是"登出了还是登录着"
+      cache: 'no-store',
+    })
+  } catch (err) {
+    return unreachable(err instanceof Error ? err.message : String(err))
+  }
+  return readResult<T>(response)
+}
+
+/** GET 那一支（只有 `/api/auth/me` 用） */
+async function get<T>(path: string): Promise<Result<T>> {
+  let response: Response
+  try {
+    response = await fetch(path, { method: 'GET', cache: 'no-store' })
+  } catch (err) {
+    return unreachable(err instanceof Error ? err.message : String(err))
+  }
+  return readResult<T>(response)
+}
+
+/**
+ * 密码下限。★ 与服务器上 `AccountRules.PASSWORD_MIN` 是**同一个数**（那边注释里
+ * 也写了这一条）。它管的是"自己设密码"那一步；**登录时不用它**
+ * ——演示账号那个 6 位的口令就是靠这一条才登得进来。
+ */
 export const PASSWORD_MIN = 8
-
-/** 见文件头「一处刻意造出来的东西」 */
-const MOCK_LATENCY_MS = 320
 
 /** 失败一律带一句**能读给人看的话**。上层直接把它显示出来，不自己编文案 */
 export type AuthFail = { ok: false; message: string }
@@ -61,143 +82,147 @@ export type AuthFail = { ok: false; message: string }
 export type AuthOk = { ok: true; user: AuthUser }
 export type AuthResult = AuthOk | AuthFail
 
+/** 发验证码的结果。★ `devMode` 为真时 `hint` 里就是那句"没有真正发送" */
+export type CodeResult = { ok: true; devMode: boolean; hint: string | null } | AuthFail
+
 /**
- * 验证码通过之后的三种结局。
- * ★ `kind` 与真后端的 `isNewUser` 一一对应：`signed-in` 是"老用户，登录完了"，
- *   `needs-password` 是"新用户，先去设密码"。
+ * 验证码通过之后的两种结局。
+ * ★ `kind` 与后端的 `isNewUser` 一一对应：`signed-in` 是"老用户，登录完了"，
+ *   `needs-password` 是"新用户，先去设密码"。★ 两种情况下浏览器都不拿到票。
  */
 export type CodeVerdict =
-  | { ok: true; kind: 'signed-in'; user: AuthUser }
-  | { ok: true; kind: 'needs-password'; phone: string }
-  | AuthFail
+  { ok: true; kind: 'signed-in'; user: AuthUser } | { ok: true; kind: 'needs-password' } | AuthFail
 
-export type CodeResult = { ok: true } | AuthFail
+/** 这个人是谁 + 他的权限 + 服务端配齐了什么（三个不同的事实，见 BFF 那条路由的注释） */
+export type MeResult =
+  { ok: true; user: AuthUser; permissions: Permissions; configured: Permissions } | AuthFail
 
-const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
-
-/**
- * 本机这次的"已验证会话"。
- *
- * ★ 它是**模块级的一个变量**，而且不落盘——这正是"会话"该有的样子：
- *   刷新页面就没了（真后端那边对应一个短命的服务端 session）。
- *   它存在的唯一目的是兑现"`setPassword` 只在已通过验证码的会话里可调"这条：
- *   没有它，任何一个人打开控制台就能给任意号码设密码。
- */
-let verifiedPhone: string | null = null
-
-function fail(message: string): AuthFail {
-  return { ok: false, message }
-}
-
-/**
- * 造一个登录态。
- *
- * ★ `createdAt` 与 `nickname` 取自**这个号码的底账**（`state.ts` 的
- *   `loadProfile`），退一步才看本机此刻的登录态：不这么做的话，同一个人重新登录
- *   会把"首次登录时间"刷成现在——一个写着"首次"的字段每次登录都变，是坏的。
- *
- * ★ **底账是必须的一层，不能只读 `loadUser()`**：登出会清掉登录态，
- *   所以"登出 → 用密码登回来"这条路上，登录态里什么都没有，
- *   昵称与首次登录时间就一起丢了。这是实测出来的症状，不是推想的
- *   （见 `state.ts` 里 `AuthProfile` 那段）。
- *
- * 真后端那边这个值存在服务端，这整段逻辑跟着删掉。
- */
-function buildUser(phone: string, storage: AuthStorage | null): AuthUser {
-  const session = loadUser(storage)
-  const known =
-    loadProfile(phone, storage) ??
-    // 退路：底账还没写过、但登录态里正好是这个号码（老版本的数据）
-    (session?.phone === phone
-      ? { phone, nickname: session.nickname, createdAt: session.createdAt }
-      : null)
-
-  const user: AuthUser = {
-    // ★ 看得出是本地造的（见 state.ts 里 `userId` 那条注释）
-    userId: `local-${phone}`,
-    phone,
-    nickname: known?.nickname ?? '',
-    createdAt: known?.createdAt ?? new Date().toISOString(),
+/** 把 BFF 的响应读成 `AuthUser`。认不出来时说一句"服务端回的东西不认识" */
+function readUser(raw: unknown): AuthOk | AuthFail {
+  const user = parseUser(raw)
+  if (!user) {
+    // ★ 这一句是给**排障**的：接口形状变了却没人发现时，这句话会直说是形状问题，
+    //   而不是让界面上某处冒出一个 undefined
+    return { ok: false, message: '服务端回的登录态不是我们认识的形状，请刷新一次试试' }
   }
-  // 第一次见到这个号码就把底账记下来。★ 写它和 `addRegistered` 是同一类事：
-  //   本地模拟必须自己记着"这个号码来过"，真后端不需要
-  saveProfile({ phone, nickname: user.nickname, createdAt: user.createdAt }, storage)
-  return user
+  return { ok: true, user }
 }
 
-/** 发验证码。真接口那边服务端还要做频控，前端这 60 秒倒计时只是体验，不是防线 */
-export async function sendCode(
-  phone: string,
-  storage: AuthStorage | null = browserStorage(),
-): Promise<CodeResult> {
-  void storage
-  await wait(MOCK_LATENCY_MS)
-  if (!PHONE_PATTERN.test(phone)) return fail('请输入 11 位大陆手机号')
-  return { ok: true }
-}
-
-/** 校验验证码。★ 通过之后才谈得上"新用户还是老用户" */
-export async function verifyCode(
-  phone: string,
-  code: string,
-  storage: AuthStorage | null = browserStorage(),
-): Promise<CodeVerdict> {
-  await wait(MOCK_LATENCY_MS)
-  if (!PHONE_PATTERN.test(phone)) return fail('请输入 11 位大陆手机号')
-  if (!CODE_PATTERN.test(code)) return fail('请输入 6 位验证码')
-
-  verifiedPhone = phone
-  if (!isRegistered(phone, storage)) return { ok: true, kind: 'needs-password', phone }
-  return { ok: true, kind: 'signed-in', user: buildUser(phone, storage) }
-}
-
-/** 新用户设密码。叫之前必须走过 `verifyCode` 且它认了同一个号码 */
-export async function setPassword(
-  phone: string,
-  password: string,
-  storage: AuthStorage | null = browserStorage(),
-): Promise<AuthResult> {
-  await wait(MOCK_LATENCY_MS)
-  if (verifiedPhone !== phone) return fail('手机号还没验证过，请先用验证码登录')
-  if (password.length < PASSWORD_MIN) return fail(`密码至少 ${PASSWORD_MIN} 位`)
-
-  addRegistered(phone, storage)
-  verifiedPhone = null // 用完即焚：一个已验证会话只够设一次密码
-  return { ok: true, user: buildUser(phone, storage) }
-}
-
-/** 密码登录 */
-export async function loginWithPassword(
-  phone: string,
-  password: string,
-  storage: AuthStorage | null = browserStorage(),
-): Promise<AuthResult> {
-  await wait(MOCK_LATENCY_MS)
-  if (!PHONE_PATTERN.test(phone)) return fail('请输入 11 位大陆手机号')
-  // ★ 这一条要排在密码长度前面：对一个根本不在册的号码说"密码至少 8 位"，
-  //   是在让人去改一个不存在的密码
-  if (!isRegistered(phone, storage)) return fail('这个号码还没设过密码，先用验证码登录')
-  if (password.length < PASSWORD_MIN) return fail(`密码至少 ${PASSWORD_MIN} 位`)
-  return { ok: true, user: buildUser(phone, storage) }
+/** 发验证码。真频控在后端：同号 60 秒、同 IP、每日硬顶三层 */
+export async function sendCode(account: string): Promise<CodeResult> {
+  const result = await call<{ ok: boolean; devMode: boolean; hint: string | null }>(
+    '/api/auth/send-code',
+    { account },
+  )
+  if (!result.ok) return { ok: false, message: result.message }
+  return { ok: true, devMode: result.data.devMode === true, hint: result.data.hint ?? null }
 }
 
 /**
- * 改昵称。
- *
- * ★ 它进这个文件而不是留在 Provider 里，就一条理由：**账号的每一处写入都要走同一条缝**。
- *   留在 Provider 里的话，接后端那天要记得在两个地方加 `fetch`，而漏掉的那一处
- *   会安静地"改了但没存"——它不报错，只是刷新之后名字回去了。
+ * 校验验证码。★ 通过之后浏览器就带着 cookie 了（老用户）或带着那张票（新用户），
+ * 但**这一层两种都拿不到**——它只需要知道下一步该显示什么。
  */
-export async function updateNickname(
-  user: AuthUser,
-  nickname: string,
-  storage: AuthStorage | null = browserStorage(),
+export async function verifyCode(account: string, code: string): Promise<CodeVerdict> {
+  const result = await call<{ kind: string; user?: unknown }>('/api/auth/verify-code', {
+    account,
+    code,
+  })
+  if (!result.ok) return { ok: false, message: result.message }
+
+  if (result.data.kind === 'needs-password') return { ok: true, kind: 'needs-password' }
+
+  const user = readUser(result.data.user)
+  if (!user.ok) return user
+  return { ok: true, kind: 'signed-in', user: user.user }
+}
+
+/**
+ * 新用户设密码。
+ *
+ * ★ 参数里**没有手机号**：号码从那张票里读（票在 cookie 里，是服务端签的）。
+ * 上一版那句"绕过它就等于任何一个人打开控制台就能给任意号码设密码"
+ * 现在由**后端**保证——这一层已经没有可绕的东西了。
+ */
+export async function setPassword(password: string): Promise<AuthResult> {
+  const result = await call<{ user?: unknown }>('/api/auth/set-password', { password })
+  if (!result.ok) return { ok: false, message: result.message }
+  return readUser(result.data.user)
+}
+
+/** 密码登录（含演示账号）。★ 长度不在这里判：判的是服务端的哈希 */
+export async function loginWithPassword(account: string, password: string): Promise<AuthResult> {
+  const result = await call<{ user?: unknown }>('/api/auth/login-password', { account, password })
+  if (!result.ok) return { ok: false, message: result.message }
+  return readUser(result.data.user)
+}
+
+/**
+ * 现在这个人是谁。
+ *
+ * ★ 首屏调它一次。**401 是正常的一种结果**（没登录），不是错误——
+ * 所以这里把它翻成 `{ ok: true, user: null }` 那一支，而不是让调用方去分辨
+ * "401 是没登录还是后端挂了"（后者会回 503）。
+ */
+export async function fetchMe(): Promise<MeResult | { ok: true; signedOut: true }> {
+  const result = await get<{ user?: unknown; permissions?: unknown; configured?: unknown }>(
+    '/api/auth/me',
+  )
+
+  if (!result.ok) {
+    if (result.status === 401) return { ok: true, signedOut: true }
+    return { ok: false, message: result.message }
+  }
+
+  const user = readUser(result.data.user)
+  if (!user.ok) return user
+
+  const fallback = user.user.permissions
+  return {
+    ok: true,
+    user: user.user,
+    permissions: user.user.permissions,
+    configured: (result.data.configured as Permissions | undefined) ?? fallback,
+  }
+}
+
+/** 改昵称。★ 收的是"改后的名字"，不是"这个人"——人是谁由 cookie 说 */
+export async function updateNickname(nickname: string): Promise<AuthResult> {
+  const result = await call<{ user?: unknown }>('/api/auth/me', { nickname })
+  if (!result.ok) return { ok: false, message: result.message }
+  return readUser(result.data.user)
+}
+
+/** 换一个默认头像（只收一个 id，不收文件：这一轮不做上传） */
+export async function pickAvatar(avatarId: string): Promise<AuthResult> {
+  const result = await call<{ user?: unknown }>('/api/auth/me/avatar', { avatar: avatarId })
+  if (!result.ok) return { ok: false, message: result.message }
+  return readUser(result.data.user)
+}
+
+/**
+ * 改密码。★ 要现在的密码——只要拿着会话就能改的话，
+ * 一个被借走的 cookie 就等于账号本身（判据在服务端）。
+ *
+ * ★ 别处的旧会话会被服务端作废（按"密码代次"），而**当前这个人不被踢出去**：
+ * BFF 会把 Java 回的新票写进 cookie。这一条在界面上不用说什么，
+ * 但它是这个功能值不值得用的分界——只改不改撤销，等于没改。
+ */
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string,
 ): Promise<AuthResult> {
-  await wait(MOCK_LATENCY_MS)
-  // 空串是合法值（"还没起过"），所以这里只裁空白，不做非空校验
-  const trimmed = nickname.trim()
-  // ★ 底账也要跟着改。漏掉这一句的症状是"改完当场对、登出再登入变回旧名字"——
-  //   它不报错，只是名字悄悄回去了，正是这个文件头要防的那一类
-  saveProfile({ phone: user.phone, nickname: trimmed, createdAt: user.createdAt }, storage)
-  return { ok: true, user: { ...user, nickname: trimmed } }
+  const result = await call<{ user?: unknown }>('/api/auth/change-password', {
+    currentPassword,
+    newPassword,
+  })
+  if (!result.ok) return { ok: false, message: result.message }
+  return readUser(result.data.user)
+}
+
+/**
+ * 退出登录。★ 成功与否**不看后端**：真正的登出动作是 BFF 把 cookie 删掉，
+ * 而那一步不依赖账号服务活着（登不出去才是最坏的：一个人连"我不是谁了"都做不到）。
+ */
+export async function logout(): Promise<void> {
+  await call('/api/auth/logout', {})
 }

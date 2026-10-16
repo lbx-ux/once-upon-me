@@ -28,6 +28,7 @@ import Link from 'next/link'
 import { useState } from 'react'
 
 import { useAuth } from '@/components/auth/AuthProvider.tsx'
+import { changePassword, PASSWORD_MIN } from '@/lib/auth/client.ts'
 import { maskPhone } from '@/lib/auth/state.ts'
 
 /** 服务端数出来的两个数。★ 它们与"这个人"无关，见文件头第 2 条 */
@@ -76,6 +77,18 @@ export default function ProfileHome({ counts }: { counts: WorkCounts }) {
   const { user, ready, signOut, rename } = useAuth()
   const [draft, setDraft] = useState<string | null>(null)
   const [status, setStatus] = useState('')
+
+  /* ── 改密码那三格（2026-10-16 用户要的功能）────────────────────────────────
+   * ★ 它是这一屏唯一的"危险动作"，所以三格都要：现在的密码（证明是本人）、
+   *   新密码、再输一遍（打错一个字符就再也进不来了，而这一轮**没有找回密码**）。
+   * ★ 状态分两处（`pwStatus` 是进行中/成功，`pwError` 是失败）而不是一处：
+   *   合成一个的话，失败时那句"改好了"会先闪一下再被覆盖，
+   *   而"改密码"这件事上闪一下是最不该有的东西。 */
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [pwStatus, setPwStatus] = useState('')
+  const [pwError, setPwError] = useState('')
 
   const heading = (
     <header className="pf__head">
@@ -132,6 +145,33 @@ export default function ProfileHome({ counts }: { counts: WorkCounts }) {
       // ★ 说"没改成"，不说"改好了"（`AuthProvider` 里那条同一个判断）
       setStatus(error instanceof Error ? error.message : '没保存成功')
     }
+  }
+
+  const savePassword = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
+    event.preventDefault()
+    if (pwStatus === '改密码中…') return
+    setPwError('')
+    if (newPassword.length < PASSWORD_MIN) {
+      setPwError(`新密码至少 ${PASSWORD_MIN} 位`)
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      setPwError('两次输入的新密码不一致')
+      return
+    }
+    setPwStatus('改密码中…')
+    const result = await changePassword(currentPassword, newPassword)
+    if (!result.ok) {
+      setPwStatus('')
+      // ★ 说"没改成"并带上后端那句话（"现在的密码不对"是最常见的一种），
+      //   不能只说"保存失败"
+      setPwError(result.message)
+      return
+    }
+    setCurrentPassword('')
+    setNewPassword('')
+    setConfirmPassword('')
+    setPwStatus('改好了')
   }
 
   return (
@@ -192,6 +232,77 @@ export default function ProfileHome({ counts }: { counts: WorkCounts }) {
           </span>
         </form>
       </div>
+
+      <h2 className="pf__section">密码</h2>
+      <form className="pf__pw" onSubmit={(event) => void savePassword(event)}>
+        {/* ★ 三格的 `autoComplete` 分别是 current-password / new-password：
+            浏览器据此知道"这是改密码"，而不是把新密码当成登录口令存下来 */}
+        <label className="pf__pw-row" htmlFor="pw-current">
+          <span className="pf__rename-label">现在的密码</span>
+          <span className="pf__box">
+            <input
+              id="pw-current"
+              className="pf__input"
+              type="password"
+              autoComplete="current-password"
+              value={currentPassword}
+              onChange={(event) => {
+                setCurrentPassword(event.target.value)
+                setPwError('')
+              }}
+            />
+          </span>
+        </label>
+        <label className="pf__pw-row" htmlFor="pw-new">
+          <span className="pf__rename-label">新密码</span>
+          <span className="pf__box">
+            <input
+              id="pw-new"
+              className="pf__input"
+              type="password"
+              placeholder={`至少 ${PASSWORD_MIN} 位`}
+              autoComplete="new-password"
+              value={newPassword}
+              onChange={(event) => {
+                setNewPassword(event.target.value)
+                setPwError('')
+              }}
+            />
+          </span>
+        </label>
+        <label className="pf__pw-row" htmlFor="pw-confirm">
+          <span className="pf__rename-label">再输一遍</span>
+          <span className="pf__box">
+            <input
+              id="pw-confirm"
+              className="pf__input"
+              type="password"
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={(event) => {
+                setConfirmPassword(event.target.value)
+                setPwError('')
+              }}
+            />
+          </span>
+        </label>
+        <div className="pf__pw-actions">
+          <button
+            className="pf__save"
+            type="submit"
+            disabled={!currentPassword || !newPassword || pwStatus === '改密码中…'}
+          >
+            {pwStatus === '改密码中…' ? '改密码中' : '改密码'}
+          </button>
+          <span className="pf__status" role="status">
+            {pwError || pwStatus}
+          </span>
+        </div>
+        {/* ★ 这句是"改密码"的另一半，必须写在按钮旁边：改完之后**别处**的会话会失效，
+            而"这一台"不会（服务端会发一张新票回来）。不写的话，
+            用户不知道他刚刚把谁踢下线了——而那正是他要的结果 */}
+        <p className="pf__hint">改完之后，别的设备上登着的会话会失效，这一台不用重新登录。</p>
+      </form>
 
       <h2 className="pf__section">这台设备上做过的东西</h2>
       {/* ★ 标题那两个字是**有意的**，见文件头第 2 条：这两个数是真的，

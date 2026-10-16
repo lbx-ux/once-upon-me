@@ -1,83 +1,70 @@
-/**
- * auth/state.test.ts —— 「谁在用」这一层里那些**不会随后端改变**的性质
- *
- * 值钱的都在两边：**坏数据不许炸**（localStorage 是用户能手改的地方）与
- * **`?next=` 不许把人送到站外**（登录页最经典的那个洞）。
- * 中间那几组是普通的 round-trip。
- *
- * ★ 存储是**传进去的**，不是全局的——`vitest.config.mts` 跑 `environment: 'node'`，
- *   那里没有 localStorage。下面这个 `fakeStorage()` 就是那一层的全部依赖。
- */
-
 import { describe, expect, it } from 'vitest'
 
 import {
-  addRegistered,
-  clearUser,
-  DEMO_REGISTERED_PHONE,
-  isRegistered,
-  loadRegistered,
-  loadUser,
+  canCreate,
   maskPhone,
+  missingForCreate,
+  NO_PERMISSIONS,
   parseUser,
   safeNext,
-  saveUser,
-  type AuthStorage,
+  type Permissions,
 } from './state.ts'
 
-function fakeStorage(
-  seed: Record<string, string> = {},
-): AuthStorage & { dump(): Record<string, string> } {
-  const map = new Map(Object.entries(seed))
-  return {
-    getItem: (key) => map.get(key) ?? null,
-    setItem: (key, value) => void map.set(key, value),
-    removeItem: (key) => void map.delete(key),
-    dump: () => Object.fromEntries(map),
-  }
-}
+/**
+ * `state.ts` 剩下三个纯函数 + 两个权限推导。
+ * ★ 上一版这里还有"用户 round-trip / 在册号码表 / 底账"三组用例——它们测的是
+ * 浏览器替后端记的那些账。后端落地之后那些账没了，用例跟着走：
+ * "登出再登入昵称还在"这条性质现在由**服务端**保证，
+ * 而它在 Java 那边有测试（`AuthFlowIntegrationTest#passwordSurvivesSignOut`）。
+ */
 
-const USER = {
-  userId: 'local-13800138000',
-  phone: '13800138000',
-  nickname: '',
-  createdAt: '2026-10-16T03:00:00.000Z',
+const allOn: Permissions = { text: true, image: true, vision: true, speech: true }
+
+function user(overrides: Record<string, unknown> = {}): unknown {
+  return {
+    userId: '7',
+    account: '13800138000',
+    phone: '13800138000',
+    nickname: '小满妈妈',
+    avatar: 'fox',
+    role: 'USER',
+    createdAt: '2026-10-16T22:11:02.645706+08:00',
+    permissions: allOn,
+    ...overrides,
+  }
 }
 
 describe('maskPhone', () => {
   it('11 位大陆号码盖中间四位', () => {
     expect(maskPhone('13800138000')).toBe('138****8000')
-    expect(maskPhone('19912345678')).toBe('199****5678')
   })
 
   it('认不出来的一律原样返回，不套假的星号形状', () => {
-    // ★ 往一个坏字符串上盖 `*` 会让它看起来"打码过了"，而它只是坏数据
-    expect(maskPhone('')).toBe('')
-    expect(maskPhone('1380013800')).toBe('1380013800') // 10 位
-    expect(maskPhone('138001380000')).toBe('138001380000') // 12 位
-    expect(maskPhone('1380013800a')).toBe('1380013800a')
-    expect(maskPhone('+8613800138000')).toBe('+8613800138000')
+    // ★ 短账号（演示账号）也走这一条：它没有被"打码"这回事
+    expect(maskPhone('123456')).toBe('123456')
+    expect(maskPhone('138001380001')).toBe('138001380001')
+    expect(maskPhone('abc')).toBe('abc')
+  })
+
+  it('短账号没有手机号时是空串，不是 "null" 那四个字母', () => {
+    expect(maskPhone(null)).toBe('')
+    expect(maskPhone(undefined)).toBe('')
   })
 })
 
 describe('safeNext', () => {
   it('收站内路径', () => {
     expect(safeNext('/home')).toBe('/home')
-    expect(safeNext('/reader/abc?page=2')).toBe('/reader/abc?page=2')
-    expect(safeNext('/')).toBe('/')
+    expect(safeNext('/account?tab=1')).toBe('/account?tab=1')
   })
 
   it('★ 协议相对的写法一个都不放过', () => {
-    // 这三条就是那个洞本身：浏览器把它们当**站外**
     expect(safeNext('//evil.com')).toBeNull()
-    expect(safeNext('//evil.com/home')).toBeNull()
     expect(safeNext('/\\evil.com')).toBeNull()
-    expect(safeNext('/\\/evil.com')).toBeNull()
+    expect(safeNext('https://evil.com')).toBeNull()
   })
 
   it('带协议的、不以其开头的、空的，全给 null', () => {
-    expect(safeNext('https://evil.com')).toBeNull()
-    expect(safeNext('javascript:alert(1)')).toBeNull()
     expect(safeNext('home')).toBeNull()
     expect(safeNext('')).toBeNull()
     expect(safeNext(undefined)).toBeNull()
@@ -85,94 +72,57 @@ describe('safeNext', () => {
   })
 })
 
-describe('parseUser —— 坏数据一律 null，不抛', () => {
+describe('parseUser —— 接口回的东西也要逐字段验', () => {
   it('形状齐全才认', () => {
-    expect(parseUser(USER)).toEqual(USER)
+    const parsed = parseUser(user())
+    expect(parsed?.userId).toBe('7')
+    expect(parsed?.permissions.text).toBe(true)
   })
 
   it('缺字段 / 类型不对 / 不是对象，全是 null', () => {
     expect(parseUser(null)).toBeNull()
-    expect(parseUser('13800138000')).toBeNull()
-    expect(parseUser([])).toBeNull()
-    expect(parseUser({ ...USER, userId: '' })).toBeNull()
-    expect(parseUser({ ...USER, phone: 13800138000 })).toBeNull()
-    expect(parseUser({ ...USER, nickname: null })).toBeNull()
-    expect(parseUser({ ...USER, createdAt: 1 })).toBeNull()
+    expect(parseUser('nope')).toBeNull()
+    expect(parseUser(user({ userId: '' }))).toBeNull()
+    expect(parseUser(user({ nickname: 7 }))).toBeNull()
+    expect(parseUser(user({ avatar: null }))).toBeNull()
+    expect(parseUser(user({ createdAt: undefined }))).toBeNull()
   })
 
-  it('★ 手机号要过格式：不然界面上那句"打码手机号"会去展示一坨垃圾', () => {
-    expect(parseUser({ ...USER, phone: 'x'.repeat(11) })).toBeNull()
-    expect(parseUser({ ...USER, phone: '1380013800' })).toBeNull()
+  it('★ 账号要过形状：不然打码那一格会拿一坨垃圾去展示', () => {
+    expect(parseUser(user({ account: 'admin' }))).toBeNull()
+    expect(parseUser(user({ account: '12345' }))).toBeNull()
+    expect(parseUser(user({ account: '123456' }))?.account).toBe('123456')
+  })
+
+  it('★ 手机号可空，但给了就必须是个号', () => {
+    expect(parseUser(user({ phone: null }))?.phone).toBeNull()
+    expect(parseUser(user({ phone: '123456' }))).toBeNull()
   })
 
   it('★ 昵称是空串时**照样认**——空串是"还没起过"，不是坏数据', () => {
-    expect(parseUser({ ...USER, nickname: '' })?.nickname).toBe('')
+    expect(parseUser(user({ nickname: '' }))?.nickname).toBe('')
+  })
+
+  it('★ 权限表缺一项就整份不认：半个权限表比没有更坏', () => {
+    expect(parseUser(user({ permissions: { text: true, image: true, vision: true } }))).toBeNull()
+    expect(parseUser(user({ permissions: { ...allOn, speech: 'yes' } }))).toBeNull()
+    expect(parseUser(user({ permissions: NO_PERMISSIONS }))?.permissions.speech).toBe(false)
   })
 })
 
-describe('用户 round-trip', () => {
-  it('存了读得回来，清了就是 null', () => {
-    const storage = fakeStorage()
-    expect(loadUser(storage)).toBeNull()
-
-    saveUser(USER, storage)
-    expect(loadUser(storage)).toEqual(USER)
-
-    clearUser(storage)
-    expect(loadUser(storage)).toBeNull()
+describe('能不能开始创作', () => {
+  it('要文本 + 图像两样（这一本最低要这两件事）', () => {
+    expect(canCreate(allOn)).toBe(true)
+    expect(canCreate({ ...allOn, image: false })).toBe(false)
+    expect(canCreate({ ...allOn, text: false })).toBe(false)
+    expect(canCreate(NO_PERMISSIONS)).toBe(false)
+    // 视觉与语音是"更好"，不是"能不能开始"
+    expect(canCreate({ ...allOn, vision: false, speech: false })).toBe(true)
   })
 
-  it('没有存储（服务端 / 隐私模式）时读是 null、写不抛', () => {
-    expect(loadUser(null)).toBeNull()
-    expect(() => saveUser(USER, null)).not.toThrow()
-    expect(() => clearUser(null)).not.toThrow()
-  })
-
-  it('存储里是坏 JSON 时不抛，当没登录', () => {
-    const storage = fakeStorage({ 'xiaozhujue.auth.user': '{ 这不是 json' })
-    expect(loadUser(storage)).toBeNull()
-  })
-
-  it('setItem 抛（配额满）时吞掉，不把失败变成崩溃', () => {
-    const storage: AuthStorage = {
-      getItem: () => null,
-      setItem: () => {
-        throw new Error('QuotaExceededError')
-      },
-      removeItem: () => undefined,
-    }
-    expect(() => saveUser(USER, storage)).not.toThrow()
-  })
-})
-
-describe('在册号码表 —— 只记号码，不记密码', () => {
-  it('演示账号一开始就在册，而且**没被写进存储**', () => {
-    const storage = fakeStorage()
-    expect(isRegistered(DEMO_REGISTERED_PHONE, storage)).toBe(true)
-    // ★ 断言这一条是为了钉住"不写演示账号"：写进去就等于第一次访问
-    //   就往用户盘上留一条他没做过的记录，以后换演示账号还得写迁移
-    expect(loadRegistered(storage)).toEqual([])
-    expect(Object.keys(storage.dump())).toEqual([])
-  })
-
-  it('设过密码之后在册，且重复记不会记两遍', () => {
-    const storage = fakeStorage()
-    expect(isRegistered('13900000000', storage)).toBe(false)
-
-    expect(addRegistered('13900000000', storage)).toEqual(['13900000000'])
-    expect(isRegistered('13900000000', storage)).toBe(true)
-    expect(addRegistered('13900000000', storage)).toEqual(['13900000000'])
-  })
-
-  it('★ 存储里塞不进不是号码的东西', () => {
-    const storage = fakeStorage({
-      'xiaozhujue.auth.registered': JSON.stringify(['13800138000', 'abc', 42, null, '123']),
-    })
-    expect(loadRegistered(storage)).toEqual(['13800138000'])
-  })
-
-  it('存的是数组以外的东西时当空表', () => {
-    const storage = fakeStorage({ 'xiaozhujue.auth.registered': '{"a":1}' })
-    expect(loadRegistered(storage)).toEqual([])
+  it('缺哪几个要说得出名字——管理员看到提示时要能一眼答上勾哪个', () => {
+    expect(missingForCreate(NO_PERMISSIONS)).toEqual(['文字', '图像'])
+    expect(missingForCreate({ ...allOn, image: false })).toEqual(['图像'])
+    expect(missingForCreate(allOn)).toEqual([])
   })
 })

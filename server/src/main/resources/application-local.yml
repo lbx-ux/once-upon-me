@@ -1,0 +1,26 @@
+# ── 本地开发这一档（默认）：H2 文件库 ──────────────────────────────────────
+#
+# ★ 为什么用 H2 而不是"先去装一个 MySQL"：本机没有 mysql 客户端，也没有 Docker，
+#   而这一档要验的是**整条链路**（浏览器 → BFF → Java → 库）真的通。
+#   文件模式（不是内存模式）是刻意的：**重启之后数据还在**，
+#   所以"设密码 → 登出 → 用密码登回来"这条最要紧的路才能被测到两次。
+#
+# ★ 它与生产那份的唯一差别就是这一段 datasource。SQL 走的是同一份
+#   `db/schema.sql`（那个文件里为什么只写两种库都认的语法，见它的文件头）。
+spring:
+  datasource:
+    url: jdbc:h2:file:./.local-db/xiaozhujue;MODE=MySQL;DATABASE_TO_LOWER=TRUE;AUTO_SERVER=TRUE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+
+logging:
+  level:
+    com.onceuponme.api: DEBUG
+
+app:
+  sms:
+    # ★ 本地默认**假发**（接口照做、频控照做，只是不真的调阿里云）：开发时一次几毛钱
+    #   也是钱，而且"没配 AccessKey 时启动就崩"会让任何人 clone 下来先卡在第一步。
+    #   接口的响应里会如实说这是开发模式，不假装发过了
+    enabled: false

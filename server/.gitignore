@@ -1,0 +1,8 @@
+# Java 侧的构建产物
+target/
+
+# local profile 那个 H2 文件库（本地数据，不进仓库）
+.local-db/
+
+# 打包出来的东西不提交；部署脚本在服务器上现打
+*.jar

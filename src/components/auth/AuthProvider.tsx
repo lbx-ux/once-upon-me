@@ -1,47 +1,60 @@
 'use client'
 
 /**
- * AuthProvider —— 「现在是谁在用」这一份状态的家
+ * AuthProvider —— 「现在是谁在用」这一份状态的家（今天：真后端在管）
  *
- * 与 `SettingsProvider` 同一层、同一套挂法：**挂在根 layout 上，不在各个页面里**。
- * 理由也一样：侧栏底部那一格、个人主页、以后任何"要看一眼是谁"的地方，
- * 读的必须是同一份状态；挂在页面里就会出现"两处各有一份、登出这边那边不知道"。
+ * 与上一版相比，它**少了一件麻烦、多了一件事实**。
  *
- * ★ 三条判断：
+ * ★ 少的麻烦：**首屏那一下闪烁没了**。上一版文件头第 2 条写着"已登录的人刷新
+ * `/home`，侧栏那一格先是「请登录」、后是「个人主页」"，并注明
+ * "等后端落地，这件事会自然消失：那时候身份在服务端的 session cookie 里"。
+ * 就是今天：cookie 是 httpOnly 的，客户端挂载后问一次 `/api/auth/me`
+ * （一次请求，而不是"先猜一个再纠正"），拿到之前渲染的是那个**中性的**
+ * 头像位（`ready` 仍然是 `false`，界面据此只画壳不画名字）。
  *
- * 1. **首屏一律按"未登录"渲染**，挂载后才把本机存的那份读回来。
- *    直接拿 localStorage 当初值会 hydration 不一致——这条学费 `AppShell` 的折叠状态
- *    已经付过一次（那个文件头第 1 条），这里不重付。
+ * ★ 多的事实：**三个不同的问题要分开回答**，而它们混成一个布尔之后
+ * 界面上就再也说不出真话：
+ *   · `user`        —— 这个人是谁
+ *   · `permissions` —— **站长给了他什么**（四个开关，决定他能不能创作）
+ *   · `configured`  —— **站里自己配齐了什么**（密钥在不在）
+ * 「能不能生成一本书」= (`text` 有权限 **且** 服务端配了文本)
+ *                    **且** (`image` 有权限 **且** 服务端配了图像)。
+ * 缺哪一半，界面上那句话是不一样的："找站长开权限" vs "站里还没配好"。
  *
- * 2. ★ **代价要说清楚：会闪一下。** 已登录的人刷新 `/home`，侧栏那一格先是
- *    「请登录」、后是「个人主页」。它比折叠状态那次轻——两副面孔的外框、图标格、
- *    行高完全一样，变的只是图标形状与两四个字，而且这一下在 hydration 后
- *    同一帧内发生。`ready` 因此**露出去**，让需要更讲究的读者自己决定怎么用
- *    （比如先占住位置）。★ 等后端落地，这件事会自然消失：那时候身份在**服务端**的
- *    session cookie 里，服务端第一次就渲染对了，根本没有"两张面孔"。
- *
- * 3. **写账号只走 `lib/auth/client.ts`**（改昵称也是）。理由写在那边的
- *    `updateNickname` 上：漏掉一处 `fetch` 的症状是"改了但没存"，它不报错。
+ * ★ 写账号只走 `lib/auth/client.ts`（与上一版同一条纪律）：漏掉一处 `fetch`
+ * 的症状是"改了但没存"，它不报错。
  */
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 
-import { updateNickname } from '@/lib/auth/client.ts'
-import { clearUser, loadUser, saveUser, type AuthUser } from '@/lib/auth/state.ts'
+import {
+  fetchMe,
+  logout as logoutRequest,
+  pickAvatar as pickAvatarRequest,
+  updateNickname,
+} from '@/lib/auth/client.ts'
+import { NO_PERMISSIONS, type AuthUser, type Permissions } from '@/lib/auth/state.ts'
 
 export type AuthContextValue = {
   user: AuthUser | null
-  /** 本机那份读完了吗（见文件头第 2 条）。★ 未读完时不要用它做"要不要显示"的判据 */
+  /** 站长给这个人的四个开关。未登录时四个全 false */
+  permissions: Permissions
+  /** 站里自己配齐了哪几个能力（密钥在不在）。★ 与 `permissions` 是两件事 */
+  configured: Permissions
+  /** 本机那份读完了吗。★ 未读完时不要拿它做"要不要显示"的判据 */
   ready: boolean
-  /** 登录成功：写进本机 + 更新内存。调用方拿到 `AuthUser` 之后调它 */
+  /** 读登录态时出的错（后端连不上）。★ 与"没登录"是两件事，界面要分开说 */
+  meError: string | null
+  /** 登录成功：调用方拿到 `AuthUser` 之后调它，这里顺手把权限刷一遍 */
   signIn: (user: AuthUser) => void
-  /**
-   * 退出登录。★ 只清"这个人是谁"，**不动那张在册号码表**——
-   * 那张表是"哪些号码设过密码"这件事实，登出不该把它忘掉（忘了就再也走不了密码登录）。
-   */
-  signOut: () => void
-  /** 改昵称。失败时抛（`client.ts` 只会因为网络失败而抛，模拟不会） */
+  /** 退出登录：请 BFF 把 cookie 删掉，然后清内存 */
+  signOut: () => Promise<void>
+  /** 改昵称。失败时抛（界面那一格要说"没改成"） */
   rename: (nickname: string) => Promise<void>
+  /** 换一个默认头像 */
+  pickAvatar: (avatarId: string) => Promise<void>
+  /** 重新问一次"我是谁"（管理页改完权限回来时有用） */
+  refresh: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -53,48 +66,79 @@ export function useAuth(): AuthContextValue {
 }
 
 export default function AuthProvider({ children }: { children: React.ReactNode }) {
-  // ★ 初值是 null（服务端也渲染得出来），挂载后再读本机那份
   const [user, setUser] = useState<AuthUser | null>(null)
+  const [configured, setConfigured] = useState<Permissions>(NO_PERMISSIONS)
   const [ready, setReady] = useState(false)
+  const [meError, setMeError] = useState<string | null>(null)
+
+  const refresh = useCallback(async () => {
+    const result = await fetchMe()
+    if (!result.ok) {
+      // ★ "读不出来"与"没登录"分开：前者要说"账号服务连不上"，
+      //   后者只是"请登录"——把前者伪装成后者会让人一直去点登录
+      setMeError(result.message)
+      return
+    }
+    setMeError(null)
+    if ('signedOut' in result) {
+      setUser(null)
+      setConfigured(NO_PERMISSIONS)
+      return
+    }
+    setUser(result.user)
+    setConfigured(result.configured)
+  }, [])
 
   useEffect(() => {
-    setUser(loadUser())
-    setReady(true)
-  }, [])
+    void refresh().finally(() => setReady(true))
+  }, [refresh])
 
-  const signIn = useCallback((next: AuthUser) => {
-    saveUser(next)
-    setUser(next)
-  }, [])
+  const signIn = useCallback(
+    (next: AuthUser) => {
+      setUser(next)
+      // ★ 权限与"站里配齐了什么"要再问一次：登录响应里只有权限，
+      //   而 `configured` 是 BFF 现算的（它读的是服务端环境变量）
+      void refresh()
+    },
+    [refresh],
+  )
 
-  const signOut = useCallback(() => {
-    clearUser()
+  const signOut = useCallback(async () => {
+    await logoutRequest()
     setUser(null)
+    setConfigured(NO_PERMISSIONS)
+    setMeError(null)
   }, [])
-
-  /**
-   * ★ `rename` 要读"**此刻**的那个人"，但又不能把 `user` 放进依赖表
-   *   （那会让它每次渲染都换一个新函数，而它又在下面 `useMemo` 的依赖里）。
-   *   用 ref 拿着当前值，是这一处唯一干净的写法。
-   */
-  const userRef = useRef(user)
-  userRef.current = user
 
   const rename = useCallback(async (nickname: string) => {
-    // 函数式写法拿的是"这一刻"的人，而不是这个回调被创建时闭包住的那个
-    // （改名期间正好登出的话，闭包里那个会把人写回来）
-    const current = userRef.current
-    if (!current) return
-    const result = await updateNickname(current, nickname)
+    const result = await updateNickname(nickname)
     // ★ 失败**抛**而不是吞掉：界面上那一格要说"没改成"，不能说"改好了"
     if (!result.ok) throw new Error(result.message)
-    saveUser(result.user)
+    setUser(result.user)
+  }, [])
+
+  const pickAvatar = useCallback(async (avatarId: string) => {
+    const result = await pickAvatarRequest(avatarId)
+    if (!result.ok) throw new Error(result.message)
     setUser(result.user)
   }, [])
 
   const value = useMemo<AuthContextValue>(
-    () => ({ user, ready, signIn, signOut, rename }),
-    [user, ready, signIn, signOut, rename],
+    () => ({
+      user,
+      // ★ 权限从 `user` 上读（它每次都是后端现给的），不另存一份——
+      //   两份会漂，而漂的那一刻的症状是"界面说能用、服务端说不行"
+      permissions: user?.permissions ?? NO_PERMISSIONS,
+      configured,
+      ready,
+      meError,
+      signIn,
+      signOut,
+      rename,
+      pickAvatar,
+      refresh,
+    }),
+    [user, configured, ready, meError, signIn, signOut, rename, pickAvatar, refresh],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

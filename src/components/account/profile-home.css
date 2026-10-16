@@ -382,3 +382,37 @@
     flex-wrap: wrap;
   }
 }
+
+/* ── 改密码那三格（2026-10-16 加的）────────────────────────────────────────
+   ★ 为什么它自成一格（`.pf__pw`）而不是塞进上面那个 `.pf__rename` 的网格：
+     那一行是「标签 + 输入 + 按钮 + 回话」四列，而这里要**三行输入 + 一行按钮**。
+     挤进同一个网格只会把 `grid-template-columns` 撑成一串只对某一行成立的数字。
+   ★ 三行都用同一套 `.pf__box / .pf__input`（与改昵称那一格同一个外观）：
+     同一个页面里两个输入框长得不一样，是"两件事"的假信号。 */
+.pf__pw {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.pf__pw-row {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.pf__pw-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  /* 与上面三格的标签列对齐：按钮落在输入框下面，而不是贴在最左边 */
+  padding-left: 88px;
+}
+
+.pf__hint {
+  margin: 0;
+  padding-left: 88px;
+  color: var(--ink-muted);
+  font-size: 12.5px;
+}

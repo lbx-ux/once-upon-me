@@ -378,6 +378,15 @@
   font-size: 12.5px;
 }
 
+/*
+ * 开发模式那句提示（"没有真正发送，验证码固定 123456"）。
+ * ★ 它不是错误，所以**不用 `--danger`**：一条红色的"提示"会让人以为自己做错了什么，
+ *   而这里只是在说"这一档没真发短信"。用次级墨色，与页脚同一档。
+ */
+.login__error--hint {
+  color: var(--ink-muted);
+}
+
 .login__chip-row {
   display: flex;
   align-items: center;
@@ -466,6 +475,25 @@
   border-top: 1px solid var(--hairline);
   font-size: 12.5px;
   color: var(--ink-muted);
+}
+
+/*
+ * 演示账号那一行。
+ * ★ 它是**给评委用的**，所以要比页脚那句再低一档存在感、但必须读得清：
+ *   字号同页脚，颜色用次级墨，账号本身加粗（要能一眼抄下来）。
+ * ★ 它排在页脚**下面**：先读完"这是什么站"，再看"怎么进去"。
+ */
+.login__demo {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  color: var(--ink-muted);
+}
+
+.login__demo b {
+  color: var(--ink);
+  /* 等宽：`123456` 里的 1 与 l、0 与 O 要分得开——这一串是要被抄下来的 */
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 600;
 }
 
 /* ── 左栏：那段水彩 ─────────────────────────────────────────────────────── */
