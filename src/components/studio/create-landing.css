@@ -242,6 +242,33 @@
 /* ── 两颗胶囊 ─────────────────────────────────────────────────────────── */
 
 .cl__pills {
+  /* ★ 2026-10-16 补的两条（`position` + `z-index`）：**这一行连同它的下拉面板
+     要压住下面那张输入卡**。
+
+     起因是用户报的一句"人物和声音的下选框跑到了输入框的底下"。真因不在
+     `.cl__options` 的 `z-index: 3` 上——那个数是对的，但它**只在同一个层叠上下文里
+     才算数**。原来这一行是 `static`、`.cl__card` 是 `position: relative` 的
+     `z-index: auto`，两者都在根上下文里按 **DOM 顺序**画：胶囊在前、卡片在后，
+     所以卡片盖住面板。平时面板赢，是因为 `z-index: 3` 把它提到了根上下文里
+     ——**只要沿途没有任何祖先新建层叠上下文**。
+
+     而"沿途"是随时会变的：`lib/useEnterTimeline.ts` 的进场给 `.cl__pills` 写了
+     `opacity` 与 `translate`（`.24s` 起、`.4s` 长），**动画期间这一行就是一个
+     层叠上下文**，面板的 `z-index: 3` 当场被关进这一行里，而这一行自己又是
+     `z-index: auto` → 卡片照旧压在上面。实测过（1600×900，面板开着时探针取点）：
+       `.cl__pills` 不带动画 → 命中的是 `SPAN.cl__option-name`（面板在上）
+       `.cl__pills` 给一个 `opacity: .99` → 命中的是 `TEXTAREA.cl__input`（卡片在上）
+     一行的差别，就是这么翻的。所以它在**每次进场那半秒里**、以及任何将来给这一行
+     加 `opacity` / `transform` / `filter` / `will-change` 的人手上，都会重现。
+
+     ★ 修法是把这一层**声明出来**，而不是继续指望 DOM 顺序：`z-index: 2` 让这一行
+     自己就是根上下文里那个"在上面"的层，面板在哪都盖得住卡片。
+     ★ 为什么是 2 而不是 3：`.cl__wall` 也是 `2`（那 12 张从首页飞回来的要**从输入卡
+     上面过去**，见 `lib/theme-handoff.ts`）。同档 → 按 DOM 顺序，墙在后、墙在上，
+     接力那条路一个字都不用改；而 `.cl__card` 压到 `1` 之下，谁也不挡。
+     ★ `.cl` 是 `static`、没有 `overflow`，所以这一条不产生别的副作用。 */
+  position: relative;
+  z-index: 2;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -412,6 +439,14 @@ button.cl__pill:hover {
   /* ★ 必须是定位上下文：`.cl__figure` 以它的顶边为基准站上去。
      这一条以前没有，是因为这张卡里没有一个东西需要"探到纸外面" */
   position: relative;
+  /* ★ 2026-10-16 补的：**这张卡是一个有名字的层，压在胶囊那一行下面。**
+     不写这一条时它是 `z-index: auto`，与 `.cl__pills` 抢的是 DOM 顺序——
+     而下拉面板一旦被关进 `.cl__pills` 新建的层叠上下文里（进场动画给那一行写了
+     `opacity`），顺序就翻过来，面板跑到卡片底下（完整推导见 `.cl__pills` 那一段）。
+     给了它一个**比胶囊行低**的确定档位，那个翻法就不可能发生。
+     ★ 卡里面的三层（`.cl__figure` 1、`.cl__beam` 0、`.cl__beam-glow`）都在
+     这个新上下文里排队，彼此先后不变。 */
+  z-index: 1;
   padding: 20px 24px 14px;
   border: 1px solid var(--hairline);
   border-radius: 18px;
