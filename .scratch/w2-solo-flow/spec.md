@@ -127,3 +127,23 @@ pnpm format:check && pnpm lint && pnpm typecheck && pnpm test
    （`openai-vision.ts` 的 `parseLooseJson` 与 `schemas/schema.ts` 的 `extractJson`
    是同一段扫描器写了两遍）。01 里有完整命令与 file:line。
 4. `illustrate.ts` 里"并发是 W2 的优化"那句注释要按 §四 改成 W3——见工单 05 的验收清单。
+
+**2026-10-15 · 进度（第二段）**
+
+- 工单 [01](issues/01-adr0004-threshold.md) **done**：判决 = **翻案**，
+  ADR-0004 的 Status 从 `proposed` 改成 `superseded`。两个条件都量到成立
+  （三样 810 行 / 953 行；重复 1 处，file:line 见工单）。
+  ★ **落地排在 W3**，理由写在 ADR 的附录里（横评数字走的是我们这条传输层，
+  换掉它那批数字就失去了同一性）。所以 **⛔ 里"ADR-0004 判决"这一条到此收口**。
+- 工单 [07](issues/07-streaming-text.md) **引擎与传输那一半 done**：
+  `stream: true` 的适配器、两个超时（实测定的 45s 空闲）、增量抽取器、
+  replay 照实说 `streamed: false`。探针实测见工单（TTFT 0.7–3.1s、最大间隔 0.45s）。
+  **界面那一半（故事板）没做**——它落在另一个会话正在改的文件上。
+- 工单 [09](issues/09-validation-tdd.md) 的两处缺口补上：表单契约
+  （`creation/state.test.ts`，19 条）与第 5 件事（增量抽取器）。
+  还差第 1/3/4 件的"先写测试再写实现"顺序，那一条**无法追认**，如实留着。
+- 计划外的两件：`lib/sse.ts` 搬进 `engine/`（引擎侧要用它做流式分帧，
+  方向不能反）；`openai-vision.ts` 与 `schemas/schema.ts` 那处重复扫描器合并。
+- **一处 ⛔ 的变化**：本 spec §三 说"`proposed` 不许留到 W3"——现在不再是 `proposed` 了，
+  但取而代之的是"翻案已定、落地在 W3"，**⛔ 的分母从"判决"变成了"落地"**，
+  这一条要按 W3 排期看，不再压着本 spec。

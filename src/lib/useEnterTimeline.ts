@@ -19,6 +19,12 @@
  *
  * 时间线本身是**纯数据**（`ENTER_STEPS`），跑它的地方只有一处 `gsap.timeline()`。
  * 这样"哪一处什么时候进场"可测、可 review，而不必开浏览器。
+ *
+ * ★ 2026-10-16 多了一条**接力**（`arrival`）：从首页点「开始创作」进来的那一次，
+ *   主题墙那一步的起点不是"从下面浮上来"，而是**从环上那 12 张刚才所在的位置飞回来**
+ *   （`lib/theme-handoff.ts`）。接力只**接管** `ENTER_STEPS` 里选择器对得上的那一步的
+ *   `at` / `duration` / 起点，其余各步一字不动；没有接力时（直接访问 / 刷新 /
+ *   `prefers-reduced-motion`）走的就是原来那条，一个数都没动。
  */
 
 'use client'
@@ -39,6 +45,56 @@ export type EnterStep = {
   stagger?: (count: number) => number
 }
 
+/**
+ * 逐元素的起点。键名**直接是 GSAP 的**（`x` / `y` / `scale` / `rotate` / `opacity`）——
+ * 我们不再发明一套自己的名字，那样等于把 GSAP 的属性表抄第二遍。
+ * 值一律是函数：接力那 12 张的起点各不相同，给不了常数。
+ *
+ * ★ 刻意**不**去 import GSAP 的 `TweenVars`：那是一个**全局声明**的类型
+ *   （README §五 记过"GSAP 把插件类声明成全局"那条闸门失效），取它要么把
+ *   `gsap` 的运行时拖进 node 测试、要么写一个跨模块的深路径。
+ *   这里要的键就这五个，写死比取巧清楚。GSAP 收得下这个类型（结构上兼容）。
+ */
+export type EnterVars = {
+  x?: (index: number, el: HTMLElement) => number
+  y?: (index: number, el: HTMLElement) => number
+  scale?: (index: number, el: HTMLElement) => number
+  rotate?: (index: number, el: HTMLElement) => number
+  opacity?: (index: number, el: HTMLElement) => number
+}
+
+/**
+ * 接力：某一步的起点由调用方接管（现在只有一处用户 —— `theme-handoff.ts`）。
+ */
+export type EnterArrival = {
+  /** 接管 `ENTER_STEPS` 里哪一步（按选择器对上；对不上就不接管） */
+  sel: string
+  /** 起点 */
+  vars: EnterVars
+  /** 那一步什么时候开始（秒），默认 `ARRIVAL_AT` */
+  at?: number
+  /** 那一步跑多久（秒），默认 `ARRIVAL_DURATION` */
+  duration?: number
+}
+
+/**
+ * 接力的起点是 **0**，不是 `ENTER_STEPS` 里那个 `.42`。
+ *
+ * ★ 这 12 张在切页那一刻**已经在屏幕上了**（就在刚才那个位置）——
+ *   让它们原地等 0.42s 再起飞，看起来就是"环突然停住半秒"（环是转的，停住就穿帮）。
+ *   于是这一条路上层级反过来：**内容先动**（它本来就在场），
+ *   标题与输入卡随后在它下面浮起来。
+ */
+export const ARRIVAL_AT = 0
+
+/**
+ * 接力那一步的时长。比默认的 0.4 长一点：它要走的路是几百像素，
+ * 而且这一下就是整条接力最想让人看见的部分。
+ * 整场仍然收在 1.2s 内（`ARRIVAL_AT + ARRIVAL_DURATION + 12 项的错峰尾巴 = 0.90s`），
+ * 由 `useEnterTimeline.test.ts` 钉着。
+ */
+export const ARRIVAL_DURATION = 0.62
+
 /** 逐项间隔的上限档：≤ 这个数按每档 35ms，再多就压，避免最后一项迟到 */
 export const STAGGER_CAP = 8
 /** 整批交错的总预算：最后一项的**开始**不晚于这个数（秒） */
@@ -55,11 +111,18 @@ export function staggerFor(count: number): number {
   return STAGGER_BUDGET / (count - 1)
 }
 
-/** 时间线的形状。顺序即层级：笔 → 标题 → 说明 → 胶囊 → 纸 → 墙 */
+/** 时间线的形状。顺序即层级：笔 → 形态 → 标题 → 胶囊 → 纸 → 墙
+ *  ★ 原来「说明」那一行（`.cl__sub`）在标题与胶囊之间，2026-10-15 按用户要求撤了，
+ *    它那一步跟着删。`at` 都是绝对秒数，所以删一步不会挪动别步的时序——
+ *    留下一个选不中任何元素的选择器只会让下一个人以为那一行还在。
+ *  ★ 2026-10-16 加了「书的形态」（`.cl__forms`，标题上方那一行），排在**第二条**：
+ *    `at` 必须非递减，而 `useEnterTimeline.test.ts` 钉着第一条必须是 `.cl__doodle`
+ *    （两笔装饰最先"被画出来"），所以它只能排在装饰之后、取同拍（`at: 0`）——
+ *    视觉上它与标题几乎同时到，这是对的：它是这一页的"环境"，不是内容。 */
 export const ENTER_STEPS: readonly EnterStep[] = [
   { sel: '.cl__doodle', from: { opacity: 0, y: 0 }, duration: 0.5, at: 0 },
+  { sel: '.cl__forms', from: { opacity: 0, y: 10 }, duration: 0.4, at: 0 },
   { sel: '.cl__title', from: { opacity: 0, y: 14 }, duration: 0.5, at: 0.05 },
-  { sel: '.cl__sub', from: { opacity: 0, y: 10 }, duration: 0.45, at: 0.16 },
   { sel: '.cl__pills', from: { opacity: 0, y: 10 }, duration: 0.4, at: 0.24 },
   { sel: '.cl__card', from: { opacity: 0, y: 18 }, duration: 0.55, at: 0.3 },
   {
@@ -74,15 +137,29 @@ export const ENTER_STEPS: readonly EnterStep[] = [
 /**
  * 挂载时跑一次。`ref` 是作用域根：所有选择器只在它内部找
  * （`gsap.context` 的 scope 就是这件事，顺带负责卸载时回滚）。
+ *
+ * `arrival` 是可选的**接力**：给了就说明"这一屏是从别处飞过来的"
+ * （见 `EnterArrival`），只影响它 `sel` 对得上的那一步。
  */
-export function useEnterTimeline(ref: React.RefObject<HTMLElement | null>): void {
+export function useEnterTimeline(
+  ref: React.RefObject<HTMLElement | null>,
+  arrival?: EnterArrival | null,
+): void {
   const played = useRef(false)
+  /* ★ 用 ref 拿着它、并让 effect **不依赖它**：接力是"进这一屏那一次"的事，
+     换一个值重播整条进场时间线是错的（那是"页面刷新了"的感觉）。
+     而它在调用方那边是**一次性**算出来的（`useState` 的初始化器），
+     所以这个 ref 不是为了躲开"每次渲染都变"，是为了把这条意思写死。 */
+  const arrivalRef = useRef(arrival)
+  arrivalRef.current = arrival
 
   useEffect(() => {
     const root = ref.current
-    // 只播一次：路由内切换回同一屏时不该再演一遍（那是"页面刷新了"的感觉）
+    // 只播一次：这一场在一个组件实例上只跑一遍
     if (!root || played.current) return
     played.current = true
+
+    const takeover = arrivalRef.current
 
     const mm = gsap.matchMedia()
     mm.add('(prefers-reduced-motion: no-preference)', () => {
@@ -98,14 +175,19 @@ export function useEnterTimeline(ref: React.RefObject<HTMLElement | null>): void
         for (const step of ENTER_STEPS) {
           const items = gsap.utils.toArray<HTMLElement>(step.sel)
           if (!items.length) continue
+          /* 接力只接管**选择器对得上的那一步**：起点（逐元素）、时长、起始时刻一起换。
+             ★ `vars` 放在 `step.from` **之后** —— 它要盖掉 `{opacity: 0, y: 12}` 那两个数，
+               而它盖不到的键（万一将来 `step.from` 长了别的）仍然按默认那条走。 */
+          const take = takeover && takeover.sel === step.sel ? takeover : null
           tl.from(
             items,
             {
               ...step.from,
-              duration: step.duration,
+              ...(take ? take.vars : null),
+              duration: take?.duration ?? step.duration,
               stagger: step.stagger ? step.stagger(items.length) : 0,
             },
-            step.at,
+            take?.at ?? step.at,
           )
         }
         tl.from(
@@ -120,6 +202,26 @@ export function useEnterTimeline(ref: React.RefObject<HTMLElement | null>): void
       }, root)
     })
 
-    return () => mm.revert()
+    /* ── 「只播一次」这个闸门**必须和 cleanup 配成一对**（2026-10-16 修的一个真 bug）
+     *
+     * 原来它只写了一半：闸门立着，而 cleanup 里的 `mm.revert()` 会把这条时间线**整条撤回**。
+     * 于是只要 effect 跑第二遍（dev 的 StrictMode 就是这样：挂载 → 卸载 → 再挂载），
+     * 第二遍撞上闸门直接 return，画面停在**撤回之后**的状态 —— **什么都不演**。
+     *
+     * ★ 实测（headless Chrome 直连 CDP，真帧）：从首页点「开始创作」进来的那一趟
+     *   `runs: 2, earlyReturn: 1, mmCallback: 1`，而墙上那 12 格的读数**从第一帧起就是终态**
+     *   （`opacity: 1` / `transform: none`）—— 整屏一次动画都没有。
+     *   也就是说"接力看起来没接上"的真正原因不是起点不对，是**整条时间线根本没跑**；
+     *   直接打开 `/home` 那一趟（`runs: 1`）的对照组里，同一格读得到 `opacity 0.7 → 1`、
+     *   `y 3.6 → 0` —— 同一个 effect，只因为它没跑第二遍。
+     *
+     * 修法就是把闸门在 cleanup 里放回去：`played` 从此是"这一刻有没有一条**活的**时间线"，
+     * 不是"这辈子演过没有"。
+     * ★ 它本来就管不到"路由内切回这一屏要不要重播"—— 组件一卸载 ref 就没了，
+     *   回来是全新的实例，那一刻重播是**对的**：每一屏都该有它自己的进场。 */
+    return () => {
+      mm.revert()
+      played.current = false
+    }
   }, [ref])
 }

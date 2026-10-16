@@ -11,6 +11,11 @@
 export type EngineErrorCode =
   | 'provider-not-configured'
   | 'provider-call-failed'
+  /** 模型回话了，但回的**不是我们要的那个形状**（该出 JSON 却写了一堆散文）。
+   *  ★ 与 `schema-validation-failed` 分开：那一个是"故事表写不合格"（要换模型重跑整步），
+   *  这一个是"读照片/关系判定这种一句话的活儿没按格式答"（再点一次通常会好）。
+   *  两者对家长的意思完全不同：前者要改选择，后者只是这一次没成。 */
+  | 'provider-bad-response'
   | 'schema-validation-failed'
   | 'consistency-unavailable'
   | 'asset-write-failed'

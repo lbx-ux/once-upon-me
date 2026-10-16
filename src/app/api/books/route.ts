@@ -1,5 +1,13 @@
 /**
- * POST /api/books —— 跑一本书，过程以 SSE 吐出来（工单 02）
+ * /api/books —— 书架这一排的读、写次序、跑一本新书
+ *
+ * ```
+ *   GET   /api/books   书架上那几本的摘要（按 `shelf/order.json` 排好）
+ *   PUT   /api/books   记住那一排的次序（用户拖完之后）
+ *   POST  /api/books   跑一本书，过程以 SSE 吐出来（工单 02）
+ * ```
+ *
+ * POST 那一条的正文在下面；这一节说的是它。
  *
  * 这是 `engine/events.ts` 那句"传输不在这里，在 app/api 那一层"的兑现处。
  * 引擎侧一行没改：`runBook(request, {providers, onEvent})` 原样收进一个流。
@@ -28,6 +36,7 @@ import {
   createFsStore,
   createProviders,
   runBook,
+  type Book,
   type BookRequest,
   type EngineEvent,
 } from '@/lib/engine/index.ts'
@@ -36,7 +45,9 @@ import { encodeBookFrameToText, type BookStreamFrame } from '@/lib/book-stream.t
 import { createFsEventLog } from '@/lib/event-log.ts'
 import { assetRoot, finishRun, tryStartRun } from '@/lib/books-runtime.ts'
 import { userFailureOf } from '@/lib/provider-messages.ts'
-import { listBooks } from '@/lib/library.ts'
+import { coverUrlOf as coverUrlIn, runtimeAssetUrl } from '@/lib/book-source.ts'
+import { listBooks, noCovers, SHELF_COVER_WIDTH } from '@/lib/library.ts'
+import { applyOrder, loadOrder, pruneOrder, saveOrder } from '@/lib/shelf-order.ts'
 
 /** node 运行时：资产要落盘（providers/stores.ts 的 fs 实现） */
 export const runtime = 'nodejs'
@@ -63,15 +74,66 @@ function jsonError(status: number, code: string, message: string, extra?: unknow
  *   理由写在 `lib/library.ts` 的文件头（往"已创作故事"里灌一个演示书是假数）。
  * ★ 返回的是**摘要**（标题 / 页数 / 有没有朗读），不是整本清单：
  *   主页不需要每页的 prompt 与资产指纹，传过去是白搬。
+ * ★ 2026-10-16 起摘要里多一个 `coverUrl`：书架那一屏改成"书立在架子上"之后要封面。
+ *   地址的尺寸口径与那一屏同一个数（`SHELF_COVER_WIDTH` = 384 档），
+ *   免得同一个封面在两条路上各是一个大小。
+ * ★ 2026-10-16 第二轮：**顺序与那一屏是同一条**（`applyOrder` + `shelf/order.json`）。
+ *   这条接口现在没有别的消费者（那一屏是服务端直接读盘），但"书架按什么次序摆"
+ *   只能有一个答案——接口回一个默认序、页面摆另一个，就是把同一件事说了两遍。
  */
 export async function GET(): Promise<Response> {
   try {
     const store = await createFsStore(assetRoot())
-    const books = await listBooks(store)
+    const coverUrlOf = (book: Book): string | null =>
+      coverUrlIn(book, (path) => runtimeAssetUrl(path, SHELF_COVER_WIDTH))
+    const books = applyOrder(await listBooks(store, coverUrlOf), await loadOrder(store))
     return Response.json({ books })
   } catch (err) {
     // 书架读不出来是服务端的事，不该伪装成"你还没有故事"
     return jsonError(500, 'library-read-failed', err instanceof Error ? err.message : String(err))
+  }
+}
+
+/**
+ * PUT /api/books —— 记住书架那一排的**次序**（用户拖完之后）
+ *
+ * ```
+ *   { "order": ["xiaolu-r1-bf84901c4fcd", "probe-01"] }
+ * ```
+ *
+ * 四条：
+ *
+ * 1. **写的是全量次序**，不是"把 X 挪到 Y"。拖动会连着改好几次，一次一次增量下发
+ *    就等于把"当前这一份是什么"复制到两端；全量是幂等的，重发一次不会有第二种结果。
+ * 2. **只认盘上真有的书号**（`pruneOrder`）：客户端那一份可能比盘上旧一点点
+ *    （另一个标签页刚删掉一本），写进去一个死 id 会让清单从第一天起就带着垃圾。
+ * 3. **回写剪过的那一份**，让调用方手上的次序与服务端对齐——不回的话，
+ *    "丢掉了一个 id"这件事只发生在服务端，界面还以为它还在。
+ * 4. ★ **不做"最多 N 条"那种上限**：一个书架上有几本书由盘上那几本决定，
+ *    这里再多一道闸门只会变成第二个真相（真要有几万本，先出问题的是 `listBooks`）。
+ */
+export async function PUT(req: Request): Promise<Response> {
+  let raw: unknown
+  try {
+    raw = await req.json()
+  } catch {
+    return jsonError(400, 'bad-json', '请求体不是合法的 JSON')
+  }
+  const order = (raw as { order?: unknown })?.order
+  if (!Array.isArray(order) || order.some((one) => typeof one !== 'string')) {
+    return jsonError(400, 'invalid-request', 'order 必须是一个书号数组')
+  }
+
+  try {
+    const store = await createFsStore(assetRoot())
+    const existing = await listBooks(store, noCovers)
+    const ids = pruneOrder(
+      order as string[],
+      existing.map((book) => book.bookId),
+    )
+    return Response.json({ order: await saveOrder(store, ids) })
+  } catch (err) {
+    return jsonError(500, 'library-write-failed', err instanceof Error ? err.message : String(err))
   }
 }
 

@@ -1,10 +1,11 @@
 import CharacterWall from '@/components/studio/CharacterWall.tsx'
-import { listChildItems } from '@/lib/children-list.ts'
+import { listWallItems } from '@/lib/children-list.ts'
 
 /**
  * /character —— 小主角（工作台的第三格）
  *
- * 服务端只做取数：有哪些孩子、他们各长什么样。卡片长什么样、动效怎么排，
+ * 服务端只做取数：有哪些孩子、他们各长什么样、以及**用他们做过几本书**
+ * （第五轮加的那条，悬停时露出来）。卡片长什么样、动效怎么排，
  * 全在 `components/studio/CharacterWall.tsx`。
  *
  * ★ 工单 03 换了这一屏的取数：以前是 `listCardItems()` + `loadKidNames()`，
@@ -13,12 +14,15 @@ import { listChildItems } from '@/lib/children-list.ts'
  *   （`lib/children-list.ts`）。
  * ★ 取数可能空，而且**不是错误**：一个新检出的仓库里 `.out/web` 什么都没有，
  *   那时列表里只有两个**示例**（档案随仓库发布）。
+ * ★ 第五轮用的是 `listWallItems()` 而不是 `listChildItems()`：多出来的那部分是
+ *   "用他做过几本书"，而它要读一遍书架。**只有这一屏要**，所以只有这一屏付那份钱
+ *   （详情页与创作流仍然用 `listChildItems`）。
  */
 
 export const dynamic = 'force-dynamic'
 
-export const metadata = { title: '小主角 · 小主角' }
+export const metadata = { title: '角色卡 · 小主角' }
 
 export default async function CharacterPage() {
-  return <CharacterWall items={await listChildItems()} />
+  return <CharacterWall items={await listWallItems()} />
 }

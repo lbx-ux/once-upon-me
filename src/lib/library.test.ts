@@ -7,11 +7,14 @@
  *      警告过同一件事，别再犯第三次）。
  *   ② **只列运行期的书**，不列 `public/demo` 里随仓库提交的那本——
  *      混进来就是往"已创作故事"里灌一个假数。
+ *   ③ **封面地址是调用方算好递进来的**（2026-10-16 书架改成"书立在架子上"时要的）：
+ *      这里钉住的是"每一本都过一遍那个函数"，不是"怎么拼这个地址"——
+ *      拼地址只有一条路（`book-source.ts` 的 `runtimeAssetUrl`），单测在那边。
  */
 
 import { describe, expect, it } from 'vitest'
 
-import { listBooks, summarize } from './library.ts'
+import { listBooks, noCovers, summarize } from './library.ts'
 import { createMemoryStore } from './engine/providers/stores.ts'
 import type { Book } from './engine/index.ts'
 
@@ -29,6 +32,12 @@ function book(parts: Partial<Book> & { bookId: string }): Book {
     ...parts,
   } as Book
 }
+
+/**
+ * 封面地址这一项，这几条用例都不测（它由调用方算好递进来，见 `listBooks` 那条）。
+ * 传 `null` 是如实的：这些 fixture 里的书**真的没有** `cover` 字段。
+ */
+const NO_COVER: string | null = null
 
 describe('summarize', () => {
   it('页数来自故事树，有图页数来自 illustrations —— 两个数不合并', () => {
@@ -91,13 +100,14 @@ describe('summarize', () => {
           },
         ],
       }),
+      NO_COVER,
     )
     expect(summary.pageCount).toBe(3)
     expect(summary.illustratedCount).toBe(2)
   })
 
   it('有朗读看 narrations；没有就是 false（不是"未知"）', () => {
-    expect(summarize(book({ bookId: 'b1' })).hasNarration).toBe(false)
+    expect(summarize(book({ bookId: 'b1' }), NO_COVER).hasNarration).toBe(false)
     expect(
       summarize(
         book({
@@ -111,13 +121,21 @@ describe('summarize', () => {
             },
           ],
         }),
+        NO_COVER,
       ).hasNarration,
     ).toBe(true)
   })
 
   it('没有标题时给一个人话兜底，不是空字符串', () => {
     const broken = { ...book({ bookId: 'b1' }), tree: undefined } as unknown as Book
-    expect(summarize(broken).title).toBe('(没有名字的书)')
+    expect(summarize(broken, NO_COVER).title).toBe('(没有名字的书)')
+  })
+
+  it('封面地址是调用方算好递进来的，原样进摘要（null 就是没有封面）', () => {
+    expect(summarize(book({ bookId: 'b1' }), '/api/assets/x?w=384').coverUrl).toBe(
+      '/api/assets/x?w=384',
+    )
+    expect(summarize(book({ bookId: 'b1' }), NO_COVER).coverUrl).toBeNull()
   })
 })
 
@@ -138,7 +156,7 @@ describe('listBooks', () => {
       bytes: new Uint8Array([1]),
       mime: 'text/plain',
     })
-    const books = await listBooks(store)
+    const books = await listBooks(store, noCovers)
     expect(books.map((item) => item.bookId)).toEqual(['b1'])
   })
 
@@ -152,7 +170,7 @@ describe('listBooks', () => {
       path: 'books/new/book.json',
       value: book({ bookId: 'new', createdAt: 900 }),
     })
-    expect((await listBooks(store)).map((item) => item.bookId)).toEqual(['new', 'old'])
+    expect((await listBooks(store, noCovers)).map((item) => item.bookId)).toEqual(['new', 'old'])
   })
 
   it('★ 一本读不出来的书不让整个书架 500（半截 JSON 当它不存在）', async () => {
@@ -163,10 +181,25 @@ describe('listBooks', () => {
       mime: 'application/json',
     })
     await store.putJson({ path: 'books/ok/book.json', value: book({ bookId: 'ok', createdAt: 5 }) })
-    expect((await listBooks(store)).map((item) => item.bookId)).toEqual(['ok'])
+    expect((await listBooks(store, noCovers)).map((item) => item.bookId)).toEqual(['ok'])
   })
 
   it('一本都没有 = 空数组，不是抛错（新用户看到的就是这个）', async () => {
-    expect(await listBooks(await createMemoryStore())).toEqual([])
+    expect(await listBooks(await createMemoryStore(), noCovers)).toEqual([])
+  })
+
+  it('封面地址由调用方算：每一本都过一遍那个函数，拿回来的原样进摘要', async () => {
+    const store = await createMemoryStore()
+    await store.putJson({
+      path: 'books/b1/book.json',
+      value: book({ bookId: 'b1', createdAt: 1 }),
+    })
+    const seen: string[] = []
+    const books = await listBooks(store, (item) => {
+      seen.push(item.bookId)
+      return `/api/assets/books/${item.bookId}/cover.png?w=384`
+    })
+    expect(seen).toEqual(['b1'])
+    expect(books[0]?.coverUrl).toBe('/api/assets/books/b1/cover.png?w=384')
   })
 })

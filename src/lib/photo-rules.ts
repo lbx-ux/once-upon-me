@@ -31,6 +31,12 @@ export const MAX_PHOTO_BYTES = 20 * 1024 * 1024
  * 同意框旁边那三条。★ 它是**文案的真身**：界面从它渲染，
  * 不许另抄一份（同 `DEFAULT_STYLE_LABEL` 那条纪律——抄一份就会漂，
  * 而这里漂掉的是一句对家长的承诺）。
+ *
+ * ★ **2026-10-16：它现在没有渲染处了。** 用户把同意那一格换成了「分析锚点」那颗按钮
+ *   （见 `NewChild.tsx` 头部第 2 条），于是屏幕上不再有一句读给家长的同意话。
+ *   留着它是因为这三句是那句话的**真身**：谁要把"可见的同意"加回来（比如那颗按钮旁边
+ *   补一行小字），从这里渲染，不要再写第二份。**不要**把这份删了当它"没用"——
+ *   它记的是这个功能对家长的承诺原文。
  */
 export const PHOTO_CONSENT_POINTS = [
   '只用来生成这本书的插画',
@@ -46,7 +52,11 @@ export type PhotoCardRequest = {
   childWord: string
   anchors: readonly CharacterAnchor[]
   photo: Uint8Array
-  /** 同意是**一次勾选**，不是一行灰字。没勾就走不到归一化 */
+  /**
+   * 同意**一次显式动作**，不是一行灰字。没同意走不到归一化。
+   * ★ 2026-10-16 起写这个字段的是用户按下的那颗按钮（「分析锚点」/「出他的第一张形象」），
+   *   不是勾选框的 state——但**这一条判据本身没变**，服务端照旧只认 `'true'`。
+   */
   consent: boolean
 }
 
@@ -67,9 +77,12 @@ export type PhotoFormInput = Omit<PhotoCardRequest, 'photo' | 'childId'> & { pho
  */
 export function photoFormProblems(input: PhotoFormInput): string[] {
   const problems: string[] = []
-  // ★ 这一条必须排在最前面。它是这一格的**存在理由**：没有同意，下面的字节不该被看
+  // ★ 这一条必须排在最前面。它是这一格的**存在理由**：没有同意，下面的字节不该被看。
+  //   ★ 2026-10-16：界面上那一格（勾选框）换成了「分析锚点」按钮，这条判据在界面上
+  //     不会再被触发（那颗按钮按下时写的就是 'true'）；但**它在这里一个字没改**——
+  //     它挡的是"任何没有写明同意的请求"，那条守门只有服务端能守。
   if (!input.consent) {
-    problems.push('还没勾选同意。这一格不勾就不能传照片——它不是形式，是这一格唯一的凭据')
+    problems.push('这张照片还没得到同意——没有一次明确的同意，它不该被读、也不该被画')
   }
   if (input.name.trim() === '') problems.push('孩子的名字还没填')
   if (!AGE_BANDS.includes(input.ageBand as (typeof AGE_BANDS)[number])) problems.push('年龄档没选')

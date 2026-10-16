@@ -30,6 +30,7 @@ import type {
   ProviderBundle,
   ProviderMode,
   TextGenerator,
+  PortraitAnalyzer,
   VisionComparator,
   VoiceSynthesizer,
 } from './types.ts'
@@ -146,18 +147,24 @@ export function imageProviderOf(env: Env): ImageGenerator {
     },
     requireModel(env, 'IMAGE_MODEL'),
     {
-      // 参考图能力**在 tokenrhythm 这条图像接口上是实测的"没有"**（7 个候选字段名
-      // 全被 400「请求包含未知字段」挡回，见 tokenrhythm-image.ts 文件头第 4 条）。
-      // ★ 更正（2026-10-14）：那不是"模型吃不了参考图"，是那条**路由**没有入口——
-      //   `/v1/images/edits` 是通的。这个开关的处置见 app-restructure 工单 02，
-      //   在它落地之前这里保持原样，改动不许顺手做。
-      supportsReference: env['IMAGE_SUPPORTS_REFERENCE'] === '1',
+      // ★ 这里**不再有** `IMAGE_SUPPORTS_REFERENCE` 那个开关了（工单 02 §2.2 要求删掉它）。
+      //   它是 W1 那条错误结论的化石："七个字段名都被挡回" ⇒ 记成"这家吃不了参考图"，
+      //   而实际只是 `/images/generations` 那条路由没有入口——`/images/edits` 是通的（实测）。
+      //   能力现在由适配器自己表达：有没有 `edit` 方法。一个可能忘记同步的环境变量
+      //   比一个方法签名更容易骗人。
       unitCostCny: numberOf(env, 'IMAGE_UNIT_COST_CNY') ?? 0.2,
     },
   )
 }
 
-export function visionProviderOf(env: Env): VisionComparator | null {
+/**
+ * 视觉那一路。★ 返回的是**两个接口的交集**（2026-10-15）：同一个适配器既做
+ * 「这两张图是不是同一个人」（`compare`，给一致性 Agent 用），也做
+ * 「这张照片里的孩子长什么样」（`analyzePortrait`，给 /character/new 用）。
+ * 用交集而不是两个工厂：两者用的是同一个模型、同一把 key、同一套 HTTP 管道，
+ * 分成两个 `visionProviderOf` 只会多一处"某个调用点忘了配超时"。
+ */
+export function visionProviderOf(env: Env): (VisionComparator & PortraitAnalyzer) | null {
   const visionKey = env['VISION_API_KEY'] || env['LLM_API_KEY'] || ''
   const visionModel = env['VISION_MODEL'] || ''
   if (!visionKey || !visionModel) return null

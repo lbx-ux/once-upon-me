@@ -22,7 +22,7 @@ export const dynamic = 'force-dynamic'
 export async function generateMetadata({ params }: { params: Promise<{ childId: string }> }) {
   const { childId } = await params
   const detail = await childDetailOf(childId)
-  return { title: detail ? `${detail.item.profile.name} · 小主角` : '小主角' }
+  return { title: detail ? `${detail.item.profile.name} · 小主角` : '角色卡 · 小主角' }
 }
 
 export default async function ChildPage({ params }: { params: Promise<{ childId: string }> }) {
@@ -37,7 +37,6 @@ export default async function ChildPage({ params }: { params: Promise<{ childId:
       demoId={await isDemoChildId(childId)}
       revisions={detail.revisions}
       anchors={detail.item.card?.anchors ?? []}
-      checklist={detail.item.card?.checklist ?? []}
     />
   )
 }

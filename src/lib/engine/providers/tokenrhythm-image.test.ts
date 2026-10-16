@@ -63,8 +63,8 @@ describe('tokenrhythm-image · 发请求之前的拦截', () => {
     // ★ 断言的是**这一对关系**，不是 true 这个值：把开关写回环境变量，
     //   这里就会红——那正是 W1 那个化石（IMAGE_SUPPORTS_REFERENCE）的病灶
     expect(one.supportsReference).toBe(typeof one.edit === 'function')
-    // 白名单里只有 1:1 与 16:9 —— 判据 3 要的 3:2 / 3:4 确实不在其中
-    expect(one.supportedRatios).toEqual(['1:1', '16:9'])
+    // 白名单派生出来的比例集合（2026-10-15 起含 3:2 / 3:4，见下面那条）
+    expect(one.supportedRatios).toEqual(['1:1', '16:9', '3:2', '3:4'])
   })
 
   it('★ 推导函数本身可被证伪：一个**没有 edit** 的实现必须推出 false', () => {
@@ -102,9 +102,14 @@ describe('tokenrhythm-image · 发请求之前的拦截', () => {
     ).rejects.toThrow(/IMAGE_API_KEY 未配置/)
   })
 
-  it('比例集合来自白名单而不是硬编（3:2 / 3:4 确实不在其中）', () => {
+  it('比例集合来自白名单而不是硬编（改白名单要连带改这里）', () => {
     const generator = image()
-    expect(generator.supportedRatios).toEqual(['1:1', '16:9'])
-    expect(generator.supportedRatios).not.toContain('3:2')
+    // ★ 2026-10-15：这条原来断言的是 `['1:1','16:9']` 且 `not.toContain('3:2')`——
+    //   那时 3:2 / 3:4 **确实不在白名单里**，而产品要的正是这两个形状（跨页与封面）。
+    //   当天把 `1536x1024` / `1152x1536` 各测了一次真请求（尺寸分毫不差），
+    //   补进白名单，这条断言随之更新。**它守的是"比例来自白名单"这层关系，
+    //   不是某几个具体的值**——所以白名单改了，这里就该跟着改，而不是删掉。
+    expect(generator.supportedRatios).toEqual(['1:1', '16:9', '3:2', '3:4'])
+    expect(generator.supportedRatios).toContain('3:2')
   })
 })

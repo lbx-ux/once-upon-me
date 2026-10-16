@@ -59,6 +59,7 @@ export default async function ReaderPage({ params }: { params: Promise<{ bookId:
       <ReaderBook
         bookId={bookId}
         title={resolved.book.tree.title}
+        coverUrl={resolved.coverUrl}
         pages={resolved.pages}
         source={resolved.source}
       />

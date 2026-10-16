@@ -4,7 +4,7 @@
  * 这一层是"自主决策"唯一真实存在的地方：它自己判断画得像不像、自己决定要不要重画、
  * 重画到第几次就交给人。三件事都必须在这一层，因为它们共用同一个循环。
  *
- * ★ 四条不显然的规则：
+ * ★ 五条不显然的规则：
  *
  * 1. **比对模型不可用时绝不重试**。没有判据的重画是烧钱抽签：
  *    一次 0.20 元、结果无人判定、还把"首次通过率"这个数据污染成"我们重画过"。
@@ -21,22 +21,38 @@
  *    技术文档也要那批图当评测数据。删掉它们等于把过程藏起来。
  * 4. **重画次数是数据不是细节**：`firstPassCount / redrawCount` 直接喂
  *    §10.1 公式里的 r_redraw 与 #2 的"首次通过率 X% / 重画后 Y%"。
+ * 5. **已经拿到的图不因后续失败而丢**（2026-10-16 补）。出图与落盘那两跳抛异常时，
+ *    只要手上有过一张画完的图，那一页就该是"图在这儿、只是没通过比对"，
+ *    而不是"这一页没做出来"——后者是**假话**。判据与实测见 `produceFailed`。
+ *    ★ 与第 3 条同源：第 3 条管"失败的图别删"，第 5 条管"别把它从书里摘出去"。
  */
 
-import { pagePrompt, DEFAULT_IMAGE_SIZE, IMAGE_PROMPT_VERSION } from '../prompts/image.ts'
+import {
+  pagePrompt,
+  coverPrompt,
+  DEFAULT_IMAGE_SIZE,
+  COVER_IMAGE_SIZE,
+  IMAGE_PROMPT_VERSION,
+} from '../prompts/image.ts'
 import { checklistOf } from './character-card/card.ts'
 import { toDataUrl } from './providers/http.ts'
 import { extensionOf } from './providers/stores.ts'
 import type {
   CharacterCard,
   ConsistencyResult,
+  Cover,
   Illustration,
   Provenance,
   StoryNode,
 } from './domain.ts'
 import type { EngineEventPayload } from './events.ts'
 import { asEngineError } from './errors.ts'
-import type { AssetStore, ImageGenerator, VisionComparator } from './providers/types.ts'
+import type {
+  AssetStore,
+  ImageGenerator,
+  ImageResponse,
+  VisionComparator,
+} from './providers/types.ts'
 
 export const DEFAULT_THRESHOLD = 0.75
 export const DEFAULT_MAX_ATTEMPTS = 3
@@ -93,6 +109,61 @@ export async function illustrateNode(
   let lastConsistency: ConsistencyResult | undefined
   let provenance: Provenance | null = null
 
+  /**
+   * 重画中途停手的记录（没有就是 null）。最后并进 `consistency.reason`，见那段。
+   *
+   * ★ 它**不进 `errors`**：那个字段的口径是"这一页没有图"，而这一页有图。
+   *   两件事合成一条，以后就分不出"这一页没做出来"与"这一页做出来了、只是重画被打断"
+   *   ——同一条教训见 `index.ts` 里 `narrations` 那段注释（"一个字段只有一种含义"）。
+   */
+  let redrawStop: { attempt: number; message: string } | null = null
+
+  /**
+   * 这一次尝试**没产出图**（出图那一步或落盘那一步抛了）。要么记下来，要么往上抛。
+   *
+   * ★ 这条 catch 是 2026-10-16 补的，理由与下面比对那条**完全同源**：
+   *   比对那一处原来没有 catch，异常冒到 `illustrateAll`，于是"已经画完、已经付过钱的图
+   *   跟着整页一起从书里消失"。当时只修了比对那一跳，**真正出图与下图那两跳没修**——
+   *   而它们才是每一页必然要走的。
+   *
+   *   实测（`.out/web/books/xiaolu-r1-ee69012def18`，2026-10-16）：第 6 页第 1 次画好了
+   *   （`page-6-a1.png`，1536×1024、3.0 MB 就躺在磁盘上），比对没过 → 重画 →
+   *   第 2 次在**下图那一跳**撞上 `ECONNRESET` → 整页变成 `errors` 里的一条，
+   *   而阅读器上那句话是"这一页没做出来"——**假的，它做出来了**。
+   *
+   * 判据只有一条：**已经拿到的 asset 不许因为后面这一次失败而丢**。
+   * 拿不到（第 1 次就没成）时照旧抛出去——那一页才是真的没有图。
+   *
+   * ★ 它**返回**这条记录而不是自己写 `redrawStop`：闭包里的赋值 TypeScript 看不见，
+   *   会在后面把 `redrawStop` 判成"永远是 null"（实测报 `Property 'attempt' does not
+   *   exist on type 'never'`）。写回调用点，CFA 才跟得上——这不是风格，是不报红的必要条件。
+   *
+   * ★ 产出失败后**不再往下一次尝试**，两个方向都是刻意的：
+   *   - 出图那一步是"生成 + 下载"**一次调用**，它抛出来时字节已经没了，再来一次就是
+   *     重新付一次钱；而"服务端可能已经建单"正是 `http.ts` 里 `ECONNRESET` 不许重试要防的事。
+   *   - 重试安全的那几种（DNS 解析不了 / 连接被拒 / 连接超时）**已经在 `requestJson`
+   *     里重试过一次**。连着两次都是安全类失败，那是中断不是抖动
+   *     （参考 10-15 那次约 36 分钟的本机网络中断），多试一次救不回来。
+   *   所以"第 1 次彻底失败、第 2 次成功"**在现在的语义下不会发生**：不是漏了，是不该。
+   */
+  const produceFailed = (err: unknown, attempt: number): { attempt: number; message: string } => {
+    const failure = asEngineError(err)
+    // 没得可留：这一页确实什么都没有，交回 illustrateAll（记 errors、书标"这一页缺"）
+    if (!lastAsset) throw err
+    opts.emit({
+      kind: 'error',
+      stage: 'illustrating',
+      pageNo: node.pageNo,
+      code: failure.code,
+      message:
+        `第 ${node.pageNo} 页的重画没跑成（第 ${attempt} 次尝试）：${failure.message}。` +
+        `书上留的是第 ${lastConsistency?.attempt ?? 1} 次那张——它只是没通过比对，` +
+        `不是"没做出来"`,
+      fatal: false,
+    })
+    return { attempt, message: failure.message }
+  }
+
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     opts.emit({
       kind: 'stage',
@@ -107,14 +178,31 @@ export async function illustrateNode(
     // ★ 两条都是显式分支，没有"传了但被忽略"那种中间状态：那种状态的症状
     //   是整本书画完才发现没锁脸，而那时钱已经花完了
     const edit = opts.referenceForPages === true ? opts.image.edit : undefined
-    const response = edit
-      ? await edit.call(opts.image, {
-          prompt,
-          size: DEFAULT_IMAGE_SIZE,
-          referenceDataUrl: opts.referenceDataUrl,
-        })
-      : await opts.image.generate({ prompt, size: DEFAULT_IMAGE_SIZE })
 
+    // ── ① 出图。失败走 produceFailed：有旧图就留着，没有就抛 ──────────────
+    let response: ImageResponse
+    try {
+      response = edit
+        ? await edit.call(opts.image, {
+            prompt,
+            size: DEFAULT_IMAGE_SIZE,
+            referenceDataUrl: opts.referenceDataUrl,
+          })
+        : await opts.image.generate({ prompt, size: DEFAULT_IMAGE_SIZE })
+    } catch (err) {
+      redrawStop = produceFailed(err, attempt)
+      break
+    }
+
+    /**
+     * ★ 锁脸没生效**不交给 `produceFailed`**，哪怕手上已经有一张旧图。
+     *   这一条是**想过之后**才这么写的，不是漏了：`referenceApplied` 是"这一次请求
+     *   是怎么发的"的属性，而它由**策略与能力**决定——同一个 provider 在同一个循环里
+     *   不会第 1 次锁上了、第 2 次没锁。所以它实际只会在第 1 次触发，
+     *   而第 1 次手上必然没有旧图（`produceFailed` 也会抛）。两条路在这里重合。
+     *   保留"无条件抛"是为了让文件头第 2 条那句话**不被降级路径盖住**：
+     *   它要喊的是"这一页没锁脸"，而"用上一张"正好会把这句话咽下去。
+     */
     if (opts.requireReference && response.referenceApplied === false) {
       throw asEngineError(
         new Error(
@@ -126,14 +214,22 @@ export async function illustrateNode(
       )
     }
 
-    const asset = await opts.store.put({
-      // 失败的图也留（文件头第 3 条），所以文件名带 attempt
-      path: `books/${opts.bookId}/page-${node.pageNo}-a${attempt}${extensionOf(response.mime)}`,
-      bytes: response.bytes,
-      mime: response.mime,
-      originUrl: response.originUrl,
-      originExpiresAt: response.originExpiresAt,
-    })
+    // ── ② 落盘。同样：失败时已经有图就留着，没有就抛 ────────────────────
+    let asset: Illustration['asset']
+    try {
+      asset = await opts.store.put({
+        // 失败的图也留（文件头第 3 条），所以文件名带 attempt
+        path: `books/${opts.bookId}/page-${node.pageNo}-a${attempt}${extensionOf(response.mime)}`,
+        bytes: response.bytes,
+        mime: response.mime,
+        originUrl: response.originUrl,
+        originExpiresAt: response.originExpiresAt,
+      })
+    } catch (err) {
+      redrawStop = produceFailed(err, attempt)
+      break
+    }
+
     lastAsset = asset
     provenance = {
       modelId: response.modelId,
@@ -250,6 +346,26 @@ export async function illustrateNode(
       bytes: new Uint8Array(),
       mime: 'application/octet-stream',
     }))
+
+  /**
+   * 判决连同"为什么最后停在第 attempt 次"一起说清。
+   *
+   * ★ 这一句是给**几个月后翻 `book.json` 的人**写的：没有它，一页 `verdict: 'fail'`
+   *   配 `attempt: 1` 完全看不出"后面还画过、只是被打断了"，
+   *   而"重画几次"正是 §10.1 的 r_redraw 与 #2 首次通过率的数据源（文件头第 4 条）。
+   *   原始那句"哪一撮头发不对"一个字不动，只在后面续上停手的原因。
+   */
+  const consistency =
+    lastConsistency && redrawStop
+      ? {
+          ...lastConsistency,
+          reason:
+            `${lastConsistency.reason ?? ''}` +
+            `；★ 之后的重画没跑成（第 ${redrawStop.attempt} 次尝试：${redrawStop.message}），` +
+            `书上留的是第 ${lastConsistency.attempt} 次那张——它只是没通过比对，不是"没做出来"`,
+        }
+      : lastConsistency
+
   return {
     pageNo: node.pageNo,
     attempt: lastConsistency?.attempt ?? 1,
@@ -260,13 +376,93 @@ export async function illustrateNode(
       cardRevision: opts.card.revision,
       generatedAt: opts.now(),
     },
-    consistency: lastConsistency,
+    consistency,
     // 没通过 ≠ 失败：交给人，书仍然完整（降级 B）
     needsHumanReview: lastConsistency === undefined || lastConsistency.verdict !== 'pass',
   }
 }
 
-/** 整本书的逐页生成。串行而不是并发：并发是 W2 的优化，判据要先把单页跑对 */
+/**
+ * 封面：**一次单独的出图**，3:4 竖版。
+ *
+ * ★ 与页图的三处不同，都是有理由的：
+ *
+ * 1. **不比对、不重画**。页图的判据是"和标准像像不像"，而封面没有上一页可比；
+ *    它也不是"这一页画错了"的那种错，重画三次救不了一个构图不对的封面。
+ *    所以这里不引入一致性这条路——测不了的东西不要假装测过（CLAUDE.md「不糊弄」）。
+ * 2. **尺寸是 3:4**（`COVER_IMAGE_SIZE`），与首页演示书的 `cover.webp` 同比例。
+ * 3. **事件里 `pageNo: 0`**，由 `describeEvent` 翻成"封面"（见 events.ts 那条注释）。
+ *
+ * 它**失败就让整本书失败**，不像页图那样降级：没有封面的书在货架上认不出来，
+ * 而"这一页缺"是可以接受的（书还是完整的）。这个取舍是刻意的。
+ */
+export async function illustrateCover(opts: {
+  image: ImageGenerator
+  store: AssetStore
+  card: CharacterCard
+  bookId: string
+  title: string
+  emit: (payload: EngineEventPayload) => void
+  now: () => number
+}): Promise<Cover> {
+  opts.emit({
+    kind: 'stage',
+    stage: 'illustrating',
+    phase: 'begin',
+    pageNo: 0,
+    attempt: 1,
+    total: 1,
+  })
+  const response = await opts.image.generate({
+    prompt: coverPrompt({ card: opts.card, title: opts.title }),
+    size: COVER_IMAGE_SIZE,
+  })
+  const asset = await opts.store.put({
+    path: `books/${opts.bookId}/cover${extensionOf(response.mime)}`,
+    bytes: response.bytes,
+    mime: response.mime,
+    originUrl: response.originUrl,
+    originExpiresAt: response.originExpiresAt,
+  })
+  opts.emit({
+    kind: 'illustration',
+    stage: 'illustrating',
+    pageNo: 0,
+    attempt: 1,
+    assetPath: asset.path,
+    modelId: response.modelId,
+    costCny: response.costCny,
+  })
+  return {
+    asset,
+    provenance: {
+      modelId: response.modelId,
+      promptVersion: IMAGE_PROMPT_VERSION,
+      cardRevision: opts.card.revision,
+      generatedAt: opts.now(),
+    },
+    ...(response.costCny === undefined ? {} : { costCny: response.costCny }),
+  }
+}
+
+/**
+ * 整本书的逐页生成。串行而不是并发：**并发是 W3 的优化**（10/13 从 W2 挪后，
+ * 见 `.scratch/w2-solo-flow/issues/05-generate-orchestration.md` §三）。
+ *
+ * 挪后的判据是实测而不是偏好：3 页的书串行实测 77.7s（比对关）/ 455.6s（比对开 + 1 次重画），
+ * 而"要不要上并发池（上限 3）"的规则是**先量到 20 页 > 8 分钟**才做。
+ *
+ * ★ 2026-10-15：20 页真跑过一趟（`.out/web/books/xiaolu-r1-bf84901c4fcd`），
+ *   但那一趟**没能量出串行整本的干净耗时**——中段撞上约 36 分钟的本机网络中断
+ *   （18 页 `fetch failed`，两个不同供应商同时段一起坏，见工单 05 的 Comments）。
+ *   阈值仍然判"过线"，靠的是下界：串行里每页**至少**出一次图，而"一次出图尝试"的耗时是从
+ *   mtime 量的——运行起点（`book.json` 的 mtime − `stats.elapsedMs` = 18:15:32）到 p3 落图
+ *   18:28:23.3 共 **770.5s、5 次尝试，≈154 s/次**；20 页至少 20 次 ⇒ **≥ 51.4 分钟 > 8 分钟**。
+ *   所以并发池（上限 3、优先并发比对）是**判据要求的**，而这一格**还没落地**——
+ *   它是独立的一单，不要因为读到这段就顺手在这里开并发。
+ * ★ 这句话以前写的是"并发是 W2 的优化"：**一句与计划不符的注释，
+ *   就是下一个人读错代码的入口**（工单 05 的验收里点名了它）。
+ */
 export async function illustrateAll(
   nodes: readonly StoryNode[],
   opts: IllustrateOptions,

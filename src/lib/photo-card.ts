@@ -86,7 +86,8 @@ export async function cardFromPhoto(
   const problems = photoProblems(input)
   if (problems.length > 0) {
     // ★ 用 `invalid-request` 而不是 `reference-invalid`：那一个会翻成
-    //   "这张照片不能用作参考图，换一张更清楚的"，而"没勾同意"要的是**一个勾**。
+    //   "这张照片不能用作参考图，换一张更清楚的"，而"还没有同意"要的是**一次明确的同意**
+    //   （界面上是按下那颗按钮，见 `photo-rules.ts` 的 `consent`）。
     //   工单 02 §五 记过同一类事故（照片的问题给了锚点的指示），所以这里分开
     throw new EngineError('invalid-request', problems.join('；'))
   }

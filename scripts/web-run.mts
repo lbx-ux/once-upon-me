@@ -11,7 +11,7 @@
  *
  * 它是工单 02 的验收脚本，做四件事，每一件都对应工单里的一条判据：
  *
- * 1. **消费那条 SSE**：用的是与浏览器**同一个解码器**（`src/lib/sse.ts` +
+ * 1. **消费那条 SSE**：用的是与浏览器**同一个解码器**（`src/lib/engine/sse.ts` +
  *    `src/lib/book-stream.ts`），不是脚本另写一个松一点的解析。
  *    横评那一轮的教训（README §五 第一类）：测量脚本自己搭一条流水线，
  *    量出来的就不是产品的数。
@@ -42,7 +42,7 @@ import { join, resolve } from 'node:path'
 import { describeEvent } from '../src/lib/engine/events.ts'
 import { decodeBookFrame, type BookStreamFrame } from '../src/lib/book-stream.ts'
 import { parseEventLog } from '../src/lib/event-log.ts'
-import { createSseDecoder } from '../src/lib/sse.ts'
+import { createSseDecoder } from '../src/lib/engine/sse.ts'
 import type { EngineEvent } from '../src/lib/engine/index.ts'
 import { arg, readEnv } from './env.mts'
 

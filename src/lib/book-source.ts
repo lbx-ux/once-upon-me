@@ -46,6 +46,12 @@ export type ReaderPage = {
 export type ResolvedBook = {
   book: Book
   source: BookSource
+  /**
+   * 封面图。**null = 这本书没有封面**：仓库里那本预生成的演示书是在有 `cover`
+   * 这个字段之前出的（见 domain.ts 那条注释）。阅读器遇到 null 就照实只出书名，
+   * **不许拿第一页冒充封面**——那是"图没到位就留一个诚实的兜底"这条。
+   */
+  coverUrl: string | null
   pages: ReaderPage[]
 }
 
@@ -99,18 +105,30 @@ async function readBook(path: string): Promise<Book | null> {
   }
 }
 
+/**
+ * 运行期资产 → URL 的那条路。`width` 是**这次要显示多大**（缩略档由 `thumbs.ts` 归位）。
+ *
+ * ★ 抽出来是因为它现在有**两个消费者、两种尺寸**：阅读器要 1024（一页铺满屏），
+ *   书架上那本封面只要 384（显示约 156px）。两处各写一遍 `assetUrlOf` +
+ *   `isResizableImage` 之后，早晚会出现"内页缩了、封面没缩"这种没人会去查的差异
+ *   （封面原来就是一张 2.8 MB 的 PNG，正是这条注释要挡的那件事）。
+ *   **判据是扩展名**，所以"这一页有没有朗读"这件事不受缩放影响。
+ */
+export function runtimeAssetUrl(path: string, width: number): string {
+  return assetUrlOf(path, isResizableImage(path) ? width : undefined)
+}
+
 export async function resolveBook(bookId: string): Promise<ResolvedBook | null> {
   const runtimePath = join(assetRoot(), manifestPathOf(bookId))
   const runtime = await readBook(runtimePath)
   if (runtime) {
+    // ★ 图与封面走**同一条** urlOf（1024 档，`/api/assets` 现缩并落盘缓存）
+    const runtimeUrl = (path: string): string => runtimeAssetUrl(path, READER_PAGE_WIDTH)
     return {
       book: runtime,
       source: 'runtime',
-      // ★ 图走 1024 档（`/api/assets` 现缩并落盘缓存），音频原样——
-      //   判据是扩展名，所以"这一页有没有朗读"这件事不受缩放影响
-      pages: readerPages(runtime, (path) =>
-        assetUrlOf(path, isResizableImage(path) ? READER_PAGE_WIDTH : undefined),
-      ),
+      coverUrl: coverUrlOf(runtime, runtimeUrl),
+      pages: readerPages(runtime, runtimeUrl),
     }
   }
 
@@ -121,13 +139,25 @@ export async function resolveBook(bookId: string): Promise<ResolvedBook | null> 
     const siblings = new Set(
       (await readdir(demoDir).catch(() => [] as string[])).filter((name) => /\.webp$/i.test(name)),
     )
+    const demoUrl = (path: string): string => demoAssetUrl(bookId, demoAssetPathFor(path, siblings))
     return {
       book: demo,
       source: 'demo',
-      pages: readerPages(demo, (path) => demoAssetUrl(bookId, demoAssetPathFor(path, siblings))),
+      coverUrl: coverUrlOf(demo, demoUrl),
+      pages: readerPages(demo, demoUrl),
     }
   }
   return null
+}
+
+/**
+ * 封面 → 阅读器的封面地址。没有 `cover` 字段就是 null（见 `ResolvedBook.coverUrl`）。
+ *
+ * ★ 单独一个导出函数，理由与 `readerPages` 一样：它是"书的字段 → 页面要的东西"
+ *   这一步翻译，要能被单测钉住，而不是埋在 `resolveBook` 里跟着文件系统一起难测。
+ */
+export function coverUrlOf(book: Book, urlOf: (assetPath: string) => string): string | null {
+  return book.cover ? urlOf(book.cover.asset.path) : null
 }
 
 /**

@@ -142,6 +142,16 @@
   margin-bottom: 6px;
 }
 
+/* ★ 提示与标题同行（`Field` 的 `tight`，2026-10-15 给 /character/new 用的）。
+   窄栏**不要**用这一档：两段文字挤一行，各自折成两行，反而更高。
+   字号比另起一行时小半档：它现在是标题的附注，不是独立一句。 */
+.cf__field-hint--inline {
+  display: inline;
+  margin-bottom: 0;
+  font-size: 12.5px;
+  font-weight: 400;
+}
+
 .cf__input {
   width: 100%;
   min-height: 44px;
@@ -179,6 +189,36 @@
 
 .cf__row .cf__input {
   flex: 1;
+}
+
+/* ── 并排的两格（`ChildFields` 的 `pairName`）────────────────────────────
+ * 名字与读音并排放。★ 窄屏**落回一列**：这两格在手机上各占半屏的话，
+ * 输入框会短到看不出自己填了什么（占位文字「比如：小宇」都放不下）。
+ * ★ 只有 `/character/new` 传 `pairName`：创作流那一列本来就窄，两格并排会挤。 */
+.cf__pair {
+  display: grid;
+  gap: 0 18px;
+}
+
+@media (min-width: 560px) {
+  .cf__pair {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    /* ★ 两个输入框的**底边对齐**（2026-10-15 补）。
+       成因：名字没有提示、读音有一条（"多音字最容易念错…"），两格的行数因此不同，
+       并排时下面那个框就矮了一截——截图上是两个错开 30px 的输入框。
+       做法是把每格的输入推到格底（`margin-top: auto`），于是标题各自贴顶、
+       输入框底边齐平。★ 只调这一档，且只调"谁在哪儿"，两个框的字号/高度都没动。 */
+    align-items: stretch;
+  }
+
+  .cf__pair .cf__field {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .cf__pair .cf__field > .cf__input {
+    margin-top: auto;
+  }
 }
 
 /* ── 胶囊（多选与单选的同一套） ──────────────────────────────────────────── */
@@ -496,7 +536,14 @@
 
 .cf__pick-art,
 .cf__picked-art {
-  object-fit: cover;
+  /* ★ `contain` 而不是 `cover`（2026-10-15 第五轮）：示例角色那两张参考图换成了
+     **3:4 全身像**（896×1200，实测），而这两个框是方的。`cover` 会把上下各切掉
+     12.7%——切掉的正是头顶与脚，于是头像位上变成一张"中段特写"。
+     这不是这两屏的重新设计，是**换了图之后跟着要改的地方**。
+     底色给 `--surface`：图本身是纯白底（四角 252–255），缩在框里时
+     留下的那两条要跟它连成一片，不能露一块灰。 */
+  object-fit: contain;
+  background: var(--surface);
   border-radius: 10px;
   border: 1px solid var(--dot);
   flex: none;
@@ -653,7 +700,9 @@
 .cf__reuse-thumb {
   width: 48px;
   height: 48px;
-  object-fit: cover;
+  /* 同 `.cf__pick-art`：3:4 的参考图放进方框里不许裁，白底跟着图走 */
+  object-fit: contain;
+  background: var(--surface);
   border-radius: 8px;
   border: 1px solid var(--dot);
   flex: none;

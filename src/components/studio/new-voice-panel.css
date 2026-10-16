@@ -1,0 +1,352 @@
+/**
+ * new-voice-panel.css —— 「新建声音」那块面板（`NewVoicePanel.tsx`）
+ *
+ * 它沿用设置抽屉那套浮层的规矩（`settings-drawer.css`）：遮罩 + Esc + 点外面关、
+ * `z-index: 50` 压过首页那几幕。**不一样的是位置**：抽屉从右边推出来，这一块是
+ * **居中**的——它是一条有先后顺序的流程（同意 → 录 → 听 → 生成），居中的一栏比一条
+ * 贴着右边的长条更读得出"下一步在这儿"。
+ *
+ * ★ 两处与动效有关的取舍：
+ *   1. 在录时那个点会呼吸，但**状态本身靠文字说**（秒数 + "正在录"）。
+ *      `prefers-reduced-motion` 下点停在**实心**（不是"卡在某一帧"），字照读。
+ *   2. 面板本身不做入场动画：它是用户点了钮之后立刻要看的东西，
+ *      多 200ms 的淡入只是让"点了没反应"多持续 200ms。
+ */
+
+.nv {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.nv__scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(19, 19, 28, 0.38);
+}
+
+.nv__panel {
+  position: relative;
+  width: min(560px, 100%);
+  max-height: 92vh;
+  overflow-y: auto;
+  padding: 22px 24px 16px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--card-radius);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--sheet-shadow);
+}
+
+.nv__panel:focus {
+  outline: none;
+}
+
+.nv__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.nv__title {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.nv__close {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border: none;
+  background: none;
+  color: var(--ink-muted);
+  font: inherit;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.nv__close:hover:not(:disabled) {
+  color: var(--ink);
+}
+
+.nv__close:disabled {
+  color: var(--dot);
+  cursor: default;
+}
+
+/* ── ① 同意 ───────────────────────────────────────────────────────────── */
+
+.nv__consent {
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: var(--surface-soft);
+}
+
+.nv__consent p {
+  margin: 0 0 10px;
+  font-size: 13px;
+  line-height: 1.9;
+}
+
+.nv__consent p:last-child {
+  margin-bottom: 0;
+}
+
+.nv__check {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 14px 0 0;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+
+.nv__check input {
+  margin: 2px 0 0;
+  accent-color: var(--accent);
+}
+
+/* ── 动作行 ───────────────────────────────────────────────────────────── */
+
+.nv__acts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.nv__go {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--surface);
+  font: inherit;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+
+.nv__go:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.nv__go:disabled {
+  background: var(--dot);
+  color: var(--surface);
+  cursor: default;
+}
+
+.nv__ghost {
+  padding: 9px 18px;
+  border: 1px solid var(--dot);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+
+.nv__ghost:hover:not(:disabled) {
+  border-color: rgba(var(--accent-rgb), 0.5);
+  color: var(--accent);
+}
+
+.nv__ghost:disabled {
+  color: var(--ink-muted);
+  cursor: default;
+}
+
+/* 「或选一个音频文件」。★ 真正的控件是那个 `<input type="file">`（键盘 Tab 到的是它），
+   所以焦点环画在 label 上（`:focus-within`）——不然键盘用户看不到自己在哪 */
+.nv__file {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: 9px 18px;
+  border: 1px dashed var(--dot);
+  border-radius: 999px;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+
+.nv__file input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.nv__file:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.nv__file:has(input:disabled) {
+  color: var(--ink-muted);
+  cursor: default;
+}
+
+.nv__file:has(input:disabled) input {
+  cursor: default;
+}
+
+/* ── ② 在录 ───────────────────────────────────────────────────────────── */
+
+.nv__rec-state {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0 0;
+  font-size: 15px;
+}
+
+.nv__rec-state strong {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 17px;
+  /* 秒数每一位宽度一样，跳数字时不会把整行挤来挤去 */
+  font-variant-numeric: tabular-nums;
+}
+
+.nv__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--danger);
+  animation: nv-blink 1.1s ease-in-out infinite;
+}
+
+@keyframes nv-blink {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.nv__rec-hint {
+  margin: 10px 0 0;
+  font-size: 13px;
+  line-height: 1.85;
+  color: var(--ink-muted);
+}
+
+/* ── ③ 试听 ───────────────────────────────────────────────────────────── */
+
+.nv__review-title {
+  margin: 0 0 10px;
+  font-size: 13.5px;
+}
+
+.nv__review-note {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--ink-muted);
+}
+
+.nv__audio {
+  width: 100%;
+  height: 36px;
+}
+
+.nv__problem {
+  margin: 10px 0 0;
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.nv__problem[data-level='warn'] {
+  color: var(--accent);
+}
+
+.nv__problem[data-level='block'] {
+  color: var(--danger);
+}
+
+.nv__name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0 0;
+  font-size: 13px;
+}
+
+.nv__name input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--dot);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13.5px;
+}
+
+.nv__name input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* ── ④ 成了 / 还在部署 ────────────────────────────────────────────────── */
+
+.nv__done-title {
+  margin: 4px 0 8px;
+  font-family: var(--font-serif);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.nv__done-state {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.9;
+  color: var(--ink-muted);
+}
+
+.nv__done-state[data-state='ready'] {
+  color: var(--ink);
+}
+
+/* ── 报错与页脚 ───────────────────────────────────────────────────────── */
+
+.nv__error {
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--surface-soft);
+  color: var(--danger);
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+/* ★ 这里原来还有一条 `.nv__foot`（面板底部那句"这一段只用来生成音色…"）。
+   2026-10-16 用户把它划掉了：与上面第二条说的是同一件事，说两遍。
+   那件事现在只在「开始录音」那颗钮的 `title` 里留一份（见 `NewVoicePanel.tsx`）。 */
+
+/* ── 焦点可见 / 静止模式 ──────────────────────────────────────────────── */
+
+.nv__go:focus-visible,
+.nv__ghost:focus-visible,
+.nv__close:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ★ 静止模式下那个点**停在实心**（不是"动画停了、卡在某一帧"）：
+   "正在录"这件事本来就由旁边那行字说，点只是让它更容易被扫到 */
+@media (prefers-reduced-motion: reduce) {
+  .nv__dot {
+    animation: none;
+    opacity: 1;
+  }
+}

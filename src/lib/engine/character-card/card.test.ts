@@ -3,6 +3,7 @@ import {
   attachReferenceDigest,
   buildCard,
   cardDigest,
+  checkAnchors,
   checklistOf,
   normalizeAnchors,
   promptFragmentOf,
@@ -120,6 +121,60 @@ describe('normalizeAnchors', () => {
 
   it('空串与纯空白被丢掉', () => {
     expect(normalizeAnchors([{ slot: 'mark', value: '   ' }])).toEqual([])
+  })
+})
+
+describe('checkAnchors', () => {
+  /**
+   * ★ 这一条守的是一个**会花钱**的缝（2026-10-15 补的）：
+   *   `normalizeAnchors` 丢空值，而 `checkAnchors` 原来只看"槽位在不在"。
+   *   两者不同向时，界面会说"可以提交"，服务端**先出图**再拒——
+   *   家长付了一张图的钱，换来一句"角色卡不合格"。
+   */
+  it('★ 空值算问题 —— 判据要与 normalizeAnchors 同向（那边丢、这边就得报）', () => {
+    const withEmpty = ANCHOR_SLOTS.map((slot) => ({
+      slot,
+      value: slot === 'bone' ? '   ' : '圆脸、颊部饱满',
+    }))
+    expect(checkAnchors(withEmpty)).toEqual(['骨相是空的'])
+  })
+
+  it('槽位整格缺失仍然报"缺"（与"空了"分开，两句话对应两个动作）', () => {
+    const missing = ANCHOR_SLOTS.filter((slot) => slot !== 'eyes').map((slot) => ({
+      slot,
+      value: '圆脸、颊部饱满',
+    }))
+    expect(checkAnchors(missing)).toEqual(['缺眼睛'])
+  })
+
+  /**
+   * ★ 这一条守的是上面那条修正的**另一半**：空值只在硬锚点上算错。
+   *
+   * 它会红的那个场景是实测出来的（2026-10-15，`/api/cards/analyze-photo`）：
+   * 读完一张照片之后，模型**看不见的槽位被刻意清空**（不清空就留着小宇的示例值，
+   * 那张卡会变成"照片里的脸 + 示例里那个孩子的雨鞋"），而"看不见记号/常服"
+   * 是照片这条路上的常事。把软锚点的空值也报成错，家长就会看到一句
+   * 「记号是空的」而按钮点不动——那张卡本来完全合法。
+   */
+  it('★ 软锚点空着不算问题 —— 照片里读不出来的格子会被清空', () => {
+    const read = ANCHOR_SLOTS.map((slot) => ({
+      slot,
+      value: slot === 'mark' || slot === 'wardrobe' ? '' : '圆脸、颊部饱满',
+    }))
+    expect(checkAnchors(read)).toEqual([])
+  })
+
+  it('★ 硬锚点空着**仍然**算问题 —— 上面那条不许把花钱那一道缝一起放开', () => {
+    const read = ANCHOR_SLOTS.map((slot) => ({
+      slot,
+      value: slot === 'build' ? '   ' : '圆脸、颊部饱满',
+    }))
+    expect(checkAnchors(read)).toEqual(['头身比是空的'])
+  })
+
+  it('齐全且非空就是合法（预填那八条是这条的实例，见 default-anchors.test.ts）', () => {
+    const full = ANCHOR_SLOTS.map((slot) => ({ slot, value: '圆脸、颊部饱满、下颌线软' }))
+    expect(checkAnchors(full)).toEqual([])
   })
 })
 

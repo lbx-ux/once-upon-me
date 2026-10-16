@@ -163,9 +163,18 @@ describe('missingRequired · 只算跑不动的那两项', () => {
 })
 
 describe('默认音色', () => {
-  it('就是两个，一男一女（产品定义要的"两个默认音色"）', () => {
+  it('就是两个，且两个 id 都是实测打过 200 的（2026-10-16 换的那一版）', () => {
     expect(DEFAULT_VOICES).toHaveLength(2)
-    expect(DEFAULT_VOICES.map((v) => v.id)).toEqual(['longjielidou_v3.6', 'longpaopao_v3.6'])
+    expect(DEFAULT_VOICES.map((v) => v.id)).toEqual(['longjielidou_v3.6', 'longanlingxi'])
+  })
+
+  it('每一条都有名字与调性，且都取自厂商自己的说法（空串会让卡片画出一片空）', () => {
+    for (const voice of DEFAULT_VOICES) {
+      expect(voice.name.trim()).not.toBe('')
+      expect(voice.tone.trim()).not.toBe('')
+    }
+    // id 不许重复：两张卡指着同一个声音，用户怎么点都一样
+    expect(new Set(DEFAULT_VOICES.map((v) => v.id)).size).toBe(DEFAULT_VOICES.length)
   })
 
   it('默认设置里不预选音色：预选一个等于替家长决定了他孩子的声音', () => {

@@ -15,7 +15,8 @@
 import { assetRoot } from './books-runtime.ts'
 import { assetUrlOf } from './asset-url.ts'
 import { listCardItems, type CardListItem } from './cards-list.ts'
-import { listChildren, type ChildSource } from './children-source.ts'
+import { listChildren, type ChildSource, type ResolvedChild } from './children-source.ts'
+import { listBooks, noCovers } from './library.ts'
 import {
   cardDigest,
   createCardStore,
@@ -33,8 +34,11 @@ export type ChildListItem = {
   card: CardListItem | null
 }
 
-export async function listChildItems(root: string = assetRoot()): Promise<ChildListItem[]> {
-  const [children, cards] = await Promise.all([listChildren(root), listCardItems(root)])
+/**
+ * 档案与卡**对起来**这件事本身。提出来是为了让 `listWallItems` 复用同一份卡表，
+ * 而不是把同一个 join 写两遍——`listChildItems` 内部已经读过一次卡目录了。
+ */
+function joinChildrenWithCards(children: ResolvedChild[], cards: CardListItem[]): ChildListItem[] {
   const byChild = new Map<string, CardListItem>()
   for (const card of cards) {
     // 一个孩子可能有多张卡（换过命名、重建过）。取 revision 最大的那一张，
@@ -47,6 +51,62 @@ export async function listChildItems(root: string = assetRoot()): Promise<ChildL
     source: child.source,
     card: byChild.get(child.profile.childId) ?? null,
   }))
+}
+
+export async function listChildItems(root: string = assetRoot()): Promise<ChildListItem[]> {
+  const [children, cards] = await Promise.all([listChildren(root), listCardItems(root)])
+  return joinChildrenWithCards(children, cards)
+}
+
+/**
+ * 角色墙那一屏要的：`ChildListItem` 再加**用他做过几本书**（工单 05 第五轮）。
+ *
+ * ★ 为什么这两个数单独一函数，而不是塞进 `ChildListItem`：
+ *   构造一个 `BookSummary` 要把资产根下每一本 `book.json` 都读一遍
+ *   （`library.ts` 的 `listBooks`），而创作流第 1 步（`listChildPicker`）与详情页
+ *   都不是非要知道这个数。**要的人自己来拿**，别让所有人都付这份钱。
+ *
+ * ★ 数的是这个孩子名下的**全部 cardId**，不是只有当前那张：书里记的是 `cardId`，
+ *   而一个孩子可能换过卡号——只数当前那张的话，"换过形象"的孩子会显示成
+ *   从来没做过书，而那个数是错的却看着很正常。
+ *
+ * ★ 只数**运行期的书**（`library.ts` 的口径），不含随仓库发布的演示书：
+ *   那个数是"你做了几本"，把演示书灌进去就是一个假数。
+ */
+export type ChildWallItem = ChildListItem & {
+  /** `count` 为 0 时 `lastCreatedAt` 是 null——**没有"最近一本"，不是第 0 毫秒** */
+  books: { count: number; lastCreatedAt: number | null }
+}
+
+export async function listWallItems(root: string = assetRoot()): Promise<ChildWallItem[]> {
+  const store = await createFsStore(root)
+  const [children, cards, books] = await Promise.all([
+    listChildren(root),
+    listCardItems(root),
+    // 只要"用他做过几本"，这一屏不摆封面 → `noCovers`（见它的注释：
+    // 不设默认值，是因为"忘了给"与"这本书没有封面"不该是同一个 null）
+    listBooks(store, noCovers),
+  ])
+  const items = joinChildrenWithCards(children, cards)
+
+  const cardIdsOf = new Map<string, Set<string>>()
+  for (const card of cards) {
+    const mine = cardIdsOf.get(card.childId) ?? new Set<string>()
+    mine.add(card.cardId)
+    cardIdsOf.set(card.childId, mine)
+  }
+
+  return items.map((item) => {
+    const ids = cardIdsOf.get(item.profile.childId)
+    let count = 0
+    let last = 0
+    for (const book of books) {
+      if (!ids?.has(book.cardId)) continue
+      count += 1
+      if (book.createdAt > last) last = book.createdAt
+    }
+    return { ...item, books: { count, lastCreatedAt: count > 0 ? last : null } }
+  })
 }
 
 /** 一个孩子 + 他的形象。找不到这个孩子时回 null（不抛：childId 来自 URL） */

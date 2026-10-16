@@ -9,7 +9,7 @@
  * 2. `createCard` / `createBook` 的入参类型来自 `state.ts` 的转换函数，
  *    所以界面上不出现任何环境变量名或引擎字段名。
  * 3. **`consumeStream` 用与脚本、与将来 MCP 同一个解码器**
- *    （`lib/sse.ts` + `lib/book-stream.ts`），不是这里再写一个松一点的解析。
+ *    （`lib/engine/sse.ts` + `lib/book-stream.ts`），不是这里再写一个松一点的解析。
  *    读两条不同的解析器，会让"终端里看到的"和"屏幕上看到的"变成两份真相。
  */
 
@@ -17,7 +17,7 @@ import { decodeBookFrame, type BookStreamFrame } from '@/lib/book-stream.ts'
 import type { ChildPickerItem } from '@/lib/children-list.ts'
 import type { CharacterAnchor } from '@/lib/engine/domain.ts'
 import type { EngineEvent } from '@/lib/engine/events.ts'
-import { createSseDecoder } from '@/lib/sse.ts'
+import { createSseDecoder } from '@/lib/engine/sse.ts'
 
 export type ApiFailure = { code: string; message: string; retryable: boolean }
 

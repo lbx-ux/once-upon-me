@@ -4,16 +4,19 @@
  * 几何整块来自首页第二屏（`storybook-flip.css` §2），**类名另起一套**：
  * 两张样式表都是全局引入的，共用 `.book__*` 就会互相串。
  *
- * 与首页那套的三处差别，都是"一页一图一句"决定的：
- *   1. 每一面装的是一整页（方形插画在上 75%、正文在下 25%），不是跨页图的一半；
- *   2. 舞台尺寸按**一页 3:4** 推，两页合起来正好还是 3:2 —— 与首页咬合在同一组
- *      min() 上，观感一致，改一处要同时看另一处；
- *   3. 静止模式（prefers-reduced-motion）走 `data-motion="reduced"`：
+ * ★ 2026-10-15 改了**每一面装什么**（页模型），几何一个字没动：
+ *   一页 = 一个跨页 = 一张 3:2 的图，左半 / 右半靠 `background-position` 各取一半，
+ *   正文只叠在左半的下角 —— 与首页那本演示书同一套。
+ *   改之前是一面装一整页（方图在上、正文在下），翻开一屏是左右各一张图。
+ *
+ * 与首页那套的两处差别：
+ *   1. 舞台尺寸按**一页 3:4** 推、两页合起来是 3:2 —— 与首页咬合在同一组 min() 上，
+ *      观感一致，改一处要同时看另一处；
+ *   2. 静止模式（prefers-reduced-motion）走 `data-motion="reduced"`：
  *      不是"不翻页"，是**不播动画**，直接落在目标页上（README §五 的硬要求）。
  * ========================================================================== */
 
 .reader {
-  --page-h: min(74vh, 88vw);
   padding: 24px 0 48px;
 }
 
@@ -62,15 +65,50 @@
   box-shadow: 0 2px 7px rgba(19, 19, 28, 0.1);
   /* 纸色：图铺不满时露出来的那一层，不是白 */
   background-color: #fbf7ef;
-  display: flex;
-  flex-direction: column;
+  /* ★ 这四行**只有封面用**（封面图直接挂在 `__face` 上，内页在图挂 `__half` 上）。
+     漏了 `background-size: cover` 的症状很隐蔽：图按原始像素铺（1024×1365 塞进
+     464×619 的一页），于是只剩左上角一小块——看着像"封面没生成好"。 */
+  background-repeat: no-repeat;
+  background-position: 50% 50%;
+  background-size: cover;
 }
 
 .reader__face--back {
   transform: rotateY(180deg);
 }
 
-/* 纸感：shade = sin(θ)，平放 0、立起 1（flip.ts 把两个端点钉死） */
+/* ── 跨页的两个半页 ────────────────────────────────────────────────────────
+ * 同一张 3:2 的图挂两次，靠 position 各取一半（**不切文件**：请求数减半）。
+ * ★ 3:2 的图铺进 3:4 的页面（宽 200%、高 100%）正好是原比例 —— 不拉伸也不裁。
+ *   反过来说：页图的比例与一页的比例是**咬死**的，改了 3:2 这里就得出错，
+ *   而错的样子很隐蔽（图被纵向拉长一点点，像"画风变了"）。
+ * ★ 背面自己 rotateY(180deg)，转轴是它自己的中心。它加上叶绕书脊的 -180° 之后
+ *   正好两两抵消，所以**左半挂在背面、右半挂在正面**这个分工是对的：
+ *   左页从外沿到书脊看到的是原图的 0→50%，右页从书脊到外沿是 50%→100%，
+ *   接缝落在书脊上。挂反了的症状是"跨页中缝处画面接不上"，而它看着像出图的问题。
+ */
+.reader__half {
+  position: absolute;
+  inset: 0;
+  background-repeat: no-repeat;
+  background-position: 50% 50%;
+  background-size: cover;
+}
+
+.reader__half[data-half='left'] {
+  background-size: 200% 100%;
+  background-position: 0 0;
+}
+
+.reader__half[data-half='right'] {
+  background-size: 200% 100%;
+  background-position: 100% 0;
+}
+
+/* 纸感：shade = sin(θ)，平放 0、立起 1（flip.ts 把两个端点钉死）。
+   ★ 这一层是 `__leaf` 的子元素，**一叶一层**，所以两面共用同一个方向：
+   叶的转轴在左中，正反两面在叶的局部坐标里都是"左边靠书脊"，
+   一条 to-right 的渐变对两面都对（首页是一面一层，那里才需要镜像）。 */
 .reader__shade {
   position: absolute;
   inset: 0;
@@ -78,24 +116,23 @@
   background: linear-gradient(to right, rgba(30, 22, 12, 0.32), rgba(30, 22, 12, 0) 54%);
 }
 
-/* ── 一页的版式：图在上、正文在下 ─────────────────────────────────────── */
-
-.reader__art {
-  flex: 0 0 75%;
-  background-repeat: no-repeat;
-  /* contain + 顶部对齐：方形画不裁不拉伸，正文那条纸色带留在下面 */
-  background-size: contain;
-  background-position: 50% 0;
-  background-color: #fbf7ef;
-}
-
+/* ── 正文：叠在**左半**的下角 ─────────────────────────────────────────────
+ * ★ 这个位置不是排版偏好：出图时那条构图约束写的就是"主体偏右或居中，
+ *   左下方约四分之一留出相对干净、可叠字的区域"（`prompts/image.ts`）。
+ *   两块是一对合同——把正文挪到别处，那块留白就成了图上的一块白斑。
+ */
 .reader__text {
-  flex: 1 1 25%;
-  padding: 4% 8% 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 0.35em;
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  max-width: 74%;
+  padding: 12% 8% 7% 9%;
+  background: linear-gradient(
+    to top,
+    rgba(255, 253, 247, 0.94) 0%,
+    rgba(255, 253, 247, 0.8) 46%,
+    rgba(255, 253, 247, 0) 100%
+  );
 }
 
 .reader__text p {
@@ -106,15 +143,18 @@
   color: var(--ink-soft);
 }
 
-/* 缺图那一页：写清"为什么这里没有画"，不留裂图也不留空框 */
+/* 缺图那一页：写清"为什么这里没有画"，不留裂图也不留空框。
+   它只出在左半（正文所在的那半），下面留出正文的位置——那两行字仍然要念得到 */
 .reader__missing {
-  flex: 0 0 75%;
+  position: absolute;
+  inset: 12% 10% 34%;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  border-bottom: 1px dashed var(--dot);
+  border: 1px dashed var(--dot);
+  border-radius: var(--card-radius);
   color: var(--ink-muted);
   font-size: 14px;
 }
@@ -125,9 +165,12 @@
   letter-spacing: 0.08em;
 }
 
+/* ── 封面与封底 ──────────────────────────────────────────────────────────── */
+
 .reader__cover,
 .reader__back {
-  flex: 1;
+  position: absolute;
+  inset: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -135,8 +178,27 @@
   gap: 10px;
   padding: 10%;
   text-align: center;
-  /* 封面与封底铺一层极淡的暖底，与内页的纸色区分开 */
+  /* 没有封面图时（旧书）铺一层极淡的暖底，与内页的纸色区分开 */
   background: linear-gradient(160deg, rgba(var(--accent-rgb), 0.08), rgba(30, 22, 12, 0.03));
+}
+
+/**
+ * 有封面图时，书名叠在**上方**，不是下方。
+ *
+ * ★ 这一条与出图那边的 prompt 是一对：`coverPrompt` 里明确要求
+ *   "不要把书名画进画面，但请在画面上方留出一条相对干净的区域"。
+ *   上半留给字、下半留给画——按首页那本的"书名压在下角"来，正好压在这张图的
+ *   主体（坐在云上的那个孩子）身上。两处谁改都要看另一处。
+ */
+.reader[data-cover='image'] .reader__cover {
+  justify-content: flex-start;
+  padding: 9% 10%;
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 253, 247, 0.93) 0%,
+    rgba(255, 253, 247, 0.66) 30%,
+    rgba(255, 253, 247, 0) 62%
+  );
 }
 
 .reader__title {
@@ -146,10 +208,20 @@
   line-height: 1.4;
 }
 
+/* 提示语钉在封面下沿：有封面图时它是唯一压在画上的字，放中上会挡住主体 */
 .reader__hint {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 4%;
   margin: 0;
+  text-align: center;
   font-size: 12px;
   color: var(--ink-muted);
+}
+
+.reader[data-cover='image'] .reader__hint {
+  color: var(--ink-soft);
 }
 
 .reader__back-line {
@@ -280,10 +352,24 @@
   }
 }
 
-/* 竖屏手机：一页 3:4 装不下两页并排，就把舞台按宽度撑满、图仍是一页一图 */
+/* 竖屏手机：舞台照旧是 3:2 —— 它现在就是**一张页图**的形状（一页 = 一个跨页），
+   所以这一档只调排版，不动页模型。 */
 @media (max-width: 640px) {
   .reader__stage {
     width: 92vw;
     aspect-ratio: 3 / 2;
+  }
+
+  /* 窄屏上半页只有约 170px 宽，正文按桌面比例会窄到每行七八个字。
+     这一档只把字与留白调小一点；正文仍然叠在**左半的左下角**——
+     一旦为了"放得下"把它挪到图外面，就成了"两页并排"，那正是这次返工要修的毛病。 */
+  .reader__text {
+    max-width: 88%;
+    padding: 10% 6% 6% 7%;
+  }
+
+  .reader__text p {
+    font-size: 12px;
+    line-height: 1.6;
   }
 }

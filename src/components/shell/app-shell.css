@@ -189,15 +189,75 @@
   background: var(--surface);
 }
 
-.shell__icon {
+/* 一格里的图标位。★ 图标与转圈**共用这 20px**（转圈绝对定位压在同一个格子上），
+   所以点下去换形状时这一格不会跳，收起侧栏只剩图标时位置也纹丝不动。
+   `flex: 0 0 20px` 从原来挂 `.shell__icon` 上搬到这里——现在它才是 flex 项 */
+.shell__glyph {
+  position: relative;
+  display: grid;
+  place-items: center;
   flex: 0 0 20px;
   width: 20px;
   height: 20px;
 }
 
+.shell__icon {
+  width: 20px;
+  height: 20px;
+}
+
+/* ── 「已经点下去了，那一屏还在路上」─────────────────────────────────────
+   成因与实测读数写在 AppShell.tsx 文件头第 4 条：dev 下没有预取、dynamic 页在客户端
+   路由缓存里也不留，所以每一格都要等一次完整的服务端渲染（本机 0.5–2.6s）。
+   这一格补的是**立刻有反应**，让人不必再点第二下（再点一下会把上一次导航掐掉重来）。
+
+   ★ 图标用 `visibility` 而不是 `display` 让位：两者都占着同一个格子，
+     换成 `display` 会让 grid 重排一次——那正是"点下去界面跳一下"的来源。 */
+.shell__glyph[data-pending='true'] .shell__icon {
+  visibility: hidden;
+}
+
+.shell__spin {
+  position: absolute;
+  width: 15px;
+  height: 15px;
+  border: 2px solid rgba(var(--accent-rgb), 0.25);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  opacity: 0;
+}
+
+.shell__glyph[data-pending='true'] .shell__spin {
+  opacity: 1;
+  animation: shell-spin 0.6s linear infinite;
+}
+
+@keyframes shell-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+/* 标签跟着图标一起报信。★ 这里用**兄弟选择器**：标签紧跟在图标那格后面，
+   这条先后关系就是结构本身，不需要再算一次匹配（`:has()` 留给下面那条——
+   光标要作用在整行上，而整行的状态只有从外面往回看才看得见） */
+.shell__glyph[data-pending='true'] + .shell__link-label {
+  color: var(--accent);
+}
+
+/* 手型换成"在忙"（与创作屏那颗「优化」用的同一档）。整行都换，不只是图标那 20px */
+.shell__link:has(.shell__glyph[data-pending='true']) {
+  cursor: progress;
+}
+
 .shell__link-label {
   white-space: nowrap;
   overflow: hidden;
+  /* ★ `ellipsis` 是给底部「个人主页」那一格加的（2026-10-16，见 AppShell 的
+     `accountItem`）：那一格的文字是**用户自己起的昵称**，长度不可控。
+     `overflow: hidden` 一个人扛的话，长昵称会被**硬切**成半截字——看上去像渲染坏了；
+     带省略号至少说得清"后面还有"。其余五格的文字都是固定的两个字，这一条对它们是空转的 */
+  text-overflow: ellipsis;
 }
 
 .shell__foot {
@@ -306,6 +366,15 @@
   .shell__side,
   .shell__collapse-arrow svg {
     transition: none;
+  }
+
+  /* ★ 静止终态**不是"停住不转"**——那是一个缺口停在半路的圈，读起来像画坏了。
+     这一档换成一个**完整的橙圈**：信息（"这一格正在做事"）还在，只是不动。
+     与 `.cl__optimize` 那条"停在固定的暗档"、`character-wall` 那条"少动不是少信息"
+     是同一条判据。 */
+  .shell__glyph[data-pending='true'] .shell__spin {
+    animation: none;
+    border-color: var(--accent);
   }
 }
 

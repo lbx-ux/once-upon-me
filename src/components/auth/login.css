@@ -1,0 +1,571 @@
+/**
+ * login.css —— 「登录」（`/login`）与 `LoginPage.tsx` 同目录同名，在 app/globals.css 里 @import
+ *
+ * 版式**照 `E:\match\login` 那份设计稿**：左栏一整幅水彩（`picnic-loop.mp4`），
+ * 右栏平涂纸底上的表单。三类改动记在下面，都是这一层必须做的事，不是重新设计：
+ *
+ * 1. **底子是 `--paper` 平涂**，与稿子一致（纸的右上角那条 180px 的 `--sky` 渐变也照搬）。
+ *    ★ 这一屏**刻意不铺工作台那片天**（`StudioBackdrop`）。那片天带一条 112vh 的天空带，
+ *    而十带表（`studio-backdrop.css` 文件头）写着：压在天上的字只允许 `--ink` 与
+ *    `--ink-on-sky`，`--ink-muted` 与 `--accent` 在前几段是 3.99–4.47:1，破 AA——
+ *    而这张表单从头到尾都写着这两个色。所以要么把表单关进一张纸，要么就别铺那片天。
+ *    **用户 2026-10-16 选的是后者**：他要的是稿子那个样子。于是背景回到纯 `--paper`，
+ *    而 `--ink-muted`(4.99:1) / `--accent`(4.84:1) 在它上面是量过的、合法的。
+ *
+ * 2. **一段素材两个替身**：右栏是 `picnic-loop.mp4`（`autoplay muted loop`），
+ *    而 `prefers-reduced-motion: reduce` 下**必须有一个静止终态**（CLAUDE.md §不糊弄）——
+ *    它是一张 `picnic-loop.webp`（那段视频第一帧的转码，`scripts/make-webp.py --preset login-art`）。
+ *    两张都在 DOM 里、**由 CSS 切**（默认图、`no-preference` 里才放开视频），
+ *    于是服务端渲染、禁 JS、reduced 三种情形拿到的都是同一张画完的图，
+ *    既没有 hydration 风险，也不需要"挂载后才敢显示"。
+ *
+ * 3. **窄屏收成一列**。稿子写着 `min-width: 1080px`，而那一行的产物是横向滚动条——
+ *    这一页是家长在手机上真会打开的一页（同 `/create` 那条理由），所以改成 900px 以下竖排：
+ *    画面缩成一条横幅，表单在它下面。1080px 以上看到的就是稿子本身的样子。
+ *
+ * ★ 图上的那行小字（`.login__caption`）与稿子不同：稿子是"白字影 + 透明底"，
+ *   而视频每一帧都不一样，`text-shadow` 在**任何一帧**上都成立不了、也没有一帧可以量。
+ *   所以它住进一颗不透明的 `--surface` 药丸里，于是"`--surface` + `--ink`"这一对
+ *   就是全站量过的那一对（17.85:1），与画面无关。
+ */
+
+.login {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(400px, 560px);
+  /* ★ 稿子的底。不铺 `StudioBackdrop`——理由写在文件头第 1 条 */
+  background: var(--paper);
+  color: var(--ink);
+}
+
+/* ── 右栏：表单 ─────────────────────────────────────────────────────────── */
+
+.login__pane {
+  /* 画面在左、表单在右。★ 用 `order` 而不是调换 DOM 顺序：
+     读屏与 Tab 顺序里**表单在前**（那是这一页唯一要做的事），
+     而视觉上画面在左——这两件事本来就该分开说。 */
+  order: 2;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 26px;
+  padding: clamp(36px, 7vh, 72px) clamp(28px, 5vw, 84px);
+}
+
+/* 纸的右上角那道光。★ 那个 `rgba(232,243,244,0)` 就是 `--sky` 的 rgb 收到 α 0
+   （`--sky` = #e8f3f4），照稿子搬过来；这里不另开一颗 `--sky-rgb` 令牌，
+   因为这一处渐变是**这一屏独有的一段装饰**，不是配色的一部分 */
+.login__pane::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 180px;
+  background: linear-gradient(180deg, var(--sky), rgba(232, 243, 244, 0));
+  pointer-events: none;
+}
+
+/* ★ 这一条不是可选的：`::before` 是定位元素，而 `static` 的孩子排在它**前面**，
+   没有这一句整张表单会被那道光盖住（同 `app-shell.css` 的 `.shell__side` 上记的那次） */
+.login__pane > * {
+  position: relative;
+}
+
+.login__brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.login__mark {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  object-fit: cover;
+  box-shadow: var(--sheet-shadow);
+}
+
+.login__wordmark {
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.login__sep {
+  color: var(--ink-muted);
+  font-weight: 400;
+}
+
+.login__latin {
+  font-family: var(--font-serif);
+}
+
+.login__step {
+  display: grid;
+  gap: 24px;
+  /* 稿子这一下就是入场：0.34s 从下面 8px 浮上来。
+     ★ 用 CSS 而不是 `lib/useEnterTimeline.ts`：那张 `ENTER_STEPS` 表是给 `/home`
+       定死的选择器清单，为一个新页面再塞一套进去是给假想的将来搭架子。
+       CSS 动画在禁 JS 时照样播；`prefers-reduced-motion` 下 `animation: none`
+       就是静止终态（元素直接以默认态在场），两条规矩都满足 */
+  animation: login-rise 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.login__head {
+  position: relative;
+}
+
+.login__title {
+  position: relative;
+  display: table;
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: clamp(28px, 3.4vw, 36px);
+  font-weight: 600;
+  line-height: 1.24;
+}
+
+.login__lede {
+  max-width: 34em;
+  margin: 10px 0 0;
+  color: var(--ink-muted);
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+/* 两笔手绘装饰：与首页、与「创作」那一屏是同一支笔（同一个描边、同一个色），
+   位置也照稿子。★ 它们能伸到标题框外，是因为**这一栏的内边距够宽**
+   （`clamp(28px, 5vw, 84px)`，最窄 28px 也大于 44px 的伸出量吗——不，见下） */
+.login__doodle {
+  position: absolute;
+  z-index: 1;
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+/* ★ 这一笔向左伸出 44px，而窄档的内边距只有 28px——所以它在最窄的那一档上
+   会探到纸外面一点。**这是照稿子的取法**，真机上量过：
+   1024×768 上它落在 pane 左缘里侧 12px（`clamp` 取 5vw = 51px > 44px），
+   只有窗口宽到接近 900px 那一档才会贴边，而那已经是竖排断点前的最后一档。
+   要更稳就把 `left` 收成 `calc(4px - 1em)` 之类，但那会改掉稿子的样子 */
+.login__doodle--spark {
+  top: -20px;
+  left: -44px;
+  width: 34px;
+  height: 34px;
+  animation: login-float 7s ease-in-out infinite alternate;
+}
+
+.login__doodle--leaf {
+  right: -50px;
+  bottom: -12px;
+  width: 38px;
+  height: 38px;
+  /* 与另一笔错开半拍：两笔一起动像一台机器，错开像有人随手画的 */
+  animation: login-float 9s ease-in-out -3.5s infinite alternate;
+}
+
+@keyframes login-float {
+  from {
+    transform: translateY(-2px) rotate(-2deg);
+  }
+  to {
+    transform: translateY(2px) rotate(2deg);
+  }
+}
+
+@keyframes login-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login__doodle,
+  .login__step {
+    animation: none;
+  }
+}
+
+/* ── 表单 ───────────────────────────────────────────────────────────────── */
+
+.login__form {
+  display: grid;
+  gap: 15px;
+}
+
+.login__field {
+  display: grid;
+  gap: 6px;
+}
+
+/* 输入那一组：框 + 它自己那行错误。★ 与 `.login__field` 同一个 6px——
+   错误提示要**贴着**它说的那个框（15px 会被读成"下面又有一组"） */
+.login__panel {
+  display: grid;
+  gap: 6px;
+}
+
+.login__label {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.login__box {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 6px 0 12px;
+  border: 1px solid var(--dot);
+  border-radius: var(--card-radius);
+  background: var(--surface);
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+/* ★ 聚焦不靠 `outline` 而靠一整圈 2px 强调色：这一屏的输入框下面就是自己那条
+   `--dot` 细边，浏览器默认那圈 outline 会被衬成两条并排的线 */
+.login__box:focus-within {
+  border-color: transparent;
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.login__prefix {
+  flex-shrink: 0;
+  margin-right: 12px;
+  padding-right: 10px;
+  border-right: 1px solid var(--hairline);
+  color: var(--ink-muted);
+  font-size: 14px;
+}
+
+.login__input {
+  flex: 1;
+  min-width: 0;
+  min-height: 42px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+}
+
+.login__input:focus-visible {
+  outline: none;
+}
+
+.login__input::placeholder {
+  color: rgba(28, 28, 36, 0.38);
+}
+
+.login__send {
+  flex-shrink: 0;
+  height: 32px;
+  margin-left: 8px;
+  padding: 0 12px;
+  border: 1px solid rgba(var(--accent-rgb), 0.28);
+  border-radius: 999px;
+  background: rgba(var(--accent-rgb), 0.08);
+  color: var(--accent);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.16s ease,
+    transform 0.16s ease;
+}
+
+.login__send:hover:not(:disabled) {
+  background: rgba(var(--accent-rgb), 0.13);
+  transform: translateY(-1px);
+}
+
+.login__send:disabled {
+  border-color: var(--hairline);
+  background: transparent;
+  color: var(--ink-muted);
+  cursor: not-allowed;
+}
+
+.login__send:focus-visible,
+.login__eye:focus-visible,
+.login__mode:focus-visible,
+.login__again:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.login__eye {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  margin-left: 8px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-muted);
+  cursor: pointer;
+}
+
+.login__eye:hover {
+  color: var(--ink);
+}
+
+.login__eye svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.login__modes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  /* 稿子那颗浅蓝（`rgba(232,243,244,.72)` = `--sky` 的 rgb）。★ 它能用是因为
+     这一栏的底就是 `--paper`，与稿子同一块纸；铺了天空带就不能这么写 */
+  background: rgba(232, 243, 244, 0.72);
+}
+
+.login__mode {
+  height: 36px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-muted);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    color 0.16s ease,
+    background 0.16s ease;
+}
+
+.login__mode.is-active {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 2px 8px rgba(23, 23, 29, 0.08);
+}
+
+.login__error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 12.5px;
+}
+
+.login__chip-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 3px;
+}
+
+.login__chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow:
+    0 1px 2px rgba(23, 23, 29, 0.05),
+    0 8px 18px -12px rgba(23, 23, 29, 0.22);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* 主按钮 = 首页那颗墨色药丸（`hero-orbit.css` §5 的 `.btn`）：
+   `#1a1a20` / 52px / radius 999 / 白字 / hover 抬起 2px。
+   ★ 稿子本来就写对了，一个字没改——同一个动作在两屏长两个样子，
+   是"两个网站"最省力的证据（同 `create-landing.css` 文件头第 1 条） */
+.login__submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 52px;
+  margin-top: 4px;
+  padding: 0 30px;
+  border: 0;
+  border-radius: 999px;
+  background: #1a1a20;
+  color: #fff;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(23, 23, 29, 0.16);
+  transition:
+    transform 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.18s ease;
+}
+
+.login__submit:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px rgba(23, 23, 29, 0.22);
+}
+
+.login__submit:active {
+  transform: translateY(0);
+}
+
+.login__submit:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ★ 一个**真的在做事**的按钮要能说出"正在做"：不发请求的模拟也照样会等
+   （见 `client.ts` 的 `MOCK_LATENCY_MS`），这期间它不能看起来还是"能点" */
+.login__submit:disabled {
+  cursor: progress;
+  opacity: 0.72;
+}
+
+.login__again {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.login__again:hover {
+  text-decoration: underline;
+}
+
+.login__foot {
+  padding-top: 16px;
+  border-top: 1px solid var(--hairline);
+  font-size: 12.5px;
+  color: var(--ink-muted);
+}
+
+/* ── 左栏：那段水彩 ─────────────────────────────────────────────────────── */
+
+.login__art {
+  order: 1;
+  position: relative;
+  margin: 0;
+  min-height: 100%;
+  overflow: hidden;
+}
+
+.login__art-media {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* 与稿子同一档偏置：方图 `cover` 进一列竖屏时会从上下各切掉一块，
+     58% 让主体（草地上的人）留在可见的那一段里 */
+  object-position: 50% 58%;
+}
+
+/* ★ 默认是**图**、不是视频。见文件头第 2 条：reduced-motion、禁 JS、
+   服务端渲染这三种情形拿到的都是这一张画完的静止帧 */
+.login__still {
+  display: block;
+}
+
+.login__video {
+  display: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .login__still {
+    display: none;
+  }
+
+  .login__video {
+    display: block;
+  }
+}
+
+/* 图上那行字。★ 它压在**画面**上，不是压在天上——所以十带表管不着它，
+   但也因此没有任何一条"量过的底色"可以依赖：视频每一帧都不一样。
+   做法是把它放进一颗**不透明的** `--surface` 药丸里，于是它和
+   `--ink` 这一对就是全站量过的那一对（17.85:1），与画面无关。
+   ★ 稿子那版是"白字影 + 透明底"（`text-shadow`）。那条路在**任何一帧**上都成立不了，
+   而这里没有一帧可以量——所以不 adopt 它 */
+.login__caption {
+  position: absolute;
+  left: 24px;
+  bottom: 24px;
+  max-width: 360px;
+  margin: 0;
+  padding: 10px 16px;
+  border-radius: var(--card-radius);
+  background: var(--surface);
+  box-shadow: var(--sheet-shadow);
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* ── 窄屏：收成一列 ─────────────────────────────────────────────────────
+   ★ 这一条是**加出来**的，稿子里没有（它写着 `min-width: 1080px`）。
+   理由：那一行的产物是横向滚动条，而这一页是家长在手机上真会打开的一页。
+   画面缩成一条横幅（180px），表单在它下面；`order` 归零让视觉顺序
+   与 DOM 顺序合流——竖排之后那个"画面在左"的理由不存在了 */
+@media (max-width: 900px) {
+  .login {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .login__art,
+  .login__pane {
+    order: 0;
+  }
+
+  .login__art {
+    min-height: 180px;
+    max-height: 180px;
+  }
+
+  .login__caption {
+    left: 14px;
+    bottom: 14px;
+    max-width: calc(100% - 28px);
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+
+  .login__pane {
+    justify-content: flex-start;
+    padding: 26px 20px 40px;
+  }
+
+  /* 竖排之后这两笔没有多余的边距可以伸了，收回纸内 */
+  .login__doodle--spark {
+    left: -26px;
+  }
+
+  .login__doodle--leaf {
+    right: -20px;
+  }
+}

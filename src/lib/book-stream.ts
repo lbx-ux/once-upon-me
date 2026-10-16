@@ -22,7 +22,7 @@
  */
 
 import type { EngineEvent } from './engine/index.ts'
-import { encodeFrame, type SseFrame } from './sse.ts'
+import { encodeFrame, type SseFrame } from './engine/sse.ts'
 
 export type BookStreamFrame =
   | { kind: 'engine'; event: EngineEvent }

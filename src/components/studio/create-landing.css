@@ -5,6 +5,9 @@
  *   原来是一列居中的 820px（标题/说明/胶囊/卡/三条建议），上下各一大片空，
  *   读起来是"没做完"而不是"留白"。现在是**左对齐 + 上方留给天空**，
  *   下面那一块空由 12 张主题封面自己填。
+ *   ★ 2026-10-16：形态那一行（`.cl__forms`）站到了**这一列的最上面**，
+ *     上方那片"留给天空"的 padding 跟着收到 `clamp(18px, 3vh, 36px)`——
+ *     第一件事不再是标题，是"你在给谁做书"。
  *
  * ★ 三处刻意的判断：
  *   1. **主按钮是首页那颗墨色药丸**，不是原来的橙色圆圈 `↑`。
@@ -17,11 +20,13 @@
  *      原来是 44 / 15 / 13.5 / 12.5——这四个数之间没有关系，所以标题不像标题。
  *
  * ★ 压在天空上的文字只有两种颜色，各自是量出来的（见 `scripts/check-scrim.mts`）：
- *   `--ink`（标题，最狠的一段 13.34:1）与 `--ink-on-sky`（说明那一行，最狠 6.63:1）。
+ *   `--ink`（标题，最狠的一段 13.34:1）与 `--ink-on-sky`（原来是说明那一行，最狠 6.63:1）。
  *   `--ink-muted` **一次都不许直接压在天上**——它在天空带第 1 段只有 3.99:1。
- *   所以 `.cl__hint` 与 `.cl__theme-tag` 都在卡片的 `--surface` 里，
+ *   所以卡片里的字（`.cl__theme-tag`、`.cl__go`）都在 `--surface` 里，
  *   `.cl__wallhead` 落在天空带以下那段纯纸（第 7 段 4.70:1，过线）。
  *   这条不是审美，是那张十带表定的（见 studio-backdrop.css 文件头）。
+ *   ★ 2026-10-15：`--ink-on-sky` 在这**一屏**的唯一消费者（`.cl__sub`）撤了，
+ *     但令牌本身照旧（`shelf.css` / `booklist-wall.css` 还在用），规矩也没松。
  * ★ 两笔装饰是描边 SVG，颜色走 `--accent`：它们与首页那三屏的水彩是同一支笔。
  *   进场时被"画"出来（`lib/useEnterTimeline.ts`），静止模式下不飘也不描——直接在场。
  */
@@ -29,7 +34,141 @@
 .cl {
   max-width: 980px;
   margin: 0 auto;
-  padding: clamp(48px, 9vh, 116px) clamp(22px, 4vw, 60px) 80px;
+  /* ★ 2026-10-16：上面那一档从 `clamp(48px, 9vh, 116px)` 收到这里。
+     原来那一大片是"上方留给天空"（文件头那条），形态那一行进来之后它变成了
+     **控件上方的一段空**——用户看到的就是这个，要求"放到最上面"。
+     形态是这一页的**第一件事**，把它顶上去之后，天空那口气改由标题下方与
+     主题墙之间承担（那两处的留白一个数没动）。
+     ★ 顺带一笔账：这一收把整页上移约 46px，正好抵消了形态那一行占掉的高度，
+       主题墙第二排的位置因此回到加这一行之前的读数附近。 */
+  padding: clamp(18px, 3vh, 36px) clamp(22px, 4vw, 60px) 80px;
+}
+
+/* ── 书的形态：标题上方那一行（2026-10-16）────────────────────────────────
+
+   产品有两种形态（GLOSSARY §语言）：**独读版**（线性、睡前）与**共读版**（故事树、白天）。
+   这一行把它们摆出来。★ 但这一轮**只有独读版能选**——共读版还没开始做（W3）。
+
+   ★ 位置是**居中**的，而这一屏的其余部分（标题、胶囊、卡、主题墙）都是左对齐。
+     这是一次刻意的不对称，按用户画的草图标上去的，不是没对齐：形态换的是
+     "这一页在给谁做书"，管的是整块；标题以下管的是"这本书"。别顺手改回左对齐。
+
+   ★ 2026-10-16 第二刀（用户："把这两个最外面的那个圈去掉，选中之后，四周的那一圈
+     变成蓝色，中间不变"）：**外面那层白胶囊撤了**，两颗各自成为一颗独立的药丸，
+     选中由**它自己的那一圈**表示。
+     ★ 撤掉外壳有一个不能忘的后果：原来那层白底是这一行的**对比度安全区**
+       （"压在天上的字只允许 `--ink` 与 `--ink-on-sky`"，`scripts/check-scrim.mts`
+       钉着；`--ink-muted` 在天空带第 1 段只有 3.99:1）。所以这层白底**不是被删掉，
+       是下移到了每一颗药丸自己身上**（`.cl__form` 的 `background`）——
+       于是"中间不变"这条也顺带成立：选中那颗里面的淡橙底、橙字与原来**一模一样**，
+       因为底下垫的仍然是同一张白纸。 */
+.cl__forms {
+  display: flex;
+  /* ── 「贴到最上面」与「其余一个像素都不动」是同一个数 ──────────────────
+     ★ 用户 2026-10-16 的要求原话是"这个选择放到最上面，其他的不要动"。
+       这两条**互相咬合**，所以写成一个变量，两个 margin 都从它算：
+       流内元素的规矩是"你上移多少，后面所有东西跟着上移多少"。
+       要只把这一行举上去、下面一个像素都不动，就得**从下面把它让出来**：
+         margin-top   : −pull
+         margin-bottom: 22 + pull      ←（22 是与标题之间那个原距离）
+       于是 `margin-top + margin-bottom` 恒等于 22：**这一行去哪儿，
+       标题以下都不受影响**。改 pull 只动这一行，别动那个 22。
+     ★ 下面那对 `padding-block: 4px` **不是留白，是补高度**：撤掉外壳之后
+       这一行的盒高从 52 掉到 44，而它下面的一切是接着这 52 排的——
+       不补回来，标题以下会整体上移 8px，上面那条"其他不要动"当场就破了。
+       4 + 44 + 4 = 52，与撤外壳之前逐值相同。 */
+  --cl-forms-pull: 50px;
+  margin-top: calc(-1 * var(--cl-forms-pull));
+  margin-bottom: calc(22px + var(--cl-forms-pull));
+  padding-block: 4px;
+  width: fit-content;
+  /* ★ `max-width: 100%` + `flex-wrap` 是一道保险：实测 375px 下**整条壳**
+     （侧栏 + 内容列）本身就是坏的——侧栏 `.sb` 铺满 375，内容列只剩 143px，
+     那是 studio shell 自己的问题，不是这一行造成的（这一屏在那一档本来就没法用）。
+     但这一行不该在那上面再添一笔：加上这两条之后它最多铺满容器、再往下换行，
+     **永远不会横向戳出容器**。`justify-content: center` 是给换行后那一行用的
+     （默认 flex-start，换行之后会靠左，看着像居中的那一行歪了）。 */
+  max-width: 100%;
+  flex-wrap: wrap;
+  justify-content: center;
+  /* ★ 只写 `margin-inline: auto`，**不要**用 `margin` 简写——
+     那会把上面那对上下 margin 覆盖掉，而它们是"其他不要动"的全部机关。
+     ★ 横向居中靠的是 `width: fit-content` + `margin-inline: auto` 这一对：
+     只写 `inline-flex` 的话它是行内级盒子，`margin: auto` 不起作用，
+     而 `.cl` 没有 text-align，结果会贴左边（`.cl__title` 是 `display: table`
+     且有 `margin: 0`，所以不能靠继承它的对齐） */
+  margin-inline: auto;
+  /* ★ 两颗之间**必须留一道缝**：原来它们是同一块白胶囊里的两段（靠底色连着），
+     外壳撤了之后不留缝，两颗的边会挨在一起，读起来还是"一个控件被切了两刀"。 */
+  gap: 8px;
+}
+
+.cl__form {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  /* 44px 是触控热区那条线，与 `create-flow.css` 的 `.cf__chip` 同一个数 */
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  /* ★ 白底从外壳**下移到这里**（2026-10-16 撤外壳那一刀）：这一行压在天空带上，
+     而这屏的规矩是"压在天上的字只允许 `--ink` 与 `--ink-on-sky`"
+     （`--ink-muted` 在天空带第 1 段只有 3.99:1，`scripts/check-scrim.mts` 钉着）。
+     白底不在这儿，"还没做"那三个灰字就直接压在 2:1 的天空上了。
+     ★ 顺带一条：底色与 `.cl__pill`（小满 / 我的声音）**同一张白纸**，
+     所以形态这两颗与它们读起来是同一族控件，不是另一套。 */
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  /* ★ 一行，不是两行。第一版给独读版加了一行小注（"睡前 · 一页一图一句"），
+     整行高度 58.5px；实测 1280×760 下它把主题墙第二排从"露 90px"压成"露 10px"，
+     而这一屏的规矩是主题墙要接得住视线。用户这一轮也一直在删字（"不用写那么多"）。
+     所以：**名字一行说完**，"共读版"后面挂一个「还没做」就够。
+     ★ 代价写明白：这一屏从此**不解释**"独读版/共读版"是什么意思。
+       现在无所谓（只有一个能选），但**共读版真能选的那一天必须补一行说明**——
+       那时它是一个真选择，两个词得让人看懂 */
+  font-size: 14px;
+  font-weight: 600;
+  /* ★ 选中那一颗是**默认光标**，不是 `pointer`：它点了不会发生任何事
+     （只有一个可选值）。给一个手型就是在承诺一件做不到的事 */
+  cursor: default;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease;
+}
+
+.cl__form-todo {
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.3;
+  color: var(--ink-muted);
+}
+
+/* 选中那一颗。★ **只有那一圈变蓝，中间一直是白的**——用户 2026-10-16 的原话：
+   "选中之后，四周的那一圈变成蓝色，中间不变"，补一句"我的意思是，中间一直是白色的"。
+   所以这里**只留一条 `border-color`**：深浅两个字色都不许动。
+   ★ 这条规矩值得写下来，因为它与全站那套不同：`create-flow.css` 的
+     `.cf__chip[data-active='true']` 是"accent 边 + 10% accent 底 + accent 字"三件套。
+     形态这一颗**故意不走那一套**——它要的是"这一颗是按下的"，
+     而不是"这一颗可以点"（后者是强调色的差事，旁边那颗「开始创作」在用）。
+   ★ 底是白的这一条另有一个后果：`--ink-muted` 的「还没做」因此落在白底上
+     （5.33:1），而不是压在天空带上（那样只有 3.99:1，破线）。 */
+.cl__form[data-active='true'] {
+  border-color: var(--select);
+}
+
+/* ★ 共读版那一颗：**真 disabled**，而且"不可用"靠**边框与层次**说，
+   **不靠把字调淡**——「还没做」这三个字必须读得到，否则它就是在假装自己能点。
+   （文字仍是 `--ink-muted`，对白底 5.33:1，是过线的那一档。） */
+.cl__form:disabled {
+  border-color: var(--dot);
+  border-style: dashed;
+  cursor: not-allowed;
+  /* ★ 名字降一档（`--ink` → `--ink-muted`，对白底 5.33:1）表示"这一颗现在拿不到"，
+     但**不把它调淡**：旁边那句「还没做」必须读得到 */
+  color: var(--ink-muted);
 }
 
 /* ── 标题与那两笔装饰 ─────────────────────────────────────────────────── */
@@ -73,8 +212,11 @@
 .cl__doodle--leaf {
   right: -46px;
   /* ★ 这个数是量的，不是挑的：标题框 margin-bottom 26px，这一笔高 40px + 浮动 ±2px，
-     底边压到 -8px 才与下一行灰字留出 18px —— 原来写 -22px，真机截图里它正好横穿
-     `.cl__sub` 那行字。装饰压到正文上，再好看也是错的 */
+     底边压到 -8px 才与下面那行字留出 18px —— 原来写 -22px，真机截图里它正好横穿
+     标题下那行灰字。装饰压到正文上，再好看也是错的。
+     ★ 那行灰字（`.cl__sub`）2026-10-15 撤了，这一笔下面现在直接是两颗胶囊，
+     留白只多不少——所以 -8px **不动**：它是被"装饰不许压到字上"这条量出来的，
+     不是被"下一行是谁"量出来的 */
   bottom: -8px;
   width: 40px;
   height: 40px;
@@ -91,16 +233,11 @@
   }
 }
 
-.cl__sub {
-  max-width: 44ch;
-  margin: 0 0 28px;
-  font-size: 15px;
-  line-height: 1.9;
-  /* ★ 不是 --ink-muted：这一行压在天空带第 3 段上，那里灰字只有 4.21:1
-     （`node scripts/check-scrim.mts`）。--ink-on-sky 同一段 7.01:1，
-     仍明显轻于标题的 14.10:1——层级靠字号与这一档的深浅一起撑 */
-  color: var(--ink-on-sky);
-}
+/* ★ 原来这里有一条 `.cl__sub`（标题下那行说明，`--ink-on-sky`）。
+   2026-10-15 按用户要求整条撤掉，规则一起删——`--ink-on-sky` 这一屏因此没有消费者了，
+   但它不是孤儿令牌（`shelf.css` / `booklist-wall.css` 还在用），
+   而"压在天空上的字只允许 `--ink` 与 `--ink-on-sky`"那条规矩照旧由
+   `scripts/check-scrim.mts` 钉着（与 `.cw__sub` 删掉时同一个处置） */
 
 /* ── 两颗胶囊 ─────────────────────────────────────────────────────────── */
 
@@ -155,14 +292,18 @@ button.cl__pill:hover {
 }
 
 /* 头像：240 档，实测 10 KB（原图 2.7 MB）。★ 圆的是"这是一个人"，
-   不是"这是一个应用图标"——所以它只出现在小主角那一格 */
+   不是"这是一个应用图标"——所以它只出现在小主角那一格
+   ★ 2026-10-15 第五轮：`cover` → `contain`，底色 `--surface-soft` → `--surface`。
+   参考图换成 3:4 全身像之后，`cover` 在这个圆里裁出来的是**腰腹那一段**
+   （一个没有脸的圆）；`contain` 把整个人缩进来，与换图之前的样子一致。
+   底色跟着图走：图是纯白底，留白就不能是一块灰。 */
 .cl__pill-face {
   flex: 0 0 24px;
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  object-fit: cover;
-  background: var(--surface-soft);
+  object-fit: contain;
+  background: var(--surface);
 }
 
 .cl__pill-text {
@@ -208,7 +349,11 @@ button.cl__pill:hover {
 
 .cl__option {
   display: grid;
-  /* 头像占左边一整列、两行文字在右边：不这么排的话头像会被挤到名字上面 */
+  /* 头像占左边一整列、名字在右边。
+     ★ 2026-10-16：名字下面那行「第 N 版 · <模型名> 画的」撤了，所以这里从
+       "两行文字"变成"一行"。原来那条 `.cl__option .cl__pill-face { grid-row: span 2 }`
+       跟着删掉——留着它，头像是跨两行，栅格就会多造一个**空行**出来，
+       每一项白白高出一截。 */
   grid-template-columns: 26px 1fr;
   align-items: center;
   column-gap: 9px;
@@ -223,13 +368,20 @@ button.cl__pill:hover {
   cursor: pointer;
 }
 
-.cl__option .cl__pill-face {
-  grid-row: span 2;
-}
-
 .cl__option:hover,
 .cl__option[aria-selected='true'] {
   background: var(--surface-soft);
+}
+
+/* ★ 自己录的音色会出现在这一列里，而克隆音色绑模型（跨模型 400）。对不上的那条
+   要看得出来点不动，`title` 里写着为什么（`lib/voices/catalog.ts` 的 `why`） */
+.cl__option:disabled {
+  color: var(--ink-muted);
+  cursor: default;
+}
+
+.cl__option:disabled:hover {
+  background: none;
 }
 
 .cl__option-name {
@@ -243,39 +395,207 @@ button.cl__pill:hover {
 }
 
 /* 声音那一格的选项：没有头像，所以不是"图上字下"那两行的排法，就是两行字。
-   ★ 机器名（`longjielidou_v3.6`）照旧念出来：音色表里就是这两个 id，
-     不换成"温暖男声"这种我编的形容词——名字对得上，去 `/voice` 才找得到那一张卡 */
+   ★ 2026-10-16：机器名（`longjielidou_v3.6`）撤了，只留调性（"天真男童音"）。
+     原来这里写着"机器名照旧念出来，名字对得上，去 `/voice` 才找得到那一张卡"——
+     那句话在当时是对的。现在不对了，因为**这条下拉底部那条通到 `/voice` 的路
+     也一起撤了**（用户划掉的）：对不上号这个代价没有了，而机器名本身
+     对选购者是零信息。★ 代价写明白：这一格从此是**盲选**（听不到），
+     真要补，补的是试听本身，不是把这行机器名加回来。 */
 .cl__option--voice {
   grid-template-columns: 1fr;
   row-gap: 2px;
 }
 
-/* 面板底部那条"去听"。★ 它是一条路，不是一个选项，所以与上面两项之间有一条分隔线 */
-.cl__options-foot {
-  margin-top: 6px;
-  padding: 8px 10px 3px;
-  border-top: 1px solid var(--hairline);
-  font-size: 12px;
-}
-
-.cl__options-foot a {
-  color: var(--accent);
-  text-decoration: none;
-}
-
-.cl__options-foot a:hover {
-  text-decoration: underline;
-}
-
 /* ── 输入卡：这一屏真正的那张纸 ───────────────────────────────────────── */
 
 .cl__card {
+  /* ★ 必须是定位上下文：`.cl__figure` 以它的顶边为基准站上去。
+     这一条以前没有，是因为这张卡里没有一个东西需要"探到纸外面" */
+  position: relative;
   padding: 20px 24px 14px;
   border: 1px solid var(--hairline);
   border-radius: 18px;
   background: var(--surface);
   box-shadow: var(--sheet-shadow);
-  transition: border-color 0.18s ease;
+  /* ★ `transition: border-color` 也一起删了（2026-10-16）——它**只**为下面那条
+     `:focus-within` 存在；留一条没有终点可去的过渡，只是下一个人读不懂的一行 */
+}
+
+/* ── 绕着这张纸走的一圈光 ─────────────────────────────────────────────── */
+
+/**
+ * 结构：**静态的裁剪壳 + 会转的方片**，两层。
+ *
+ *   ① 壳（`.cl__beam` / `.cl__beam-glow`）负责"光带长什么样、在哪儿"：
+ *      `overflow: hidden` 裁成圆角矩形，两层 `mask` 相减只留 `padding` 那一圈。
+ *      **`padding` 的宽度就是光带的宽度**——整套做法里只有这一个旋钮。
+ *   ② 方片（两壳的 `::before`）负责"光在哪儿"。它超大到能盖住环带的**对角线**，
+ *      带着一条锥形渐变原地转圈；那条渐变上有**两个**波峰（对位，见下面 `background`），
+ *      所以屏幕上看到的是两道光一起走。
+ *
+ * ★ 为什么拆成两层而不是一层：因为方片必须在**静态的壳**里转。
+ *   直接把渐变画在壳上、去动画它的角度（`@property --angle`）也能出同样的画面，
+ *   但那是**每帧重绘**那圈渐变（主线程 paint）；拆开之后方片的光栅只做一次，
+ *   之后每帧只有一次 transform 合成。用户要的是**一直转**，所以这笔账要算。
+ *   （仓库里 `storybook-flip.css` 也有一条同样的倾向："不用 color-mix、
+ *   不用 Houdini 注册属性"——不引 `@property` 顺着它走。）
+ *
+ * ★ 遮罩那条 `mask-composite: exclude` 是**有坑的**，`highlights-reel.css` 记过一次：
+ *   合成关键字写错会被摊到两层上，结果要么整块全透明（什么都不画）、要么糊成实心。
+ *   "什么都不画"与"写对了但光刚好转到别处"肉眼分不开，所以这一层的验收是**看编译后的
+ *   产物 + 量几何**，不是看一眼截图。
+ *
+ * ★ 颜色取的是 `--beam-rgb`，**不是** `--accent-rgb`：第一版直接用了强调色
+ *   （陶土橙），在卡片边上转起来读作"一张暖色卡片被框住了"，与这一屏的冷天
+ *   打架（用户原话："突兀"）。两道光的差事不同——`--accent` 管"要你看见"，
+ *   `--beam` 管"在那儿就好"。这个令牌在 `globals.css` 的 `:root` 里，只定义
+ *   一次（硬约束）；在这里写一个字面色仍然是错的。
+ */
+
+.cl__beam,
+.cl__beam-glow {
+  position: absolute;
+  pointer-events: none;
+  /* 裁成圆角矩形：转动的那张方片会被这里剪掉四角 */
+  overflow: hidden;
+  /* 只留 padding 那一圈：整块 − content-box = 一圈边带 */
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  /* 在 `.cl__figure`（z-index: 1）下面：光走到卡片顶边时从人脚下过 */
+  z-index: 0;
+}
+
+/* 贴着卡片边的那条亮线。
+   ★ `inset: -1px` 那 1px 是**卡片自己那条边框**：绝对定位的 `inset` 量的是包含块的
+     **padding box**，而这张卡有 `border: 1px`，所以 `inset: 0` 会让光带缩在边框**里面**
+     （实测 863×180，比卡片小一圈）——那样卡片那条 `--hairline` 会露在光外面，脏。
+     `-1px` 之后光带的 border box 与卡片的 border box 重合。
+   ★ `padding: 1.25px` 是**量的**，不是挑的：第一版写 2px，真机截图里那条线读起来
+     是一圈"描边"而不是"一道光"（用户原话："太粗了"）。发丝级才像光 */
+.cl__beam {
+  inset: -1px;
+  padding: 1.25px;
+  border-radius: 18px;
+}
+
+/* 框**外**那层柔光晕。
+   ★ `inset: -6px` + `padding: 5px` 是一对（同样按 padding box 算）：壳的外框比卡片
+     大 5px，而 content-box 正好缩回**卡片的外沿**，于是带子整条落在框外——
+     内侧边界就是卡片边，一点都不会糊到卡里的字上。
+   ★ `border-radius: 23` = 5（padding）+ 18（卡片外圆角）：CSS 里内圆角 = max(0, 外 − padding)，
+     所以 23 − 5 = 18，光晕的内沿与卡片外沿的弧正好对上。
+   ★ 5px + `blur(9px)` + α .3 也是**量的**：第一版是 16px + 12px + .55，
+     真机截图里那圈read成一整条**深褐色厚边**（把卡片框住了），而不是"光晕"。
+     光晕要薄、要淡、要糊得开——它只负责让那道光"冒出来一点"，不负责占位置 */
+.cl__beam-glow {
+  inset: -6px;
+  padding: 5px;
+  border-radius: 23px;
+  opacity: 0.3;
+}
+
+/* 会转的那张方片。两层的声明完全相同，只有光晕层多一条 blur */
+.cl__beam::before,
+.cl__beam-glow::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  /* ★ 1000px 是导出来的，不是随手一个数：方片要盖住环带盒子的**对角线**，
+     否则转到某个角度时四角会露空。这一屏卡片内容宽最大 ~830px
+     （`--cl` 980 − 左右 padding 各 60 − 卡片 padding 各 24），
+     环带盒子 ~866×220 → 对角线 ≈ 893px；外层光晕盒 ~898×252 → ≈ 933px。取 1000 留余量。
+     **卡片将来若宽过 ~950px，这个数要重算。** */
+  width: 1000px;
+  height: 1000px;
+  translate: -50% -50%;
+  /* 一圈里只有这两段是亮的，各自两端化开——"两道光"就是这条渐变。
+     ★ **两条，对位**（2026-10-15 用户要的）：单条的时候看上去是"一圈描边里
+       只有一处漏光"，两条之后才是"光沿边走"的读法。两个波峰锁在 0° 与 180°，
+       也就是**直径的两端**——它们在任何一帧都隔着圆心对称，转起来一左一右、
+       一上一下地对着走，不会出现"两条贴到一起"的帧。
+     ★ 每条的坡度仍是 36°，与单条时同宽：加的是**条数**，不是把光拉长。
+       若哪天要改"光有多长"，改的是这两个 36，不是 0/180。 */
+  background: conic-gradient(
+    from 0deg,
+    rgba(var(--beam-rgb), 0.9) 0deg,
+    rgba(var(--beam-rgb), 0) 36deg 144deg,
+    rgba(var(--beam-rgb), 0.9) 180deg,
+    rgba(var(--beam-rgb), 0) 216deg 324deg,
+    rgba(var(--beam-rgb), 0.9) 360deg
+  );
+  animation: cl-beam 7s linear infinite;
+  /* 只碰 transform：提升成合成层之后光栅化一次就够 */
+  will-change: transform;
+}
+
+/* ★ blur 写在**方片**上，不写在外壳上：写在外壳上等于每帧重新糊一次；
+   写在方片上，糊的结果跟着它自己那份光栅一起转 */
+.cl__beam-glow::before {
+  filter: blur(9px);
+}
+
+@keyframes cl-beam {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ── 站着的小主角 ─────────────────────────────────────────────────────── */
+
+/**
+ * 输入卡右上角站着的那一个（12 张全身立绘之一，出自 `public/figures/`，
+ * 出图与去底见 `docs/figure-art-prompts.md`）。
+ *
+ * ★ **全身、不切割**，所以只需要一个普通的定位，不需要参考做法那套
+ *   "卡片画在小人上面、把他下半身藏进纸里"的层叠戏法。那套是给切 1/4 用的；
+ *   我们不切，于是也少踩一个层叠上下文的坑（`.cl__card` 只要 `position: relative`）。
+ *
+ * ★ 它是卡片的**孩子**，不是兄弟。两个理由：
+ *   1. 跟着卡片一起进场——`lib/useEnterTimeline.ts` 的 `.cl__card` 那一步
+ *      `from({opacity:0, y:18})` 会带动整棵子树，人和纸是一个动作。
+ *      ★ 因此**不给 `.cl__figure` 单开一条 ENTER_STEP**：两处驱动同一个位移必漂。
+ *   2. `bottom: calc(100% - 6px)` 里那个 6px 是"脚踩在纸边上"的那一点重叠。
+ *      基准是卡片自己，才不用去算父容器的 padding。
+ *
+ * ★ 数字要能复现：`right: 26px` 与卡片自身 24px 的横向 padding 差 2px，
+ *   让他的轮廓线落在内容区内沿；`height` 那一档 120–168px 是**待实测**的区间——
+ *   1440×900 下头顶不能碰到它上方那行字，右侧不能出 `.cl` 那 980px。
+ *   定完这两个数要回来看一眼这一行注释有没有说谎。
+ *   ★ 2026-10-15：他头顶上方原先是 `.cl__sub` 那行说明，撤掉之后换成两颗胶囊，
+ *     头顶的空只多不少——所以 168px 这个上限**不动**（动它要重新量，见上）。
+ */
+.cl__figure {
+  position: absolute;
+  right: 26px;
+  bottom: calc(100% - 6px);
+  z-index: 1;
+  height: clamp(120px, 15vh, 168px);
+  /* 装饰不能抢点击：换人在侧栏那一颗 */
+  pointer-events: none;
+}
+
+.cl__figure img {
+  display: block;
+  height: 100%;
+  width: auto;
+  /* 影子挂在 img 上而不是 ::after 的一个写死椭圆上，两个理由：
+     ① `drop-shadow` 跟着 alpha 轮廓走，一个站着的人本来就不是一根柱子；
+     ② 图还没到位（404）时它**什么都不画**——不会在纸上留一个孤零零的椭圆。
+     这正是"图没到位就留一个语义上诚实的兜底"那条：宁可什么都不画。 */
+  filter: drop-shadow(0 3px 5px rgba(23, 23, 29, 0.18));
+  /* 换人那一下的轻入。终态就是默认态（opacity 1 / y 0），所以静止模式关掉它
+     不需要另写一套"静止版" */
+  animation: cl-figure-in 0.24s ease-out;
+}
+
+@keyframes cl-figure-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
 }
 
 .cl__field {
@@ -305,82 +625,73 @@ button.cl__pill:hover {
   outline: none;
 }
 
-.cl__card:focus-within {
-  border-color: rgba(var(--accent-rgb), 0.5);
-}
+/* ★ 这里原来有一条 `.cl__card:focus-within { border-color: rgba(--accent-rgb, .5) }`：
+   光标进到输入框时整张卡的边变橙。**2026-10-16 按用户要求撤了**（"把这个选中的
+   橙色效果取消了"），连同 `.cl__card` 上那条只为它存在的 `transition`。
+   ★ 代价必须写在这里，别让它悄悄消失：**这张卡现在没有任何焦点指示了**。
+     键盘用户 Tab 到这个输入框时，能看见的只有光标本身（`.cl__input` 的
+     `outline` 也是 `none`，见上面那条——那是"整张卡才是那个框"的旧判断，
+     现在那个框不再变色了）。
+     真要补回来的正确做法是**换一种不刺眼的表示**（比如焦点时把边加深一档，
+     或改用 `--select` 那支蓝），**不是**把这条橙边加回来——用户撤的是这个效果，
+     不是"焦点要被看见"这件事。 */
 
+/* 输入区下面那条分隔线：**左边两颗工具，右边「开始创作」**。
+   ★ 两边不是一类动作——左边改的是**框里这句话**，右边是**离开这一屏**。
+     原来三颗并排挤在右边，主按钮和工具抢同一处视线；用户要求把工具挪过来。
+   ★ `flex-wrap` + `.cl__go { margin-left: auto }` 是一组的：
+     窄屏放不下时「开始创作」自己换到第二行，而 `margin-left: auto`
+     让它在**哪一行都靠右**（`justify-content: space-between` 在换行后
+     会把第二行那个孩子推到左边去，正是这里要避免的）。
+   ★ 这一栏里**没有**那句语音警示了（2026-10-15 按用户要求撤掉），
+     后果写在 `CreateLanding.tsx` 的 `.cl__bar` 那段注释里。 */
 .cl__bar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+  gap: 12px 10px;
   margin-top: 12px;
   padding-top: 14px;
   border-top: 1px solid var(--hairline);
 }
 
-/* 左半边：提示语 + （没配齐时才出现的）语音那一句。
-   ★ 包一层是为了让警示只在真缺东西时占高度——它不该把这一屏顶上推下去 */
-.cl__note {
+/* 左半边那两颗工具。★ `min-width: 0` 让窄屏时它们先收缩，而不是先把主按钮挤下去 */
+.cl__tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   min-width: 0;
 }
 
-.cl__hint {
-  margin: 0;
-  font-size: 12.5px;
-  line-height: 1.7;
-  color: var(--ink-muted);
-}
-
-/* 语音没配齐。★ 用 `--accent` 而不是 `--danger`：这一本照样能出来，只是没有朗读——
-   那是一条降级路径（`state.ts` 写着"语音缺了走没有朗读"），不是"坏了"。
-   `--danger` 只用在真坏了的地方，拿它做提醒，红就不再表示任何东西了。
-   ★ 这一行在卡片的 `--surface` 里，所以它可以是 `--ink-muted` 这一档 */
+/* 优化没成。★ 用 `--accent` 而不是 `--danger`：这一次调用没成，用户在框里的字
+   一个字都没动（`optimize()` **只回建议**），所以这是"没改成"，不是"东西丢了"。
+   原句还在框里，再点一次就行——`--danger` 只用在真坏了的地方，
+   拿它做提醒，红就不再表示任何东西了。
+   ★ 这一行在卡片的 `--surface` 里，所以它可以是 `--ink-muted` 这一档——
+   不过这里用的是 `--accent`（同一张卡上已经是 5.18:1，`check-scrim.mts` 量过） */
 .cl__warn {
-  margin: 6px 0 0;
+  margin: 10px 0 0;
   font-size: 12.5px;
   line-height: 1.7;
   color: var(--accent);
 }
 
-.cl__warn strong {
-  font-weight: 600;
-}
-
-/* 句子里那颗"去做点什么"：与 `cf__link` 同一套（同一条纪律：链接不该长得像按钮） */
-.cl__link {
-  margin-left: 6px;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--accent);
-  font: inherit;
-  text-decoration: underline;
-  cursor: pointer;
-}
-
-.cl__actions {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 10px;
-}
-
-/* "换一句"：次要动作，描边胶囊 + 图标。
-   ★ 原来是一颗圆里三个点——那读起来像"随机生成一本书"，
-   而它改的只是框里的字。图标语言要跟着这句说明走，所以补了文字标签 */
+/* "换一句"：次要动作，描边圆形按钮，**里面只有那枚骰子**。
+   ★ 原来是一颗圆里三个点——那读起来像"随机生成一本书"，而它改的只是框里的字。
+     2026-10-15 用户要求去掉可见文字、只留图标，于是回到纯图标按钮；
+     "它到底改的是什么"这句话挪进了 `title` 与 `aria-label`（组件那边写着理由）。
+   ★ 40×40 与「优化提示词」同一档：两颗并排时不比大小，是**一组工具** */
 .cl__roll {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  justify-content: center;
+  width: 40px;
   height: 40px;
-  padding: 0 15px;
+  padding: 0;
   border: 1px solid var(--hairline);
   border-radius: 999px;
   background: var(--surface);
   color: var(--ink-muted);
-  font: inherit;
-  font-size: 13px;
   cursor: pointer;
   transition:
     color 0.16s ease,
@@ -393,8 +704,8 @@ button.cl__pill:hover {
 }
 
 .cl__roll-icon {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   fill: currentColor;
   stroke: none;
 }
@@ -405,22 +716,21 @@ button.cl__pill:hover {
   stroke-width: 1.6;
 }
 
-/* 「优化提示词」：与「换一句」同一档尺寸、同一颗胶囊，但它是**这条动作栏里唯一
-   带强调色描边的次动作**——它做的是"把这句话改好"，而「换一句」只是换一个例子。
+/* 「优化提示词」：与「换一句」同尺寸、同一颗圆，但它是这两颗里唯一
+   带强调色描边的——它做的是"把这句话改好"，「换一句」只是换一个例子。
    ★ 图标与标题旁那两笔装饰用的是同一条路径：一个动作与一屏的装饰出自同一支笔，
    这比再找一枚通用 AI 图标（星星 / 魔杖）更贴这一屏 */
 .cl__optimize {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  justify-content: center;
+  width: 40px;
   height: 40px;
-  padding: 0 15px;
+  padding: 0;
   border: 1px solid rgba(var(--accent-rgb), 0.45);
   border-radius: 999px;
   background: var(--surface);
   color: var(--accent);
-  font: inherit;
-  font-size: 13px;
   cursor: pointer;
   transition:
     background-color 0.16s ease,
@@ -432,6 +742,9 @@ button.cl__pill:hover {
   color: var(--surface);
 }
 
+/* 两种"不能用"长得**不一样**，因为它们不是一件事：
+   ① `:disabled` 且不在忙 = 框里还没写字（或正忙），描边退成灰；
+   ② 正在忙 = 调用真的发出去了，见下面 `[data-busy]` */
 .cl__optimize:disabled {
   border-color: var(--hairline);
   color: var(--ink-muted);
@@ -439,9 +752,29 @@ button.cl__pill:hover {
 }
 
 .cl__optimize-icon {
-  width: 15px;
-  height: 15px;
+  width: 17px;
+  height: 17px;
   fill: currentColor;
+}
+
+/* ★ "正在想…"原来靠按钮上的字说，字撤掉之后得靠**状态**说。
+   呼吸而不是转圈：这一颗做的是"读一句话再写一句"，不是"加载一个页面"，
+   转圈会让人以为进度可测。 */
+.cl__optimize[data-busy='true'] {
+  cursor: progress;
+}
+
+.cl__optimize[data-busy='true'] .cl__optimize-icon {
+  animation: cl-think 0.9s ease-in-out infinite alternate;
+}
+
+@keyframes cl-think {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.3;
+  }
 }
 
 /* ── 建议那一块（工单 07）────────────────────────────────────────────────
@@ -515,6 +848,9 @@ button.cl__pill:hover {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  /* ★ 顶到这一行的最右边：左边是两颗工具。写成 `margin-left: auto` 而不是靠
+     `.cl__bar` 的 `justify-content`，是因为窄屏换行之后它也得靠在**自己那一行**的右边 */
+  margin-left: auto;
   height: 52px;
   padding: 0 26px;
   border: 0;
@@ -555,9 +891,11 @@ button.cl__pill:hover {
 /* ── 主题墙：12 张封面，一格一条 ──────────────────────────────────────── */
 
 .cl__wallhead {
-  /* ★ 46px → 36px 是量的：整屏高度只有 900 的时候，天空、标题、说明、胶囊、输入卡
+  /* ★ 46px → 36px 是量的：整屏高度只有 900 的时候，天空、标题、胶囊、输入卡
      一路排下来，主题墙只剩第一行可见。这一屏的内容密度必须让**墙露出第二行**
-     （那是"下面还有"的抓手），否则用户以为只有 5 个主题。 */
+     （那是"下面还有"的抓手），否则用户以为只有 5 个主题。
+     ★ 2026-10-15 撤掉标题下那行说明之后，上面少了一行的量，这个 36px 更宽松了——
+     它**不动**：量出来的数是"墙能露出第二行"的下限判断，不是"刚好卡住" */
   margin: 36px 0 14px;
   font-size: 13px;
   font-weight: 600;
@@ -572,6 +910,13 @@ button.cl__pill:hover {
   margin: 0;
   padding: 0;
   list-style: none;
+  /* ★ 这两条是给**接力**用的（2026-10-16）：从首页环上飞下来的那 12 张
+     要从**输入卡上面**过去。不写的话这一层是 static，而按绘制顺序 static 块画在
+     定位元素（`.cl__card` 是 relative）**下面**——卡片会在输入卡背后消失半秒，
+     而"这 12 张一路看得见"正是那条接力的全部意义（见 lib/theme-handoff.ts）。
+     平时两者不重叠，所以这两条现在是惰性的：它们不改变今天的版面。 */
+  position: relative;
+  z-index: 2;
 }
 
 .cl__theme {
@@ -652,9 +997,35 @@ button.cl__pill:hover {
     animation: none;
   }
 
+  /* 换人不淡入。★ 静止终态就是默认态本身——人照样在场、照样是那个中性站姿，
+     不是"简单地不播"然后停在某一帧上 */
+  .cl__figure img {
+    animation: none;
+  }
+
   .cl__theme,
   .cl__go {
     transition: none;
+  }
+
+  /* "正在想"那口气的**静止终态**：停在一个固定的暗档（0.55），
+     而不是"把动画关掉"——关掉会停在下标的那一帧上，两个请求的按钮亮度还不一样。
+     `aria-busy` 与 `disabled` 照旧说着同一件事，所以静止模式丢的只是那点动 */
+  .cl__optimize[data-busy='true'] .cl__optimize-icon {
+    animation: none;
+    opacity: 0.55;
+  }
+
+  /* 走光那圈。★ 终态**不是"停在下标那一帧"**：两个方片都定在一个固定角度，
+     画面读起来是"这张纸的边上有一处固定的高光"，而不是"动画刚好停在这儿"。
+     ★ 两道光的静止态是**两个**固定高光（35° 与 215°，仍是直径两端）——
+     因为它们本来就在同一条渐变上，冻住角度自然冻住两条，不用各写一份。
+     这与 `character-wall.css` 那条同一个判据：`prefers-reduced-motion` 要的是**少动**，
+     不是**少信息**——框还在、光还在，只是不走了。 */
+  .cl__beam::before,
+  .cl__beam-glow::before {
+    animation: none;
+    transform: rotate(35deg);
   }
 }
 
@@ -667,6 +1038,26 @@ button.cl__pill:hover {
     padding-top: 40px;
   }
 
+  /* 形态那一行：窄屏收窄一点 padding，并把举上去的量减半——
+     这一档 `.cl` 的上内边距只有 40px，举 50 会把它顶进 `.studio` 的 padding 里。
+     ★ `margin-bottom` 必须跟着 `--cl-forms-pull` 走（16 + pull），
+       否则"其他不要动"就在这一档失效了 */
+  .cl__forms {
+    --cl-forms-pull: 34px;
+    margin-bottom: calc(16px + var(--cl-forms-pull));
+  }
+
+  .cl__form {
+    padding: 0 14px;
+  }
+
+  /* 站着的人收掉。★ 与上面那两笔装饰同一理由：这个宽度上标题会折成两三行，
+     卡片上方那块"空天"没了——硬留就是让他的头压在标题字上。
+     换人那颗在侧栏里还在，功能没丢，丢的只是这一屏的一个装饰位 */
+  .cl__figure {
+    display: none;
+  }
+
   .cl__doodle--spark {
     top: -34px;
     left: 0;
@@ -677,14 +1068,20 @@ button.cl__pill:hover {
     bottom: -38px;
   }
 
-  /* 底部那条动作栏会挤成两行：提示语让到上面，两颗按钮靠右 */
-  .cl__bar {
-    flex-direction: column;
-    align-items: stretch;
+  /* 动作栏：两颗图标 + 主按钮在这一档放不下（约 88 + 137 + 间距 > 331 的内容宽），
+     `.cl__bar` 的 `flex-wrap` 会让「开始创作」自己换到第二行、靠右
+     （那一条在主规则里，窄屏不需要补丁）。
+     ★ 这里只把左组那两颗**收紧一点**：40px 在这一档偏肥，36 仍够点得准
+     （手指靶目标的下限是 44 CSS px 那条规矩管的是**主**动作，
+     这两颗是次动作，而且它们的 `title`/可访问名都在） */
+  .cl__tools {
+    gap: 8px;
   }
 
-  .cl__actions {
-    justify-content: flex-end;
+  .cl__optimize,
+  .cl__roll {
+    width: 36px;
+    height: 36px;
   }
 
   /* 主题墙两列。158px 的下限在 375 宽的屏上会掉成一列，

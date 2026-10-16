@@ -2,24 +2,54 @@
  * new-child.css —— 「新建一个小主角」（`NewChild.tsx`）的样式
  *
  * 设计令牌全部来自 globals.css 的 `:root`，这里**一个裸色值都不写**。
- * ★ 本单**没有新增令牌**（与上一刀同一条纪律：新增令牌要改 `:root`，
+ * ★ 本单**没有新增令牌**（与前两刀同一条纪律：新增令牌要改 `:root`，
  *   而那一块正被另一个会话用于首页改版）。
  *
- * 两个入口的"长相"由 `.nc__mode` 承担：它们是**选择**，不是标签，
- * 所以用 `aria-checked` + `data-active`，而不是做成两颗普通按钮。
  * 表单本身的字段样式仍然复用 `.cf__*`（`create-flow.css` 已在 globals 里全局 import）——
  * 同一个"名字/读音/年龄"在两个页面上必须是同一种输入框。
+ * `.cf__pair`（名字与读音并排）也不在这个文件里：发出那个 class 的是共用的
+ * `fields.tsx`，那条规则属于那一层。
+ *
+ * ★ 2026-10-15 这一屏改过两刀，方向相反，都得记下来免得下次又绕回去：
+ *
+ * | 时间 | 结构 | 为什么 |
+ * | --- | --- | --- |
+ * | 上午（用户："太复杂也太乱了"） | 两列 → **一列 760px**，七条锚点折进 `.nc__more` | 三十来个控件挤两列，右列是七个输入框，重心压在"改七句话"上 |
+ * | 下午（用户：左边上传、右边填写） | 一列 → **两栏 1080px**，锚点从折叠里出来 | 分栏的判据变了：现在是**左图右字**，不是左字右锚点。而锚点多半由系统读出来，要能一眼核对 |
+ * | 晚上（用户："怎么这么长啊"） | 提示与标题同行、够宽时锚点排两列、上限 1080 → **1200** | 视口 1080 实测全页 2093 → 1852，一条提示、一个字段都没删 |
+ * | 晚上（用户："放到右上角" / "上传图片不要这么多话"） | 按钮进标题行**右上角**，判据改成"点过之后才出现"；左栏只剩上传控件 + 一行同意 | 删掉的是**常驻**的话（一整列判据、按钮下那句说明、左栏两句解释），内容一句没少 |
+ * | 次日（用户："应该有一个预览的照片"） | `.nc__drop` 里**画选中的那张照片**（`.nc__drop-shot`），`＋` 只在没选时站着 | 文件名认不出选的是哪张；补的是图不是话 |
+ * | 次日（用户划掉那句话："这句话不要，改为分析锚点"） | 同意那句 → **「同意用这张照片分析外貌锚点、画他的第一张形象」** | 原来那句只说"交出去处理这一次"，没回答这次拿它干什么；勾本身留着（服务端的门） |
+ * | 次日（用户划掉整个同意框："这个改为一个按钮『分析锚点』…没有上传按钮为白色"） | 同意勾那一行 → **一颗满宽按钮**（`.nc__analyze`，白底 / 橙底），`.nc__agree` 那几条规则删掉 | 白=还没到第一步，橙=轮到你了；"读锚点"本来就是用户想主动发起的事 |
+ * | 次日（用户圈住上传框与按钮之间那条缝："有点挨的太近了"） | 按钮补 **`margin-top: 12px`**（改前两档实测都是 0） | 两块是两个控件，不是一个控件被切开；12 是这一格原本的节奏，不是新添的数 |
+ *
+ * ★ 于是 `.nc__modes` / `.nc__mode*` / `.nc__more*` / `.nc__consent-points`
+ *   / `.nc__file*` 这几组规则**连同它们在 TSX 里的 JSX 一起删掉了**，
+ *   不是留着不用——留着的话下一个人会以为那还是活的（删掉的判据写在 TSX 那一段的注释里）。
+ *   第七刀删掉的是 `.nc__foot`（页脚整块搬进标题行）与 `.nc__note--quiet`
+ *   （它只在那句被划掉的说明上用过），`.nc__problems` / `.nc__error` 留着，
+ *   换了个位置、也换了排版（见那一段）。
+ *
+ * ★ 出图之后那一屏（`.nc__made` / `.nc__did`）这次**没动**。
  * ========================================================================== */
 
 .nc {
-  max-width: 1080px;
+  /* ★ 1080 → 1200（2026-10-15 第六刀，用户："怎么这么长啊"）。
+     ★ 但要说清楚它**只在大屏生效**：`.nc` 的实际宽度是「视口 − 应用外壳的侧栏」与
+       这个上限里较小的那个。侧栏那一坨实测：视口 1080 → 747、1280 → 931、
+       1440 → 1081、1520 → 1161、1560 → **1200**（到这一档上限才开始绑定，
+       再把视口调大也还是 1200）。所以绑定点是**视口 ≈1560**，不是 1440——
+       这条数是量出来的（`.out/probe-nc-frame.mjs <宽度>` 打 `section.nc` 那一行），
+       原来的注释写的是"≈1440"，那是推的，量完发现差了 120px 视口。
+       也就是说这一屏的"太长了"不是靠加宽解决的——那是提示与标题同行 + 锚点够宽才
+       两列干的（第六刀的主项）。这 120px 换来的东西要到**视口 ≥1560** 才看得到：
+       右栏 665 → 784，两列的每格 321 → 380（两者都放得下，所以它是一条余量，
+       不是那一轮的关键）。同一份数在 `.out/probe-nc-boxes.mjs 1440 1560` 里。
+     旧注释里那条「右栏不到 700 每格只剩 340」的算法漏了侧栏，见下面锚点那一段。 */
+  max-width: 1200px;
   margin: 0 auto;
   padding: 32px 20px 96px;
   color: var(--ink);
-}
-
-.nc__head {
-  margin-bottom: 20px;
 }
 
 .nc__eyebrow {
@@ -37,6 +67,46 @@
   text-decoration: underline;
 }
 
+/* ── 标题行：左边是标题，右上角是出图那颗按钮（2026-10-15 第七刀）────────────
+ * ★ 用户："把这个生成放到右上角"。按钮与它的判据一起住进 `.nc__head-act`，
+ *   于是"这几句话是这颗按钮的判据"这件事由位置本身说明；页脚整块因此没有了。
+ * ★ 窄屏落成一列（按钮在标题下面）：`auto` 那一条轨道放不下按钮时会挤标题，
+ *   而这一屏在窄屏上本来就是一栏。
+ * ★ 不用 `position: absolute` 钉在右上角：那会让按钮脱离文档流，标题长了就压上去，
+ *   而**焦点环与触摸目标**在绝对定位里还得自己再量一遍。 */
+.nc__head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+@media (min-width: 760px) {
+  .nc__head {
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 28px;
+    align-items: start;
+  }
+}
+
+.nc__head-main {
+  min-width: 0;
+}
+
+.nc__head-act {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+@media (min-width: 760px) {
+  .nc__head-act {
+    align-items: flex-end;
+    text-align: right;
+  }
+}
+
 .nc__title {
   font-family: var(--font-serif);
   font-size: clamp(24px, 3.4vw, 32px);
@@ -51,67 +121,34 @@
   line-height: 1.75;
 }
 
-/* ── 两个入口 ───────────────────────────────────────────────────────────── */
-
-.nc__modes {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 10px;
-  margin-bottom: 26px;
-}
-
-@media (min-width: 700px) {
-  .nc__modes {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    max-width: 620px;
-  }
-}
-
-.nc__mode {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-height: 44px;
-  padding: 12px 16px;
-  border: 1px solid var(--dot);
-  border-radius: var(--card-radius);
-  background: var(--card-paper);
-  color: var(--ink);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.nc__mode[data-active='true'] {
-  border-color: var(--accent);
-  /* 选中不只靠颜色：左侧那条竖线在小屏与灰度打印下也看得见 */
-  box-shadow: inset 3px 0 0 var(--accent);
-}
-
-.nc__mode-title {
-  font-size: 15px;
-  font-weight: 600;
-}
-
-.nc__mode-hint {
-  color: var(--ink-muted);
-  font-size: 12.5px;
-  line-height: 1.6;
-}
-
-/* ── 表单两栏 ───────────────────────────────────────────────────────────── */
-
+/* ── 两栏：左图右字 ───────────────────────────────────────────────────────
+ * ★ 2026-10-15：判据是"这一栏回答的是哪一类问题"。左边回答**他的样子从哪来**
+ *   （一张照片，或者没有照片就按右边的描述画），右边回答**他是谁**。
+ *   左栏是固定宽度（它装的是一个上传框，宽了也只是空着），右栏吃掉剩下的。
+ * ★ 窄屏落成一栏，**上传区在上**：它是那条路的第一步，先看图再填字才顺。
+ *   这条顺序不是靠 CSS 的 `order` 摆出来的——DOM 里左栏本来就在前面。 */
 .nc__body {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 28px;
+  gap: 26px;
 }
 
-@media (min-width: 880px) {
+@media (min-width: 980px) {
   .nc__body {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+    grid-template-columns: 340px minmax(0, 1fr);
+    gap: 36px;
     align-items: start;
   }
+}
+
+.nc__form {
+  display: grid;
+  gap: 26px;
+  min-width: 0;
+}
+
+.nc__sec {
+  min-width: 0;
 }
 
 .nc__h2 {
@@ -131,83 +168,237 @@
   font-weight: 600;
 }
 
-.nc__note--quiet {
-  margin-top: 10px;
-  font-size: 12.5px;
+/* ── 七条锚点：够宽才排两列 ───────────────────────────────────────────────
+ * ★ 这是这一屏最长的一段（改前实测 782px，占全页 2046 的 38%）：七格 × (标题
+ *   一行 + 提示一行 + 输入框 + 间距)。提示与标题同行 + 两列之后掉到 334。
+ *
+ * ★ **用容器查询，不用视口断点**。上一版写的是 `@media (min-width: 1100px)`，
+ *   那条推导是错的、也是我这次实测抓出来的：它按「右栏 = 视口 − 40 内边距 − 340
+ *   左栏 − 36 栏间距」算，**漏了应用外壳那条侧栏**（实测它占 ~349–360px）。
+ *   错的后果不是"不够漂亮"，是**每一格都放不下值**：
+ *     视口 1100 → 右栏实测 349，两列每格 163，七条示例值溢出 24–98px（全被切）；
+ *     视口 1440 → 右栏实测 665，两列每格 321，一条都不切。
+ *   判据问的本来就是"这一栏有多宽"，所以让它去量自己那一栏。
+ *   （支持面：容器查询自 2023 年在三家都是基线，本项目只跑桌面 Chrome。）
+ *
+ * ★ 阈值 500 的来路（复现：`.out/probe-nc-width.mjs` 打印每格的 `scrollWidth −
+ *   clientWidth`）：最长的**非**常服示例值是「黑发偏软，左侧总有一撮翘起来」210px，
+ *   加输入框左右内边距 24 → 每格 ≥234；两列再加 24 的栏间距 → 容器 ≥492，取 500。
+ *   低于它宁可长、不可挤（与 `.cf__pair` 窄屏落回一列是同一条判断）。
+ *
+ * ★ `.cf__card-form` 在 `fields.tsx` 里是个没有任何样式的钩子，所以这一段
+ *   只作用在 `/character/new`：创作流那一步的七格一个字都没动。 */
+.nc__anchors {
+  container-type: inline-size;
 }
 
-/* ── 照片那一格 ─────────────────────────────────────────────────────────── */
+.nc__anchors .cf__card-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0 24px;
+}
+
+@container (min-width: 500px) {
+  .nc__anchors .cf__card-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* 最后两格独占一行：**常服**与**补充**。
+     ★ 规则原来是 `:last-child`（只有常服），注释里写着"往里加槽位时先回头看一眼这条还成不成立"——
+       2026-10-16 加第八格「补充」时，它就不成立了：`:last-child` 落到「补充」身上，
+       而**常服会掉回半格**，那句「芥黄短袖 + 深蓝短裤 + 一双红雨鞋」实测 235px 在 245px 的
+       格子里可视只有 221px，溢出 16px（这是原注释里量过的数）。
+       所以改成"最后两格"，并且**两格都要独占**：常服是一条"一整套衣服"，
+       补充是家长自己写的、**长度没有上限**（只有 `checkAnchors` 那条 80 字）。
+       选位置而不是选槽位名，是因为 `AnchorFields` 不为槽位打标记；
+       真到第三格也要独占的那天，这条规则要再回来看一次。 */
+  .nc__anchors .cf__card-form > .cf__field:nth-last-child(-n + 2) {
+    grid-column: 1 / -1;
+  }
+}
+
+/* 两列之后格子矮了，格间留白跟着收一档（18 → 14），否则省下来的高度又还回去 */
+.nc__anchors .cf__field {
+  margin-bottom: 14px;
+}
+
+.nc__anchors .cf__field-hint--inline {
+  /* 与标题同一行时的间距由 `.cf__label` 的 gap 给（8px），这里不再加 */
+  color: var(--ink-muted);
+}
+
+/* ── 左栏：上传照片 ─────────────────────────────────────────────────────── */
 
 .nc__photo {
-  margin-top: 30px;
   padding: 20px 18px;
   border: 1px solid var(--dot);
   border-radius: var(--card-radius);
-  background: var(--surface);
-}
-
-/* 三条承诺逐条列出来，不是一行灰字。它们是**同意框的内容**，所以给它正常字号 */
-.nc__consent-points {
-  margin: 0 0 14px;
-  padding-left: 20px;
-  font-size: 14px;
-  line-height: 2;
-  color: var(--ink-soft);
-}
-
-.nc__agree {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  min-height: 44px;
-  padding: 10px 12px;
-  border: 1px solid var(--dot);
-  border-radius: var(--card-radius);
   background: var(--card-paper);
-  font-size: 14px;
-  line-height: 1.7;
+}
+
+/* 上传区。★ 是 `<label>` 而不是 `<button>`：点它等于点里面那个真 input，
+   于是"键盘能到、读屏念得出是文件选择"这两件事不用自己实现。
+   ★ 也不做拖放（理由写在 TSX 那一段）。 */
+.nc__drop {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  /* 132px：比一颗按钮高得多，因为它是这一栏的主控件；也是拖放的落点大小 */
+  min-height: 132px;
+  padding: 18px 14px;
+  border: 1px dashed var(--dot);
+  border-radius: var(--card-radius);
+  background: var(--surface);
+  color: var(--ink-muted);
+  font-size: 13.5px;
+  line-height: 1.6;
+  text-align: center;
   cursor: pointer;
 }
 
-.nc__agree input {
-  margin-top: 3px;
-  width: 18px;
-  height: 18px;
-  accent-color: var(--accent);
-  flex: none;
+.nc__drop:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
-.nc__file {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+/* ★ 真正的 input 藏起来但**不 `display: none`**：display:none 的 input 拿不到焦点，
+   键盘用户就再也开不了这个文件选择框。1px + opacity:0 是能收焦点的藏法，
+   焦点环由下面 `:focus-within` 画在 label 上（input 自己看不见，环画上看不见的东西等于没画） */
+.nc__drop input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.nc__drop:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.nc__drop[data-chosen='true'] {
+  border-style: solid;
+  border-color: var(--accent);
+  color: var(--ink);
+  background: var(--card-paper);
+}
+
+.nc__drop-plus {
+  font-size: 22px;
+  line-height: 1;
+  color: var(--accent);
+}
+
+/* ── 选了照片之后：框里画那张照片本身（2026-10-16）─────────────────────────
+ * ★ 在这之前这一栏只写一行文件名（「【哲风壁纸】冲锋衣-吸烟 - 副本.png · 0.4 MB」），
+ *   而那行字**认不出选的是哪张**——上一刀把说明文字删到只剩它，等于把"看到了什么"
+ *   也一起删掉了。所以补的是**图**，不是话；文件名留着，它是"选的是哪个文件"的凭据。
+ * ★ 只给 max-*：**不上采样**——一张 60px 的小图铺满 300px 只会更糊，
+ *   而手机拍的原图本来就比这一栏宽，两个上限一起就把它按比例收进来了。
+ * ★ `contain` 是保险：万一盒子与图的比例对不上，宁可留边也不切脸。 */
+.nc__drop-shot {
+  display: block;
+  max-width: 100%;
+  /* 240px：竖版手机照片（3:4）在这一档量到 180×240 —— 够看清是谁。
+     ★ 宁可**两侧留白也不裁**（于是不用 `aspect-ratio` + `cover`）：这一栏是让人
+       核对"我选的是不是这张"的，裁掉一条边就可能把"选错了"这件事一起裁掉。
+     （左栏是固定 340px，所以这一档在 980px 以上的任何视口都一样大。） */
+  max-height: 240px;
+  object-fit: contain;
+  border-radius: var(--card-radius);
+  background: var(--card-paper);
+}
+
+.nc__drop-text {
+  /* 文件名可能很长，不许撑破这一栏 */
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+/* 状态行：选了没有 / 在读 / 读到了 / 读不了 都用这一条 */
+.nc__photo-state {
+  margin: 12px 0 0;
+  color: var(--ink-muted);
+  font-size: 12.5px;
+  line-height: 1.8;
+}
+
+/* 「去掉这张照片」在第七刀之后常常**独占**这一行（它上面那句"会照着这张照片画他的
+   形象"被划掉了）。`.nc__link` 的 `margin-left` 是给"跟在句子后面"用的，
+   独占一行时会平白缩进 6px。 */
+.nc__photo-state > .nc__link:only-child {
+  margin-left: 0;
+}
+
+/* ★ "读不了"用 `--danger`，"读到了"用正常字色——两者不能只差一句话。
+   `data-tone` 由 TSX 给（`readNote.tone`）。 */
+.nc__photo-state[data-tone='bad'] {
+  color: var(--danger);
+}
+
+/* ── 「分析锚点」那颗按钮（2026-10-16 第十刀，用户："这个改为一个按钮『分析锚点』…
+      上传图片之后按钮变为橙色，没有上传按钮为白色"）────────────────────────────
+ * ★ 它替掉了原来那一行同意勾（`.nc__agree` 那几条规则**删掉了**，不是留着不用——
+ *   留着下一个人会以为它还是活的）。判据是 `data-ready`，也就是**有没有照片**：
+ *   没照片 → 白底（`--surface`，与空态上传框同一块白）；有照片 → 橙底（`--accent`）。
+ *   这两色是"还没到你 / 轮到你了"，不是"禁用 / 可用"——所以不做 `:disabled`
+ *   （第七刀的教训：锁死的按钮解释不了自己为什么点不动），没照片时按了当场说一句人话。
+ * ★ 满宽：它是这一栏（左栏）的主动作，与上面那个上传框同宽才读得出"先上图、再读"的顺序。
+ * ★ 底色过渡只有 180ms：它是一次状态变化，不是装饰；`prefers-reduced-motion` 下
+ *   照旧要有**静止终态**（见文件末那一段），所以那里把它关掉而不是不画。
+ * ★ 两条规则都写成 `.nc__btn.nc__analyze`（两位类名）**不是啰嗦**：`.nc__btn` 定义在
+ *   这个文件的后面，而它写着 `background: transparent`——单类名会**被它盖掉**，
+ *   于是"白底"那一档实测是透明的（探针抓到的就是这个：`rgba(0,0,0,0)`）。
+ *   顺带把 `margin-right: 0` 也一起盖住 `.nc__btn` 的 10px（那是给并排两颗按钮留的）。
+ *
+ * ★ `margin-top: 12px`（2026-10-16 第十一刀，用户："有点挨的太近了"，截图圈住那条缝）。
+ *   改前实测**两档都是 0**（`.out/probe-analyze-gap.mjs 1080`）：没照片时中间一个元素都没有，
+ *   两块的 margin 直接对上；有照片时中间那行「去掉这张照片」只给了自己上面 12、下面没给，
+ *   于是按钮照样贴着它。12 不是随手挑的——**这一格里控件之间的距离就是一个数**
+ *   （`.nc__h2` 的下边距、`.nc__photo-state` 的上边距都是 12），量出来对齐它，
+ *   而不是新添一个 14。 */
+.nc__btn.nc__analyze {
+  width: 100%;
+  margin-right: 0;
   margin-top: 12px;
-  font-size: 14px;
+  background: var(--surface);
+  transition:
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease;
 }
 
-/* ★ 没勾同意时连文件都选不了（`disabled`），所以要有一个看得出来的"不能碰" */
-.nc__file input:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
+.nc__btn.nc__analyze[data-ready='true'] {
+  border-color: transparent;
+  background: var(--accent);
+  color: var(--bg);
 }
 
-.nc__file-text {
-  color: var(--ink-muted);
-  font-size: 13px;
-}
+/* ── 判据、错误、按钮（2026-10-15 第七刀起，它们都住在右上角 `.nc__head-act` 里；
+ *    原来那一块是页脚 `.nc__foot`，连同"会用你填的模型画一张标准像…"那句一起没了）── */
 
-/* ── 底部：判据、错误、按钮 ─────────────────────────────────────────────── */
-
-.nc__foot {
-  margin-top: 30px;
-}
-
+/* ★ 判据只在小主角**点过按钮之后**才出现（TSX 里的 `tried`）。三条与旧的那份不同，
+   都是位置换来的：① 没有列表符——右对齐的一列 "•" 会飘在句子右边，看着像排版坏了；
+   ② 小一档、右对齐：它是这颗按钮的判据，不是整页的公告；
+   ③ 上边距 0：与按钮之间那 10px 由 `.nc__head-act` 的 `gap` 给。 */
 .nc__problems {
-  margin: 0 0 14px;
-  padding-left: 20px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
   color: var(--ink-muted);
-  font-size: 13px;
-  line-height: 1.9;
+  font-size: 12.5px;
+  line-height: 1.8;
+}
+
+/* 右上角那颗按钮：`.nc__btn` 的 `margin-right` 是给页脚里并排两颗按钮留的，
+   在这里只会让它离右边框差 10px；`nowrap` 是防止 `auto` 那条轨道把它折成两行。 */
+.nc__head-act .nc__btn {
+  margin-right: 0;
+  white-space: nowrap;
 }
 
 .nc__btn {
@@ -248,7 +439,7 @@
 }
 
 .nc__error {
-  margin: 0 0 14px;
+  margin: 0;
   color: var(--danger);
   font-size: 13px;
   line-height: 1.7;
@@ -315,11 +506,13 @@
 
 @media (prefers-reduced-motion: reduce) {
   /* 这一屏没有位移类动效，显式说清"没有"：谁在这里加一条过渡，
-     都得先看一眼这一段（README §五：静止终态不是「不播」） */
-  .nc__mode,
+     都得先看一眼这一段（README §五：静止终态不是「不播」）。
+     ★ 名单里原来有 `.nc__mode`（那两张入口卡）与 `.nc__agree`（同意勾），
+     它们随 JSX 一起删掉了；`.nc__analyze` 要写两位类名才盖得住上面那条过渡 */
+  .nc__drop,
   .nc__btn,
-  .nc__link,
-  .nc__agree {
+  .nc__btn.nc__analyze,
+  .nc__link {
     transition: none;
   }
 }

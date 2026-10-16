@@ -98,11 +98,8 @@
   background: var(--card-paper);
 }
 
-.cd__art-meta {
-  margin: 10px 0 0;
-  color: var(--ink-muted);
-  font-size: 13px;
-}
+/* ★ 2026-10-16：图下方那行 `.cd__art-meta`（`第 N 版 · 模型 · 现在用它`）与它的样式
+   **一起删了**（用户："花❌的地方不要"）。版本号在头部那句与版本历史里都有，模型名没有别的用处 */
 
 /* 这一版照着哪句话改的。★ 它不是"说明"，是**这一版的出处**，所以给它一条左侧竖线 */
 .cd__art-note {
@@ -313,10 +310,34 @@
   line-height: 1.7;
 }
 
-/* ── 锚点清单 ───────────────────────────────────────────────────────────── */
+/* ★ 这两条现在挂在右栏**顶上**（四个动作共用，见 ChildDetail.tsx 文件头第 6 条），
+   于是成了 `.cd__right` 的直接子元素。而 `.cd__right` 是 `gap: 20px` 的纵向 flex——
+   它们自己那条 `margin: 10px 0 0`（当初写在卡片里的时候写的）到这里会再叠一层，
+   顶上凭空多出 10px。只在这一处清掉它，不去动 `.cd__error` / `.cd__notice` 本身：
+   它们仍然可能在卡片内部被用（删除那一节就是） */
+.cd__right > .cd__error,
+.cd__right > .cd__notice {
+  margin-top: 0;
+}
 
+/* ── 改基础信息（用户 2026-10-15 提的第 5 条） ────────────────────────────── */
+
+/* 那五格字段是**直接复用** `creation/fields.tsx` 的 `ChildFields`
+   （`/character/new` 那一屏用的是同一份），class 仍是 `cf__*`，
+   样式来自全局 import 的 `create-flow.css`。这里只补一处这一屏特有的收尾，
+   不重写字段自己的长相——重写的那天，两个入口的同一种输入框就会长成两种样子。
+   ★ `.cf__field` 自带 `margin-bottom: 18px`，而它后面接的是那句实话（`.cd__hint`，
+   自带 12px 上边距）：不清掉就是 30px 的空隙，把"这一格在说什么"与"改完会怎样"分开两段读 */
+.cd__card > .cf__field:last-of-type {
+  margin-bottom: 0;
+}
+
+/* ── 锚点清单 ───────────────────────────────────────────────────────────── */
+/* ★ 2026-10-16：这张卡现在**只有这一张表**了——标题与底下那段解释都删了
+   （用户："花❌的地方不要"），所以底边距从 `0 0 12px` 收成 0：
+   那 12px 原来是给下面那段话留的，留着就是卡片底部一段说不出来由的空白 */
 .cd__anchors {
-  margin: 0 0 12px;
+  margin: 0;
 }
 
 .cd__anchor {
@@ -342,21 +363,9 @@
   color: var(--ink-soft);
 }
 
-.cd__foot {
-  margin: 0;
-  color: var(--ink-muted);
-  font-size: 12px;
-  line-height: 1.8;
-}
-
-.cd__foot code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.95em;
-  padding: 1px 5px;
-  border-radius: 4px;
-  background: rgba(var(--accent-rgb), 0.09);
-  color: var(--ink-soft);
-}
+/* ★ 2026-10-16：`.cd__foot`（`画图用的是 <模型>。换模型在右上角的「模型与密钥」。`）
+   与它的样式一起删了（用户："花❌的地方不要"）。换模型的路没丢：侧栏那颗一直在，
+   没配模型时「再画一版」那张卡底下还有一句带按钮的实话 */
 
 /* ── 删除（工单 03 第三刀） ─────────────────────────────────────────────── */
 
@@ -366,6 +375,12 @@
   margin-top: 40px;
   padding-top: 20px;
   border-top: 1px solid var(--dot);
+  /* ★ `#delete` 是**角色卡上那颗「删掉他」的落点**（`/character/<id>#delete`）。
+     不留这一条的话，跳过来这一节会正好贴在视口顶边——它的上边框与"删除"那两个字
+     会被当成页面的开头，而它上面其实还有一整个孩子的形象与版本历史。
+     这一屏**没有悬浮顶栏**（`app-shell.css` 的 sticky 只挂在左侧栏上），
+     所以这是一个"留一口气"的值，不是"补一个 header 的高度"——两回事，别照抄别处的 64px。 */
+  scroll-margin-top: 24px;
 }
 
 .cd__danger-quiet {

@@ -25,7 +25,7 @@ import { EngineError } from './errors.ts'
 import type { BookForm, StoryTree } from './domain.ts'
 import { buildTree, type TreeProblem } from './tree.ts'
 import type { EngineEventPayload } from './events.ts'
-import type { TextGenerator } from './providers/types.ts'
+import type { TextDelta, TextGenerator, TextRequest } from './providers/types.ts'
 
 export type PlanOutcome = {
   tree: StoryTree
@@ -47,6 +47,19 @@ export type PlanOptions = {
    * 常规路径上预算由适配器按模型决定。
    */
   maxTokens?: number
+  /**
+   * 流式增量（工单 07）。**给了它就走 `stream()`，不给就走 `complete()`**。
+   *
+   * ★ 默认不给，是刻意的：脚本、横评、测试里的每一次规划调用都与加了这条路之前
+   *   **逐字节相同**（同一条纪律见 `TextRequest.plainText` 的注释）。
+   *   流式是**界面要的东西**，不是引擎的新默认——把它设成默认，等于让每一次跑测
+   *   都换一条没量过的 HTTP 路径。
+   * ★ 重试时也会走流式（第二次起带着上一轮的问题重发）：界面看到的是"这一版又写了一遍"，
+   *   而 `seq` 仍是发射顺序，所以两条流的 delta 不会串。
+   */
+  onDelta?: (delta: TextDelta) => void
+  /** 流式的**空闲**超时（多久没有新 delta 算失败）。见 http.ts 的 DEFAULT_SSE_IDLE_TIMEOUT_MS */
+  idleTimeoutMs?: number
   emit: (payload: EngineEventPayload) => void
 }
 
@@ -58,7 +71,7 @@ export async function planStory(input: StoryPlanInput, opts: PlanOptions): Promi
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     opts.emit({ kind: 'stage', stage: 'planning', phase: 'begin', attempt, total: maxAttempts })
 
-    const response = await opts.text.complete({
+    const request: TextRequest = {
       system: storyPlanSystem(),
       // 第二次起，把上一轮的具体问题贴回去。这是通过率的决定因素之一
       user: attempt === 1 ? baseUser : withFeedback(baseUser, failures),
@@ -69,7 +82,17 @@ export async function planStory(input: StoryPlanInput, opts: PlanOptions): Promi
       //   正文一个字都不写（见 openai-text.ts 的 DEFAULT_TEXT_MAX_TOKENS）。
       //   谁最清楚该给多少？适配器——它知道自己在跟哪个模型说话。
       maxTokens: opts.maxTokens,
-    })
+    }
+    // ★ 这里**不写 `opts.text.stream &&`** 那种兜底：`stream` 在接口上是必填的
+    //   （见 types.ts 里那段理由），写一个 "有就用、没有就算了" 的判断，
+    //   等于把"必填"退回成一个建议——而它一旦真的缺失，症状是"界面上什么都没发生"
+    const response = opts.onDelta
+      ? await opts.text.stream(
+          request,
+          opts.idleTimeoutMs === undefined ? {} : { idleTimeoutMs: opts.idleTimeoutMs },
+          opts.onDelta,
+        )
+      : await opts.text.complete(request)
 
     const draft = parseWith(planDraftCodec, response.text)
     if (!draft.ok) {

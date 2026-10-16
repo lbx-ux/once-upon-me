@@ -1,0 +1,349 @@
+/* ============================================================================
+ * booklist-reader.css —— 灵感书单那 12 本样书的阅读器（`BooklistReader.tsx`）
+ *
+ * 与组件同名同目录，在 `app/globals.css` 里 `@import`。
+ *
+ * ★ 为什么不与 `reader/reader-book.css` 共用一套类名（那边是 `/reader/[bookId]`）：
+ *   那边每一面装的是一整页（方形插画在上 75%、正文在下 25%），这边装的是
+ *   **一张 3:2 跨页图的半幅 + 叠在左页下角的正文**。两者的叶几何确实同源
+ *   （都来自 `book/flip.ts` 与首页第二屏），但"面里装什么"不一样，共用类名就会互相串
+ *   ——`reader-book.css` 文件头第 3 条写的就是这件事。把公共层抽出来要动一张已经
+ *   在用的表（约 60 行），收益低于回归风险，所以这里**另起一套 `.blr__*`**，
+ *   并把两处真正共用的算术留在 `flip.ts` 里（那才是它该在的地方）。
+ *
+ * ★ 类名是缩写不是随便取的：`blr` = booklist reader，`blw` = booklist wall。
+ *   两张表都是全局引入的，前缀必须一眼区分得开。
+ * ========================================================================== */
+
+.blr {
+  padding: 20px 0 48px;
+}
+
+/* 舞台就是一整本书翻开的样子：宽 = 2 × 页宽（每页 3:4），合起来正好 3:2 ——
+   **一张跨页图铺满两页**，这也是出图时那条"主体不许压在水平 46%–54%"的来源。
+   三条宽度上限取最小的，与 `/reader` 那台同一组数：观感一致，改一处要看另一处。 */
+.blr__stage {
+  position: relative;
+  width: min(1120px, 96vw, 108vh);
+  aspect-ratio: 3 / 2;
+  margin: 0 auto;
+  outline: none;
+}
+
+.blr__stage:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 8px;
+  border-radius: var(--card-radius);
+}
+
+/* perspective-origin 落在书的中点上，叶的 transform-origin 也落在那里：
+   转轴与灭点重合才不会"斜着翻" */
+.blr__book {
+  position: absolute;
+  inset: 0;
+  perspective: 2400px;
+  transform: translateX(calc(-1 * var(--book-x, 25%)));
+}
+
+.blr__leaf {
+  position: absolute;
+  left: 50%; /* 书脊 */
+  top: 0;
+  width: 50%;
+  height: 100%;
+  transform-origin: left center;
+  transform-style: preserve-3d;
+  transform: rotateY(var(--leaf-angle, 0deg));
+  z-index: var(--leaf-z, 1);
+}
+
+.blr__face {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  backface-visibility: hidden;
+  border-radius: 2px;
+  box-shadow: 0 2px 7px rgba(19, 19, 28, 0.1);
+  /* 纸色：图没到位时露出来的那一层，不是白。用的是**相纸**的暖色 ——
+     "冷的是光，暖的是物件"，一张待印的画纸属于物件那一侧 */
+  background-color: var(--card-paper);
+  background-repeat: no-repeat;
+  background-position: 50% 50%;
+  background-size: cover;
+}
+
+/* 背面自己绕自己的中心转 180°，所以翻到左边之后它的局部左边落在左页外缘、
+   局部右边落在书脊——图不用镜像，但**明暗渐变要镜像**（下面那层 shade） */
+.blr__face--back {
+  transform: rotateY(180deg);
+}
+
+/* 跨页的两个半页：同一张 3:2 的图挂两次，各取一半。
+   3:2 铺进 3:4 的页面（宽 200%、高 100%）正好是原比例，不拉伸也不裁 */
+.blr__face[data-half='left'] {
+  background-size: 200% 100%;
+  background-position: 0 0;
+}
+
+.blr__face[data-half='right'] {
+  background-size: 200% 100%;
+  background-position: 100% 0;
+}
+
+/* 纸感全靠这一层：shade = sin(θ)，平放时恰好 0、立起来时 1（`flip.ts` 把两端点钉死） */
+.blr__shade {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(to right, rgba(30, 22, 12, 0.32), rgba(30, 22, 12, 0) 54%);
+}
+
+/* ── 叠在左页下角的正文 ─────────────────────────────────────────────────── */
+
+/* 与首页第二屏同一个处理：字压在一条纸色渐变上，而不是直接压在画上。
+   判据是"字必须读得清"，而水彩的下角正好是草地与野餐垫那种中明度区。
+   ★ 宽度 86%、字号上限 18px 是**量出来的**，不是挑的：一本样书的正文是 2–3 行、
+   每行 ≤ 22 字（`booklist.test.ts` 摁着），在 1920 视口下舞台封顶 1120px、
+   左页 560px，文字块可用宽度 =(0.86−0.17)×560 ≈ 386px，18px 一行正好装 21 字。
+   两者一起定，才能保证"三行就是三行"，不会折成五六行、把左页下角吃掉一半。 */
+.blr__text {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  max-width: 86%;
+  padding: 12% 8% 7% 9%;
+  background: linear-gradient(
+    to top,
+    rgba(255, 253, 247, 0.94) 0%,
+    rgba(255, 253, 247, 0.8) 46%,
+    rgba(255, 253, 247, 0) 100%
+  );
+}
+
+.blr__text p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-family: var(--font-serif);
+  font-size: clamp(13px, 1.02vw, 18px);
+  line-height: 1.72;
+  letter-spacing: 0.01em;
+}
+
+/* ── 缺图的那一跨页 / 还没有封面 ────────────────────────────────────────── */
+
+/* 一张写着"为什么这里没有画"的纸：不留裂图，也不留空框（CLAUDE.md「不糊弄」）。
+   emoji 是兜底的那一档，与书里选择点图标同一套做法 */
+.blr__missing {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--ink-muted);
+  font-size: 12.5px;
+  letter-spacing: 0.02em;
+}
+
+.blr__glyph {
+  font-size: 30px;
+  line-height: 1;
+  opacity: 0.4;
+}
+
+.blr__missing-no {
+  font-family: var(--font-serif);
+  font-size: 14px;
+  color: var(--ink-soft);
+}
+
+/* ── 封面与封底 ─────────────────────────────────────────────────────────── */
+
+/* 封面：3:4 的封面装进 3:4 的页面，一比一，不裁（`background-size: cover` 在
+   `.blr__face` 上已经写好了，两边同比例所以这一步是恒等变换） */
+.blr__cover {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12% 10% 9%;
+  background: linear-gradient(
+    to top,
+    rgba(255, 253, 247, 0.94) 0%,
+    rgba(255, 253, 247, 0.72) 40%,
+    rgba(255, 253, 247, 0) 78%
+  );
+}
+
+.blr__title {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: clamp(19px, 1.9vw, 30px);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.blr__hint {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--ink-muted);
+}
+
+.blr__back {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 10%;
+  text-align: center;
+}
+
+.blr__back-line {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: clamp(20px, 2vw, 30px);
+  color: var(--ink);
+}
+
+.blr__back-sub {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--ink-muted);
+}
+
+/* ── 页码、进度、朗读 ───────────────────────────────────────────────────── */
+
+.blr__bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.blr__btn {
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--dot);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.blr__btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.blr__readout {
+  margin: 0;
+  font-size: 14px;
+  min-width: 14ch;
+  text-align: center;
+}
+
+.blr__total {
+  color: var(--ink-muted);
+}
+
+/* 朗读做成**药丸形**而不是圆形：它带字，与左右两个只有箭头的圆钮不是一类东西 */
+.blr__audio {
+  padding: 8px 14px;
+  border: 1px solid var(--dot);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/* 正在放：用强调色描边，不换底色——纸感页面上多一块深色块反而更吵 */
+.blr__audio[aria-pressed='true'] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.blr__audio:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* 键盘聚焦要看得见：这一屏的翻页是键盘主路径，朗读钮也在同一条路径上 */
+.blr__audio:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.blr__progress {
+  width: min(320px, 60vw);
+  height: 2px;
+  margin: 14px auto 0;
+  background: var(--dot);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.blr__progress i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.blr__meta {
+  margin: 16px 0 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+/* "这本书为什么没有朗读"那句，比上面那行**更醒目一点**：它是需要被读到的话 */
+.blr__meta--note {
+  color: var(--ink-soft);
+}
+
+/* ── 静止模式 ───────────────────────────────────────────────────────────── */
+
+/* ★ 不是"不翻页"，是**不播补间**、直接落在目标页上（组件里那半 matchMedia 管这件事）。
+   这一条与组件是同一件事的两半：少了任何一半，就会出现"少了一点动画"的中间态。
+   `data-motion` 留给开发期核对，也让日后想说清"现在是哪一档"时有个可查的钩子 */
+.blr[data-motion='reduced'] .blr__btn,
+.blr[data-motion='reduced'] .blr__audio {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .blr__btn,
+  .blr__audio {
+    transition: none;
+  }
+}
+
+/* 竖屏手机：两页并排装不下，舞台按宽度撑满。★ 这时"一跨页一张图"不变 ——
+   半幅各自还是一个书页，只是整本书变小了，不是把跨页改成两页 */
+@media (max-width: 640px) {
+  .blr__stage {
+    width: 94vw;
+  }
+
+  .blr__text {
+    max-width: 92%;
+    padding: 9% 7% 5% 7%;
+  }
+
+  .blr__bar {
+    gap: 10px;
+  }
+}

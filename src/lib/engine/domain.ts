@@ -108,10 +108,36 @@ export type ChildProfile = {
  * 会随页变化的东西（姿势、表情、场景、光线）一律不许进这张表，
  * 它们属于画面 prompt 的页级部分。
  */
-export const ANCHOR_SLOTS = ['bone', 'eyes', 'hair', 'build', 'skin', 'mark', 'wardrobe'] as const
+export const ANCHOR_SLOTS = [
+  'bone',
+  'eyes',
+  'hair',
+  'build',
+  'skin',
+  'mark',
+  'wardrobe',
+  /**
+   * ★ 第八格（2026-10-16，用户："这应该有一个补充，家长可以对孩子的外貌再进行补充"）。
+   *
+   * 加它的时候**没有新造第二套机制**：补充就是一条锚点，只是槽位是"别的"。
+   * 于是它自动跟着现有的每一条路走——归一化的顺序、卡上的存储、`promptFragmentOf`
+   * 拼出的角色段、每一页的画面 prompt、指纹——一处都不用另写。
+   *
+   * ★ 它是**软锚点**（见 `ANCHOR_STRENGTH`），所以：
+   *   - 空着**完全合法**：`normalizeAnchors` 丢空值、`checkAnchors` 只报硬锚点的空值、
+   *     `REQUIRED_SLOTS` 里没有它——**已建好的七格卡一张都不会因此失效**；
+   *   - 预填值是**空的**（见 `default-anchors.ts`）：补充是家长自己加的东西，
+   *     给一个示例值等于往每张新卡里塞一条没人写过的特征。
+   *
+   * ★ 它排在**最后**：槽位声明序就是 prompt 里角色段的顺序、也是表单里格子的顺序。
+   *   表单那边有一条按位置写的 CSS（最后两格独占一行，见 `new-child.css`），
+   *   那条注释当时就提醒过"往里加槽位时先回头看一眼"——这一刀照做了。
+   */
+  'extra',
+] as const
 export type AnchorSlot = (typeof ANCHOR_SLOTS)[number]
 
-/** 槽位的中文名，只给人看（日志与角色卡编辑器 UI），不进 prompt */
+/** 槽位的中文名（角色卡编辑器 UI 与画面 prompt 的角色段都用它） */
 export const ANCHOR_LABELS: Record<AnchorSlot, string> = {
   bone: '骨相',
   eyes: '眼睛',
@@ -120,6 +146,8 @@ export const ANCHOR_LABELS: Record<AnchorSlot, string> = {
   skin: '肤色',
   mark: '特征记号',
   wardrobe: '常服',
+  /** 家长自己写的那些"别的"（见 `ANCHOR_SLOTS` 里那一段） */
+  extra: '补充',
 }
 
 /**
@@ -137,6 +165,8 @@ export const ANCHOR_STRENGTH: Record<AnchorSlot, 'hard' | 'soft'> = {
   skin: 'hard',
   mark: 'soft',
   wardrobe: 'soft',
+  /** 补充是家长自己加的东西，**空着是常态**——它绝不能是硬锚点（见 `ANCHOR_SLOTS`） */
+  extra: 'soft',
 }
 
 export type CharacterAnchor = {
@@ -144,6 +174,45 @@ export type CharacterAnchor = {
   /** 中文描述，会被原样拼进画面 prompt 的"角色段" */
   value: string
 }
+
+/**
+ * **从照片能读出来的槽位**：`ANCHOR_SLOTS` 去掉 `extra`（补充）。
+ *
+ * ★ 2026-10-16 加第八格时顺手立了这一条，理由是那一刀踩到的**同一个坑**：
+ *   "读照片"与"表单"两边各写一份槽位表，于是第八格一加进来，
+ *   读照片那条路就去读一个**不该它读**的格子（提示词里"要读的槽位"列了八个、
+ *   而 JSON 范例只有七个，模型只能自己猜），而界面那边又会把"补充没读出来"
+ *   报给家长——可它本来就没人去读。
+ * ★ 为什么补充**不该**被读：它是**家长自己写的那一句**（用户原话："家长可以对孩子的
+ *   外貌再进行补充"）。让模型去填它，等于把"家长补一句"变成"模型猜一句"，
+ *   而这一格的存在意义恰恰是"系统没覆盖到的地方由人来补"。
+ * ★ 判据只有一处（这里），读照片适配器与 `/character/new` 那一屏都从这里取。
+ */
+export const READ_SLOTS: readonly AnchorSlot[] = ANCHOR_SLOTS.filter((slot) => slot !== 'extra')
+
+/**
+ * 外貌标签（工单 03 第二刀从 `creation/fields.tsx` 搬到这里，2026-10-15）。
+ *
+ * ★ 它为什么是**领域词汇**而不是界面选项：`childWordOf`（`creation/state.ts`）
+ *   拿这几个词推断称呼，而那个称呼会进 prompt 决定模型画男孩还是女孩——
+ *   也就是说这几个字符串**已经**是领域规则的一部分，只是住在界面那一层。
+ *   搬过来的直接理由：视觉模型读照片之后要给"看出来哪些标签"，
+ *   而**判据得与表单是同一份**（各写一份的坏法是"模型说短发、表单里没有短发这个选项"）。
+ * ★ 别随手加语义不清的：`childWordOf` 靠 马尾/辫子/裙子/短发/球衣 这几个词分档。
+ */
+export const LOOK_TAGS = [
+  '短发',
+  '圆脸',
+  '爱笑',
+  '戴眼镜',
+  '马尾',
+  '小酒窝',
+  '高个',
+  '瘦小',
+] as const
+
+/** 兴趣标签。只在表单与故事里用，不进 prompt 的角色段——放在这里是为了与外貌标签同一处 */
+export const INTEREST_TAGS = ['恐龙', '画画', '足球', '小猫', '太空', '云', '船', '音乐'] as const
 
 /** 画风锁定（W3「画风模板锁定」的字段先在这儿占住） */
 export type StyleLock = {
@@ -291,6 +360,23 @@ export type Narration = {
   durationMs?: number
 }
 
+/**
+ * 封面：**一次单独的出图**，3:4 竖版（`COVER_IMAGE_SIZE`）。
+ *
+ * ★ 它不是"从某一页里挑一张"。任何一页的跨页图都答不了"这本书讲谁"：
+ *   页图的构图是"这一页在发生什么"，而且左下角按约定留给正文。
+ *   封面要能在没有上下文的时候独立认人——这是它的唯一职责。
+ *
+ * ★ 它**不进** `illustrations`：那个数组的每一项都带一致性判定与重画次数，
+ *   而封面的判据不是"像不像上一页"（它没有上一页）。硬塞进去会让
+ *   `stats.firstPassCount` / `redrawCount` 的分母多出一个语义不同的东西。
+ */
+export type Cover = {
+  asset: AssetRef
+  provenance: Provenance
+  costCny?: number
+}
+
 /** 一本书 = 一堆资产 + 一份清单。★ 它是资产，不是一次调用（ADR-0003） */
 /**
  * 一页的硬失败：这一页**没有图**（出图调用抛错、用尽重画后仍无资产…）。
@@ -310,6 +396,12 @@ export type Book = {
   cardRevision: number
   form: BookForm
   tree: StoryTree
+  /**
+   * 封面。**可选是为了读旧书**：仓库里那本预生成演示书（`public/demo/books/`）
+   * 是在有封面这个字段之前出的，它的 `book.json` 里没有这一项。
+   * 阅读器遇到没有封面的书要**照实少显示一面**，不许拿第一页冒充封面。
+   */
+  cover?: Cover
   illustrations: readonly Illustration[]
   /**
    * 硬失败页。`illustrateAll` 的注释早就写了"书要标'这一页缺'"，

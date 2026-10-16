@@ -5,13 +5,15 @@ import —— 源图是外部下载物，不当作可信代码）：
 
     python -I scripts/make-webp.py <源图目录> <产出目录> [--preset <名>] [选项]
 
-五个预设（不传 --preset 就是 hero，行为与加预设之前一字不差）：
+七个预设（不传 --preset 就是 hero，行为与加预设之前一字不差）：
 
   hero         16:9  1280  ≤130KB   首屏 12 张卡片封面
   book-spread   3:2  1536  ≤220KB   绘本内页跨页（书脊在正中，主体必须避开中缝）
   book-cover    3:4  1024  ≤150KB   绘本竖版封面
   book-icon     1:1    192   ≤15KB   选择点那两枚小云图（显示只有 56px）
   theme-card   16:9    320  ≤18KB   工作台主题墙（源就是 public/art 那 12 张，派生）
+  figure        2:3    256  ≤22KB   输入框上方那 12 个站着的小主角（★ 唯一保留 alpha 的一档）
+  login-art     1:1    960  ≤120KB  登录页右栏那段循环视频的静止帧（见下）
 
 例：首屏 12 张、演示书的一个封面与四个跨页、两枚选择点图标——
 
@@ -20,6 +22,19 @@ import —— 源图是外部下载物，不当作可信代码）：
         --preset book-cover --match 'rocket*' --name cover
     python -I scripts/make-webp.py <源图目录> public/book --preset book-spread --match 'spread-*'
     python -I scripts/make-webp.py <源图目录> public/book --preset book-icon --match 'choice-*'
+
+★ **login-art 是唯一为"视频的静止替身"建的档**（2026-10-16 加）。
+  它存在的理由是 `prefers-reduced-motion: reduce`：登录页右栏那段
+  `public/art/picnic-loop.mp4`（768×768、10.1s、1,944,714 字节）在那档下不播，
+  但那一栏**不能是空的**——静止终态必须是一张"画完的"画面，不是一块黑。
+  所以源图是那段视频的封面（出图侧的 `cover.jpg`，1024×1024）。
+
+  ★ 为什么不为它复用已有的档：`hero` 是 16:9，拿它裁一张 1:1 的方图会把上下切掉；
+    `book-icon` 虽是 1:1 但只有 192px、≤15KB，投到右栏那一整列上是糊的。
+    两档都"能跑"，但都会把这个文件从"那张画"变成"那张画的别的东西"。
+  ★ 960 这个宽是量的：右栏最窄 400px、最宽 560px，而 `object-fit: cover` 撑满一列
+    竖屏（如 560×900）时，1:1 源需要缩到 **900×900** 才够——960 留了一点余量，
+    再大就是给这一列白付字节。上限 120KB 与 `hero`(130KB) 同档。
 
 ★ **只有 theme-card 这一档的源图是仓库里已有的 webp**，不是出图侧的 JPG：
 
@@ -71,9 +86,16 @@ PRESETS = {
     'book-cover':  (3, 4, 1024, 150 * 1024),
     'book-icon':   (1, 1, 192, 15 * 1024),
     'theme-card':  (16, 9, 320, 18 * 1024),
+    'figure':      (2, 3, 256, 22 * 1024),
+    'login-art':   (1, 1, 960, 120 * 1024),
 }
 DEFAULT_PRESET = 'hero'
 QUALITIES = [78, 74, 70, 66, 62, 58, 54]
+
+# ★ 只有这一档保留 alpha。下面那句 `convert('RGB')` 会把透明通道抹掉——
+#   对照片是对的（WebP 里多一条 alpha 是白付的字节），对 `figure` 是错的：
+#   那 12 个小人要站在 StudioBackdrop 那片渐变天上，alpha 没了就是一块方方正正的白补丁。
+ALPHA_PRESETS = {'figure'}
 
 
 def crop_to_ratio(im: Image.Image, rw: int, rh: int) -> Image.Image:
@@ -146,7 +168,12 @@ def main() -> int:
         src = os.path.join(src_dir, fn)
         src_total += os.path.getsize(src)
         with Image.open(src) as raw:
-            cropped = crop_to_ratio(raw.convert('RGB'), rw, rh)
+            # ★ 只有 ALPHA_PRESETS 那一档走 RGBA。`figure` 的源图必须是
+            #   scripts/cutout.py 的产出——它把透明像素的 RGB 也填成白，
+            #   所以下面 LANCZOS 缩放时边缘拖出来的是白边（在近白的页面上读不出来）；
+            #   换成 alpha=0 而 RGB=黑 的图，缩完会有一圈灰边，那是这条链子的责任，不是这里的。
+            mode = 'RGBA' if args.preset in ALPHA_PRESETS else 'RGB'
+            cropped = crop_to_ratio(raw.convert(mode), rw, rh)
             im, degraded = fit_width(cropped, target_w)
         out_w, out_h = im.size
         stem = args.name or os.path.splitext(fn)[0]

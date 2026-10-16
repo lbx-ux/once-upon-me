@@ -33,15 +33,17 @@
  * 清不清楚"取决于它在**文档里的位置**，与滚到哪儿无关——量一次，管所有滚动位置。
  * （第一版背景是 fixed，那时按视口分带才是对的；两种几何不能混用，
  * 这也是为什么量具与被量对象必须同源。）
- * 天空带以下那一段是纯纸 `--paper`，三种墨色的对比度 globals.css 里已经量过并写着
- * （16.45 / 4.92 / 4.77），本表只量天空带那一段。
+ * 天空带以下那一段是纯纸 `--paper`，纸本身的四种墨色也由本表算（不再从 globals.css
+ * 的注释里手抄）；卡面上那三层（`--surface` 卡身 / `--card-paper` 相纸 /
+ * `--sky` 声音卡里那一格）同样算，见下面"卡面上那三层"那一段。
  *
  * 报什么
  * ---------------------------------------------------------------------------
  * 1. 十段表：每一段最暗 1% 的合成明度，与三种墨色在那一点的对比度（门槛 4.5:1）
  * 2. 灰字与橙色字的**最长安全横向区间**（逐列取该段最暗处，保守）——
  *    读法是"这一段里，x 在这个区间内放灰字才不违规"
- * 3. 唯一的硬断言：`--ink` 在天空带内**每一段每一列**都过 4.5:1。
+ * 3. 纯纸与两层卡面的四条墨色对比度（门槛同一条）
+ * 4. 唯一的硬断言：`--ink` 在天空带内**每一段每一列**都过 4.5:1。
  *    这条过了，才允许说"深墨字可以直接压在天光上"——那是整套设计省掉厚雾的前提。
  *    红了就改 CSS 的 α，**不许改这里的门槛**（门槛是 WCAG 的，不是我们的参数）。
  */
@@ -173,8 +175,14 @@ const PAPER = must(
 const SKY_TINT = parseHex(globals, 'sky')
 const INKS = {
   '--ink': parseHex(globals, 'ink'),
+  /* ★ `--ink-soft` 也要在表里：它是卡片上 `strong` 那一档（`.cd__hint strong`），
+     不进表就没人会发现它被改暗/改亮到了线上 */
+  '--ink-soft': parseHex(globals, 'ink-soft'),
   '--ink-muted': parseHex(globals, 'ink-muted'),
   '--accent': parseHex(globals, 'accent'),
+  /* ★ `--danger` 也在表里：卡面上那颗「删掉他」hover 时就是它（`.cw__del:hover`），
+     而"红色在卡面上够不够"这件事以前没人量过——它一直是靠"红了就行"选出来的 */
+  '--danger': parseHex(globals, 'danger'),
   /* 压在天空上的次级文字。★ 它必须在这张表里，否则改暗一点/亮一点没人会发现 */
   '--ink-on-sky': parseHex(globals, 'ink-on-sky'),
 } as Record<string, Rgb>
@@ -440,6 +448,47 @@ for (const [name, v] of Object.entries(PAPER_CR)) {
   )
 }
 
+/**
+ * 卡面上那一层：**不是**纸，是纸上面压着的卡（`--surface`）、被拿在手里的相纸
+ * （`--card-paper`），以及声音卡里那一格冷纸（`--sky`）。
+ *
+ * ★ `--sky` 是 2026-10-16 加进这张表的：那一格原来铺的是暖相纸（`--card-paper`），
+ *   用户把声音那一屏改成了冷色，那一格改成 `--sky`，而**里面照样是正文**
+ *   （一句真语料 + 一颗按钮）。也就是说"卡面上有正文的面"从两层变成了三层——
+ *   量具不跟着走，就有一层没量过的面留在那儿。
+ *
+ * ★ 为什么这两行必须进这支脚本（工单 05）
+ * ---------------------------------------------------------------------------
+ * 2026-10-15 角色墙的卡身从 `--card-paper` 换成 `--surface`。当时要回答的问题是
+ * "换底色会不会把字读坏"，而手算一遍再抄进注释的数是**会漂移的那份**
+ * （globals.css 的文件头就写着这条教训）。所以让量具自己去读那两个令牌：
+ * 谁改了令牌，这两行当场变；下面的断言红了，就是那一屏真的读不了了。
+ * ★ 门槛与纯纸同一条：卡面上落的也是正文级的小字（13–15px），不是大标题。
+ */
+const CARD_FACES = ['surface', 'card-paper', 'sky'] as const
+const CARD_CR: Record<string, Record<string, number>> = {}
+for (const face of CARD_FACES) {
+  const L = luminance(parseHex(globals, face))
+  CARD_CR[face] = Object.fromEntries(
+    Object.entries(INKS).map(([name, rgb]) => [name, contrast(L, luminance(rgb))]),
+  ) as Record<string, number>
+}
+console.log(
+  `\n   卡面上那三层（卡身 --surface / 相纸 --card-paper / 声音卡那一格 --sky）—— 与纸同一条门槛：`,
+)
+console.log(
+  `     ${''.padEnd(12)} ${Object.keys(INKS)
+    .map((n) => ` ${n}`.padStart(13))
+    .join('')}`,
+)
+for (const face of CARD_FACES) {
+  console.log(
+    `     ${('--' + face).padEnd(12)} ${Object.values(CARD_CR[face]!)
+      .map((v) => `${fmt(v)}${v >= THRESHOLD ? ' ' : '✗'}`.padStart(13))
+      .join('')}`,
+  )
+}
+
 let fail = false
 /** ★ 交界不许换色。天空带**最后一段**的冷暖度与它下面那块纯纸必须同号——
  *  异号就是"往上滚是天、往下滚又变橙"那个割裂感本身。
@@ -465,6 +514,19 @@ for (const [name, v] of Object.entries(PAPER_CR)) {
     console.log(
       `   ✗ 纯纸上的 ${name} 只有 ${fmt(v)}:1（门槛 ${THRESHOLD}）—— 改 --paper，别改门槛`,
     )
+  }
+}
+/** ★ 卡面四条全断言。卡上有 13px 的次级文字与橙色链接（`.cw__eyebrow`、`.cw__use`），
+ *  所以这里不能只查 `--ink`。实测三层的四条都在 4.5 以上，`--surface` 还更高——
+ *  这条断言的意义不是"现在过"，是**下次有人为了好看把卡面调深时当场拦住他**。 */
+for (const face of CARD_FACES) {
+  for (const [name, v] of Object.entries(CARD_CR[face]!)) {
+    if (v < THRESHOLD) {
+      fail = true
+      console.log(
+        `   ✗ --${face} 上的 ${name} 只有 ${fmt(v)}:1（门槛 ${THRESHOLD}）—— 卡面调浅，别改门槛`,
+      )
+    }
   }
 }
 /** ★ 这两条才是硬断言：它们被**定义**成"可以压在天空上"，所以必须整段过。

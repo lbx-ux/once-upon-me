@@ -129,7 +129,12 @@ export function isDisplayable(event: EngineEvent): boolean {
 
 /** 一句话人话。放在引擎侧而不是 UI 侧：MCP 返回与日志也要同一句话，不能各翻一遍 */
 export function describeEvent(event: EngineEvent): string {
-  const page = event.pageNo === undefined ? '' : `第 ${event.pageNo} 页`
+  // ★ `pageNo === 0` 是**封面**的约定，不是"第 0 页"。封面是一次单独的出图
+  //   （见 domain.ts 的 Cover），它没有页号，但事件通道是同一套。
+  //   不在这里翻译的话，过程面板会显示"第 0 页画好了"——那句话在界面上是噪音，
+  //   而且会让人以为页号从 0 开始数。
+  const page =
+    event.pageNo === undefined ? '' : event.pageNo === 0 ? '封面' : `第 ${event.pageNo} 页`
   switch (event.kind) {
     case 'stage':
       return `${STAGE_LABELS[event.stage]}${event.phase === 'begin' ? '…' : '完成'}`

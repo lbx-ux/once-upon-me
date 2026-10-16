@@ -1,13 +1,12 @@
 import NextLink from 'next/link'
 import type { CSSProperties } from 'react'
 
-import { AGE_BAND_LABELS, ANCHOR_LABELS } from '@/lib/engine/domain.ts'
 import { assetUrlOf } from '@/lib/asset-url.ts'
-import { DEFAULT_STYLE_LABEL } from '@/lib/prompts/character-sheet.ts'
-import type { ChildListItem } from '@/lib/children-list.ts'
+import type { ChildWallItem } from '@/lib/children-list.ts'
+import { dayKeyOf } from '@/lib/reading-log.ts'
 
 /**
- * CharacterWall —— 工作台的「小主角」那一屏：一墙贴着的角色卡
+ * CharacterWall —— 工作台的「角色卡」那一屏：一墙贴着的角色卡
  *
  * ★ 工单 03 把这一屏的数据源换了：以前是"卡 + 另一份演示名单（`kids.json`）"，
  *   现在是**档案（他是谁）+ 卡（他长什么样）**两条真实的线，在
@@ -22,36 +21,95 @@ import type { ChildListItem } from '@/lib/children-list.ts'
  *   3. **"还没出图"是一个正常状态，不是空**：示例孩子与刚建档的孩子都是这样。
  *      相纸那一格里写"还没印出来"，而**不拿一张示例图去顶**。
  *
- * ★ 卡面上的动作现在有两个，都是真的能走通的：
- *   `看这一版 / 提建议`（→ `/character/<childId>`，工单 03 新做的）与
- *   `用它做一本`（→ `/create?card=`，早已实测）。参考图里那支铅笔**仍然没有**：
- *   改档案（名字/读音/年龄）的那一屏还没做，画一支点不动的铅笔就是假装。
+ * ★ 2026-10-15 第四轮：用户在这张卡的截图上**划掉了五处**，这一屏于是瘦了一圈。
+ *   划掉的是：页头那句「每一页里那个他…」、卡上「角色卡 · 第 N 版 · N 条锚点」、
+ *   读音（mǎn / yǔ）、「4-6 岁 · 水彩形象 · wan2.7-image 画的」那一行、
+ *   以及那一栏「看剩下 N 条，以及这张卡凭什么算「同一个人」」。
+ *   连它们带走的四个决定，逐个都有去处，不是"删了就算了"：
+ *   - **版次**（第 N 版）→ 详情页的版本历史（那一屏本来就按倒序列出来了）；
+ *   - **锚点数** → 卡面上就摆着三条（`VISIBLE_ANCHORS`），数得出来；
+ *   - **六条锚点的全文与那句"画的与查的同源"** → 详情页的
+ *     「这张卡凭什么算「同一个人」」那一格（同名的内容在那里有一份完整实现）；
+ *   - **年龄与画风/模型** → 年龄在详情页的「改基础信息」里可读可改；
+ *     画风是产品**唯一**那一档（`DEFAULT_STYLE_LABEL`），写在卡上等于印一句永远一样的话。
+ *   ★ 唯一一处**没去处**的是 `.cw__photo`（「用过照片，已删除」）——它留着，
+ *     因为它是隐私那一条的可见凭据，不是说明文字。
+ *   ★ 卡片因此变成"一张脸 + 一个名字 + 三条锚点"，判断依据是**用户看这一屏要的是认人**，
+ *     不是读档案。要读档案有详情页，那也是整张卡可点的去向。
+ *
+ * ★ 2026-10-15 第五轮：用户给了参考源码（`gitee.com/mao-yongyao/cards`，一张卡 +
+ *   悬停展开）要"这样的效果"。这一屏于是变成**静止认人、悬停看他做过什么**：
+ *   - 静止态只剩 脸 + 名字 + 三条锚点（连那两颗动作也**挪进悬停层**，用户点的）；
+ *   - 悬停露出的是**两个真数字**——做过的书 N 本 · 最近一本哪天。★ 参考图上那两个
+ *     数是编的点赞数；我们这里没有任何一个数不是从磁盘上数出来的
+ *     （`children-list.ts` 的 `listWallItems`，第五轮新接的一条：卡号 → 书架）。
+ *   ★ 三条**没有照搬**的地方，都是刻意的：
+ *     ① 参考图那张卡是绝对居中、屏幕上只有一张，所以它"在流里长高"看不出来；
+ *       我们是一面网格墙，真长高会让**下面整排跳**。所以卡在静止与悬停时
+ *       **盒子一模一样大**，"长大了"那个观感由背后那张撑开的面板给（`::after`）；
+ *     ② 参考图把画缩到 0.8 再把标题移上去补位；我们只缩到 0.9，因为卡本来就已经
+ *       抬了 10px，缩得太狠会读成"图跑了"；
+ *     ③ 参考图那颗按钮是 See More；我们的按钮指向详情页，而**整张卡也指向详情页**——
+ *       留着它是因为它是这一层唯一的"主句"，不是因为它是唯一的出口。
+ *
+ * ★ 卡面上的动作是 `看这一版 / 看他的档案`（→ `/character/<childId>`），
+ *   加上自建孩子才有的 `删掉他`（→ 详情页那一节，见下面那条）——
+ *   ★ 第五轮起这两颗**住在悬停层里**（`character-wall.css` 的 `.cw__reveal`）。
+ *   用户划掉的「用它做一本」**整颗删了**，删得掉的理由是查过之后成立的：
+ *   首页 `/home` 那颗角色卡选择器走的就是同一个 `/create?card=`（`CreateLanding.tsx:171`），
+ *   而没有形象的孩子，详情页里那条「去出一张形象」也还在——**它不是唯一的路**。
+ *   ★ 而且**整张卡本身可点**（`.cw__open` 那层覆盖）——上一版有"抬起来"的悬停
+ *     却没有点击目标，那个落差就是用户说"不像一张卡片"的实际所指。
+ *   ★ 动作挪走之后，**名字本身成了链接**（静止就看得见、键盘 Tab 得到）。
+ *     那不是顺手加的：悬停层静止时是 `visibility: hidden`，里面的东西
+ *     **不进 Tab 序列也不进可见树**，所以名字是键盘与读屏的那条路——
+ *     聚焦它 → `:focus-within` 把这一层打开 → 再 Tab 才够得到那两颗。
+ *     悬停层是**加法**（鼠标的捷径），不是无障碍路径；这与 `.cw__open` 同一条理由。
+ *
+ * ★ 参考图里那支铅笔**仍然没有**，但理由换了：改档案（名字/读音/年龄/标签）
+ *   这一轮做到了**详情页**上（`ChildDetail.tsx` 的「改基础信息」+ `PATCH /api/children/<id>`）。
+ *   卡上不放铅笔，是因为一个 27px 的名字旁边摆一支笔，会让人以为改的是**卡**，
+ *   而卡改的是锚点、走的是"提建议再画一版"那条完全不同的路。
+ *
+ * ★ 垃圾桶这一轮有了，但它是**一颗链到详情页的入口**，不是就地确认。
+ *   删除这件事的三步（列出"将要失去什么"→ 确认 → 给一张报数的凭据）
+ *   在 `lib/child-deletion.ts` + `ChildDetail.tsx` 里已经完整，
+ *   这里搬第二份实现只会让两份迟早说不同的数。
+ *   ★ 示例角色的卡面上**不渲染这一颗**（`source === 'demo'`）；
+ *     服务端那侧对示例 id 一律 403 并说明理由，那才是守卫。
  *
  * ★ `＋新建角色` 现在指 `/character/new` 了（工单 03 第二刀）。它以前指 `/create`，
  *   理由是"建卡本来就在创作流里，不新造第二条路"——**那个理由已经不成立**：
  *   建卡有两条路了（从零描述 / 用他的照片），而第二条要一次单独同意，
  *   塞进创作流的节奏里两边都做不好。创作流第 1 步仍然能新建，
  *   两处收的是同一份判据（`creation/state.ts` 的 `stepProblems`）。
- *
- * ★ 参考图右上角那颗垃圾桶**仍然没做**。`deleteChild` 这一版补上了测试
- *   （`store.test.ts`），但"删除"这件事要走的路由 + 二次确认 + 报数还没接出来。
- *   拿一个家长点下去就不可撤销的动作，不能只靠"引擎里有这个方法"就上。
  */
 
 export type CharacterWallProps = {
-  items: ChildListItem[]
+  items: ChildWallItem[]
 }
 
 /** 卡面上摆几条锚点。★ 三条：再多这一张卡就从"档案"变成"表格"了 */
 const VISIBLE_ANCHORS = 3
+
+/**
+ * 「最近一本」那一天。★ **不另写一个日期格式化器**：`dayKeyOf` 已经是这个仓库
+ * 对"哪一天"的既有答案（`lib/reading-log.ts`，书架那一屏也这么显示），
+ * 而且它的注释写着为什么不用 `toISOString()`——那是 UTC，晚上做的书会被算到第二天。
+ */
+function lastBookLabel(at: number | null): string {
+  return at === null ? '' : dayKeyOf(new Date(at))
+}
 
 export default function CharacterWall({ items }: CharacterWallProps) {
   return (
     <section className="cw">
       <header className="cw__head">
         <div>
-          <h1 className="cw__title">小主角</h1>
-          <p className="cw__sub">每一页里那个他，都由这张卡上的几条锚点决定。</p>
+          {/* ★ 这一屏的名字跟着侧栏走（用户 2026-10-15 提的）：入口叫「角色卡」，
+              因为这一屏列的是**卡**。左上角那颗品牌字仍然是「小主角」——
+              那是产品名，不是这一屏的名字。 */}
+          <h1 className="cw__title">角色卡</h1>
         </div>
         <NextLink className="cw__new" href="/character/new">
           <span className="cw__new-plus" aria-hidden="true">
@@ -71,9 +129,8 @@ export default function CharacterWall({ items }: CharacterWallProps) {
       ) : (
         <ul className="cw__wall">
           {items.map((item, index) => {
-            const { profile, card, source } = item
+            const { profile, card, source, books } = item
             const shown = card?.anchors.slice(0, VISIBLE_ANCHORS) ?? []
-            const rest = (card?.anchors.length ?? 0) - shown.length
             return (
               <li
                 key={profile.childId}
@@ -84,109 +141,141 @@ export default function CharacterWall({ items }: CharacterWallProps) {
               >
                 <article className="cw__card">
                   <span className="cw__tape" aria-hidden="true" />
-                  <p className="cw__eyebrow">
-                    {card ? `角色卡 · 第 ${card.revision} 版` : '还没有形象'}
-                    {rest > 0 ? ` · ${card?.anchors.length} 条锚点` : ''}
-                  </p>
 
-                  {/* 相纸那一层：白边 + 虚线内框，图压在框里。
-                      ★ 走原生 <img>：图在资产根里、经 /api/assets 出来，
-                      next/image 要另配 loader，而它是 README §五「刻意未做」那一条。
-                      ★ 取 768 那一档而不是原图：卡面显示 372 CSS px，两倍屏要 744；
-                      原图是 2.7 MB 的 1440 PNG，两张贴满墙就是 5.6 MB（实测）。
-                      缩略档由 /api/assets 现缩并落盘缓存，见 lib/thumbs.ts */}
-                  <div className="cw__mat">
-                    {card ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        className="cw__art"
-                        src={assetUrlOf(card.referencePath, 768)}
-                        alt={`${profile.name} 的形象`}
-                        width={768}
-                        height={768}
-                        loading="lazy"
-                        decoding="async"
-                      />
-                    ) : (
-                      <p className="cw__mat-empty">
-                        形象还没印出来
-                        <span>说一句想要的样子，就能出一张</span>
-                      </p>
-                    )}
-                  </div>
-
-                  <h2 className="cw__name">
-                    {profile.name}
-                    {profile.nameReading ? (
-                      <span className="cw__reading">{profile.nameReading}</span>
-                    ) : null}
-                    {/* ★ "示例"两个字标在**来源**上（档案是从 public/demo 读到的），
-                        不是档案里的一个字段——字段会说谎，来源不会。
-                        而且这里不许出现"你的孩子"这类指代：它不是谁的孩子，
-                        它是一张用来"先看看效果"的示例（用户 10/13 定的口径）。 */}
-                    {source === 'demo' ? <span className="cw__demo">示例</span> : null}
-                  </h2>
-                  <p className="cw__meta">
-                    {AGE_BAND_LABELS[profile.ageBand]}
-                    {card ? ` · ${DEFAULT_STYLE_LABEL}形象 · ${card.modelId} 画的` : ''}
-                  </p>
-
-                  {card?.photoDeleted ? <p className="cw__photo">用过照片，已删除</p> : null}
-
-                  {shown.length > 0 ? (
-                    <ul className="cw__tags">
-                      {shown.map((anchor) => (
-                        <li key={anchor.slot} className="cw__tag">
-                          {anchor.value}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
-
-                  {card ? (
-                    <>
-                      <hr className="cw__rule" />
-                      <details className="cw__detail">
-                        <summary>
-                          {rest > 0
-                            ? `看剩下 ${rest} 条，以及这张卡凭什么算「同一个人」`
-                            : '这张卡凭什么算「同一个人」'}
-                        </summary>
-                        <dl className="cw__anchors">
-                          {card.anchors.map((anchor) => (
-                            <div key={anchor.slot} className="cw__anchor">
-                              <dt>{ANCHOR_LABELS[anchor.slot]}</dt>
-                              <dd>{anchor.value}</dd>
-                            </div>
-                          ))}
-                        </dl>
-                        {/* 画的与查的同源（ADR-0007）：这句是这张卡存在的理由，值得写在卡上 */}
-                        <p className="cw__why">
-                          画每一页时按这几条画，核对每一页时按同一批查——所以「这一页还是不是他」
-                          有答案，而不是只有感觉。
+                  {/* `.cw__show` = 参考图的 `.show-wrapper`：悬停时**整块**上移一点，
+                      给下面腾出位置。它只管位移，不管显隐 */}
+                  <div className="cw__show">
+                    {/* 相纸那一层：白边 + 虚线内框，图压在框里。
+                        ★ 走原生 <img>：图在资产根里、经 /api/assets 出来，
+                        next/image 要另配 loader，而它是 README §五「刻意未做」那一条。
+                        ★ 取 768 那一档而不是原图：卡面显示 372 CSS px，两倍屏要 744；
+                        原图是 2.7 MB 的 1440 PNG，两张贴满墙就是 5.6 MB（实测）。
+                        缩略档由 /api/assets 现缩并落盘缓存，见 lib/thumbs.ts */}
+                    <div className="cw__mat">
+                      {card ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          className="cw__art"
+                          src={assetUrlOf(card.referencePath, 768)}
+                          alt={`${profile.name} 的形象`}
+                          width={768}
+                          height={768}
+                          loading="lazy"
+                          decoding="async"
+                        />
+                      ) : (
+                        <p className="cw__mat-empty">
+                          形象还没印出来
+                          <span>说一句想要的样子，就能出一张</span>
                         </p>
-                      </details>
-                    </>
-                  ) : null}
+                      )}
+                    </div>
 
-                  <div className="cw__actions">
-                    {card ? (
-                      <a className="cw__use cw__use--ghost" href={`/character/${profile.childId}`}>
-                        看这一版
+                    {/* ★ 名字是**链接**（第五轮）。理由不是"顺手让它可点"：
+                        悬停层静止时 `visibility: hidden`，里面的动作既不可聚焦
+                        也不在可见树里，所以**名字是键盘与读屏那唯一的一条路**——
+                        聚焦它 → `:focus-within` 打开悬停层 → 再 Tab 才够得到那两颗。 */}
+                    <h2 className="cw__name">
+                      <a className="cw__name-link" href={`/character/${profile.childId}`}>
+                        {profile.name}
                       </a>
-                    ) : null}
-                    {/* ★ 两类孩子走两个**都已经存在**的参数，不新造一个：
-                        有形象的走 `?card=`（`/create` 真的会预置第 3 步，早已实测）；
-                        没形象的只能去 `/create` 从头填——创作流现在**还不收** `?child=`，
-                        写一个没人读的参数就是一个点下去没反应的按钮。
-                        让 `/create` 收下 `?child=` 属于"第 1 步改成选角色"那一刀。 */}
-                    <a
-                      className="cw__use"
-                      href={card ? `/create?card=${encodeURIComponent(card.cardId)}` : '/create'}
-                    >
-                      {card ? '用它做一本' : '去出形象'}
-                    </a>
+                      {/* ★ "示例"两个字标在**来源**上（档案是从 public/demo 读到的），
+                          不是档案里的一个字段——字段会说谎，来源不会。
+                          而且这里不许出现"你的孩子"这类指代：它不是谁的孩子，
+                          它是一张用来"先看看效果"的示例（用户 10/13 定的口径）。 */}
+                      {source === 'demo' ? <span className="cw__demo">示例</span> : null}
+                    </h2>
+
+                    {card?.photoDeleted ? <p className="cw__photo">用过照片，已删除</p> : null}
+
+                    {/* ── 同一格里叠着的两层：三条锚点 与 悬停才露出来的那一层 ────
+                        ★ 两层共用**一个网格格**（见 `.cw__fold`），所以这一格的高度
+                          自动是两者的较大值：静止时标签在上面、露出层藏着，
+                          悬停时标签淡出、露出层淡入——**交叉溶解在同一处**，
+                          而且卡的高度在静止与悬停时**一模一样**（不会顶到下一排）。
+                        ★ 这也是为什么它俩不是"前者占位、后者绝对定位"：
+                          绝对定位要靠手算的偏移量才能不压到名字，而偏移量随卡宽变；
+                          交给网格，"有没有地方"是**算出来的**，不是估的。 */}
+                    <div className="cw__fold">
+                      {shown.length > 0 ? (
+                        <ul className="cw__tags">
+                          {shown.map((anchor) => (
+                            <li key={anchor.slot} className="cw__tag">
+                              {anchor.value}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+
+                      {/* 两个数是从磁盘上数出来的（`listWallItems`）。**没有一个是编的**：
+                          参考图那张卡上写的是 13k / 14k 的点赞数，那种数这个产品永远不会有。 */}
+                      <div className="cw__reveal">
+                        <p className="cw__stats">
+                          {books.count > 0 ? (
+                            <>
+                              <span className="cw__stat">
+                                <span className="cw__stat-num">{books.count}</span> 本书
+                              </span>
+                              <span className="cw__stat-sep" aria-hidden="true" />
+                              <span className="cw__stat">
+                                最近 {lastBookLabel(books.lastCreatedAt)}
+                              </span>
+                            </>
+                          ) : (
+                            /* ★ 0 本如实说"还没做过书"，不显示一个 0：一个 0 在这里
+                               读起来像"数据没读出来"，而这一句是**事实**，不是缺省值 */
+                            <span className="cw__stat cw__stat--none">还没做过书</span>
+                          )}
+                        </p>
+
+                        <div className="cw__reveal-actions">
+                          {/* ★ 两类孩子都给了这一颗：没有形象的孩子也有详情页
+                              （那里写着"这个孩子还没有形象" + 一条去出形象的出口）。
+                              原来只在有卡时渲染，于是"整卡可点"对那一类孩子是**点进一个空位**。
+                              ★ 第五轮从卡面挪进这一层，并且**从 ghost 改成填色**：
+                              它是这一层唯一的"主句"（参考图那颗 See More 也是填色的）。
+                              原来那半句"实心按钮压在整张可点的卡上会让人以为别处不能点"
+                              在这里不成立——它们本来就指向同一处。 */}
+                          <a className="cw__use" href={`/character/${profile.childId}`}>
+                            查看详情
+                          </a>
+                          {/* ★ 这里原来还有一颗「用它做一本」（→ `/create?card=`），
+                              2026-10-15 第四轮**按用户划掉的记号删掉了**。
+                              删得掉的理由是查过之后成立的：**它不是唯一的那条路**——
+                              首页 `/home` 那颗角色卡选择器选完人就 `params.set('card', …)`
+                              （`CreateLanding.tsx:171`），走的正是同一个 `/create?card=`；
+                              而没有形象的孩子，详情页里那条「去出一张形象」也还在。 */}
+                          {/* 删除的**入口**。★ 两步确认与那张凭据只在详情页有一份实现
+                              （`ChildDetail.tsx` + `lib/child-deletion.ts`）：这里再做一个就地确认，
+                              这一屏就得变成客户端组件、`DeletionReceipt` 要搬第二份——
+                              同一个行为两份实现，迟早一份说"删 8 条"另一份说"删 7 条"。
+                            ★ 示例角色的卡面上**不渲染这一颗**（用户提的正是"系统提供的不给删除"）。
+                              但这是显示层的取舍，不是守卫：服务端 `refuse()` 对示例 id 一律 403，
+                              并说明"他的档案在 public/demo/ 里，硬删会让下一次列目录他回来但没有形象"。
+                              `source` 与那个守卫不完全等价（本机可能覆盖过同 id 的档案），
+                              那种情形这颗会露出来、点进去被拒绝并说明——**比在卡上再编一个判断可靠**。 */}
+                          {source === 'demo' ? null : (
+                            <a className="cw__del" href={`/character/${profile.childId}#delete`}>
+                              删掉他
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   </div>
+
+                  {/* 整卡可点的那层覆盖（`character-wall.css` 的 `.cw__open`）。
+                      ★ `aria-hidden` + `tabIndex=-1` 是**故意的**：无障碍路径是上面那颗
+                        有名字的链接，这一颗只是鼠标的捷径。两个都能 Tab 到同一处的话，
+                        键盘用户在这张卡上要按两次 Tab 才跳得过去。
+                      ★ 它必须排在悬停层**之前**：它靠 `z-index: 1` 压在卡面上，
+                        而悬停层那两颗是 `z-index: 2` 抬在它上面的 */}
+                  <a
+                    className="cw__open"
+                    href={`/character/${profile.childId}`}
+                    aria-hidden
+                    tabIndex={-1}
+                  />
                 </article>
               </li>
             )

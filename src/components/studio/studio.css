@@ -1,10 +1,13 @@
 /**
  * studio.css —— 工作台里**没有自己组件文件**的那些共用件
  *
- * 现在只剩两样：三屏共用的页面框 `.studio`（路由组 layout 给的），
- * 和「声音」那一屏的 `.vc__*`（它的标记直接写在 `VoicePicker.tsx` 里，
- * 但那个文件同时导出了组件，所以它的样式**应该**搬去同名的 `voice-picker.css`——
- * 搬的时候记得连 `.vc__head/.vc__title/.vc__sub` 一起，别留半截）。
+ * 现在只剩一样：三屏共用的页面框 `.studio`（路由组 layout 给的）。
+ *
+ * ★ 「声音」那一屏的 `.vc__*` 2026-10-16 **搬走了**，去了
+ *   `voice-picker.css`（与 `VoicePicker.tsx` 同目录同名）。这个文件头从第一天
+ *   就在等这一步，搬的时候连 `.vc__head/.vc__title/.vc__sub` 一起搬的，没留半截。
+ *   ★ 那次搬家不是纯粹的整理：那一屏同一轮从"UI 卡片"改成了**贴在纸上的音色卡**
+ *     （用户原话「声音这一块也应该像角色卡一样是一张卡片」），整段样式本来就重写了。
  *
  * ★ 「小主角」那一屏原来也住在这里（`.ch__*`）。它已经长成一张真正的卡片墙，
  *   搬去 `character-wall.css` 与 `CharacterWall.tsx` 同名作伴了。
@@ -19,171 +22,9 @@
   min-height: 100vh;
   padding: clamp(28px, 5vh, 52px) clamp(20px, 4vw, 56px) 64px;
 }
-
-/* ── 页头 ─────────────────────────────────────────────────────────────── */
-
-.vc__head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 20px;
-  margin-bottom: 26px;
-}
-
-.vc__title {
-  margin: 0 0 8px;
-  font-family: var(--font-serif);
-  font-size: clamp(24px, 3.4vw, 32px);
-  font-weight: 600;
-}
-
-.vc__sub {
-  max-width: 60ch;
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.8;
-  /* ★ 这一行压在天空带第 1 段（y≈45，`scripts/check-scrim.mts`：灰字在那一段
-     3.96:1，而且**没有任何一段横向区间是安全的**——那一段最暗的 1% 是云的暗部）。
-     换成 `--ink-on-sky` 之后同一段 6.60:1。这一屏的页头全部落在天空带里，
-     所以这里不是"往纸里挪一行"能解决的（挪不出 112vh）。 */
-  color: var(--ink-on-sky);
-}
-
-/* ── 声音 ─────────────────────────────────────────────────────────────── */
-
-.vc__warn {
-  margin: 0 0 20px;
-  padding: 12px 14px;
-  border: 1px solid var(--dot);
-  border-left: 3px solid var(--danger);
-  border-radius: 10px;
-  background: var(--surface);
-  font-size: 13px;
-  line-height: 1.8;
-}
-
-.vc__grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 18px;
-  margin: 0 0 28px;
-  padding: 0;
-  list-style: none;
-}
-
-.vc__card {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  height: 100%;
-  padding: 16px;
-  border: 1px solid var(--dot);
-  border-radius: var(--card-radius);
-  background: var(--surface);
-}
-
-/* 当前音色：整张卡描强调色。★ 只描边不填色——填了就和"听一句真的"那颗钮
-   抢同一块视觉，而那颗钮才是这一屏真正的动作（选音色没法用文字判断） */
-.vc__card[data-selected='true'] {
-  border-color: var(--accent);
-  box-shadow: inset 0 0 0 1px var(--accent);
-}
-
-.vc__pick {
-  display: grid;
-  gap: 4px;
-  width: 100%;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--ink);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.vc__name {
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.vc__id {
-  /* 模型 id 是机器名，得用等宽字体。★ 不引 `--font-mono` 这个令牌：
-     :root 里没有它，为一行字加一个令牌不值当，直接给系统等宽栈 */
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 11px;
-  color: var(--ink-muted);
-  overflow-wrap: anywhere;
-}
-
-.vc__state {
-  font-size: 12px;
-  color: var(--accent);
-}
-
-.vc__listen {
-  align-self: flex-start;
-  padding: 8px 16px;
-  border: 1px solid var(--dot);
-  border-radius: 999px;
-  background: var(--surface);
-  color: var(--ink);
-  font: inherit;
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.vc__listen:hover:not(:disabled) {
-  border-color: rgba(var(--accent-rgb), 0.5);
-  color: var(--accent);
-}
-
-.vc__listen:disabled {
-  color: var(--ink-muted);
-  cursor: default;
-}
-
-.vc__error {
-  margin: 0 0 20px;
-  padding: 12px 14px;
-  border-radius: 10px;
-  background: var(--surface-soft);
-  color: var(--danger);
-  font-size: 13px;
-  line-height: 1.8;
-}
-
-.vc__own {
-  padding: 18px;
-  border: 1px dashed var(--dot);
-  border-radius: var(--card-radius);
-  background: var(--surface);
-}
-
-.vc__own-title {
-  margin: 0 0 8px;
-  font-size: 15px;
-  font-weight: 600;
-}
-
-.vc__own-body {
-  max-width: 62ch;
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.9;
-  color: var(--ink-muted);
-}
-
-/* 键盘走到哪里都要看得见 */
-.vc__pick:focus-visible,
-.vc__listen:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-/* 窄屏：页头改竖排，右上的动作挪到下面 */
-@media (max-width: 720px) {
-  .vc__head {
-    flex-direction: column;
-  }
-}
+/* ★ 这里原来还有一整套 `.vc__*`（声音那一屏）。2026-10-16 整段搬去了
+   `voice-picker.css`（与 `VoicePicker.tsx` 同目录同名）——这个文件头从第一天
+   就在等这一步。搬家时一条都没留：`.vc__head` / `.vc__title` / `.vc__sub` /
+   `.vc__grid` / `.vc__card` / `.vc__pick` / `.vc__name` / `.vc__state` / `.vc__listen` /
+   `.vc__error` / 焦点可见 / 窄屏那条媒体查询，全部在新文件里（而且同一轮从"UI 卡片"
+   重写成了音色卡；那条 `.vc__warn` 横幅与 `.vc__own` 那一块后来被用户划掉、整条删了）。 */

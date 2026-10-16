@@ -369,3 +369,61 @@
     min-height: 100vh;
   }
 }
+
+/* ============================================================
+   8. 退场：把这一屏交给 /home（2026-10-16）
+
+   点「开始创作」之后那 200ms（`components/hero/StartCreating.tsx` 往
+   `[data-hero-experience]` 上写 `data-leaving="true"`）：文案（品牌 + 打字句）淡出、
+   点阵与柔光淡出，**然后才切页**。
+
+   ★ 三处刻意的：
+     1. **轨道一个像素不动。** 环继续自转。这不是省事——那 12 张的位置**就是接力的起点**
+        （`lib/theme-handoff.ts` 在切页那一刻量它们），让环在退场里下沉或缩小，
+        量到的位置与用户最后看到的那一帧就会差几十像素，等于自己给自己加一个跳变。
+        所以 §3 那条 transform 不改，这里也不加任何新变量。
+     2. **CTA 那一行不在这一组里。** 退场之后到工作台上屏之间还要等一次 RSC
+        （dev 下实测 0.5–2.6s，见 shell/AppShell.tsx 文件头那组读数）。那时屏上若只剩一个
+        转着的环、一个字都没有，读起来像坏了。所以那颗主按钮留下来，
+        120ms 后自己把话说成「正在打开…」（`.btn[data-busy]`，见下）。
+        门槛数字与 AppShell 的 `PENDING_SHOW_AFTER_MS` 是同一条规矩：报信要比人开始怀疑慢半拍。
+     3. **`transition` 只写在退场态里**，不写进上面那些常驻规则。
+        `.hero-orbit` 的 transform 是**每帧被滚动驱动**的（交接段那三个数，见 §3），
+        常驻一条 transition 会让整段交接发糊——而那三个数是实测钉住的契约。
+
+   ★ 时长 `0.2s` 与 `StartCreating.tsx` 的 `EXIT_MS` 是**同一个数**，改一处要改另一处。
+   ★ 静止模式下这一整节根本不会发生：`StartCreating` 不拦那一下，直接交给 `<Link>`
+     瞬间切页（它也不写 `data-leaving`）。所以这里**没有** `prefers-reduced-motion` 分支——
+     写了就是一段永远走不到的代码（同 `child-deletion.ts` 那条"多一个永远走不到的分支，
+     就多一处会骗人的代码"）。
+   ============================================================ */
+.hero[data-leaving='true'] .hero__brand,
+.hero[data-leaving='true'] .hero__typing,
+.hero[data-leaving='true'] .hero__ambient,
+.hero[data-leaving='true'] .hero__glow {
+  transition: opacity 0.2s ease;
+  opacity: 0;
+}
+
+/* 「正在打开…」。★ 这一颗按钮的可访问名就是它的文案，所以字要跟着一起换
+   （`.cl__optimize` 那种"只留图标"的做法在这一颗上不成立——它本来就有字）。
+   `pointer-events: none` 不是防双发（那是 `leavingRef` 的活），是别让 hover 那一下
+   抬起动画在这 200ms 里自己演一遍。 */
+.btn[data-busy='true'] {
+  pointer-events: none;
+}
+
+.btn__spin {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  animation: hero-spin 0.7s linear infinite;
+}
+
+@keyframes hero-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}

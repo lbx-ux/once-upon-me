@@ -17,7 +17,14 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { ENTER_STEPS, STAGGER_BUDGET, STAGGER_CAP, staggerFor } from './useEnterTimeline.ts'
+import {
+  ARRIVAL_AT,
+  ARRIVAL_DURATION,
+  ENTER_STEPS,
+  STAGGER_BUDGET,
+  STAGGER_CAP,
+  staggerFor,
+} from './useEnterTimeline.ts'
 
 describe('交错间隔 staggerFor', () => {
   it('零项与一项不交错：0', () => {
@@ -95,5 +102,25 @@ describe('时间线形状 ENTER_STEPS', () => {
   it('两笔手绘装饰排在最前（它们最先"被画出来"）', () => {
     expect(ENTER_STEPS[0]?.sel).toBe('.cl__doodle')
     expect(ENTER_STEPS[0]?.at).toBe(0)
+  })
+})
+
+describe('接力那一步（从首页环上飞回来的那 12 张）', () => {
+  it('★ 从 0 起跳，不是排在最后那一步的 0.42', () => {
+    // 这 12 张在切页那一刻**已经在屏幕上**了（就在刚才那个位置）。让它们原地等到
+    // 0.42s 再起飞，看起来就是"环突然停住半秒"——环是转的，停住就穿帮。
+    expect(ARRIVAL_AT).toBe(0)
+    const wall = ENTER_STEPS[ENTER_STEPS.length - 1]
+    expect(wall?.sel).toBe('.cl__wall li') // 接的必须是那一步（按选择器对上）
+    expect(ARRIVAL_AT).toBeLessThan(wall?.at ?? 0)
+  })
+
+  it('★ 整场仍然收在一秒出头：0.62 + 12 项的错峰尾巴 = 0.90s', () => {
+    const n = 12
+    const endsAt = ARRIVAL_AT + ARRIVAL_DURATION + staggerFor(n) * (n - 1)
+    expect(endsAt).toBeLessThanOrEqual(1.2)
+    // 它比默认那一步（0.4s）长，是因为要走几百像素：不是随手放长的
+    const wall = ENTER_STEPS[ENTER_STEPS.length - 1]
+    expect(ARRIVAL_DURATION).toBeGreaterThan(wall?.duration ?? 0)
   })
 })

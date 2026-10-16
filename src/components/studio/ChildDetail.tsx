@@ -7,12 +7,15 @@ import { useState } from 'react'
 import { AGE_BAND_LABELS, ANCHOR_LABELS, type AnchorSlot } from '@/lib/engine/domain.ts'
 import type { ChildRecord } from '@/lib/engine/character-card/profile.ts'
 import { useSettings } from '@/components/settings/SettingsProvider.tsx'
+// 表单零件与「新建小主角」那一屏共用同一份（选项与必填项只能有一处，见 fields.tsx 文件头）
+import { ChildFields } from '@/components/creation/fields.tsx'
+import type { ChildForm } from '@/lib/creation/state.ts'
 import type { CardRevisionView } from '@/lib/children-list.ts'
 
 /**
- * ChildDetail —— 一个孩子的形象页：看、提建议再画一版、切回旧版、删掉他（工单 03）
+ * ChildDetail —— 一个孩子的形象页：看、提建议再画一版、切回旧版、改基础信息、删掉他（工单 03）
  *
- * 四件不显然的事：
+ * 五件不显然的事：
  *
  * 1. **"再画一版"不自动判"这条建议被采纳了吗"**，所以界面上也**不写**
  *    "AI 会尽力理解"这类免责话。理由是具体的：现有的比对器问的是"图上有没有这几条锚点"，
@@ -25,11 +28,30 @@ import type { CardRevisionView } from '@/lib/children-list.ts'
  *    以为新的一版没了，然后不敢点。
  * 3. **版本历史按时间升序读、按倒序列**：历史的理解顺序是从早到晚，
  *    而家长要找的是"刚才那一版"，所以列表最新的在最上面。
+ *    ★ **示例角色的第一版不列**（2026-10-16，用户："去掉第一版，这个是系统给好的，
+ *      应该直接就是好的"）。那一版不是家长的某一版，是我们**做这张卡时的草稿**：
+ *      `scripts/make-demo-cards.mts` 先按锚点出一张，后来把手工出的那张叠成了第 2 版
+ *      （`provenance.modelId` 写着「Google Generative AI（手工出图）」）。
+ *      列出来只有坏处——它长得像"可以切回去的一个选择"，切回去的却是练习用的图。
+ *      家长**自己**孩子的第一版照旧列出来：那是他真出过的一版，切回去有意义。
+ *      （判据用 `demoId`，与"能不能改、能不能删"同一把尺子，见下面那段。）
  * 4. **删除的两步是"列出要失去什么"→"确认"，不是"确定吗"**（第三刀）。
  *    第二步弹的是**取回来的数字**（几本书、几版形象、每个位置各多少条），
  *    不是我们写死的一句话——因为家长需要知道的不是"你确定吗"，是"要没的是哪些"。
  *    预演与结果**共用同一个渲染组件**：两处各写一遍，就会出现
  *    "预演说删 8 条、结果说删了 7 条"这种看不出是数错了还是渲染错了的分歧。
+ * 5. **「改基础信息」那一格不是"改了这一页"，改的是以后**（用户 2026-10-15 提的第 5 条）。
+ *    两句实话必须印在那一格上，不然它就是在骗人：
+ *    - 已经做出来的书**不变**。`book.json` 里存的是当时那份档案的**快照**，不是引用
+ *      ——所以"改完名字发现书架里的旧书还写着旧名字"是**对的**，不是没生效。
+ *    - 改年龄档**不会重画形象**。卡是按八条锚点画的，年龄档只在**建卡那一次**
+ *      进过提示词（`ageLabelOf`）。要改他长什么样，走上面那颗「再画一版」。
+ *    ★ 那一格在 `demoId` 时**不渲染**——示例孩子改不了（`PATCH` 与 `DELETE`
+ *      共用同一道 `refuse()`，服务端 403）。但藏起来只是省一次白点，
+ *      守卫在服务端。
+ * 6. `error` / `notice` **挂在右栏顶上，不挂在某一格里**。它们是四个动作共用的那一条，
+ *    而其中三个动作（切回旧版 / 改档案 / 删掉他）跟"有没有形象"没关系——
+ *    写在「想改哪里」那张卡里面的话，没有形象的孩子**永远看不到失败提示**。
  */
 
 export type ChildDetailProps = {
@@ -46,10 +68,17 @@ export type ChildDetailProps = {
   demoId: boolean
   revisions: CardRevisionView[]
   anchors: readonly { slot: AnchorSlot; value: string }[]
-  checklist: readonly string[]
+  /**
+   * ★ 2026-10-16：`checklist` 那一项**去掉了**（用户："花❌的地方不要"）——它是
+   *   `checklistOf(card)` 拼给人读的那几句，只被「这张卡凭什么算同一个人」那张卡
+   *   底下那段话用过；那段话与那行标题一起删了，这一项就再没有人读。
+   *   引擎里的 `checklistOf` 与它喂的**比对**没动：那是"每一页还是不是他"的判据，
+   *   与这一屏显示不显示一句说明无关。
+   */
 }
 
-type Busy = { kind: 'idle' } | { kind: 'revise' } | { kind: 'switch' } | { kind: 'delete' }
+type Busy =
+  { kind: 'idle' } | { kind: 'revise' } | { kind: 'switch' } | { kind: 'delete' } | { kind: 'save' }
 
 /**
  * 删除凭据的一行（`lib/child-deletion.ts` 的 `DeletionPlace` 的界面版）。
@@ -73,11 +102,33 @@ type DeletionReceiptView = {
 }
 
 export default function ChildDetail(props: ChildDetailProps) {
-  const { profile, isDemo, demoId, revisions, anchors, checklist } = props
+  const { profile, isDemo, demoId, revisions, anchors } = props
   const router = useRouter()
-  const { settings, env, openSettings } = useSettings()
+  const { env, openSettings } = useSettings()
 
   const current = revisions.find((item) => item.isCurrent) ?? null
+  /**
+   * 版本历史里**列出来的**那几版（见文件头第 3 条）。
+   *
+   * ★ 只过滤"列表"，**不动 `revisions` 本身**：`current`、图、切换动作都还按全量算——
+   *   万一示例角色的 `latest` 恰好指着第 1 版（草稿），那一屏也得照常出图，
+   *   不能因为"列表里没有它"就变成一片空白。
+   */
+  const listed = demoId ? revisions.filter((item) => item.revision > 1) : revisions
+
+  /**
+   * 头部那一行末尾那句。
+   *
+   * ★ 示例角色**不报"第几版"**（2026-10-16）：那个编号是**我们做卡时的次序**
+   *   （先按锚点出一张草稿、再把手出图叠上去），不是家长做过的一版。
+   *   列表已经把那些版藏掉了，这里再留一句"现在这一版是第 2 版"，就成了"第 1 版呢？"
+   *   ——同一件事说一半比不说更糊涂。
+   */
+  const versionLine = current
+    ? demoId
+      ? ''
+      : ` · 现在这一版是第 ${current.revision} 版`
+    : ' · 还没有形象'
   /** 界面在看哪一版。默认就是现在这一版；点历史里的某一版只换"看"，不动指针 */
   const [viewing, setViewing] = useState<number | null>(current?.revision ?? null)
   const [suggestion, setSuggestion] = useState('')
@@ -87,6 +138,13 @@ export default function ChildDetail(props: ChildDetailProps) {
   /** 删除的两步：`plan` = 已把"要删什么"摆出来了（还没动手） */
   const [deleting, setDeleting] = useState<DeletionReceiptView | null>(null)
   const [deleted, setDeleted] = useState<DeletionReceiptView | null>(null)
+
+  /**
+   * 「改基础信息」那一份草稿。★ `null` = 没在改。
+   * 它是**从档案抄出来的一份本地草稿**，不是一条持续生效的绑定：
+   * 家长改到一半不保存就离开，档案不该跟着动（那才是"改了但没点保存"最该有的行为）。
+   */
+  const [draft, setDraft] = useState<ChildForm | null>(null)
 
   const shown = revisions.find((item) => item.revision === viewing) ?? current
   const imageReady = Boolean(env['IMAGE_MODEL'] && env['IMAGE_API_KEY'])
@@ -144,6 +202,58 @@ export default function ChildDetail(props: ChildDetailProps) {
       router.refresh()
     } catch {
       setError('网络断了，指针没动。')
+    } finally {
+      setBusy({ kind: 'idle' })
+    }
+  }
+
+  /** 从档案抄一份可改的草稿。★ `childId` 带上但**不发出去**（它只从 URL 来） */
+  function draftOf(): ChildForm {
+    return {
+      childId: profile.childId,
+      name: profile.name,
+      nameReading: profile.nameReading,
+      ageBand: profile.ageBand,
+      lookTags: [...profile.lookTags],
+      interestTags: [...profile.interestTags],
+    }
+  }
+
+  /**
+   * 保存档案。
+   *
+   * ★ 失败时**留着草稿**：清空它等于把家长刚打的那一遍一起回滚了，
+   *   而失败的原因（比如名字被引擎判空）往往正需要他改几个字再试。
+   * ★ 成功后 `router.refresh()`：这一屏的标题、年龄那一行、卡墙上的名字
+   *   都是服务端渲染的，不刷新就会出现"我改了但屏幕上还是旧的"。
+   */
+  async function saveProfile(): Promise<void> {
+    if (!draft) return
+    setBusy({ kind: 'save' })
+    setError(null)
+    setNotice(null)
+    try {
+      const response = await fetch(`/api/children/${encodeURIComponent(profile.childId)}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          name: draft.name,
+          nameReading: draft.nameReading,
+          ageBand: draft.ageBand,
+          lookTags: draft.lookTags,
+          interestTags: draft.interestTags,
+        }),
+      })
+      const payload = (await response.json()) as { profile?: unknown; message?: string }
+      if (!response.ok || !payload.profile) {
+        setError(payload.message ?? '没改上')
+        return
+      }
+      setDraft(null)
+      setNotice('档案改好了。以后做的书按新的来；已经做出来的那些不变。')
+      router.refresh()
+    } catch {
+      setError('网络断了，档案没改。')
     } finally {
       setBusy({ kind: 'idle' })
     }
@@ -221,7 +331,7 @@ export default function ChildDetail(props: ChildDetailProps) {
            所以整个替换掉，只留凭据与一条出口。 */
         <div className="cd__gone">
           <p className="cd__eyebrow">
-            <NextLink href="/character">← 小主角</NextLink>
+            <NextLink href="/character">← 角色卡</NextLink>
           </p>
           <h1 className="cd__title">
             {deleted.complete ? `${profile.name} 已经删掉了` : `${profile.name} 只删掉了一部分`}
@@ -237,7 +347,7 @@ export default function ChildDetail(props: ChildDetailProps) {
           ) : null}
           <DeletionReceipt receipt={deleted} done />
           <NextLink className="cd__btn" href="/character">
-            回「小主角」
+            回「角色卡」
           </NextLink>
         </div>
       ) : (
@@ -246,7 +356,7 @@ export default function ChildDetail(props: ChildDetailProps) {
             <div>
               <p className="cd__eyebrow">
                 {/* next/link 而不是 <a>：整页刷一次只为回列表，是这一屏最没必要的一笔开销 */}
-                <NextLink href="/character">← 小主角</NextLink>
+                <NextLink href="/character">← 角色卡</NextLink>
               </p>
               <h1 className="cd__title">
                 {profile.name}
@@ -257,7 +367,7 @@ export default function ChildDetail(props: ChildDetailProps) {
               </h1>
               <p className="cd__meta">
                 {AGE_BAND_LABELS[profile.ageBand]}
-                {current ? ` · 现在这一版是第 ${current.revision} 版` : ' · 还没有形象'}
+                {versionLine}
               </p>
             </div>
           </header>
@@ -276,10 +386,11 @@ export default function ChildDetail(props: ChildDetailProps) {
                     width={768}
                     height={768}
                   />
-                  <p className="cd__art-meta">
-                    第 {shown.revision} 版 · {shown.modelId}
-                    {shown.isCurrent ? ' · 现在用它' : ''}
-                  </p>
+                  {/* ★ 2026-10-16：图底下那行字（`第 N 版 · 模型 · 现在用它`）**删了**
+                      （用户："花❌的地方不要"）。它说的两件事各有别处已经在说：
+                      在看哪一版，头部那句与下面版本历史里选中那一行都写着；
+                      用的是哪个模型，本来是 `.cd__foot` 那句在说，而那句用户也划掉了
+                      ——一个只在这一屏出现的"是谁在画"，留着就是同一件事说三遍。 */}
                   {shown.suggestion ? (
                     <p className="cd__art-note">这一版照着这句话改的：{shown.suggestion}</p>
                   ) : null}
@@ -311,12 +422,12 @@ export default function ChildDetail(props: ChildDetailProps) {
                 </div>
               )}
 
-              {revisions.length > 1 ? (
+              {listed.length > 1 ? (
                 <div className="cd__history">
                   <h2 className="cd__h2">版本历史</h2>
                   <ul className="cd__versions">
                     {/* 最新的在最上面：家长要找的是"刚才那一版" */}
-                    {[...revisions].reverse().map((item) => (
+                    {[...listed].reverse().map((item) => (
                       <li key={item.revision}>
                         <button
                           type="button"
@@ -328,9 +439,16 @@ export default function ChildDetail(props: ChildDetailProps) {
                           {item.isCurrent ? (
                             <span className="cd__version-now">现在用它</span>
                           ) : null}
-                          <span className="cd__version-what">
-                            {item.suggestion ?? '第一版：按锚点画的'}
-                          </span>
+                          {/* ★ 这一行的文案原来是 `item.suggestion ?? '第一版：按锚点画的'`，
+                              也就是**没有建议的每一版**都会自称"第一版"——用户截图上第 2 版
+                              底下就印着这句（它是脚本装进去的手工图，没有 suggestion）。
+                              现在只有真的第 1 版才说这句；没有建议、又不是第一版时**什么都不写**：
+                              那一版的来历我们不一定知道，"不说"比"说错"好。 */}
+                          {item.suggestion ? (
+                            <span className="cd__version-what">{item.suggestion}</span>
+                          ) : item.revision === 1 ? (
+                            <span className="cd__version-what">第一版：按锚点画的</span>
+                          ) : null}
                         </button>
                       </li>
                     ))}
@@ -341,6 +459,18 @@ export default function ChildDetail(props: ChildDetailProps) {
 
             {/* ── 右边：提建议 + 这张卡凭什么算同一个人 ──────────────────────── */}
             <div className="cd__right">
+              {/* ★ `error` / `notice` 是**四个动作共用的那一条**（再画一版 / 切回旧版 /
+                  改档案 / 删掉他），所以它俩挂在右栏**顶上**，不挂在某一格里。
+                  原来它们写在「想改哪里」那张卡里面，而那张卡被 `current` 挡着——
+                  于是"这个孩子还没有形象"的那些人，删除失败与保存失败都**不显示任何话**：
+                  一句"没删掉"写进了 state，却没有任何地方读它。这一条是验证时发现的，
+                  不是读代码读出来的（读代码只会觉得"渲染在那儿呢"）。 */}
+              {error ? (
+                <p className="cd__error" role="alert">
+                  {error}
+                </p>
+              ) : null}
+              {notice ? <p className="cd__notice">{notice}</p> : null}
               {current ? (
                 <div className="cd__card">
                   <h2 className="cd__h2">想改哪里？</h2>
@@ -376,20 +506,72 @@ export default function ChildDetail(props: ChildDetailProps) {
                       </button>
                     </p>
                   ) : null}
-                  {error ? (
-                    <p className="cd__error" role="alert">
-                      {error}
-                    </p>
-                  ) : null}
-                  {notice ? <p className="cd__notice">{notice}</p> : null}
                   {/* ★ 这里**没有**"AI 会尽力理解"这类话（文件头第 1 条）：改没改出来，
                   上面两版并排一放就知道，不需要我们用一句话先把责任推开 */}
                 </div>
               ) : null}
 
-              {anchors.length > 0 ? (
+              {/* ── 改基础信息（用户 2026-10-15 提的第 5 条）────────────────────
+                  ★ 示例角色**不渲染这一格**：`PATCH` 复用的就是删除那一道 `refuse()`，
+                    服务端会 403。界面上提前不给入口，比让人点完吃一句拒绝好；
+                    而守卫仍然在服务端——这一格藏不藏都挡不住一个直接打接口的请求。 */}
+              {demoId ? null : (
                 <div className="cd__card">
-                  <h2 className="cd__h2">这张卡凭什么算「同一个人」</h2>
+                  <h2 className="cd__h2">改基础信息</h2>
+                  {draft ? (
+                    <>
+                      <ChildFields child={draft} onPatch={(p) => setDraft({ ...draft, ...p })} />
+                      {/* ★ 两句必须说的实话，缺一句这一格就是在骗人 */}
+                      <p className="cd__hint">
+                        改的是<strong>以后</strong>做的书——已经做出来的那些仍然按当时那一份档案
+                        （书里存的是快照，不是引用）。 年龄档改完<strong>不会重画形象</strong>
+                        ：形象按那八条锚点画， 要改他长什么样，用上面那颗「再画一版」。
+                      </p>
+                      <div className="cd__row">
+                        <button
+                          type="button"
+                          className="cd__btn"
+                          disabled={busy.kind !== 'idle'}
+                          onClick={() => void saveProfile()}
+                        >
+                          {busy.kind === 'save' ? '正在存…' : '保存'}
+                        </button>
+                        <button
+                          type="button"
+                          className="cd__btn cd__btn--ghost"
+                          disabled={busy.kind !== 'idle'}
+                          onClick={() => setDraft(null)}
+                        >
+                          取消
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <p className="cd__hint">
+                        名字、读音、年龄档，还有他喜欢什么——这些决定以后每一本里
+                        <strong>故事怎么讲给他</strong>，不决定他长什么样。
+                      </p>
+                      <button
+                        type="button"
+                        className="cd__btn cd__btn--ghost"
+                        disabled={busy.kind !== 'idle'}
+                        onClick={() => setDraft(draftOf())}
+                      >
+                        改一改
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {anchors.length > 0 ? (
+                /* ★ 2026-10-16：这一格原来有标题（「这张卡凭什么算「同一个人」」，被用户划掉）
+                   和底下一段解释（`画每一页时按这几条画…`，被用户打了两个叉）。两样都删了，
+                   只留下**那八条本身**——它们是这张卡唯一不可替代的东西：
+                   出图与比对都按这几条走（ADR-0007），而"为什么按这几条"是文档里的话，
+                   不是家长每次打开孩子这一页要重读一遍的话。 */
+                <div className="cd__card">
                   <dl className="cd__anchors">
                     {anchors.map((anchor) => (
                       <div key={anchor.slot} className="cd__anchor">
@@ -398,86 +580,78 @@ export default function ChildDetail(props: ChildDetailProps) {
                       </div>
                     ))}
                   </dl>
-                  <p className="cd__hint">
-                    画每一页时按这几条画，核对每一页时按同一批查（ADR-0007）。 上面那
-                    {checklist.length}
-                    条就是核对清单——「这一页还是不是他」因此有答案，而不是只有感觉。
-                  </p>
                 </div>
               ) : null}
 
-              {/* 当前设置里用的图像模型：出图前能一眼看到"是谁在画" */}
-              <p className="cd__foot">
-                画图用的是 <code>{settings.image.model || '（没配）'}</code>。换模型在右上角的
-                <button type="button" className="cd__link" onClick={openSettings}>
-                  模型与密钥
-                </button>
-                。
-              </p>
+              {/* ★ 2026-10-16：`画图用的是 <模型>。换模型在右上角的「模型与密钥」。` 这句
+                  **删了**（用户："花❌的地方不要"）。删得掉的理由是核过的：它不是唯一的路——
+                  侧栏那颗「模型与密钥」一直在（`AppShell`），而没配模型时「再画一版」那张卡
+                  底下还有一句带按钮的实话（`imageReady` 那一条）。 */}
             </div>
           </div>
 
           {/* ── 删除（工单 03 第三刀）。★ 摆在整页最下面、字号最小的一档：
           它是一个"退到不能再退"的动作，不该与上面那些日常动作抢视线。
-          删成之后的那一屏在**外面**（`deleted` 那个分支），这里只剩"要不要删" ─────── */}
-          <section className="cd__danger">
-            {deleting ? (
-              <div className="cd__confirm">
-                <h2 className="cd__h2">要删掉 {profile.name} 的这些东西：</h2>
-                <DeletionReceipt receipt={deleting} />
-                <p className="cd__danger-warn">
-                  <strong>删了就回不来了</strong>——没有回收站，也没有备份。
-                  {deleting.books.length > 0
-                    ? `已经做出来的 ${deleting.books.length} 本书会一起没。`
-                    : ''}
-                </p>
-                <div className="cd__row">
-                  <button
-                    type="button"
-                    className="cd__btn cd__btn--danger"
-                    disabled={busy.kind !== 'idle'}
-                    onClick={() => void confirmDeletion()}
-                  >
-                    {busy.kind === 'delete' ? '正在删…' : '确认删掉'}
-                  </button>
-                  <button
-                    type="button"
-                    className="cd__btn cd__btn--ghost"
-                    disabled={busy.kind !== 'idle'}
-                    onClick={() => setDeleting(null)}
-                  >
-                    不删了
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="cd__danger-quiet">
-                {demoId ? (
-                  /* ★ 示例角色不是"我们懒得做删除"，是**删不掉**：档案在 public/ 里，
-                 硬删只会让他下一次从 public/ 回来、而且没有形象。理由要说出来 */
-                  <p className="cd__hint">
-                    {profile.name} 是随仓库发布的示例角色，<strong>不能删</strong>—— 他的档案在{' '}
-                    <code>public/demo/</code> 里，是仓库的一部分。
-                    真把他名下的图删掉，下一次列目录他会从那里回来，变成一个没有形象的孩子。
+          删成之后的那一屏在**外面**（`deleted` 那个分支），这里只剩"要不要删" ───────
+          ★ `id="delete"`：角色卡上那颗「删掉他」链到这里（`/character/<id>#delete`）。
+            这个 id 是**两个组件之间的接口**，改它要同时改 `CharacterWall.tsx`。
+            上面那条 `scroll-margin-top` 也是为它写的——不然跳过来这一节会被顶栏裁住。
+          ★ 2026-10-16：示例角色**连这一节都不渲染**了。原来这里留了一段话说
+            "他是随仓库发布的示例角色，不能删，为什么不能删"（用户："花❌的地方不要"）。
+            删得掉是因为**判据本来就一致**：角色卡上那颗「删掉他」对示例角色不渲染
+            （`CharacterWall.tsx` 同一把尺子），服务端 `refuse()` 对示例 id 一律 403——
+            这一节留着，就是给一个**点不到、点到了也会被拒绝**的动作写说明。
+            代价说清楚：本机覆盖过同 id 档案（`source` 是 local、`demoId` 仍为 true）时，
+            角色卡那颗会露出来、点进来却看不到这一节。那种情形服务端照旧 403，
+            但**屏幕上不会再有一句解释**——这是删掉这段话的真实代价，不是零成本。 */}
+          {demoId ? null : (
+            <section className="cd__danger" id="delete">
+              {deleting ? (
+                <div className="cd__confirm">
+                  <h2 className="cd__h2">要删掉 {profile.name} 的这些东西：</h2>
+                  <DeletionReceipt receipt={deleting} />
+                  <p className="cd__danger-warn">
+                    <strong>删了就回不来了</strong>——没有回收站，也没有备份。
+                    {deleting.books.length > 0
+                      ? `已经做出来的 ${deleting.books.length} 本书会一起没。`
+                      : ''}
                   </p>
-                ) : (
-                  <>
+                  <div className="cd__row">
+                    <button
+                      type="button"
+                      className="cd__btn cd__btn--danger"
+                      disabled={busy.kind !== 'idle'}
+                      onClick={() => void confirmDeletion()}
+                    >
+                      {busy.kind === 'delete' ? '正在删…' : '确认删掉'}
+                    </button>
                     <button
                       type="button"
                       className="cd__btn cd__btn--ghost"
                       disabled={busy.kind !== 'idle'}
-                      onClick={() => void askDeletion()}
+                      onClick={() => setDeleting(null)}
                     >
-                      {busy.kind === 'delete' ? '正在数…' : '删掉他和他的一切'}
+                      不删了
                     </button>
-                    <p className="cd__hint">
-                      会先把你<strong>将要失去什么</strong>列出来，再问你一次。
-                    </p>
-                  </>
-                )}
-              </div>
-            )}
-          </section>
+                  </div>
+                </div>
+              ) : (
+                <div className="cd__danger-quiet">
+                  <button
+                    type="button"
+                    className="cd__btn cd__btn--ghost"
+                    disabled={busy.kind !== 'idle'}
+                    onClick={() => void askDeletion()}
+                  >
+                    {busy.kind === 'delete' ? '正在数…' : '删掉他和他的一切'}
+                  </button>
+                  <p className="cd__hint">
+                    会先把你<strong>将要失去什么</strong>列出来，再问你一次。
+                  </p>
+                </div>
+              )}
+            </section>
+          )}
         </>
       )}
     </section>

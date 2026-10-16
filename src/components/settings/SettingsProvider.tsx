@@ -26,6 +26,8 @@ import {
   toEnv,
   type SettingsForm,
 } from '@/lib/settings/state.ts'
+import { voiceCatalog, type CatalogVoice } from '@/lib/voices/catalog.ts'
+import { addMyVoice, loadMyVoices, removeMyVoice, type MyVoice } from '@/lib/voices/store.ts'
 import SettingsDrawer from './SettingsDrawer.tsx'
 
 export type SettingsContextValue = {
@@ -36,6 +38,22 @@ export type SettingsContextValue = {
   env: Record<string, string | undefined>
   /** 生成的书会不会有朗读 */
   canNarrate: boolean
+  /**
+   * 可选的音色 = **预设 + 我录的**（`lib/voices/catalog.ts`）。
+   * ★ 它是设置的一部分：当前音色就是 `settings.speech.voice` 那一个字符串，
+   *   所以这份表也住在这里——`/home`、设置抽屉、`/voice` 三处读它一个，
+   *   不各自去 map `DEFAULT_VOICES`（那样迟早有一处忘了滤掉"模型对不上"的那些）。
+   */
+  voices: CatalogVoice[]
+  /** 我录的那些（带创建时间与授权凭据号，删除时要用） */
+  myVoices: MyVoice[]
+  /** 建好一条：写进本地记录，并把它设为当前音色（刚录完就想用它，不必再点一下） */
+  rememberVoice: (voice: MyVoice) => void
+  /**
+   * 删掉一条：本地记录跟着走；如果当前音色正指着它，**清空并如实说明**——
+   * 不悄悄回落到另一个声音（那是"你的书突然换了个嗓子"）
+   */
+  forgetVoice: (voiceId: string) => void
   open: boolean
   openSettings: () => void
   closeSettings: () => void
@@ -52,6 +70,8 @@ export function useSettings(): SettingsContextValue {
 export default function SettingsProvider({ children }: { children: React.ReactNode }) {
   // ★ 初值是默认值（服务端也渲染得出来），挂载后再合并本地存的那半份
   const [settings, setSettings] = useState<SettingsForm>(DEFAULT_SETTINGS)
+  /** 我录的音色。★ 与 settings 同一条路：初值空（服务端渲染得出来），挂载后再读盘 */
+  const [myVoices, setMyVoices] = useState<MyVoice[]>([])
   const [open, setOpen] = useState(false)
 
   useEffect(() => {
@@ -65,6 +85,7 @@ export default function SettingsProvider({ children }: { children: React.ReactNo
         speech: { ...stored.speech, apiKey: current.speech.apiKey },
       }
     })
+    setMyVoices(loadMyVoices())
   }, [])
 
   const patch = useCallback(
@@ -85,17 +106,55 @@ export default function SettingsProvider({ children }: { children: React.ReactNo
   const env = useMemo(() => toEnv(settings), [settings])
   const canNarrate = useMemo(() => speechReady(settings), [settings])
 
+  /**
+   * 建好一条音色。★ 两件事一起做，因为它们本来就是一件事的后果：
+   * 记下来（本地那份列表）+ 把它设成当前音色（刚录完就想着用它）。
+   * 若模型现在还没填，`patch` 照写不误——`speechReady` 会如实说"还缺模型名"。
+   */
+  const rememberVoice = useCallback((voice: MyVoice) => {
+    setMyVoices(addMyVoice(voice))
+    setSettings((current) => {
+      const next: SettingsForm = { ...current, speech: { ...current.speech, voice: voice.voiceId } }
+      saveStoredSettings(next)
+      return next
+    })
+  }, [])
+
+  /**
+   * 删掉一条。★ 当前音色正指着它时**清空**，而不是回落到另一个声音：
+   * 回落会让"我删掉的那个声音"变成"另一个陌生声音"，而用户只是不想要那一条。
+   * 清空之后界面会说"还要再挑一个"（`speechReady` 为 false 时那一屏本来就会拦）。
+   */
+  const forgetVoice = useCallback((voiceId: string) => {
+    setMyVoices(removeMyVoice(voiceId))
+    setSettings((current) => {
+      if (current.speech.voice !== voiceId) return current
+      const next: SettingsForm = { ...current, speech: { ...current.speech, voice: '' } }
+      saveStoredSettings(next)
+      return next
+    })
+  }, [])
+
+  const voices = useMemo<CatalogVoice[]>(
+    () => voiceCatalog(myVoices, settings.speech.model.trim()),
+    [myVoices, settings.speech.model],
+  )
+
   const value = useMemo<SettingsContextValue>(
     () => ({
       settings,
       patch,
       env,
       canNarrate,
+      voices,
+      myVoices,
+      rememberVoice,
+      forgetVoice,
       open,
       openSettings: () => setOpen(true),
       closeSettings: () => setOpen(false),
     }),
-    [settings, patch, env, canNarrate, open],
+    [settings, patch, env, canNarrate, voices, myVoices, rememberVoice, forgetVoice, open],
   )
 
   return (

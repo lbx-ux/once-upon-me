@@ -166,6 +166,33 @@ export function checkAnchors(anchors: readonly CharacterAnchor[]): string[] {
     if (!present.has(slot)) problems.push(`缺${ANCHOR_LABELS[slot]}`)
   }
   for (const anchor of anchors) {
+    /**
+     * ★ **空值也算问题**（2026-10-15 补的，它补掉的是一个会花钱的漏洞）。
+     *
+     * 原来这一条只看"槽位在不在"，而 `normalizeAnchors` 是**丢空值**的
+     * （见它上面那行注释）。两者的差在生产路径上的样子是：
+     *   ① 界面把某一格清空 → 槽位还在 → 这里不报问题 → 按钮可点、
+     *   ② `/api/cards` 照单收下 → **先出图**（钱已经花了）→
+     *   ③ `buildCard` 里 `normalizeAnchors` 把那一格丢掉 → `validateCard` 才发现「缺骨相」→ 抛。
+     * 家长于是付了一张图的钱，换来一句"角色卡不合格"——`default-anchors.ts` 记的
+     * 就是同一类事故（那次是预填值自己不合格）。
+     * ★ 判据必须与 `normalizeAnchors` 的**同向**：那边丢空值，这边就得把空值当错，
+     * 否则界面说的"可以提交"比服务端说的"合法"更松，而那道缝只在花钱的那一步露出来。
+     *
+     * ★ **只管硬锚点**（2026-10-15 当天补的第二刀）。上面那段推理对软锚点**不成立**：
+     *   软锚点丢空值之后卡照样合法（`REQUIRED_SLOTS` 里没有它），所以"界面比服务端松"
+     *   这个差在软锚点上不花任何钱。反过来，把软锚点的空值也报成错会**假拦**——
+     *   症状是这一轮实测出来的：`/api/cards/analyze-photo` 会把照片里读不出来的格子
+     *   **清空**（那是刻意的，不清空就留着小宇的示例值），而照片里看不见"特征记号"
+     *   或"常服"是常事。于是家长读完一张照片，看到一句「记号是空的」，
+     *   按钮点不动——而那张卡本来完全合法。
+     * ★ 一句话概括判据：**空值只在"缺了它会出不了图"的槽位上算错**。
+     */
+    if (anchor.value.trim() === '') {
+      // 软锚点空着**不是问题**：`normalizeAnchors` 丢它，卡照样合法（理由见上）
+      if (isHardAnchor(anchor.slot)) problems.push(`${ANCHOR_LABELS[anchor.slot]}是空的`)
+      continue
+    }
     if (anchor.value.length > 80) problems.push(`${ANCHOR_LABELS[anchor.slot]}描述过长（>80 字）`)
     const hit = PER_PAGE_WORDS.find((word) => anchor.value.includes(word))
     if (hit) problems.push(`${ANCHOR_LABELS[anchor.slot]}含页级概念「${hit}」，应留在页级 prompt`)

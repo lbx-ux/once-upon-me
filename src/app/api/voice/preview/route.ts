@@ -1,5 +1,7 @@
 import { EngineError } from '@/lib/engine/index.ts'
-import { voiceProviderOf, type Env } from '@/lib/engine/providers/registry.ts'
+import { voiceProviderOf } from '@/lib/engine/providers/registry.ts'
+import { PREVIEW_LINE } from '@/lib/settings/preview-line.ts'
+import { envFromBody } from '@/lib/settings/request-env.ts'
 
 /**
  * POST /api/voice/preview —— 「听一句真的」
@@ -9,14 +11,18 @@ import { voiceProviderOf, type Env } from '@/lib/engine/providers/registry.ts'
  *   两种响应形状挤在一个端点里，两边都会写得别扭。
  *
  * ★ 为什么值得做：选音色这件事**没法用文字判断**。
- *   "男童声（5 岁）"这五个字不告诉你它念童书是什么调子——
- *   本轮用户就是听了三段真音频才说"这几个声音可以的"。
+ *   "天真男童音"这五个字不告诉你它念童书是什么调子——第一轮的两个音色就是听了三段真音频
+ *   才定下的，2026-10-16 换的那两个是用户在厂商控制台里**自己听过**才挑的。
  *   所以选音色的那一屏不给试听，等于让人蒙。
  *
  * 三条约定：
  *   1. 文本**限长**（一次试听不该变成一整本书）；
  *   2. 音频**不落盘**——直接回字节。落盘就要管清理，而它是一次性的试听；
  *   3. 密钥只从请求体的 env 来（ADR-0008），服务端 `process.env` 不参与。
+ *
+ * ★ 缺省那句与音色卡上印的那句是**同一个常量**（`lib/settings/preview-line.ts`）：
+ *   卡片会把它一起送来，缺省这条是兜底——两处各写一份的话，卡片上印的和实际念的
+ *   迟早成了两句话，而这种错没人会去对。
  */
 
 export const runtime = 'nodejs'
@@ -24,10 +30,6 @@ export const dynamic = 'force-dynamic'
 
 /** 试听最多这么长。超了就截，而不是报错——用户只是想听个调子 */
 const MAX_PREVIEW_CHARS = 80
-
-/** 默认那句。★ 用演示书第 1 页的真句子，不用"测试文本一二三"：
- *  念的是真语料，听出来的才是产品里的效果 */
-const DEFAULT_TEXT = '哗啦啦，大雨落下来。'
 
 export async function POST(req: Request): Promise<Response> {
   let source: Record<string, unknown>
@@ -37,19 +39,15 @@ export async function POST(req: Request): Promise<Response> {
     return new Response('请求体不是 JSON', { status: 400 })
   }
 
-  const rawEnv = source['env']
-  if (!rawEnv || typeof rawEnv !== 'object' || Array.isArray(rawEnv)) {
-    return new Response('env 要是键值对', { status: 400 })
-  }
-  const env: Env = {}
-  for (const [key, value] of Object.entries(rawEnv as Record<string, unknown>)) {
-    if (typeof value === 'string' && value.trim() !== '') env[key] = value
-  }
+  const env = envFromBody(source)
+  if (!env) return new Response('env 要是键值对', { status: 400 })
 
   const voiceId = String(source['voiceId'] ?? '').trim()
   if (voiceId === '') return new Response('没有指定音色', { status: 400 })
 
-  const text = String(source['text'] ?? DEFAULT_TEXT).slice(0, MAX_PREVIEW_CHARS)
+  // 调用方（音色卡）会把同一句话一起送来并印在卡片上；缺省这条是兜底，
+  // 两边读的是同一个常量（`lib/settings/preview-line.ts`），所以不会各印各的
+  const text = String(source['text'] ?? PREVIEW_LINE).slice(0, MAX_PREVIEW_CHARS)
 
   let bytes: Uint8Array
   let mime: string

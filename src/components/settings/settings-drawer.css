@@ -156,6 +156,16 @@
   background: rgba(var(--accent-rgb), 0.08);
 }
 
+/* ★ 2026-10-16 起这一排里会出现"自己录的音色"，而克隆音色是**绑模型**的
+   （实测跨模型 400）。对不上的那一条要看得出来是死的，`title` 里写着为什么
+   （见 `SettingsDrawer.tsx` 与 `lib/voices/catalog.ts` 的 `why`） */
+.sd__voice:disabled {
+  color: var(--ink-muted);
+  cursor: default;
+  text-decoration: line-through;
+  text-decoration-color: var(--dot);
+}
+
 .sd__probe {
   display: flex;
   flex-wrap: wrap;

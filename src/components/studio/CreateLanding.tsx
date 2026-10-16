@@ -3,14 +3,72 @@
 /**
  * CreateLanding —— 工作台「创作」那一屏：一句话进去
  *
- * 版式（2026-10-15 与首页并成同一世界之后）：左对齐的标题 → 一行说明 →
- * 两颗胶囊 → 一张纸（输入区 / 分隔线 / 提示与动作）→ **12 个主题的封面墙**。
+ * 版式（2026-10-15 与首页并成同一世界之后）：左对齐的标题 → 两颗胶囊 →
+ * 一张纸（输入区 / 分隔线 / **左边两颗工具 + 右边「开始创作」**）→
+ * **12 个主题的封面墙**。
+ * ★ 2026-10-16 起标题**上方**还有一行「书的形态」（`.cl__forms`）——那一行是**居中**的，
+ *   而它以下的一切仍然是左对齐的。这是按用户画的草图标上去的（他在标题上方画了两个框），
+ *   是一次**刻意的不对称**，不是没对齐：形态换的是"这一页在给谁做书"，
+ *   它管的是整块，所以它在上方居中；标题以下管的是"这本书"，所以左对齐。
+ *
+ * ★ 2026-10-15 按用户要求删掉这**两行字**，别把它们当成漏了：
+ *   1. 标题下那行说明（`.cl__sub`，"选好小主角和声音…"）
+ *   2. 输入框下那行小字（`.cl__hint`，"一句话就够…"）
+ *   3. 那句语音警示（`.cl__warn` 原来那一句，"语音的 Key 或模型名还没填…"）
+ *   留下的只有"他必须看见的那几件"：两颗胶囊、输入框，以及动作栏里那三颗按钮。
+ *
+ * ★ 2026-10-16 「书的形态」那一行（`.cl__forms`）：**两颗按钮，但只有一颗能选**，
+ *   因为共读版还没开始做（看板排在 W3，README §一 记着"未开始"）。用户这一轮要的就是
+ *   把产品**有两种形态**这件事摆出来（GLOSSARY §语言：独读版 / 共读版）。
+ *   1. ★ **共读版那一颗是真 `disabled`，而且按钮上直接写着「还没做」。**
+ *      这个项目的既有判断是"没有的东西直说没有""一颗点了没反应的按钮不如没有"
+ *      （CLAUDE.md §不糊弄）——所以它不许是一颗看着能点、点了什么都不发生的按钮。
+ *      「还没做」这句话也**不做低对比**：禁用态本来不受对比度约束，但淡到没人看见
+ *      "还没做"，那才是骗人。整颗控件落在 `--surface` 上，小字用 `--ink-muted`（5.33:1）。
+ *   2. **刻意没有 `useState`、没有 `onClick`**：只有一个可选值的时候，状态是假的。
+ *      共读版落地时要接线的地方写在下面那一段注释里（`toBookBody()` 现在写死 `'solo'`）。
+ *   3. ★ 会被质疑的一条：一个"只有一档能选的分段控件"，看起来正撞在
+ *      `.scratch/studio-round2/issues/02-home-two-picks.md` §一（画风那一格为什么撤：
+ *      "一个用户动不了的格子占着可选项的位置，只是在数这一屏还剩几个格子"）。
+ *      **两者不是同一件事**，差别在"有没有第二个值"：画风是产品**永远只有一档**，
+ *      而形态**真的有两档，且引擎侧两档都成立**（ADR-0006：`BookRequest.form` 是入参）。
+ *      缺的只是界面与"读"，而且已排期。所以这里摆的不是一个假选择，
+ *      是**产品形状的可见性**。下一个人若想拿 §一 把这两颗也撤掉，先读这一条。
+ *
+ * ★ 2026-10-16 两个下拉各**减一行**，都是用户要求（"只显示照片和姓名就行，
+ *   不用写那么多"）：
+ *   1. 小主角那一项后面的「第 N 版 · <模型名> 画的」**撤了**。那是**卡的历史**，
+ *      做卡的人（`/character`）才需要它；在这里，"哪张卡"由头像和名字就说完了，
+ *      而且这行字每一张都长得一样，占着位置却不帮人做选择。
+ *      `revision` / `modelId` 仍在数据里（`/character` 那一屏照旧念），这里只是不显示。
+ *   2. 声音那一项后面的机器名（`longjielidou_v3.6`）**撤了**，只留调性
+ *      （"天真男童音"）。这一条推翻的是本文件原来那句"机器名照旧念出来，
+ *      名字对得上，去 `/voice` 才找得到那一张卡"——那句话在当时是对的，
+ *      现在不对了，因为**这个下拉里已经不再通往 `/voice`**（见下面第 4 条）：
+ *      对不上号这个代价没有了，而机器名对选购者本来就零信息。
+ *      ★ 代价要写明白：**在这一屏选声音，从今往后只能靠"天真男童音"这四个字**，
+ *        听不到。`/voice` 那一屏（侧栏「声音」进得去）每张卡照样能听一句真的，
+ *        但这个下拉不再指过去。若哪天觉得"盲选"这件事变严重了，
+ *        该修的是**在这里放试听**，不是把机器名加回来。
+ *   4. 下拉底部那条「先去听一句真的 →」**撤了**（用户划掉的）。判断没变——
+ *      选音色确实没法靠文字判断——变的是**摆法**：一个下拉里塞第三条腿，
+ *      比没有这条腿更乱。`/voice` 仍在侧栏上，没有变成走不到的路。
+ *
+ * ★ 「优化提示词」与「换一句」**搬过一次家，也没有删过**——记在这里免得再被误读一遍：
+ *   它们原来挤在动作栏的**右边**（和主按钮抢同一处视线），用户要求挪到**左边**、
+ *   并且**去掉可见文字只留图标**。所以动作栏是 `[左：两颗图标] …… [右：开始创作]`。
+ *   这个排法不只是好看：右边那颗是**离开这一屏**的动作，左边两颗是**改框里这句话**
+ *   的动作，两者不是一件事，本来就不该并排。
+ *   ★ 只有图标就**必须**补 `aria-label`（否则读屏念到的是一颗匿名按钮），
+ *     而且"正在想…"那件事也要换个方式说——现在靠 `data-busy` 的呼吸 + `aria-busy`。
+ *   ★ 优化那一颗必须长在**它真正作用的输入框**旁边（工单 07 §一）：
+ *     长在主题那一行，用户会以为"挑了恐龙再优化"会变成另一只恐龙。
  *
  * ★ 它**不自己造一套表单**：这一句话交给 `/create?wish=…&theme=…&card=…`，
  *   创作流里那四步（孩子 / 想讲什么 / 角色卡 / 生成）一步都不少。
  *   也就是说这一屏是**入口**，不是另一条生成路径——两条路径迟早会漂。
  *
- * 四处与最初那版参考图不同，都是刻意的：
+ * 五处与最初那版参考图不同，都是刻意的：
  *   1. 提示语写"想讲什么故事"，不写参考图那句"描述要生成的画面"——
  *      这个产品生成的是**书**，不是图。说成画面会让人以为只出一张图。
  *   2. 画风那一格**撤了**（原来是"一个事实"的只读胶囊）。撤的理由是它连事实都省了：
@@ -23,17 +81,31 @@
  *      12 个主题各一张水彩封面，点一下填进输入框。emoji 因此在这一屏彻底消失——
  *      首页 §五 早就写过"emoji 是扁平高饱和的 clip-art，与水彩是两套画法"，
  *      主页留着它，两屏放在一起会互相拆台。
+ *   5. 参考图那颗小人**搬过来了，但换了做法**：输入卡右上角站着一个全身的孩子
+ *      （`.cl__figure`，12 张之一，出自 `public/figures/`）。两处不同是刻意的——
+ *      **全身不切割**（参考做法把他下半身藏进纸里，那需要一套层叠戏法，而且
+ *      "只对着一张输入框露半个人"不是这一屏想说的话）；**不是 3D 盲盒质感**
+ *      （与第 4 条同一判断：一个树脂公仔站在 12 张水彩旁边是两套画法互相拆台）。
+ *      ★ **他只跟着主题墙走，没有第二个来源**：点「鲸鱼」封面，站上来的就是鲸鱼
+ *        那张里的孩子；没挑主题时站 `DEFAULT_FIGURE`。这一句就是全部规则——
+ *        曾经有过"侧栏手动换人、手动值覆盖主题"那一套，已按用户要求**整块拆掉**
+ *        （连 `FigureProvider` / `figure-pref` / `FigurePicker` 一起删掉，见
+ *        README §五）。所以现在这里是**一条推导**，不是一个会被谁改掉的状态：
+ *        `figure = theme ?? DEFAULT_FIGURE`。将来若要按用户记住形象（登录之后那件事），
+ *        它是**另一件事**——不要顺手在这里加一个 override 回来。
  *
  * ★ 两格都是**真控件**，一个假的都没有：小主角那一格列已经存在的卡，
- *   声音那一格列 `DEFAULT_VOICES`。
+ *   声音那一格列 `SettingsProvider` 那张表（预设 + 我录的，见 `lib/voices/catalog.ts`）。
  *   ★ 声音这一格不新造状态：它写的是 `settings.speech.voice`，与 `/voice` 那一屏
  *     `VoicePicker.tsx` 是**同一个字段、同一个 `patch`**。所以在这里选完，
  *     点「开始创作」进去的那一次生成就已经是它了——不需要再往 URL 上挂一个 voice 参数
  *     （`/create` 那一边本来就从设置里读 `env`）。一个值只有一个家。
  *   ★ 它**不做试听**。`VoicePicker.tsx` 的文件头写着选音色这件事没法用文字判断——
- *     那句判断没变，所以我不能在这里摆一个"看名字挑"的下拉就完事。做法是下拉底部
- *     给一条通到 `/voice` 的路（那里每张卡都能"听一句真的"），而**不是**把试听那
- *     ~30 行 fetch + Blob 复制第二份：一个行为两个实现，迟早有一份先烂。
+ *     那句判断没变，所以我不能靠一句"看名字挑"就完事。原来的做法是下拉底部给一条
+ *     通到 `/voice` 的路，而**不是**把试听那 ~30 行 fetch + Blob 复制第二份
+ *     （一个行为两个实现，迟早有一份先烂）；2026-10-16 那条路**也撤了**（见文件头
+ *     上面那一节）。★ 所以这里现在是一个**盲选**的下拉，这是已知代价，不是遗漏：
+ *     真要补，补的是试听本身，不是把机器名加回来。
  *
  * ★ 「小主角」那一格只列**已经存在的卡**，头像取 240 档（实测 10 KB）。
  *   上一版刻意不放头像，理由是"原图 2,772,224 字节，不该为一个 20px 的圆点拉两兆多"——
@@ -46,9 +118,9 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 
 import { nextExample, ofTheme } from '@/lib/creation/example-wishes.ts'
-import { DEFAULT_STYLE_LABEL } from '@/lib/prompts/character-sheet.ts'
-import { DEFAULT_VOICES, speechReady } from '@/lib/settings/state.ts'
-import { THEMES, themeCardPath } from '@/lib/themes.ts'
+import { DEFAULT_FIGURE, figurePath } from '@/lib/figures.ts'
+import { forgetThemes, peekThemes, themeArrival } from '@/lib/theme-handoff.ts'
+import { THEMES, themeCardPath, type ThemeKey } from '@/lib/themes.ts'
 import { useEnterTimeline } from '@/lib/useEnterTimeline.ts'
 import { useSettings } from '@/components/settings/SettingsProvider.tsx'
 
@@ -65,11 +137,16 @@ export type ChildOption = {
 
 export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
   const router = useRouter()
-  const { settings, patch, env, openSettings } = useSettings()
+  const { settings, patch, env, voices, openSettings } = useSettings()
   const rootRef = useRef<HTMLElement>(null)
   const [wish, setWish] = useState('')
-  /** 跟着示例句走的那条主题。用户自己打字时它保留上一次的值（清空是丢信息） */
-  const [theme, setTheme] = useState<string | null>(null)
+  /* 主题（以及由它推出来的「站着的是谁」）就住在这里。
+     ★ 它一度被搬到 `FigureProvider` 里，因为当时侧栏还有一颗换人的按钮要读它；
+        那颗按钮拆掉之后，这里就是唯一的家，于是搬回来——**留一个只有一个读者的
+        Provider 是给假想的将来搭架子**，不是省事。 */
+  const [theme, setTheme] = useState<ThemeKey | null>(null)
+  /* ★ 一条推导，不是一个状态：立绘只跟着主题走（见文件头 5） */
+  const figure = theme ?? DEFAULT_FIGURE
   const [exampleAt, setExampleAt] = useState(0)
   /** 哪一格的下拉开着。★ 一个状态而不是两个布尔：两格同时开着是画不出来的 */
   const [open, setOpen] = useState<'card' | 'voice' | null>(null)
@@ -102,7 +179,23 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
   const [optimizeError, setOptimizeError] = useState<string | null>(null)
   const [applied, setApplied] = useState(false)
 
-  useEnterTimeline(rootRef)
+  /* ── 接力：从首页点「开始创作」进来的那一次（2026-10-16）────────────────────
+   * 主题墙上那 12 格的起点不是"从下面浮上来"，而是**从环上那 12 张刚才所在的位置
+   * 飞回来**（几何与三块分工写在 `lib/theme-handoff.ts` 文件头）。
+   *
+   * ★ 只读**不认领**（`peekThemes` 而不是"拿走"）：React 严格模式会重复调用这个
+   *   初始化器，读一次就没的写法在 dev 下会读到空的；认领交给下面那个 effect。
+   * ★ 它是**一次性**的：初始化器只在挂上这一屏时跑一次，之后换个值重播整条
+   *   进场时间线是错的（那是"页面刷新了"的感觉）——`useEnterTimeline` 里那个 ref
+   *   把这条意思写死了。
+   * ★ 没有载荷（直接访问 / 刷新 / 静止模式 / 从别的入口进来）→ `themeArrival([])`
+   *   返回 null → 墙上那一步走 `ENTER_STEPS` 原来那条，**一个数都没动**。 */
+  const [arrival] = useState(() => themeArrival(peekThemes() ?? []))
+  useEnterTimeline(rootRef, arrival)
+  /* 认领掉这一份。不清的话它会一直躺到过期，而"窗口内从别的入口进 /home"
+     （去 /shelf 转一圈再回来，`staleTimes` 那 30 秒里回访是常态）会拿一份
+     跟当下毫无关系的位置去飞。挂上这一屏就算用过——**这一屏只有第一次挂上是那一次接力** */
+  useEffect(() => forgetThemes(), [])
 
   const ready = wish.trim() !== ''
   const chosen = cards.find((card) => card.cardId === picked) ?? cards[0] ?? null
@@ -112,10 +205,13 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
 
   /* 音色：读的是设置里那**唯一**一份，写回也是 */
   const voiceId = settings.speech.voice
-  const voice = DEFAULT_VOICES.find((item) => item.id === voiceId) ?? null
-  /** 缺的那一样决定了该怎么修：没有 Key/模型名要去设置，没选声音就在这颗药丸里挑 */
-  const speechOk = speechReady(settings)
-  const speechKeysReady = Boolean(settings.speech.apiKey.trim() && settings.speech.model.trim())
+  /* ★ 表来自 `SettingsProvider`（预设 + 我录的），不再直接 map `DEFAULT_VOICES`：
+     自己录的那条必须也能在这里选到，而那一步要经过"模型对不上就不许选"这条判据——
+     判据只在 `voiceCatalog` 里有一份（见那个文件头） */
+  const voice = voices.find((item) => item.id === voiceId) ?? null
+  /* ★ 原来这里还有 `speechOk` / `speechKeysReady` 两条推导，只喂给那句语音警示。
+     警示按用户要求撤了，它们跟着删——留着会变成"两句没人读的判断"，
+     下一个人会以为界面上还有一处地方在说这件事（现在没有，见 `.cl__bar` 那段注释） */
 
   /* 优化用的是**文本**那一组。★ 与 `missingRequired`（"能不能出书"）分开判：
      只配了图像的人照样能出书，但"把这句话改一改"动不了——两件事的边界不一样 */
@@ -159,8 +255,9 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
     router.push(`/create?${params.toString()}`)
   }
 
-  /** 填一句现成的话。★ 骰子与封面墙走的是同一个动作，只是选法不同：一个替你挑，一个你自己挑 */
-  const applyWish = (text: string, key: string): void => {
+  /** 填一句现成的话。★ 骰子与封面墙走的是同一个动作，只是选法不同：一个替你挑，一个你自己挑。
+   *  主题一起换，输入卡上方站着的那个孩子**也跟着换**（`figure` 是从 `theme` 推出来的） */
+  const applyWish = (text: string, key: ThemeKey): void => {
     setWish(text)
     setTheme(key)
   }
@@ -242,6 +339,27 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
 
   return (
     <section className="cl" ref={rootRef}>
+      {/* 书的形态。★ 两颗按钮，**只有一颗能选**：共读版还没开始做（W3）。
+          ★ 这里刻意**不写 `useState`、不写 `onClick`**——只有一个可选值的时候，
+            状态是假的。共读版落地时，接线点是 `lib/creation/state.ts` 的 `toBookBody()`：
+            它现在写死 `form: 'solo'`，要走的是**那一个入参**，不是新开一条生成路径
+            （ADR-0006 明说不许出现 `runSoloBook()` / `runSharedBook()` 这种分裂）。
+          ★ 共读版那一颗是真 `disabled` + 按钮上写着「还没做」——理由写在文件头第 1 条 */}
+      <div className="cl__forms" role="group" aria-label="书的形态">
+        <button type="button" className="cl__form" data-active="true" aria-pressed="true">
+          独读版
+        </button>
+        <button
+          type="button"
+          className="cl__form"
+          disabled
+          title="共读版还没开始做——现在做出来的都是独读版"
+        >
+          共读版
+          <span className="cl__form-todo">还没做</span>
+        </button>
+      </div>
+
       <h1 className="cl__title">
         {/* 两笔手绘装饰：纯装饰，读屏不念（aria-hidden）。进场时被"画"出来，静止模式下直接在场 */}
         <svg className="cl__doodle cl__doodle--spark" viewBox="0 0 40 40" aria-hidden="true">
@@ -254,11 +372,6 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
           <path d="M12 33c6-8 13-14 22-19" />
         </svg>
       </h1>
-
-      <p className="cl__sub">
-        选好小主角和声音，把想讲的那句话写下来就能开始。下面这些封面都是{DEFAULT_STYLE_LABEL}
-        画的。
-      </p>
 
       <div className="cl__pills">
         <div className="cl__pick" ref={cardRef}>
@@ -309,9 +422,10 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
                           height={24}
                         />
                         <span className="cl__option-name">{card.label ?? card.childId}</span>
-                        <span className="cl__option-meta">
-                          第 {card.revision} 版 · {card.modelId} 画的
-                        </span>
+                        {/* ★ 这里原来还有一行「第 N 版 · <模型名> 画的」——
+                            2026-10-16 撤了（用户："只显示照片和姓名就行"）。
+                            那是**卡的历史**，做卡那一屏才需要；在这一屏，
+                            "哪张卡"由头像 + 名字就说完了，而且那行字每张都一样长 */}
                       </button>
                     </li>
                   ))}
@@ -353,7 +467,7 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
             </svg>
             {/* 没选过时**不预填**一个默认音色：那会让"我还没选"看起来像"已经选好了"。
                 `''` 是 DEFAULT_SETTINGS 里真的那个值，这里就把那个值念出来 */}
-            <span className="cl__pill-text">{voice?.label ?? (voiceId || '还没选声音')}</span>
+            <span className="cl__pill-text">{voice?.name ?? (voiceId || '还没选声音')}</span>
             <svg className="cl__pill-caret" viewBox="0 0 16 16" aria-hidden="true">
               <path
                 d="m4 6.5 4 4 4-4"
@@ -367,36 +481,62 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
           </button>
           {open === 'voice' && (
             <ul className="cl__options cl__options--voice" role="listbox">
-              {DEFAULT_VOICES.map((item) => (
+              {voices.map((item) => (
                 <li key={item.id}>
                   <button
                     type="button"
                     role="option"
                     aria-selected={item.id === voiceId}
                     className="cl__option cl__option--voice"
+                    disabled={!item.usable}
+                    title={item.why}
                     onClick={() => {
                       patch('speech', { voice: item.id })
                       setOpen(null)
                     }}
                   >
-                    <span className="cl__option-name">{item.label}</span>
-                    <span className="cl__option-meta">{item.id}</span>
+                    <span className="cl__option-name">{item.name}</span>
+                    {/* ★ 只留调性。原来的「调性 · 机器名」里那个机器名（`longjielidou_v3.6`）
+                        2026-10-16 撤了（用户划掉的）：在这个下拉里它对选购者零信息，
+                        而它当年存在的理由是"对得上号，好去 `/voice` 找那一张卡"——
+                        这条下拉已经不通往 `/voice` 了，那个理由跟着消失 */}
+                    {/* ★ 调性这一行只有预设音色有。自己录的那条 `tone` 是**空串**，
+                        所以这里什么都不画——"用你自己录的那段声音合成"那句是同义反复
+                        （判据写在 `lib/voices/catalog.ts` 里） */}
+                    {item.tone ? <span className="cl__option-meta">{item.tone}</span> : null}
                   </button>
                 </li>
               ))}
-              {/* ★ 试听这条路**指过去**，不在这里重做一份：选音色没法靠文字判断，
-                  而 `/voice` 那一屏每张卡都能"听一句真的"（那里有现成的实现） */}
-              <li className="cl__options-foot">
-                <Link href="/voice" onClick={() => setOpen(null)}>
-                  先去听一句真的 →
-                </Link>
-              </li>
             </ul>
           )}
         </div>
       </div>
 
       <div className="cl__card">
+        {/* 绕着这张纸走的一圈光。★ 两个都是**纯装饰节点**，而且都是**静态的裁剪壳**——
+            真正会转的是它们各自的 `::before`（一张超大的方片）。这么拆是为了让每帧
+            只发生一次 transform 合成，而不是每帧重绘那圈渐变：用户要的是"一直转"，
+            那是常驻动画，账记在 `create-landing.css` 里 `.cl__beam` 那一段。
+            ★ 不给它们单开 ENTER_STEP：它们是 `.cl__card` 的孩子，跟着卡片那一步
+            `from({opacity, y})` 一起进场（与下面 `.cl__figure` 同一条理由）。 */}
+        <span className="cl__beam" aria-hidden="true" />
+        <span className="cl__beam-glow" aria-hidden="true" />
+
+        {/* 站着的小主角。★ **全身，不切割**——所以它是卡片的**孩子**而不是兄弟：
+            脚落在纸边上、人整个在纸面上方，不需要参考做法那种"卡片盖住下半身"的
+            层叠戏法（那套是给切 1/4 用的，我们这一版用不上，也少一个层叠上下文的坑）。
+            挂在卡片里面还顺手跟着卡片一起进场：`useEnterTimeline` 里 `.cl__card`
+            那一步 `from({opacity, y})` 会带着整棵子树动，所以**不给它单开一条
+            ENTER_STEP**——两处驱动同一个位移，迟早会看到人纸分离。
+            ★ 不可点（CSS 里 `pointer-events: none`）：换人在侧栏底部那一颗。
+            ★ `aria-hidden` + `alt=""`：装饰，读屏不念。图没到位时它什么都不画
+            （与首页那几处同一机制），所以下面那 12 张是这一屏能站人的前提。 */}
+        <div className="cl__figure" aria-hidden="true">
+          {/* key 一换就重挂载 → CSS 那个轻入每次换人都播一次。静止模式下不播 */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img key={figure} src={figurePath(figure)} alt="" width={256} height={384} />
+        </div>
+
         <label className="cl__field">
           <span className="cl__sr">想讲什么故事</span>
           <textarea
@@ -456,64 +596,48 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
           </p>
         )}
 
+        {/* 动作栏。★ 左边两颗是**改框里这句话**的工具，右边那颗是**离开这一屏**——
+            两者不是一类动作，所以分成两组、各占一边（原来三颗挤在右边，
+            主按钮和工具抢同一处视线，用户要求把工具挪到左边） */}
         <div className="cl__bar">
-          <div className="cl__note">
-            <p className="cl__hint">一句话就够，进去之后还能改，也可以不写、直接挑一个主题。</p>
-            {/* ★ 这颗药丸选完就能选，但**没有 Key 的时候它选了不会响**——
-                所以这里必须说出来，而且要说清缺的是哪一样：
-                两句话各自正好覆盖 `speechReady` 为假的两半（keys 齐 ⇒ 缺的只可能是音色）。
-                ★ 不写成 `role="alert"`：这不是"这一轮坏了"，是一个状态说明，
-                而且这一屏的语音只是**可选项**（没有朗读照样能出书）。
-                `/voice` 那一屏用 alert，是因为在那里"没配好"意味着用户专程来做的事做不成。 */}
-            {!speechOk && (
-              <p className="cl__warn">
-                {speechKeysReady ? (
-                  <>
-                    还没选声音——这样做出来的书<strong>没有朗读</strong>。上面那颗里挑一个，
-                    想先听听看就去
-                    <Link className="cl__link" href="/voice">
-                      「声音」那一屏
-                    </Link>
-                    。
-                  </>
-                ) : (
-                  <>
-                    语音的 Key 或模型名还没填——这样做出来的书<strong>没有朗读</strong>。
-                    <button type="button" className="cl__link" onClick={openSettings}>
-                      去补上
-                    </button>
-                  </>
-                )}
-              </p>
-            )}
-          </div>
-          <div className="cl__actions">
-            {/* 优化那一颗。★ 它在**输入框的右下角**，不在主题那一行——
+          <div className="cl__tools">
+            {/* 优化那一颗。★ 它在**输入框下方**，不在主题那一行——
                 按钮长在别处就是误导（工单 07 §一：那里写的是"挑了恐龙再优化会变成另一只恐龙"）。
-                ★ 缺文本密钥时它不报错，而是把设置打开：缺的东西在哪里就把哪里打开 */}
+                ★ 缺文本密钥时它不报错，而是把设置打开：缺的东西在哪里就把哪里打开
+                ★ 2026-10-15 按用户要求**去掉可见文字、只留那枚图标**。于是有了两条必须补的：
+                  ① `aria-label`——没有可见文字之后，读屏能念的就只剩它，少了就是一颗匿名按钮；
+                  ② `data-busy`——"正在想…"原来靠按钮上的字说，字没了就得靠**状态**说：
+                     图标自己呼吸 + `aria-busy`，静止模式下停在**一个固定的暗档**
+                    （不是"停下动画、卡在某一帧"，见 CSS 那条 @media） */}
             <button
               type="button"
               className="cl__optimize"
+              data-busy={thinking ? 'true' : 'false'}
               onClick={() => void optimize()}
               disabled={!ready || thinking}
+              aria-label={thinking ? '正在想…' : '优化提示词'}
+              aria-busy={thinking}
               title={
                 textMissing
-                  ? '优化要文本模型和 Key——点了先把设置打开'
+                  ? '优化提示词：要文本模型和 Key——点了先把设置打开'
                   : ready
-                    ? '把这句话改得更具体（先给你看，不直接替换）'
-                    : '先写一句话'
+                    ? '优化提示词：把这句话改得更具体（先给你看，不直接替换）'
+                    : '优化提示词：先写一句话'
               }
             >
               <svg className="cl__optimize-icon" viewBox="0 0 40 40" aria-hidden="true">
                 <path d="M14 4c1.6 6.4 4.6 9.4 11 11-6.4 1.6-9.4 4.6-11 11-1.6-6.4-4.6-9.4-11-11 6.4-1.6 9.4-4.6 11-11Z" />
                 <path d="M31 24c.7 2.8 2 4.1 4.8 4.8-2.8.7-4.1 2-4.8 4.8-.7-2.8-2-4.1-4.8-4.8 2.8-.7 4.1-2 4.8-4.8Z" />
               </svg>
-              {thinking ? '正在想…' : '优化提示词'}
             </button>
+            {/* 换一句。★ 同样只留那枚骰子，可访问名靠 `aria-label`。
+                ★ 它原来是一颗圆里三个点、后来补过文字标签（"读起来像随机生成一本书"），
+                  现在文字又撤了——所以 `title` 里必须把话说全，图标语言一个人扛不住 */}
             <button
               type="button"
               className="cl__roll"
               onClick={roll}
+              aria-label="换一句"
               title="换一句灵感（填进输入框，可以照改）"
             >
               <svg className="cl__roll-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -524,32 +648,43 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
                 <circle cx="8.5" cy="15.5" r="1.4" />
                 <circle cx="15.5" cy="15.5" r="1.4" />
               </svg>
-              换一句
-            </button>
-            <button
-              type="button"
-              className="cl__go"
-              onClick={submit}
-              disabled={!ready}
-              title={!ready ? '先写一句话' : chosen ? '开始创作' : '先去建一个小主角'}
-            >
-              开始创作
-              <svg className="cl__go-icon" viewBox="0 0 20 20" aria-hidden="true">
-                <path
-                  d="M3.5 10h12m-4.5-4.5L15.5 10l-4.5 4.5"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.7"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
             </button>
           </div>
+          {/* ★ 这一栏里**没有**那句语音警示了（用户要求撤掉）。后果写在这里，
+              别让下一个人以为是漏了：**没配语音 Key 的人在进入创作流之前
+              不会被告知"这本书没有朗读"**——「还没选声音」那颗药丸只反映
+              "选没选音色"，它不知道 Key 填没填。`/voice` 那一屏仍然会拦
+              （那里"没配好"意味着用户专程来做的事做不成），所以这件事不是消失了，
+              是**挪到了专门管它的那一屏**。要接回来就接在**上面那颗声音药丸**旁边，
+              不要另起一行小字。 */}
+          <button
+            type="button"
+            className="cl__go"
+            onClick={submit}
+            disabled={!ready}
+            title={!ready ? '先写一句话' : chosen ? '开始创作' : '先去建一个小主角'}
+          >
+            开始创作
+            <svg className="cl__go-icon" viewBox="0 0 20 20" aria-hidden="true">
+              <path
+                d="M3.5 10h12m-4.5-4.5L15.5 10l-4.5 4.5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.7"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
         </div>
       </div>
 
       <h2 className="cl__wallhead">或者，挑一个主题</h2>
+      {/* ★ 这一面墙与首页那个环**同序**（两边都是 `THEMES` 的顺序），接力就靠这一点：
+          第 i 格接的是环上第 i 张。**谁重排了这里，接力就会错位**——
+          `lib/theme-handoff.ts` 的文件头写着同一条，两处互相指着。
+          ★ 这一层在 CSS 里是定位元素（`position: relative; z-index: 2`），
+          也是为接力：飞行时那 12 张要从输入卡**上面**过去 */}
       <ul className="cl__wall">
         {THEMES.map((t) => {
           const wish0 = ofTheme(t.key)

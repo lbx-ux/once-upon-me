@@ -97,3 +97,41 @@ describe('不该产出帧的三种块', () => {
     expect(decodeFrames('data: x\n\n')).toEqual([{ event: 'message', data: 'x', id: undefined }])
   })
 })
+
+/**
+ * `flush()` —— 流结束时把缓冲里的最后半行交出来。
+ *
+ * ★ 它存在的理由是一次具体的截断：网关发完最后一帧就关连接、不补那个空行时，
+ *   严格按规范那一帧不算数，正文会**安静地少一截**（没有错误、没有日志）。
+ *   `providers/http.ts` 的 `requestSse` 在 EOF 时调它，就是为了这一段。
+ */
+describe('createSseDecoder 的 flush（流结束）', () => {
+  it('★ 结尾没有空行的那一帧也交出来', () => {
+    const decoder = createSseDecoder()
+    expect(decoder.push('data: {"a":1}\n\ndata: {"b":2}')).toEqual([
+      { event: 'message', data: '{"a":1}', id: undefined },
+    ])
+    expect(decoder.flush()).toEqual([{ event: 'message', data: '{"b":2}', id: undefined }])
+  })
+
+  it('已经分帧发出去的不会因为 flush 再来一遍', () => {
+    const decoder = createSseDecoder()
+    expect(decoder.push('data: x\n\n')).toHaveLength(1)
+    expect(decoder.flush()).toEqual([])
+    expect(decoder.flush()).toEqual([])
+  })
+
+  it('空缓冲 flush 出空数组（不是一条空事件）', () => {
+    expect(createSseDecoder().flush()).toEqual([])
+    // 只带注释的尾巴同样什么都不产出
+    const decoder = createSseDecoder()
+    decoder.push(': 心跳')
+    expect(decoder.flush()).toEqual([])
+  })
+
+  it('CRLF 的尾巴也认', () => {
+    const decoder = createSseDecoder()
+    decoder.push('data: x\r')
+    expect(decoder.flush()).toEqual([{ event: 'message', data: 'x', id: undefined }])
+  })
+})

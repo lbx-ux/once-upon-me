@@ -37,7 +37,7 @@ import { linearOrder } from './tree.ts'
 import { createEventFactory, type EngineEventPayload } from './events.ts'
 import { EngineError } from './errors.ts'
 import { planStory } from './plan.ts'
-import { illustrateAll } from './illustrate.ts'
+import { illustrateAll, illustrateCover } from './illustrate.ts'
 import { narrateAll } from './narrate.ts'
 import { cardDigest, validateCard } from './character-card/card.ts'
 import { digest } from './digest.ts'
@@ -55,6 +55,7 @@ export type {
   CharacterCard,
   ChildProfile,
   ConsistencyResult,
+  Cover,
   Illustration,
   Narration,
   Provenance,
@@ -178,6 +179,19 @@ export async function runBook(request: BookRequest, deps: RunDeps): Promise<Book
     now,
   })
 
+  // ── 封面 ──────────────────────────────────────────────────────────────────
+  // 排在页图之后：页图是书的正文，缺一本不成书；封面晚一步不影响任何依赖它的东西，
+  // 而且万一封面这次出图失败，前面花的钱至少还在页图里（封面失败是硬失败，见下面）。
+  const cover = await illustrateCover({
+    image: providers.image,
+    store: providers.store,
+    card: request.card,
+    bookId: bookIdOf(request),
+    title: plan.tree.title,
+    emit: forward,
+    now,
+  })
+
   // ── 配音 ──────────────────────────────────────────────────────────────────
   // 三种状态都发一条**说清原因**的事件，而不是只有"成功"与"沉默"两种：
   // 没配音的书在阅读器里是没有播放控件的，用户要知道为什么没有。
@@ -219,6 +233,10 @@ export async function runBook(request: BookRequest, deps: RunDeps): Promise<Book
     illustrations,
     errors,
     nodesPlanned: plan.tree.nodes.length,
+    // ★ 封面是一次**真实的付费调用**，必须进账。原来的口径只数页图，
+    //   加了封面却不改这里，`imageCalls` 就会比实际少一次——
+    //   而这个数字是 §10.1 与 #14 的数据源，"少一次"是账目错，不是舍入。
+    extraImageCalls: 1,
   })
 
   const book: Book = {
@@ -227,6 +245,7 @@ export async function runBook(request: BookRequest, deps: RunDeps): Promise<Book
     cardRevision: request.card.revision,
     form: plan.tree.form,
     tree: plan.tree,
+    cover,
     illustrations,
     // 硬失败页要跟着书走，不能只闪一下事件流——这就是 illustrateAll 注释里
     // 说的"书要标'这一页缺'"
@@ -296,6 +315,8 @@ function summarize(input: {
   illustrations: Illustration[]
   errors: { pageNo: number; message: string }[]
   nodesPlanned: number
+  /** 页图之外的付费出图调用（目前只有封面一次）。不传 = 0 */
+  extraImageCalls?: number
 }): BookStats {
   const judged = input.illustrations.filter(
     (item) => item.consistency && item.consistency.verdict !== 'unavailable',
@@ -306,8 +327,12 @@ function summarize(input: {
   return {
     elapsedMs: input.elapsedMs,
     // 每页最多画 maxAttempts 次，实际次数 = 各页 attempt 之和（失败的页也算，钱已经花了）
+    // ★ 封面不在 `illustrations` 里（它没有页号、也不比对），所以单独加：
+    //   口径是"这次运行一共花了多少次出图",不是"每页画了几次"。
     imageCalls:
-      input.illustrations.reduce((sum, item) => sum + item.attempt, 0) + input.errors.length,
+      input.illustrations.reduce((sum, item) => sum + item.attempt, 0) +
+      input.errors.length +
+      (input.extraImageCalls ?? 0),
     firstPassCount: firstPass.length,
     redrawCount: Math.max(0, judged.length - firstPass.length),
     totalCostCny: round2(input.illustrations.reduce((sum, item) => sum + (item.costCny ?? 0), 0)),

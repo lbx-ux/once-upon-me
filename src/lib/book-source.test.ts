@@ -12,8 +12,8 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { demoAssetPathFor, readerPages } from './book-source.ts'
-import type { Book, Illustration, Narration, StoryNode } from './engine/index.ts'
+import { coverUrlOf, demoAssetPathFor, readerPages } from './book-source.ts'
+import type { Book, Cover, Illustration, Narration, StoryNode } from './engine/index.ts'
 
 function node(pageNo: number, body: string[]): StoryNode {
   return {
@@ -127,6 +127,32 @@ describe('readerPages · 图与朗读互不影响', () => {
       (path) => `/demo/books/b1/${path.split('/').pop()}`,
     )
     expect(pages[0]?.audioUrl).toBe('/demo/books/b1/page-1-a1.mp3')
+  })
+})
+
+/**
+ * 封面：2026-10-15 起书里多了一个 `cover` 字段（一次单独的出图，3:4）。
+ *
+ * ★ 这一条锁的是"**没有就照实说没有**"：仓库里那本预生成的演示书是在这个字段之前
+ *   出的，它的 `book.json` 里没有 `cover`。阅读器要照实只出书名，
+ *   不许拿第一页顶上——拿第一页冒充当面，是"图没到位就留一个诚实的兜底"那条的反面。
+ */
+describe('coverUrlOf · 有封面走同一条 URL 规则，没有就是 null', () => {
+  const cover: Cover = {
+    asset: { path: 'books/b1/cover.png', digest: 'c1', bytes: 20, mime: 'image/png' },
+    provenance: { modelId: 'm', promptVersion: 'image-page@v1', cardRevision: 1, generatedAt: 0 },
+  }
+
+  it('有 cover → 用传进来的那个 urlOf（缩图规则与内页同一条，不另起一套）', () => {
+    const withCover: Book = { ...book({ nodes: [node(1, ['a'])] }), cover }
+    expect(coverUrlOf(withCover, urlOf)).toBe('/api/assets/books/b1/cover.png')
+  })
+
+  it('★ 没有 cover → null，不是空串、也不是第一页那张图', () => {
+    const bare = book({ nodes: [node(1, ['a'])], illustrations: [illustration(1)] })
+    expect(coverUrlOf(bare, urlOf)).toBeNull()
+    // 就算页图都在，也不许拿它当封面
+    expect(coverUrlOf(bare, urlOf)).not.toBe(urlOf('books/b1/page-1-a1.png'))
   })
 })
 

@@ -20,6 +20,8 @@
 import { assetRoot } from '@/lib/books-runtime.ts'
 import type { AgeBand } from '@/lib/engine/domain.ts'
 import { createFsStore, createProfileStore } from '@/lib/engine/index.ts'
+// ★ 校验只有一份：新建与改名收的是同一份东西（见 children-body.ts 的文件头）
+import { parseChildBody } from '@/lib/children-body.ts'
 import { listChildPicker } from '@/lib/children-list.ts'
 import { userFailureOf } from '@/lib/provider-messages.ts'
 
@@ -29,45 +31,6 @@ export const dynamic = 'force-dynamic'
 /** 有哪些孩子。创作流第 1 步与「小主角」那一屏读的是同一份 */
 export async function GET(): Promise<Response> {
   return Response.json({ children: await listChildPicker() })
-}
-
-type Body = {
-  name: string
-  nameReading: string
-  ageBand: string
-  lookTags: string[]
-  interestTags: string[]
-}
-
-function text(value: unknown): string {
-  return typeof value === 'string' ? value.trim() : ''
-}
-
-function textList(value: unknown): string[] {
-  if (!Array.isArray(value)) return []
-  return value.map((item) => text(item)).filter((item) => item !== '')
-}
-
-function parseBody(raw: unknown): { body?: Body; problems: string[] } {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-    return { problems: ['请求体要是一个 JSON 对象'] }
-  }
-  const source = raw as Record<string, unknown>
-  const body: Body = {
-    name: text(source['name']),
-    nameReading: text(source['nameReading']),
-    ageBand: text(source['ageBand']),
-    lookTags: textList(source['lookTags']),
-    interestTags: textList(source['interestTags']),
-  }
-  // ★ 这三条与 `creation/state.ts` 的 `stepProblems('child')` **是同一批判据**。
-  //   这里再写一遍不是重复：那边是"界面上的下一步要不要禁用"，这边是"这段请求能不能收"，
-  //   而只有后者能挡住一个绕过界面的请求。名字/读音/年龄档的意义见 profile.ts
-  const problems: string[] = []
-  if (body.name === '') problems.push('孩子的名字还没填')
-  if (body.nameReading === '') problems.push('名字的读音还没确认')
-  if (body.ageBand === '') problems.push('年龄档没选')
-  return problems.length > 0 ? { problems } : { body, problems: [] }
 }
 
 /**
@@ -107,7 +70,7 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({ code: 'bad-json', message: '请求体不是合法的 JSON' }, { status: 400 })
   }
 
-  const { body, problems } = parseBody(raw)
+  const { body, problems } = parseChildBody(raw)
   if (!body) {
     return Response.json(
       { code: 'invalid-request', message: problems.join('；'), extra: problems },

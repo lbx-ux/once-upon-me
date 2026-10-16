@@ -41,11 +41,20 @@ function stubImage(bytes: Uint8Array = PNG): ImageGenerator {
   }
 }
 
-function stubText(text: string): TextGenerator {
+function stubText(text: string, streamed = true): TextGenerator {
   return {
     id: 'stub-text',
     modelId: 'stub-model',
     async complete() {
+      return { text, modelId: 'stub-model' }
+    },
+    /**
+     * 测试替身的"流"：一次吐完整段，标志由调用方给。
+     * ★ 默认 `true` 是把它当**假想的 live**用（它的位置就是 live 那一格）；
+     *   要验"转发标志而不是改写标志"时才传 `false`。
+     */
+    async stream(_req, _budget, onDelta) {
+      onDelta({ text, streamed })
       return { text, modelId: 'stub-model' }
     },
   }
@@ -97,6 +106,41 @@ describe('record → replay', () => {
     const replay = createReplayText(store, manifest)
     expect((await replay.complete(req)).text).toBe('{"title":"云"}')
     await expect(replay.complete({ ...req, temperature: 0.2 })).rejects.toThrow(/离线回放里没有/)
+  })
+
+  /**
+   * 工单 07 §一.2 那一刀：**回放的"流式"是假的，而且它照实说**。
+   *
+   * 两条断言各挡一种做法：
+   * - `streamed: false` —— 挡住"拿定时器把一整段切成打字机"（那是在演示里造假）
+   * - 只调一次 onDelta —— 挡住"切成小段发出去但标志写 true"
+   *   （标志写 true 的那种，界面会当成真流式逐字动效，而它每一个字都是同一时刻到的）
+   */
+  it('回放的流式一次吐完整段，且标 streamed:false（不许定时器造假）', async () => {
+    const store = createMemoryStore()
+    const manifest = emptyManifest()
+    const req = { system: 's', user: 'u' }
+    await recordText(stubText('{"title":"云上的恐龙"}'), () => {}, manifest).complete(req)
+
+    const replay = createReplayText(store, manifest)
+    const deltas: { text: string; streamed: boolean }[] = []
+    const response = await replay.stream(req, undefined, (delta) => deltas.push({ ...delta }))
+
+    expect(response.text).toBe('{"title":"云上的恐龙"}')
+    expect(deltas).toHaveLength(1)
+    expect(deltas[0]).toEqual({ text: '{"title":"云上的恐龙"}', streamed: false })
+  })
+
+  it('录制层原样转发内层的 streamed 标志，不替它回答', async () => {
+    const manifest = emptyManifest()
+    const seen: boolean[] = []
+    const recorder = recordText(stubText('{"title":"x"}', false), () => {}, manifest)
+    await recorder.stream({ system: 's', user: 'u' }, undefined, (delta) =>
+      seen.push(delta.streamed),
+    )
+    // 内层说 false，外面就必须是 false——写死 true 的那版会在这里红
+    expect(seen).toEqual([false])
+    expect(manifest.texts[Object.keys(manifest.texts)[0] ?? '']?.text).toBe('{"title":"x"}')
   })
 
   it('modelTag 让同一提示词在两个候选模型上各存一条（横评的指纹不能撞车）', async () => {

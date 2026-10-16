@@ -1,0 +1,188 @@
+/**
+ * booklist-wall.css —— 「灵感书单」那一屏（`BooklistWall.tsx`）
+ *
+ * 与组件同名同目录，在 `app/globals.css` 里 `@import`（与其余组件样式一致）。
+ *
+ * 这一屏的形状借的是「角色卡」那面墙（`character-wall.css`）：同样的 1180px 栏宽、
+ * 同样的纸卡 + 细描边。**但两处刻意不像**：那面墙的卡是歪着贴上去的个体（每个孩子一张），
+ * 这面墙的 12 本是**一套**——所以格子齐、角不歪、悬停只抬 4px。
+ * 一套书摆在一起，齐本身就是它的意思。
+ *
+ * 页头那一行说明压在天空带上，用 `--ink-on-sky`（`studio.css` / `check-scrim.mts`
+ * 那条"压在天空上的字只允许 --ink 与 --ink-on-sky"的规矩）。
+ *
+ * ★ 封面缺席时露的是 `--card-paper` + 主题 emoji（见 `.blw__glyph`）：
+ *   这一档暖色是**物件**（一张相纸），与"冷的是光，暖的是物件"那条判据一致——
+ *   页面底色是冷的，纸上那张画是暖的。
+ */
+
+.blw {
+  max-width: 1180px;
+  margin: 0 auto;
+}
+
+/* ── 页头 ─────────────────────────────────────────────────────────────── */
+
+.blw__head {
+  margin-bottom: 26px;
+}
+
+.blw__title {
+  margin: 0 0 10px;
+  font-family: var(--font-serif);
+  font-size: clamp(26px, 3.6vw, 36px);
+  font-weight: 600;
+}
+
+.blw__sub {
+  max-width: 62ch;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.9;
+  color: var(--ink-on-sky);
+}
+
+.blw__sub b {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* ── 那 12 格 ─────────────────────────────────────────────────────────── */
+
+.blw__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(212px, 1fr));
+  gap: 30px 24px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.blw__card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  border-radius: var(--card-radius);
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  box-shadow: var(--sheet-shadow);
+  color: inherit;
+  text-decoration: none;
+  transition:
+    transform 0.24s ease,
+    box-shadow 0.24s ease;
+}
+
+.blw__card:hover,
+.blw__card:focus-visible {
+  transform: translateY(-4px);
+}
+
+.blw__card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+/* 3:4 的封面装进 3:4 的框，一比一，不裁（与书页、与 `make-webp.py`
+   的 book-cover 预设同一个比例 —— 三处对不上就是一张被裁过的封面） */
+.blw__art {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 3 / 4;
+  background-color: var(--card-paper);
+  background-size: cover;
+  background-position: 50% 50%;
+  background-repeat: no-repeat;
+}
+
+/* ★ 这张纸只属于"还没有画"的那一档：图一到位就是一张不透明的大图，
+   emoji 也不再渲染（见组件里那个条件） */
+.blw__art:not([data-ready]) {
+  /* 一条很淡的对角纹理，读起来是"一张还没印上画的纸"，不是"加载失败" */
+  background-image: linear-gradient(135deg, rgba(255, 255, 255, 0.5), rgba(0, 0, 0, 0.03));
+}
+
+.blw__glyph {
+  font-size: 34px;
+  line-height: 1;
+  opacity: 0.42;
+  /* emoji 兜底与书里那套同一个处理（`book/demoBook.ts` 的选择点图标）：图没到位时
+     按下去看得见东西，而不是一个空框 */
+}
+
+.blw__body {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  flex: 1;
+  padding: 13px 14px 14px;
+}
+
+.blw__book {
+  font-family: var(--font-serif);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.blw__blurb {
+  flex: 1;
+  font-size: 12.5px;
+  line-height: 1.75;
+  color: var(--ink-muted);
+}
+
+.blw__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+.blw__theme {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-soft);
+}
+
+/* "有朗读"用强调色：这一条是**能力**，与"16 页"那种计数不是一类东西 */
+.blw__audio {
+  color: var(--accent);
+}
+
+/* 画没齐时的一行。虚线把它和上面的元信息分开：它是**进度**，不是这本书的属性，
+   出完一本就少一行（组件里那条件控制着它） */
+.blw__todo {
+  padding-top: 8px;
+  border-top: 1px dashed var(--hairline);
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+/* ── 窄屏与静止终态 ──────────────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+  .blw__grid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 22px 14px;
+  }
+
+  .blw__blurb {
+    display: none; /* 一列两格时那两行会把卡撑得比封面还高，读起来是"卡坏了" */
+  }
+}
+
+/* ★ 静止终态：不是"不播动画"，是**没有位移**。悬停抬起在触屏上本来就不存在，
+   而 `prefers-reduced-motion` 下连这 4px 也不要（README §五 那条硬要求） */
+@media (prefers-reduced-motion: reduce), (hover: none) {
+  .blw__card {
+    transition: none;
+  }
+
+  .blw__card:hover {
+    transform: none;
+  }
+}

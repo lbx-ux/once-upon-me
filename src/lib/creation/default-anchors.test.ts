@@ -1,5 +1,5 @@
 /**
- * default-anchors.test.ts —— 「预填的七条自己得是合法的」（工单 03 第二刀补的）
+ * default-anchors.test.ts —— 「预填的那八条自己得是合法的」（工单 03 第二刀补的）
  *
  * ★ 这个文件是一个**真 bug** 逼出来的，而那个 bug 的形状值得写下来：
  *
@@ -29,7 +29,7 @@ describe('预填的锚点本身是合法的', () => {
     expect(checkAnchors(DEFAULT_ANCHORS)).toEqual([])
   })
 
-  it('七格齐全，且顺序就是声明序（顺序进 prompt 与指纹，不能随手排）', () => {
+  it('八格齐全（含空着的补充那一格），且顺序就是声明序（顺序进 prompt 与指纹，不能随手排）', () => {
     expect(DEFAULT_ANCHORS.map((anchor) => anchor.slot)).toEqual([...ANCHOR_SLOTS])
   })
 

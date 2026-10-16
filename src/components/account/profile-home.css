@@ -1,0 +1,384 @@
+/**
+ * profile-home.css —— 「个人主页」（`/account`）与 `ProfileHome.tsx` 同目录同名，
+ * 在 app/globals.css 里 @import
+ *
+ * 这一屏是**工作台的一屏**（它在 `(studio)` 路由组里，侧栏照常在），
+ * 所以版心、字阶、纸的做法都跟着 `voice-picker.css` / `create-landing.css` 那一套：
+ * 标题走 `--font-serif`（黑体在大字号上读起来像产品发布页，衬线才像一本书上的字），
+ * 面板走 `--surface` + `--hairline` + 18px + `--sheet-shadow`（"一张纸离开桌面一点点"）。
+ *
+ * ★ 页头压在天空带里（`(studio)/layout.tsx` 给了 `StudioBackdrop`），
+ *   所以 `.pf__sub` 是 `--ink-on-sky`——十带表里 `--ink-muted` 压在天上前四段只有
+ *   3.99–4.29:1，破了正文级 AA（表在 `studio-backdrop.css` 文件头）。
+ *   ★ 那张纸**以下**的一切（`.pf__section`、两个数、`.pf__foot`）都在天空带以外，
+ *     所以它们用的是普通的 `--ink-muted`——不要把这一条推广到整屏。
+ *
+ * ★ 头像那个圈是 `--card-paper`（**暖**相纸色），不是 `--surface`。
+ *   这不是随手挑的：这个项目的中性色有一句法律——**冷的是光，暖的是物件**
+ *   （globals.css 里 `--paper` 与 `--card-paper` 两条注释）。
+ *   头像位是"一张要裱进相纸里的照片"，与角色墙上那块 mat 是同一个东西，
+ *   所以它拿的是同一颗暖色。接上后端真有头像那天，这个圈会被一张 `<img>` 盖住，
+ *   而它底下那层暖色正好就是照片的边——现在与将来是同一个东西。
+ */
+
+.pf {
+  max-width: 820px;
+  margin: 0 auto;
+}
+
+.pf__head {
+  margin-bottom: 24px;
+}
+
+.pf__title {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: clamp(26px, 3.6vw, 36px);
+  font-weight: 600;
+}
+
+.pf__sub {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.8;
+  /* ★ 压在天上（见文件头） */
+  color: var(--ink-on-sky);
+}
+
+.pf__card {
+  display: grid;
+  gap: 20px;
+  padding: 22px 24px;
+  border: 1px solid var(--hairline);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--sheet-shadow);
+}
+
+/* ★ 还没读完本机登录态的那一瞬间（见 ProfileHome 文件头第 3 条）。
+   框壳与 `--blank` 的那副面孔**同高**，所以从它切到"已经登录"或"还没登录"
+   都不会让整页跳一下。高度写死是这一条的全部意义——它不是一个好看的骨架屏 */
+.pf__card--blank {
+  min-height: 236px;
+}
+
+.pf__lede {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 14px;
+}
+
+.pf__primary {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  height: 44px;
+  padding: 0 26px;
+  border-radius: 999px;
+  background: #1a1a20;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  box-shadow: 0 8px 24px rgba(23, 23, 29, 0.16);
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.pf__primary:hover {
+  transform: translateY(-2px);
+}
+
+/* ── 身份那一行 ─────────────────────────────────────────────────────────── */
+
+.pf__identity {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.pf__avatar {
+  display: grid;
+  place-items: center;
+  flex: 0 0 64px;
+  width: 64px;
+  height: 64px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  /* ★ 暖相纸：它是一张照片的位置（见文件头最后一段），而 `--ink-muted`
+     在这一档上是 4.67:1，量过的（globals.css 的 `--card-paper` 那条） */
+  background: var(--card-paper);
+  color: var(--ink-muted);
+}
+
+.pf__avatar svg {
+  width: 30px;
+  height: 30px;
+}
+
+.pf__who {
+  min-width: 0;
+  flex: 1;
+}
+
+/* 名字可能很长（用户自己起的），所以它要能收——不收会把右边那颗按钮挤出纸外 */
+.pf__name {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pf__phone {
+  margin: 4px 0 0;
+  color: var(--ink-muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pf__ghost {
+  flex-shrink: 0;
+  height: 36px;
+  padding: 0 16px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: none;
+  color: var(--ink-muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition:
+    color 0.16s ease,
+    border-color 0.16s ease;
+}
+
+.pf__ghost:hover {
+  color: var(--ink);
+  border-color: rgba(var(--accent-rgb), 0.4);
+}
+
+/* ── 两个只读字段 ───────────────────────────────────────────────────────── */
+
+.pf__meta {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding-top: 18px;
+  border-top: 1px solid var(--hairline);
+}
+
+.pf__meta > div {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 12px;
+}
+
+.pf__meta dt {
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
+.pf__meta dd {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+/* ── 改昵称 ─────────────────────────────────────────────────────────────
+   一行四件：标签 / 框 / 保存 / 那句回话。
+   ★ 回话（`.pf__status`）**占着位置**（`min-width`），不然后面没有东西时
+     那一行会随文字出现而抖一下 */
+.pf__rename {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding-top: 18px;
+  border-top: 1px solid var(--hairline);
+}
+
+.pf__rename-label {
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
+.pf__box {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--dot);
+  border-radius: var(--card-radius);
+  background: var(--surface);
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.pf__box:focus-within {
+  border-color: transparent;
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.pf__input {
+  width: 100%;
+  min-height: 38px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+}
+
+.pf__input:focus-visible {
+  outline: none;
+}
+
+.pf__input::placeholder {
+  color: rgba(28, 28, 36, 0.38);
+}
+
+.pf__save {
+  height: 40px;
+  padding: 0 18px;
+  border: 1px solid rgba(var(--accent-rgb), 0.28);
+  border-radius: 999px;
+  background: rgba(var(--accent-rgb), 0.08);
+  color: var(--accent);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.16s ease;
+}
+
+.pf__save:hover:not(:disabled) {
+  background: rgba(var(--accent-rgb), 0.13);
+}
+
+/* ★ 没改动时这颗是禁用的：一颗"点了什么都不发生"的保存按钮，
+   读起来是"我点了但它坏了"（CLAUDE.md §不糊弄那条的邻居） */
+.pf__save:disabled {
+  border-color: var(--hairline);
+  background: transparent;
+  color: var(--ink-muted);
+  cursor: not-allowed;
+}
+
+.pf__status {
+  min-width: 48px;
+  color: var(--ink-muted);
+  font-size: 12.5px;
+}
+
+/* ── 这台设备上做过的东西 ───────────────────────────────────────────────── */
+
+.pf__section {
+  margin: 34px 0 14px;
+  font-family: var(--font-serif);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.pf__stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.pf__stat {
+  display: grid;
+  gap: 4px;
+  padding: 18px 20px;
+  border: 1px solid var(--hairline);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--sheet-shadow);
+  color: inherit;
+  text-decoration: none;
+  transition:
+    transform 0.2s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.2s ease;
+}
+
+.pf__stat:hover {
+  transform: translateY(-2px);
+}
+
+.pf__stat-num {
+  font-family: var(--font-serif);
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1.1;
+  /* 等宽数字：两个数并排时，`1 张` 与 `8 张` 的宽度差不该让这一行看着在动 */
+  font-variant-numeric: tabular-nums;
+}
+
+.pf__stat-label {
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
+.pf__foot {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 22px 0 0;
+  color: var(--ink-muted);
+  font-size: 12.5px;
+  line-height: 1.7;
+}
+
+.pf__again {
+  flex-shrink: 0;
+  color: var(--accent);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.pf__again:hover {
+  text-decoration: underline;
+}
+
+.pf__primary:focus-visible,
+.pf__ghost:focus-visible,
+.pf__save:focus-visible,
+.pf__again:focus-visible,
+.pf__stat:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pf__primary,
+  .pf__stat {
+    transition: none;
+  }
+}
+
+/* 窄屏：改昵称那一行四件排不下，拆成两行（标签 + 框 / 保存 + 回话） */
+@media (max-width: 620px) {
+  .pf__rename {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
+
+  .pf__rename-label {
+    grid-column: 1 / -1;
+  }
+
+  .pf__meta > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+
+  .pf__stats {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pf__identity {
+    flex-wrap: wrap;
+  }
+}

@@ -1,6 +1,13 @@
 /**
  * sse.ts —— Server-Sent Events 的帧编解码（纯函数，node 与浏览器共用）
  *
+ * ★ 它住在 `engine/` 里，不在 `lib/` 根下（2026-10-15 搬的）。理由不是整洁：
+ *   供应商那一侧的流式解析（`providers/http.ts` 的 `requestSse`）也要用它，
+ *   而"引擎 import 界面层的模块"是把依赖方向反过来（README §二：界面 import 引擎，
+ *   不是反过来）。搬进来之后，**SSE 的分帧逻辑只有这一份**——
+ *   在此之前它被写了两遍：一遍给浏览器读 `/api/books`，一遍给适配器读供应商的流，
+ *   而"跨 chunk 的半行要留住"这件事一旦只在一处修对，另一处就会安静地吞掉半条帧。
+ *
  * 为什么自己写这 90 行而不是引一个库：SSE 的线上格式只有三种行
  * （`event:` / `data:` / `id:`，空行分隔），而**解码的难点只有一个**——
  * 网络分块会从任意位置切开一帧。真正要下车的是那个增量缓冲，
@@ -18,6 +25,7 @@
  *
  * ★ 解码器是**有状态**的（跨 chunk 的半个字节要留着），所以它是一个工厂而不是纯函数；
  *   它内部除了那个缓冲没有别的状态，push 出来的帧顺序与到达顺序一致。
+ *   缓冲里的最后半行由 `flush()` 交出来——见那个方法的注释。
  */
 
 /** 一帧的字段。`id` 本仓库暂时不用（不做 Last-Event-ID 续传，见工单 02 §2.4），留着是因为编码要向规范靠 */
@@ -43,7 +51,7 @@ export function decodeFrames(text: string): SseFrame[] {
   return decoder.push(text)
 }
 
-export function createSseDecoder(): { push(chunk: string): SseFrame[] } {
+export function createSseDecoder(): { push(chunk: string): SseFrame[]; flush(): SseFrame[] } {
   let buffer = ''
   let eventName = ''
   let id: string | undefined
@@ -67,6 +75,14 @@ export function createSseDecoder(): { push(chunk: string): SseFrame[] } {
     // 其余字段（retry 等）本仓库不用，按规范忽略
   }
 
+  const emit = (out: SseFrame[]): void => {
+    if (sawData) out.push({ event: eventName || 'message', data: dataLines.join('\n'), id })
+    eventName = ''
+    id = undefined
+    dataLines = []
+    sawData = false
+  }
+
   return {
     push(chunk: string): SseFrame[] {
       buffer += chunk
@@ -78,15 +94,30 @@ export function createSseDecoder(): { push(chunk: string): SseFrame[] } {
       for (const raw of lines) {
         const line = raw.endsWith('\r') ? raw.slice(0, -1) : raw
         if (line === '') {
-          if (sawData) out.push({ event: eventName || 'message', data: dataLines.join('\n'), id })
-          eventName = ''
-          id = undefined
-          dataLines = []
-          sawData = false
+          emit(out)
           continue
         }
         takeField(line)
       }
+      return out
+    },
+
+    /**
+     * 流结束了，把缓冲里的最后半行交出来。
+     *
+     * ★ 为什么需要它：规范说帧由空行分隔，所以"没有以空行结尾的最后一帧"严格讲不算一帧。
+     *   但对我们的**供应商**这条路，丢掉它的代价是具体的——网关发完最后一帧就直接关连接
+     *   （不补那个空行）时，正文会被安静地截掉一截，而错误信息一个字都不会有。
+     *   宁可多收一个不完整的尾巴，也不要少收一段内容。
+     * ★ 只在**流真的结束**时调用（EOF）：正常分帧的帧在 push 里就出来了，
+     *   提前 flush 会把一个还在传输中的半行当成完整帧。
+     */
+    flush(): SseFrame[] {
+      const out: SseFrame[] = []
+      const tail = buffer.endsWith('\r') ? buffer.slice(0, -1) : buffer
+      buffer = ''
+      if (tail !== '') takeField(tail)
+      emit(out)
       return out
     },
   }

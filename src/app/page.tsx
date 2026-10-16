@@ -6,6 +6,7 @@ import HeroOrbit from '@/components/hero/HeroOrbit'
 import HeroTypewriter, { type TypewriterLine } from '@/components/hero/HeroTypewriter'
 import HighlightsReel from '@/components/highlights/HighlightsReel'
 import SceneBackdrop from '@/components/scene/SceneBackdrop'
+import StartCreating from '@/components/hero/StartCreating'
 import { THEMES, artPath } from '@/lib/themes'
 
 /**
@@ -98,13 +99,11 @@ export default function HomePage() {
           {/* ★ 这两个按钮从 W1 起就是死的（`<button>` 没有 handler，两条 TODO 都过期了），
               用户报的"点开始创作进不去"就是这里。现在接上：创作流与阅读器都建好了。
               主页 `/home` 做出来后，第一个要改指 `/home`（见 .scratch/app-restructure/issues/06）。 */}
-          {/* ★ 指向 /home 而不是 /create（工单 06 的收尾那条）：/home 是工作台的
-              「创作」那一屏——一句话就能进去，比直接落在四步表单的第一格里轻。
-              创作流本身仍在 /create，直接访问也照样能用；
-              "我做过什么"那一屏现在叫 /shelf（侧栏第二项） */}
-          <Link className="btn" href="/home">
-            开始创作 →
-          </Link>
+          {/* ★「开始创作」现在是一颗客户端组件（`components/hero/StartCreating.tsx`）：
+              它除了指路，还负责**退场**与那一次跨页接力（环上那 12 张 → 主页的主题墙），
+              理由与五条判断写在那个文件头上。渲染出来仍然是一颗真 `<Link href="/home">`。
+              「看一本成品」不用接力：阅读器里没有任何东西与这 12 张对应得上。 */}
+          <StartCreating />
           {/* 指到 public/demo/books/ 里那本真的预生成演示书（ADR-0003：断网也能走完一本） */}
           <Link className="btn btn--ghost" href="/reader/xiaoyu-r1-4fe055c5723b">
             看一本成品

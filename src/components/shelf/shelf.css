@@ -1,324 +1,529 @@
 /**
- * shelf.css —— 书架（工单 05 的仪表盘，挪进工作台侧栏的「书架」）
+ * shelf.css —— 书架（`ShelfDashboard.tsx`，与组件同目录同名）
  *
- * 设计稿的版式：顶部问候 → 四张统计卡 → 最近/主题模板 → 列表。
- * 颜色一律走 `var(--x)`（globals.css 的 :root 是唯一定义处）。
+ * 2026-10-16 起步：这一屏从"仪表盘"改成一排**真的书架**（用户的要求 + 参考图，
+ * 删掉了哪些块、为什么，见 `ShelfDashboard.tsx` 文件头那张表）。
+ * 颜色一律走 `var(--x)`（`globals.css` 的 `:root` 是唯一定义处）。
  *
- * ★ 一处刻意的取舍：统计卡上的数字用**衬线体**且比别处大。
- *   它们是这一屏的"温度"所在（家长先看到的是"我陪他读了 42 分钟"），
- *   而这个页面没有插画可依靠——数字本身就是它的视觉主体。
+ * ---------------------------------------------------------------------------
+ * 书架是怎么用 CSS 摆出来的
  *
- * ★ 2026-10-15 与首页共用那片天之后，这一屏的**页头压在天空带上**（y≈45…280
- *   全在 112vh 的天空带里）。所以三处灰字改成 `--ink-on-sky`：
- *   `.shelf__sub`（第 1 段，灰字在那里 3.96:1）、`.shelf__local-note`（第 3 段 4.14:1）、
- *   `.shelf__tab` 未选中态（第 3 段）。`--ink-on-sky` 十段全过（最狠 6.60:1）。
- *   判据是 `node scripts/check-scrim.mts` 那张十带表，不是看着还行。
- *   卡片里的灰字（`.shelf__stat-*` / `.shelf__book-*`）一个都不用改——它们各自在
- *   `--surface` 上。
+ * **搁板是容器上的一张平铺背景，不是每一个格子各画一条。**
+ * 每 `--row-h` 一格，在格子里固定的高度上画一条板（顶面亮边 → 板身 → 前沿压深）。
+ * 为什么必须这样：一格一格各画自己的板时，**末行不满就会缩到最后一本书下面**，
+ * 看着像半截货架；而通长的板正是"这是个架子"的全部信息。
+ * 平铺要成立，前提是**每一行一样高**——所以 `--book-w` 定了、封面高由 3:4 推出来、
+ * 书名条高度写死，`--row-h` 才能是同一个数（它由 `--book-w` 一路 calc 出来，
+ * 所以窄屏上一起缩小，不会有一处对不上）。
+ *
+ * ★ 书**立在板上**：`--board-top` = 封面高 + 书名条高，书的底边正好落在板的顶面上，
+ *   板上还有一道贴着我方书底的投影（背景的第 ② 层）。没有那道影，书是"贴"在板上的。
+ *
+ * ★ 暖色在这儿的身份还是**物件**（`globals.css` 那句"冷的是光，暖的是物件"）：
+ *   搁板 `--shelf-wood`、封面缺席时那张 `--card-paper` 的相纸 —— 都是"被放在那儿的东西"。
+ *   冷的仍然是页面与天上的光，所以这两样暖色得小、得是具体的物件。
+ *
+ * ★ 2026-10-16 **第二轮：柜身撤了**。
+ *   第一版把书与板圈进一块 `--card-paper` 的暖纸里（`.shelf__case`，当书架的背板用）。
+ *   用户圈着它说「和背景有点突兀」：**暖色硬边压在天空背景上太硬**。
+ *   现在书与板直接落在天光上，没有那一块色块，也没有那道 `--sheet-shadow`。
+ *   这一轮只解决"色"，没解决"空"——板仍然通长（见上），没缩到最后一本书下面。
+ *   记录在 `.scratch/shelf-on-sky/`（`shelf-bookcase/` 那一册已冻结，不回头改）。
  */
 
-.home {
-  max-width: 960px;
+.shelf {
+  /* 与「灵感书单」「角色卡」同一个栏宽（`booklist-wall.css` / `character-wall.css`）：
+     工作台这几屏是同一套版式，栏宽不一致最容易被看成"这一屏没做完" */
+  max-width: 1180px;
   margin: 0 auto;
-  padding: 32px 20px 64px;
 }
 
+/* ── 页头 ───────────────────────────────────────────────────────────────
+   ★ 2026-10-16 第三轮加的：用户要「左上角写上"书架"这两个字，和其他保持一致」。
+   "一致"是有样板的，量就照 `.cw__head` / `.cw__title`（`character-wall.css`）搬：
+   衬线、`clamp(26px,3.6vw,36px)`、600 字重、页头下 24px。
+   ★ 上一版这里是一个 `sr-only` 的「我的书架」——那时一屏只有一样东西，
+   标题再说一遍自己是书架没有意义。现在页头有了右边那颗按钮，那条理由就不成立了。 */
 .shelf__head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
+  gap: 20px;
+  margin-bottom: 24px;
 }
 
-.shelf__hello {
-  margin: 0 0 4px;
+.shelf__title {
+  margin: 0;
   font-family: var(--font-serif);
-  font-size: 26px;
+  font-size: clamp(26px, 3.6vw, 36px);
   font-weight: 600;
 }
 
-.shelf__sub {
-  margin: 0;
-  font-size: 14px;
-  /* 压在天上（见文件头） */
-  color: var(--ink-on-sky);
-}
-
-.shelf__tab:focus-visible,
-.shelf__theme:focus-visible,
-.shelf__book:focus-visible,
-.shelf__cta:focus-visible,
-.shelf__resume:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-/* ── 统计条：四格，一条纸 ────────────────────────────────────────────────
-   ★ 2026-10-15 从"四张各带边框的白卡"改成**一条纸上的四格**。
-     四个浮块在天空带上读起来像四张并排的便利贴，谁也不是谁的一部分；
-     而它们本来就是同一件事的四个面（这一屏"读了多久"）。
-     一条纸 + 三道竖向发丝线说明"这四格是一组"，也把边上那层影子
-     从四处收成一处——屏幕上少三个浮层。
-   ★ 边线用 `--hairline` 而不是 `--dot`：`--dot` 是点阵纹理的墨色，
-     拿它当卡片边框是巧合不是设计（globals.css 那条写的就是这件事）。 */
-.shelf__stats {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  margin: 24px 0 10px;
-  padding: 0;
+/* 编辑那一颗：**不占实心强调色**——那是"造东西"的专用视觉（`.cw__new` 与
+   `.shelf__book--new` 上的书名），而它是个模式开关。所以它是一颗纸白底的胶囊：
+   底色差来自 `--surface`，激活态靠字与边变 `--accent`（在 `--surface` 上 5.18:1，过）。 */
+.shelf__edit {
+  flex: 0 0 auto;
+  padding: 10px 20px;
   border: 1px solid var(--hairline);
-  border-radius: var(--card-radius);
+  border-radius: 999px;
   background: var(--surface);
-  box-shadow: var(--sheet-shadow);
-}
-
-.shelf__stat {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 16px 18px;
-}
-
-.shelf__stat + .shelf__stat {
-  border-left: 1px solid var(--hairline);
-}
-
-.shelf__stat-label {
-  font-size: 12px;
-  color: var(--ink-muted);
-}
-
-.shelf__stat-value {
-  font-family: var(--font-serif);
-  font-size: 28px;
-  line-height: 1.2;
-}
-
-.shelf__stat-unit {
-  margin-left: 4px;
-  font-family: var(--font-sans);
-  font-size: 12px;
-  color: var(--ink-muted);
-}
-
-.shelf__stat-note {
-  font-size: 11px;
-  line-height: 1.5;
-  color: var(--ink-muted);
-}
-
-/* 这几个数只在本机成立，所以它必须**看得见**，不能是一句藏在角落的小字 */
-.shelf__local-note {
-  margin: 0 0 24px;
-  font-size: 12px;
-  line-height: 1.7;
-  /* 这一行在天上（见文件头）。里面那个 <b> 跟着它走、只靠字重强调——
-     不另给一个更深的颜色：那会让"重"和"更重"分不清 */
-  color: var(--ink-on-sky);
-}
-
-/* ── 继续上次创作 ─────────────────────────────────────────────────────── */
-
-.shelf__resume {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin-bottom: 24px;
-  padding: 16px 18px;
-  border: 1px solid rgba(var(--accent-rgb), 0.35);
-  border-radius: var(--card-radius);
-  background: rgba(var(--accent-rgb), 0.06);
   color: var(--ink);
-  text-decoration: none;
-}
-
-.shelf__resume-label {
-  font-size: 12px;
-  color: var(--accent);
-}
-
-.shelf__resume-title {
-  font-family: var(--font-serif);
-  font-size: 20px;
-}
-
-.shelf__resume-sub {
-  font-size: 12px;
-  color: var(--ink-muted);
-}
-
-/* ── 两个 tab ─────────────────────────────────────────────────────────── */
-
-.shelf__tabs {
-  display: flex;
-  gap: 6px;
-  margin-bottom: 16px;
-  border-bottom: 1px solid var(--dot);
-}
-
-.shelf__tab {
-  padding: 8px 14px;
-  border: none;
-  border-bottom: 2px solid transparent;
-  background: none;
-  /* 未选中态也在天上（见文件头）。★ 与选中态的区分没有丢：
-     选中是 `--ink` + 一条陶土下划线，这里是 `--ink-on-sky`，两档之间还有一倍差距 */
-  color: var(--ink-on-sky);
   font: inherit;
-  font-size: 14px;
+  font-size: 13.5px;
   cursor: pointer;
 }
 
-.shelf__tab[aria-selected='true'] {
-  border-bottom-color: var(--accent);
-  color: var(--ink);
+.shelf__edit:hover {
+  border-color: var(--dot);
 }
 
-.shelf__section-title {
-  margin: 0 0 10px;
-  font-size: 15px;
+.shelf__edit:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
 }
 
-.shelf__section-hint {
-  margin: 0 0 14px;
-  font-size: 13px;
-  line-height: 1.7;
-  color: var(--ink-muted);
+.shelf__edit[data-editing='true'] {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
-/* ── 主题模板 ─────────────────────────────────────────────────────────── */
-
-.shelf__theme-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap: 12px;
-}
-
-.shelf__theme {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  padding: 14px 8px;
-  border: 1px solid var(--dot);
+/* 顺序没存上时的那一句。★ 它压在天空带上，所以只能用 `--ink` / `--ink-on-sky`
+   （`studio.css` 那条）——要"看起来不对"就靠 `--danger` 的**边框**，不靠它的字色 */
+.shelf__notice {
+  margin: -12px 0 16px;
+  padding: 9px 12px;
+  border: 1px solid var(--danger);
   border-radius: var(--card-radius);
   background: var(--surface);
   color: var(--ink);
-  text-decoration: none;
-}
-
-.shelf__theme-art {
-  width: 72px;
-  height: 72px;
-  background-position: center;
-  background-repeat: no-repeat;
-  background-size: contain;
-}
-
-.shelf__theme-label {
   font-size: 13px;
+  line-height: 1.7;
 }
 
-/* ── 我的故事 ─────────────────────────────────────────────────────────── */
+/* ── 这里原来住着 `.shelf__case` ─────────────────────────────────────────
+   `--card-paper` 的暖纸 + `--hairline` 细边 + `--sheet-shadow`，20px 圆角，
+   内边距 `clamp(18px,2.6vw,30px) clamp(16px,2.4vw,28px) clamp(26px,3.8vw,42px)`。
+   撤掉之后**没有东西顶上来**：这一屏的上下左右本来就有 `studio.css` 里 `.studio`
+   那层 `clamp(28px,5vh,52px) … 64px` 的留白（其余三屏同样只靠它），
+   柜身那层内边距是**套在里面**的第二层。
+   不补一个"看起来差不多"的 padding：那是在把撤掉的东西偷偷加回来。 */
 
-.shelf__list {
+/* ── 那一排排书 ─────────────────────────────────────────────────────────── */
+
+.shelf__rack {
+  /* 一本书多宽。★ 这一颗是**唯一的输入**：封面高、行高、板的位置全由它推出来，
+     所以窄屏只要它跟着缩，其余的对不齐问题不会出现。
+     104px 是手机上两本能并排的下限（最小视口 375 − 侧栏 72 − 左右 40 = 263，
+     两本 104 + 缝 14 = 222）；156px 是上限（显示宽 ≈ 312 物理像素，
+     正好落在缩略图 384 那一档，见 `library.ts` 的 `SHELF_COVER_WIDTH`）。 */
+  --book-w: clamp(104px, 13vw, 156px);
+  --book-gap: clamp(14px, 1.6vw, 22px);
+  /* 竖版封面 3:4。★ 与 `make-webp.py` 的 book-cover 预设、`.blw__art` 同一个比例
+     —— 对不上就是一张被裁过的封面 */
+  --cover-h: calc(var(--book-w) * 4 / 3);
+  /* 书名条。写死高度是为了行高一致（见文件头），同时它也是书"立在板上"的那条腿 */
+  --label-h: 54px;
+  --board-h: 12px;
+  /* 一排板到下排书顶之间留多少空。书架上看不见这一段的"很多层板"，
+     只有一条条板，所以空给够才读得出"一格一格" */
+  --row-gap: clamp(26px, 3.4vw, 40px);
+  --row-h: calc(var(--cover-h) + var(--label-h) + var(--board-h) + var(--row-gap));
+  --board-top: calc(var(--cover-h) + var(--label-h));
+
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 12px;
+  /* ★ 定宽列 + auto-fill：书从左边一本本排起，右边空着就空着——真书架上就是这样，
+     而 `1fr` 会把最后几本拉开填满整行，那不是书架，那是一张表格 */
+  grid-template-columns: repeat(auto-fill, var(--book-w));
+  column-gap: var(--book-gap);
+  grid-auto-rows: var(--row-h);
+  align-items: start;
   margin: 0;
   padding: 0;
   list-style: none;
+
+  /* 两张平铺背景，都以 `--row-h` 为一格：② 是书压下去的那道影，① 是板本身。
+     顺序不能反：板要盖在影上（影落在板的顶面上）。 */
+  background-image:
+    linear-gradient(
+      to bottom,
+      transparent 0 calc(var(--board-top) - 1px),
+      rgba(74, 55, 28, 0.17) calc(var(--board-top) - 1px),
+      rgba(74, 55, 28, 0.09) calc(var(--board-top) + 2px),
+      transparent calc(var(--board-top) + 7px),
+      transparent 100%
+    ),
+    linear-gradient(
+      to bottom,
+      transparent 0 var(--board-top),
+      rgba(255, 255, 255, 0.58) var(--board-top) calc(var(--board-top) + 3px),
+      var(--shelf-wood) calc(var(--board-top) + 3px) calc(var(--board-top) + var(--board-h) - 2px),
+      var(--shelf-wood-edge) calc(var(--board-top) + var(--board-h) - 2px)
+        calc(var(--board-top) + var(--board-h)),
+      transparent calc(var(--board-top) + var(--board-h)) 100%
+    );
+  background-size: 100% var(--row-h);
+  background-repeat: repeat-y;
+}
+
+/* ── 一本书 ─────────────────────────────────────────────────────────────── */
+
+/* `<li>` 本身。第三轮才需要它：编辑模式下移除那颗按钮要挂在这一格的角上 */
+.shelf__slot {
+  position: relative;
 }
 
 .shelf__book {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 14px 16px;
-  border: 1px solid var(--dot);
-  border-radius: var(--card-radius);
-  background: var(--surface);
-  color: var(--ink);
+  color: inherit;
   text-decoration: none;
+  /* 悬停时整本（封面 + 书名条）抬起来——像从架上抽出来一点。
+     ★ 位移量小是故意的：书架是静的，动的只该是"我正看着这一本" */
+  transition: transform 0.22s ease;
 }
 
-.shelf__book--new {
+.shelf__book:hover,
+.shelf__book:focus-visible {
+  transform: translateY(-5px);
+}
+
+.shelf__book:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.shelf__cover {
+  position: relative;
+  display: block;
+  height: var(--cover-h);
+  /* 封面底：图没到位时露出的就是这张相纸（不露空框、不露裂图） */
+  background-color: var(--card-paper);
+  background-position: center;
+  background-size: cover;
+  /* 上圆下平：它下面紧接着书名条，两条合成一本立着的书 */
+  border-radius: 3px 3px 0 0;
+  /* 立在板上的影子——短、紧、偏下，与 `--card-shadow` 那种"浮在页面上"的
+     大虚边不同：这一本是被**放着**的 */
+  box-shadow: 0 7px 16px -7px rgba(23, 23, 29, 0.45);
+}
+
+/* ★ 书脊那一侧压深、翻口那一侧一点亮边。没有这道明暗，封面就是一张贴纸；
+   `::after` 而不是给 `background-image` 再加一层，是因为图是**内联样式**打进来的
+   （`ShelfDashboard.tsx`），内联的 `background-image` 会把 CSS 里那一层冲掉 */
+.shelf__cover::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    linear-gradient(to right, rgba(23, 23, 29, 0.22), rgba(23, 23, 29, 0.04) 13%, transparent 26%),
+    linear-gradient(to left, rgba(255, 255, 255, 0.22), transparent 7%);
+  pointer-events: none;
+}
+
+.shelf__glyph {
+  position: absolute;
+  inset: 0;
+  display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 76px;
-  border-style: dashed;
-  color: var(--ink-muted);
+  font-size: calc(var(--book-w) * 0.28);
+  opacity: 0.5;
 }
 
-.shelf__book-title {
-  font-family: var(--font-serif);
-  font-size: 17px;
-}
-
-.shelf__book-meta {
+/* 书名条 = 架上那块写了名字的牌子。★ 用 `--surface`（纸白）而不是搁板那种暖色：
+   它得从板与天光里"浮"起来一点才像一块牌子，而这一步靠的是**底色差**，不是阴影 */
+.shelf__label {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 3px;
   align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--ink-muted);
-}
-
-.shelf__book-audio {
-  padding: 1px 7px;
-  border: 1px solid var(--dot);
-  border-radius: 999px;
-}
-
-.shelf__book-date {
-  margin-left: auto;
-}
-
-/* ── 空态 ─────────────────────────────────────────────────────────────── */
-
-.shelf__empty {
-  padding: 28px 20px;
-  border: 1px dashed var(--dot);
-  border-radius: var(--card-radius);
+  height: var(--label-h);
+  padding: 10px 9px 0;
+  border: 1px solid var(--hairline);
+  border-top: none;
+  border-radius: 0 0 5px 5px;
+  background: var(--surface);
   text-align: center;
 }
 
-.shelf__empty p {
-  margin: 0 0 10px;
-  font-size: 14px;
+/* 书名条上的字。★ 类名从 `.shelf__title` 改成 `.shelf__name`（第三轮）：
+   `.shelf__title` 让给页头那个一级标题——`blw__title` / `cw__title` 就是这么用的，
+   两个意思共用一个名字，改页头时一定会改错那一个 */
+.shelf__name {
+  max-width: 100%;
+  overflow: hidden;
+  font-family: var(--font-serif);
+  font-size: 13px;
+  line-height: 1.35;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.shelf__meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  line-height: 1.4;
   color: var(--ink-muted);
 }
 
-.shelf__empty-actions {
-  display: flex;
-  justify-content: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin: 0 !important;
-}
-
-.shelf__cta {
-  padding: 9px 18px;
-  border: 1px solid var(--accent);
+.shelf__audio {
+  padding: 0 6px;
+  border: 1px solid var(--dot);
   border-radius: 999px;
-  background: var(--accent);
-  color: var(--surface);
-  font-size: 14px;
-  text-decoration: none;
 }
 
-.shelf__cta--ghost {
-  background: var(--surface);
+/* ── 末位那本"虚线书" ─────────────────────────────────────────────────── */
+
+.shelf__cover--new {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--dot);
+  border-bottom: none;
+  background-color: rgba(28, 28, 36, 0.035);
+  box-shadow: none;
+}
+
+/* 空的书没有书脊，也没有影子——它不是一本书，是一个空位 */
+.shelf__cover--new::after {
+  content: none;
+}
+
+.shelf__plus {
+  font-size: calc(var(--book-w) * 0.2);
+  line-height: 1;
+  color: var(--ink-muted);
+}
+
+.shelf__book--new .shelf__name {
+  font-family: var(--font-sans);
   color: var(--accent);
 }
 
-/* 窄屏：四张卡挤不下，两列 */
-@media (max-width: 640px) {
-  .shelf__stats {
-    grid-template-columns: repeat(2, 1fr);
+/* ── 编辑模式（第三轮） ───────────────────────────────────────────────────
+   两件事：拖动换位、移除一本。这里只管样子；机的部分在 `ShelfDashboard.tsx`
+   文件头那三条里（捕获挂在 `<ul>` 上 / 触摸只让抓手拖 / 写盘失败要回滚）。 */
+
+/* 拖动时不要顺手选中了书名；手指按住一本书也不该弹出系统的"长按"菜单 */
+.shelf__rack[data-editing='true'] {
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* 编辑模式下书**不是链接**了，所以那条"悬停抬起来"（它是"我正看着这一本"）
+   不成立——这时抬起来的意思是"我正拖着这一本"，由下面那条负责 */
+.shelf__rack[data-editing='true'] .shelf__book {
+  transform: none;
+}
+
+/* 抓手与移除：一枚在封面左上、一枚在封面右上。★ 都落在**封面上**，不落在书名条上：
+   书名条那一行在窄屏（`--book-w` 104px）只剩六十来个像素放"3 页 有朗读"，
+   再挤一颗按钮进去就要压字了 */
+.shelf__grab,
+.shelf__remove {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--hairline);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.88);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.shelf__grab {
+  top: 6px;
+  left: 6px;
+  /* ★ 手机上"按封面拖 = 翻页、按抓手拖 = 换位"就是这一行定的。
+     `touch-action` 从命中元素往上求**交**，`auto` 的祖先不会把它抵消掉；
+     反过来把它写在整本书上，编辑模式在手机上就再也滚不动了（书多了要往下翻）。
+     鼠标上没有这回事——整本书都能拖（那条路走的是 `pointerdown` 委派） */
+  touch-action: none;
+  cursor: grab;
+}
+
+.shelf__remove {
+  top: 6px;
+  right: 6px;
+  cursor: pointer;
+}
+
+.shelf__remove:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.shelf__grab:focus-visible,
+.shelf__remove:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* 被拖的那一本：抬起来。★ 位移与 `position: fixed` 都是**内联样式**（跟着指针走
+   的东西写不进样式表），这里只管"看着像被拿起来了"。
+   放在编辑模式那两条**后面**：同一条 `(0,3,0)` 的权重下，后写的赢 */
+.shelf__slot[data-dragging='true'] {
+  border-radius: 4px;
+  box-shadow: var(--card-shadow);
+}
+
+.shelf__slot[data-dragging='true'] .shelf__book {
+  transform: scale(1.03);
+}
+
+/* ── 确认框：先列出要失去什么 ─────────────────────────────────────────────
+   ★ 底是 `--surface` 而**不是** `--card-paper`：这一屏刚刚因为"暖色硬边压在天空
+   背景上太硬"撤掉过一整块暖纸（`.scratch/shelf-on-sky/`），再摆一块回来是同一件事。
+   危险感由那圈 `--danger` 的细边与实心按钮承担，不靠底色。
+   ★ 它是**临时**的（删成之后就没了，用户："书架底下什么也不要留"） */
+.shelf__confirm {
+  max-width: 620px;
+  margin-top: 26px;
+  padding: 18px 16px;
+  border: 1px solid var(--danger);
+  border-radius: var(--card-radius);
+  background: var(--surface);
+}
+
+.shelf__confirm-lead {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.shelf__places {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.shelf__places li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--dot);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.shelf__places li:last-child {
+  border-bottom: none;
+}
+
+/* 一行里的三样：位置名（标题）占一行，条数与解释跟一行。
+   `grid` 那两列是"名字 / 条数"，解释跨整行——所以它自己 `grid-column: 1 / -1` */
+.shelf__place-no {
+  color: var(--ink-muted);
+  white-space: nowrap;
+}
+
+.shelf__place-note {
+  grid-column: 1 / -1;
+  color: var(--ink-muted);
+  font-size: 12.5px;
+  line-height: 1.7;
+}
+
+/* "没删干净"那一行要看得出来——它是这张清单不完整的那一处 */
+.shelf__places li[data-failed='true'] .shelf__place-no {
+  color: var(--danger);
+}
+
+.shelf__confirm-warn {
+  margin: 12px 0 0;
+  color: var(--danger);
+  font-size: 13px;
+}
+
+.shelf__confirm-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.shelf__cancel,
+.shelf__danger {
+  min-height: 40px;
+  padding: 8px 18px;
+  border: 1px solid var(--dot);
+  border-radius: var(--card-radius);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+/* 只有**已经确认过**的那一步才是实心红的：这已经是第二步了 */
+.shelf__danger {
+  border-color: transparent;
+  background: var(--danger);
+  color: var(--bg);
+}
+
+.shelf__cancel:disabled,
+.shelf__danger:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* ── 空态那句话 ─────────────────────────────────────────────────────────
+   ★ 它在天空带上（这一屏只有一排书，整屏都落在 112vh 以内），所以用 `--ink-on-sky`
+   —— 与 `.blw__sub` 同一条规矩（`scripts/check-scrim.mts` 钉着）。
+   里面那根链接不另给 `--accent`：压在天空上的字只允许 `--ink` 与 `--ink-on-sky`
+   （`studio.css` 那条），链接的身份由**下划线**承担，不靠颜色。 */
+.shelf__empty {
+  margin: 20px 0 0;
+  font-size: 13px;
+  line-height: 1.9;
+  color: var(--ink-on-sky);
+}
+
+.shelf__empty a {
+  color: var(--ink);
+  text-underline-offset: 3px;
+}
+
+/* ★ 静止终态：不是"不播动画"，是**没有位移**。悬停抬起在触屏上本来就不存在，
+   而 `prefers-reduced-motion` 下连这 5px 也不要（README §五 那条硬要求，
+   与 `booklist-wall.css` 末尾同一个做法）。
+   ★ 拖动那件事**不需要另写一条静止终态**：它是用户自己的手势（跟手的东西不是播给谁看的
+   动效），而它带来的两个"状态"——抬起那一本的缩放与被拖动的位移——本来就是静止量。
+   这里取消的 `transition` 正好让那两个状态**立刻**成立，不再有 0.22s 的过场。 */
+@media (prefers-reduced-motion: reduce), (hover: none) {
+  .shelf__book {
+    transition: none;
   }
 
-  .shelf__hello {
-    font-size: 22px;
+  .shelf__book:hover {
+    transform: none;
+  }
+}
+
+/* 窄屏：书名条矮一点、字小一点，多出来的一行留给下一排书 */
+@media (max-width: 640px) {
+  .shelf__rack {
+    --label-h: 48px;
+  }
+
+  .shelf__label {
+    padding: 8px 7px 0;
+  }
+
+  .shelf__name {
+    font-size: 12px;
   }
 }

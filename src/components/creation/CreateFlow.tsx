@@ -127,7 +127,7 @@ type Action =
          * ★ 这一张卡**自己的**锚点（工单 03 第 4 刀补上的）。
          *
          * 原来是漏的：选定一张已有的卡之后，第 3 步的表单里躺着的还是
-         * `DEFAULT_ANCHORS`，而卡里是它自己那七条。症状很安静——
+         * `DEFAULT_ANCHORS`，而卡里是它自己那八条。症状很安静——
          * 界面看着正常，但此时点"换一版"发出去的锚点是**表单里那份**，
          * 于是"换一版"实际上把卡改成了另一套锚点（revision +1，形象依据全变），
          * 而家长以为自己只是重画了一张。
@@ -544,7 +544,7 @@ export default function CreateFlow({
                     挪走的理由不是位置好看：那一条路要一次<strong>单独同意</strong>、
                     要说出我们拿照片做了什么，而这一屏是&ldquo;填完往下走&rdquo;的节奏，
                     塞一个需要停下来读的同意框在这里，两边都做不好。
-                    这一步的七条锚点仍然是形象唯一的判据——照片那条路也一样，它换的是
+                    这一步的八条锚点仍然是形象唯一的判据——照片那条路也一样，它换的是
                     <strong>第一张插画怎么来</strong>，不是锚点由谁定。
                   </p>
                 }
@@ -651,13 +651,13 @@ export default function CreateFlow({
         {stepKey === 'card' && (
           <StepShell step={stepKey}>
             <p className="cf__note">
-              下面七条会<b>逐条</b>成为每一页画面的依据，也会成为画完之后核对的清单——
+              下面八条会<b>逐条</b>成为每一页画面的依据，也会成为画完之后核对的清单——
               画的与查的是同一份锚点，这是「每一页都是同一个他」能成立的原因。 写进来的一律是
               <b>跨页不变</b>的东西；姿势、表情、场景、光线属于每一页，不写在这里。
             </p>
 
             <div className="cf__card">
-              {/* 七格锚点在 `fields.tsx`，与 `/character/new` 共用（顺序即 ANCHOR_SLOTS 声明序） */}
+              {/* 八格锚点在 `fields.tsx`，与 `/character/new` 共用（顺序即 ANCHOR_SLOTS 声明序） */}
               <AnchorFields
                 anchors={state.card.anchors}
                 onChange={(anchors) => dispatch({ type: 'anchors', anchors })}

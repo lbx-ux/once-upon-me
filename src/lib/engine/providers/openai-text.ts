@@ -10,8 +10,15 @@
  */
 
 import { EngineError } from '../errors.ts'
-import type { CallBudget, TextGenerator, TextRequest, TextResponse } from './types.ts'
-import { findFirst, requestJson, traceOf, type HttpDeps } from './http.ts'
+import type {
+  CallBudget,
+  StreamBudget,
+  TextDelta,
+  TextGenerator,
+  TextRequest,
+  TextResponse,
+} from './types.ts'
+import { findFirst, requestJson, requestSse, traceOf, type HttpDeps } from './http.ts'
 
 export type OpenAiTextOptions = {
   /** 强制 JSON 输出的方式。见下面 jsonShape() 的注释 */
@@ -54,30 +61,48 @@ export function createOpenAiText(
   opts: OpenAiTextOptions = {},
 ): TextGenerator {
   const jsonMode = opts.jsonMode ?? 'object'
+
+  /**
+   * 请求体。`stream` 是唯一的差别——**同一份构造**，不是抄一遍。
+   *
+   * ★ 抄一遍的代价是具体的：将来给 chat 请求加一个字段（比如关思考的 `enable_thinking`），
+   *   改了一条路忘了另一条，症状是"流式与全量拿到的结果不一样"，
+   *   而这正是 07 §一.1 要钉死的那件事。
+   */
+  const payloadOf = (req: TextRequest, stream: boolean): Record<string, unknown> => {
+    const messages: unknown[] = []
+    if (req.system) messages.push({ role: 'system', content: req.system })
+    messages.push({ role: 'user', content: req.user })
+    return {
+      model: modelId,
+      messages,
+      temperature: req.temperature ?? 0.7,
+      max_tokens: req.maxTokens ?? opts.defaultMaxTokens ?? DEFAULT_TEXT_MAX_TOKENS,
+      // ★ `plainText` 这一条走前面：要纯文本的调用**一个 JSON 相关字段都不带**。
+      //   理由与实测的 400 写在 `TextRequest.plainText` 上——不是本节流，是那个参数
+      //   本来就不该出现在"把一句话改好"这种调用里
+      ...(req.plainText ? {} : jsonShape(jsonMode, req.jsonSchema)),
+      ...(opts.extra ?? {}),
+      ...(stream ? { stream: true } : {}),
+    }
+  }
+
+  const requireKey = (): void => {
+    if (!deps.apiKey) {
+      throw new EngineError('provider-not-configured', 'LLM_API_KEY 未配置，文本能力不可用')
+    }
+  }
+
   return {
     id: `openai-text(${modelId})`,
     modelId,
     async complete(req: TextRequest, budget?: CallBudget): Promise<TextResponse> {
-      if (!deps.apiKey) {
-        throw new EngineError('provider-not-configured', 'LLM_API_KEY 未配置，文本能力不可用')
-      }
-      const messages: unknown[] = []
-      if (req.system) messages.push({ role: 'system', content: req.system })
-      messages.push({ role: 'user', content: req.user })
-
-      const payload: Record<string, unknown> = {
-        model: modelId,
-        messages,
-        temperature: req.temperature ?? 0.7,
-        max_tokens: req.maxTokens ?? opts.defaultMaxTokens ?? DEFAULT_TEXT_MAX_TOKENS,
-        ...jsonShape(jsonMode, req.jsonSchema),
-        ...(opts.extra ?? {}),
-      }
+      requireKey()
 
       const body = await requestJson(deps, {
         method: 'POST',
         path: '/chat/completions',
-        body: payload,
+        body: payloadOf(req, false),
         signal: budget?.signal,
         // ★ 文本的缺省超时**不是** http.ts 那个 60s。两者量的是不同的东西：
         //   图像是同步出图（十几秒），文本是**生成一整张故事表**。实测 60s
@@ -107,7 +132,124 @@ export function createOpenAiText(
         traceId: traceOf(body) || undefined,
       }
     },
+
+    /**
+     * 流式（工单 07）。回的那份 `TextResponse` 与 `complete()` 是同一个形状，
+     * 差别只在"正文是一段段到的"——**这一条有测试钉住**（同一份录制响应两条路径逐字段相等）。
+     *
+     * 两处刻意的处理：
+     *
+     * 1. **`reasoning_content` 一个字都不往外发**。思考模型的思考链不是正文，
+     *    把它当正文喂给界面，家长看到的是"这本书正在写一段看不懂的推理"。
+     *    所以只累计它的长度，用来在"一个正文都没等到"时说清原因。
+     *    ★ 这条不是假想：实测里有那么一次，模型连发 9202 字思考链、正文 0 字，
+     *    而我们给出的报错正是「正文预算被思考吃掉了」。
+     *    ★ 代价要一起写在这里：那种情况下界面会**安静一分钟上下**（我们的 delta 一次不响），
+     *    所以故事板必须有"正在编故事"这一态——**不能拿"有没有新字"当它还活着的判据**。
+     * 2. **不看 `finish_reason` 就收工**：以 `[DONE]`（或流自然结束）为准。
+     *    有的网关最后一帧没有 `finish_reason`，拿它当收工信号会永久挂住。
+     * 3. **不送 `stream_options: {include_usage: true}`**：实测这一家不送也回 usage
+     *    （`{"promptTokens":833,"completionTokens":479}`），而"送一个某些网关会拒的字段"
+     *    有过前车之鉴（图像接口上 7 个未知字段全被 400 挡回）。
+     *    拿不到 usage 时按接口约定**不填**，不填一个看起来合理的数。
+     */
+    async stream(
+      req: TextRequest,
+      budget: StreamBudget | undefined,
+      onDelta: (delta: TextDelta) => void,
+    ): Promise<TextResponse> {
+      requireKey()
+      let text = ''
+      let reasoningLength = 0
+      let seenModel = modelId
+      let usage: TextResponse['usage']
+      let traceId = ''
+
+      for await (const data of requestSse(deps, {
+        method: 'POST',
+        path: '/chat/completions',
+        body: payloadOf(req, true),
+        signal: budget?.signal,
+        // 总超时与 complete 同一个量级（都是"这一次调用最多花多久"）；
+        // 空闲超时是另一条线，见 http.ts 的 DEFAULT_SSE_IDLE_TIMEOUT_MS
+        timeoutMs: budget?.timeoutMs ?? deps.timeoutMs ?? DEFAULT_TEXT_TIMEOUT_MS,
+        ...(budget?.idleTimeoutMs === undefined ? {} : { idleTimeoutMs: budget.idleTimeoutMs }),
+      })) {
+        let chunk: unknown
+        try {
+          chunk = JSON.parse(data) as unknown
+        } catch {
+          // 解析不了的一帧不致命：心跳、厂商自定义扩展都会长这样。但也不静默——
+          // 计数留给下面的报错消息（正文一直为空时，这是唯一的线索）
+          continue
+        }
+        const delta = deltaObject(chunk)
+        const piece = delta ? flattenContent(delta['content']) : ''
+        if (piece !== '') {
+          text += piece
+          onDelta({ text: piece, streamed: true })
+        }
+        if (delta) {
+          const reasoning = delta['reasoning_content']
+          if (typeof reasoning === 'string') reasoningLength += reasoning.length
+        }
+        const modelHit = findFirst(chunk, ['model'])
+        if (typeof modelHit === 'string' && modelHit !== '') seenModel = modelHit
+        usage = usageOf(chunk) ?? usage
+        traceId = traceOf(chunk) || traceId
+      }
+
+      if (text === '') {
+        throw new EngineError(
+          'provider-call-failed',
+          reasoningLength > 0
+            ? `这一轮流式一个正文字符都没等到（reasoning_content=${reasoningLength} 字符）。` +
+                `正文预算被思考吃掉了——调大 maxTokens 或换一家（与 complete() 同一条判据）`
+            : '这一轮流式没有回任何 `delta.content`。回包结构可能变了，或者这家不支持 stream',
+          { traceId: traceId || undefined },
+        )
+      }
+      return {
+        text,
+        modelId: seenModel,
+        ...(usage ? { usage } : {}),
+        ...(traceId ? { traceId } : {}),
+      }
+    },
   }
+}
+
+/**
+ * 找到流式帧里的 `delta` 对象。
+ *
+ * ★ 与 `messageObject` 分开写而不是参数化：`complete` 找的是 `message`、
+ *   流式找的是 `delta`，两个键名不一样、位置也可能不一样。
+ *   合成一个"找 message 或 delta"的函数，读的人得先在脑子里把两种情况展开——
+ *   而这两个函数各自只有十行。
+ */
+function deltaObject(chunk: unknown): Record<string, unknown> | null {
+  const walk = (obj: unknown): Record<string, unknown> | null => {
+    if (Array.isArray(obj)) {
+      for (const item of obj) {
+        const hit = walk(item)
+        if (hit) return hit
+      }
+      return null
+    }
+    if (obj && typeof obj === 'object') {
+      const record = obj as Record<string, unknown>
+      const delta = record['delta']
+      if (delta && typeof delta === 'object' && !Array.isArray(delta)) {
+        return delta as Record<string, unknown>
+      }
+      for (const value of Object.values(record)) {
+        const hit = walk(value)
+        if (hit) return hit
+      }
+    }
+    return null
+  }
+  return walk(chunk)
 }
 
 /**

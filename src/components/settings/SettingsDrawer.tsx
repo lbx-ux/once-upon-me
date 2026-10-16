@@ -21,7 +21,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { DEFAULT_VOICES, FIXED_KNOBS_NOTE, type SettingsForm } from '@/lib/settings/state.ts'
+import { FIXED_KNOBS_NOTE, type SettingsForm } from '@/lib/settings/state.ts'
 import { useSettings } from './SettingsProvider.tsx'
 
 type ProbeState = { busy: boolean; ok: boolean | null; detail: string }
@@ -63,7 +63,7 @@ const GROUPS: {
 ]
 
 export default function SettingsDrawer() {
-  const { settings, patch, env, canNarrate, open, closeSettings } = useSettings()
+  const { settings, patch, env, canNarrate, voices, open, closeSettings } = useSettings()
   const panelRef = useRef<HTMLDivElement>(null)
   const [probes, setProbes] = useState<Record<string, ProbeState>>({})
 
@@ -217,15 +217,19 @@ export default function SettingsDrawer() {
                     <div className="sd__row">
                       <span className="sd__label">默认音色</span>
                       <div className="sd__voices">
-                        {DEFAULT_VOICES.map((voice) => (
+                        {/* ★ 表来自 `SettingsProvider`（预设 + 我录的）：自己录的那条也要能在这里选到，
+                            而"模型对不上"的那条会被 `voiceCatalog` 标成不可选（`title` 说明原因） */}
+                        {voices.map((voice) => (
                           <button
                             type="button"
                             key={voice.id}
                             className="sd__voice"
                             aria-pressed={settings.speech.voice === voice.id}
+                            disabled={!voice.usable}
+                            title={voice.why}
                             onClick={() => patch('speech', { voice: voice.id })}
                           >
-                            {voice.label}
+                            {voice.name}
                           </button>
                         ))}
                       </div>

@@ -1,0 +1,641 @@
+/**
+ * voice-picker.css —— 「声音」那一屏：两个音色，各一张贴在纸上的卡
+ *
+ * ★ 它 2026-10-16 从 `studio.css` 搬出来（那个文件头一直在等这一步：
+ *   `.vc__*` 的标记写在 `VoicePicker.tsx` 里，样式就该跟它同目录同名作伴）。
+ *   类名前缀**没有**改成 `.vp__`：同一个组件的同一个缩写，改名只会制造 diff 噪音。
+ *
+ * ★ 用户这一刻的原话是「声音这一块也应该像角色卡一样是一张卡片那样」。
+ *   所以这一屏的配方**是从 `character-wall.css` 抄的，不是另发明一套**：
+ *   圆角 5px（一过 8px 就退回"UI 卡片"）、冷白卡身 + 1px `--hairline`、
+ *   两层影子（贴地的紧影 + 拖远的柔影）、一条胶带、一个静置歪角、
+ *   悬停/键盘聚焦时**被按正并抬起来**、末尾给 `prefers-reduced-motion` 一个终态。
+ *   这些值都从那里逐条抄过来，改配色仍只动 `globals.css` 的 `:root`。
+ *
+ * ★ 2026-10-16 第九轮：用户第二遍看这一屏，说「感觉有点不好看，具体是哪我也说不出来」。
+ *   把那张截图（2000×1220，比例 1.392 —— 由侧栏那颗 204px 宽的导航药丸反推出来）逐像素量了
+ *   一遍（`.out/shot-metrics.mjs` / `shot-columns.mjs` / `shot-swatch.mjs`），
+ *   "说不出来"的那几处读出来是四条，每条都能数出来：
+ *
+ *   1. **那面墙离三列只差 1.5px。** 上一版 `repeat(auto-fit, minmax(288px, 352px))`：
+ *      `auto-fit` 的重复次数在 max 是**定值**时按 max 算（CSS Grid §7.2.3.1），
+ *      于是列数由 352 决定 —— 容器 1110.5px 放不下 3×352+2×28 = 1112，
+ *      三张卡掉成 2+1，第三张孤零零留在左列，右边空一格。差 1.5px 换一个版式，
+ *      而且窗口再宽一点点它又变回三列：**这个版式本来是抖的**。
+ *   2. **页头与那面墙不在一条轴上。** 实测：标题左缘 290px、第一张卡左缘 476px，
+ *      差 **186px**；右上角那颗钮的右缘又比墙的右缘多出 186px。页头看着属于一个更宽的页面。
+ *   3. **那一格填色与卡外的天几乎同色。** 实测：那一格 rgb(232,243,244)（= `--sky`），
+ *      卡外的天 rgb(225,239,239) —— 两者 **1.04:1**，而卡身白与它 1.13:1。
+ *      也就是说那块冷纸**读起来像"白卡上抠了个洞、透出后面的天"**，不是一个面。
+ *      根子不在填色的深浅（1.13:1 与"白卡浮在天上"的 1.18:1 是同一量级），
+ *      在于**它的四边被白卡包着**，于是被读成一个框里的洞。
+ *   4. **卡内两条左缘不齐、卡底只剩 14px。** 名字缩进 18px，那句语料缩进 33px
+ *      （"卡 18 + 那一格 15"叠出来的），同一张卡里两条左缘；而卡底到那一格只有 14px ——
+ *      上宽下窄，像被裁掉一块。我录的那张更明显：下面 **59px 空白**里只放着一枚 17px 图标
+ *      （另外两张同样位置只有 14px）。
+ *
+ *   改法：1 → 墙铺满容器、列数改用 min 算（见 `.vc__wall`）；2 → 同一个改动顺带修好
+ *   （页头的左右缘就是墙的左右缘）；3 → 那一格**贴着卡底铺满整宽**，它成了卡的下半截，
+ *   "洞"这个读法从几何上被取消；4 → 两段各自带 18px 内边距，名字与语料共用一条左缘，
+ *   而删除那颗从卡底的孤零零位置挪进了试听那一行（见 `.vc__del`）。
+ *
+ *   ★ 于是卡变成**两段式**：上半截白（名字 / 调性 / 状态），下半截冷纸（要听的那句话 + 那行钮），
+ *     下半截用 `margin-top: auto` 压在卡底 —— 一排里的三张卡**分界线因此落在同一条水平线上**
+ *     （我录的那张没有调性那一行、少 27px，靠这一条补齐，不需要塞一个占位空行）。
+ *
+ * ★ 而**有四件事刻意不一样**，因为这一屏的物件与角色卡不是同一个东西：
+ *
+ *   1. **卡上没有人像，也不画波形。** 音色没有形象，我们不摆一个 emoji 头像、
+ *      也不画一条假波形——那是给不存在的数据背书（CLAUDE.md「没有的东西直说没有」），
+ *      而且用户原话补了一条："不建议加假波形装饰，因为没有真实波形数据时它会误导。"
+ *      于是那一格裱的是**你要听到的那句话**（`.vc__plate` 里那句真语料，
+ *      与试听路由读同一个常量 `lib/settings/preview-line.ts`）。
+ *   2. **不用暖相纸那一套**（2026-10-16 用户定的方向）。角色卡的判据是
+ *      "冷的是光，暖的是物件"，因为那里真的裱着一张照片；声音卡不裱照片，
+ *      借暖相纸只会和这片冷蓝的天打架。这一屏的判据换成一句：
+ *      **背景是冷蓝水彩天空，所以这里是冷白、雾蓝、轻投影；暖色与橙色只留在极少数动作上**
+ *      ——落到实处就是：那一格是 `--sky`、边是淡蓝、选中是 `--select` 蓝、
+ *      橙色只剩右上角那颗「＋新建声音」。
+ *   3. **没有背后那张撑开的面板**（`.cw__card::after`）。它是"这张卡在悬停时长大了"
+ *      那个观感的来源；这里两张卡本来就比角色卡高，再加一层白边只是多一圈边。
+ *   4. **主要动作不在悬停层里，而是静止就在卡面上**。角色卡的"看这一版 / 删掉他"
+ *      是次要动作，藏起来合理；而"听一句真的"是**这一屏存在的理由**——
+ *      藏进 hover 就等于在没有 hover 的设备上把它删了。
+ *   ★ 还有一条跟着第 2 条走的：**胶带删了**（`character-wall.css` 的 `.cw__tape` 不搬）。
+ *     它表达的是"这张纸贴在什么上"，而这一屏的卡要读成浮在空气里。
+ *
+ * ★ 页面框、页头那两行仍在天空带里：`.vc__sub` 必须用 `--ink-on-sky`，
+ *   不能用 `--ink-muted`（十带表见 `shell/studio-backdrop.css` 文件头）。
+ */
+
+/* ── 页头 ─────────────────────────────────────────────────────────────── */
+
+.vc {
+  max-width: 1180px;
+  margin: 0 auto;
+}
+
+.vc__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 24px;
+}
+
+.vc__title {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: clamp(26px, 3.6vw, 36px);
+  font-weight: 600;
+}
+
+/* 新建那颗：整颗填强调色。★ 与 `/character` 的 `.cw__new` 逐条同款——
+   两屏的"造东西"动作本来就该是同一个东西 */
+.vc__new {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  padding: 11px 20px;
+  border: none;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--surface);
+  font: inherit;
+  font-size: 13.5px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(var(--accent-rgb), 0.28);
+}
+
+.vc__new:hover {
+  filter: brightness(1.06);
+}
+
+.vc__new-plus {
+  font-size: 15px;
+  line-height: 1;
+}
+
+/* 页头那句短说明。★ 它压在天空带上，所以只能用 `--ink-on-sky`（十带表见
+   `shell/studio-backdrop.css` 文件头；`scripts/check-scrim.mts` 钉着这条）。
+   2026-10-16 这一行删过一次又加回来：用户先划掉了原来那**两句**，随后要一句**短的**。
+   区别只在长度——页头说清"这个音色是干什么用的"就够，别的解释属于设置页。 */
+.vc__sub {
+  max-width: 44ch;
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--ink-on-sky);
+}
+
+/* ★ 这里原来是没配齐语音时那条横幅（`.vc__warn`）。2026-10-16 用户把它划掉了，
+   整条删。它说的那件事**没有消失**：没配齐时每张卡的「听一句真的」本来就是灰的，
+   而"为什么是灰的"挂在钮自己的 `title` 上（见 `VoicePicker.tsx` 那段注释）。 */
+
+/* ── 那面墙 ───────────────────────────────────────────────────────────── */
+
+.vc__wall {
+  display: grid;
+  /* ★ 列数按 **min** 算，不按 max —— 这是三张卡能不能排成一排的关键。
+     `auto-fill`/`auto-fit` 的重复次数：max 是定值时用 max，否则用 min（CSS Grid §7.2.3.1）。
+     上一版是 `minmax(288px, 352px)`，max 是定值 352 —— 容器 1110px 时
+     3×352+2×28 = 1112 差 1.5px 放不下，于是三张卡掉成 2+1，第三张孤零零留在左列。
+     换成 `1fr` 之后列数改用 min（276）算：3×276+2×28 = 884 ≤ 1110，三张一排。
+     `min(276px, 100%)` 是窄屏兜底：容器比 276 还窄时（手机），轨道不要撑破容器。
+     ★ 276 而不是角色墙那个 292/372：这一屏的卡里只有一行衬线语料与一颗胶囊钮，
+       352px 上限从来没用满过（实测就是 352），把上限交给 1fr 让卡自己跟着容器长。
+     ★ 用 `auto-fill` 不用 `auto-fit`：两者的列数算法一样，区别在**空轨道收不收起**。
+       `auto-fit` 会把没占满的列折掉，于是只有两个音色时两张卡各长到 **535px**
+       （实测：容器 1098、两列），而同一屏有三个音色时是 347px —— 卡宽随音色数量变，
+       加一条声音会把另外两张挤窄。`auto-fill` 留着那一格空位：不管两三个音色，
+       卡宽都是 347px，而墙仍然铺满容器（`1fr` 的空轨道照样占宽）。 */
+  grid-template-columns: repeat(auto-fill, minmax(min(276px, 100%), 1fr));
+  /* ★ **不居中**（角色墙是 `justify-content: center`，这一屏刻意不抄）：
+     墙要铺满容器，页头的左右缘才是墙的左右缘。居中会让标题比第一张卡多出 186px
+     （旧版实测），页头看着属于另一个宽度。 */
+  gap: 28px;
+  margin: 0 0 30px;
+  padding: 12px 0 0;
+  list-style: none;
+}
+
+/* ── 卡 ───────────────────────────────────────────────────────────────── */
+
+/**
+ * ★ 2026-10-16 用户给了一套配色方向，这一屏从"贴着暖相纸的卡"改成**安静的冷纸层**。
+ *   原话："背景是冷蓝水彩天空，声音页应该用冷白、雾蓝、轻投影；暖米色和橙色只保留在
+ *   极少数动作上。" 落成五条：
+ *
+ *   1. **静置角从 ±0.7° 收到 ±0.35°**。歪角是"贴上去"的观感来源，而这一屏要的是
+ *      "浮在空气里"——留一点不对称（完全归零就变成表格里的格子），但不再像贴纸。
+ *   2. **影子轻一档**：贴地那层从 `.08` 收到 `.05`，拖远那层从 `rgba(19,19,28,.12)`
+ *      改成 `-14px` 收口的 `.18`——散得开但浅，是"浮起来"，不是"被手电筒照着"。
+ *   3. **边是冷蓝的**：`rgba(var(--select-rgb), .14)`，不是那条中性的 `--hairline`
+ *      （它是墨色的 10%，压在冷天上偏暖灰）。同一个蓝在 14% 下是"轻冷边"，
+ *      不是"蓝色的框"。
+ *   4. **胶带删了**（原来借的是 `character-wall.css` 的 `.cw__tape`；理由见下面
+ *      `.vc__card[data-selected]` 那一段的末条）。
+ *   5. 暖色在这一屏**只剩三处，各有理由**（其余一处不留）：
+ *      - 右上角那颗「＋新建声音」：这一屏唯一的主动作，用户点名留给它；
+ *      - **焦点环**（`.vc__del:focus-visible` 等）：`--accent` 是**全站统一**的
+ *        "键盘现在在这儿"（`.cw__*` / `.sd__*` / `.cl__*` 都是它）。为了这一屏改成蓝，
+ *        会让"焦点"在四屏里长得不一样——那是把配色的一致换成了无障碍的不一致；
+ *      - `.vc__receipt-x`（那张报数凭据上的「知道了」）：它是**小字正文**，
+ *        而 `--select` 对 `--surface` 只有 3.87:1，够"非文字"那条 3:1、
+ *        不够正文级 4.5:1。全站唯一一个过 AA 的彩色正文就是 `--accent`（5.18:1）。
+ */
+.vc__card {
+  /* 静置角：一排里一奇一偶歪向两边（同 `.cw__card` 的做法）。★ 不用随机：
+     随机每次刷新都换一批歪法，那就从"浮着"变成"在抖" */
+  --rest: -0.35deg;
+  /* ★ 影子写成变量，只为了能和选中态那圈 `inset` 描边**叠起来**：
+     两条规则同特异度，写死 box-shadow 的话后写的那条会把前一条整个盖掉 */
+  --vc-lift: 0 1px 2px rgba(19, 19, 28, 0.05), 0 10px 22px -14px rgba(19, 19, 28, 0.18);
+  position: relative;
+  /* 同一排的卡一样高（`character-wall.css` 的 `.cw__card` 也这么写）。
+     ★ 第九轮之后这一条是**承重**的：我录的那张没有调性那一行，比另外两张少 27px，
+       靠"网格拉伸 + 下半截 `margin-top: auto`"两条合起来，三张卡的分界线才会齐。
+       删掉任何一条，我录的那张就会矮一截、分界线错开 */
+  height: 100%;
+  /* ★ 两段式（2026-10-16 第九轮，理由见文件头第 3、4 条）：卡身自己不留白，
+     上下两段各自带内边距 —— 于是卡里只有一条文字左缘（18px），
+     旧版是两条（名字 18px、语料 33px，那是"卡 18 + 那一格 15"叠出来的）。 */
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  border-radius: 5px;
+  background: var(--surface);
+  border: 1px solid rgba(var(--select-rgb), 0.14);
+  box-shadow: var(--vc-lift);
+  transform: rotate(var(--rest));
+  transition:
+    transform 0.3s cubic-bezier(0.2, 0.7, 0.25, 1),
+    box-shadow 0.3s ease,
+    border-color 0.3s ease;
+  animation: vc-pin 0.55s cubic-bezier(0.2, 0.8, 0.3, 1) backwards;
+  /* 入场错开的节拍写在 style 上（`--vc-i`）：它是**这一张**的位置属性，
+     用 nth-child 写会把它锁死在"前两张" */
+  animation-delay: calc(var(--vc-i, 0) * 90ms);
+}
+
+.vc__slot:nth-child(even) .vc__card {
+  --rest: 0.35deg;
+}
+
+@keyframes vc-pin {
+  from {
+    opacity: 0;
+    transform: translateY(-14px) rotate(calc(var(--rest) - 1.5deg)) scale(1.02);
+  }
+  to {
+    opacity: 1;
+    transform: rotate(var(--rest));
+  }
+}
+
+/* 悬停与键盘聚焦走同一条：只用 hover 的话，键盘用户永远看不到"被按正"这件事。
+   抬 8px + 边转蓝，两件事一起（同 `.cw__card`，但那一屏用的是橙）。
+   ★ 边的差值是**静态的**，所以静止模式下"能碰"仍然看得出来——
+     看末尾那个媒体查询：它只清 transform，不清这条 */
+.vc__card:hover,
+.vc__card:focus-within {
+  --vc-lift: 0 2px 4px rgba(19, 19, 28, 0.06), 0 20px 34px -16px rgba(19, 19, 28, 0.2);
+  transform: rotate(0deg) translateY(-8px);
+  border-color: rgba(var(--select-rgb), 0.45);
+}
+
+/* 当前音色：一圈蓝 + 一层很浅的蓝色底光。
+   ★ 蓝色**只做边与光**，不做字：`--select` 对 `--surface` 是 3.87:1，
+     够"非文字元素"那条 3:1，**不够正文级 4.5:1**（这条数在 `globals.css` 的
+     `--select` 那条注释里记着）。所以状态字走 `.vc__state` 的中性色。
+   ★ 也不填蓝底：填了就和"听一句真的"那颗钮抢同一块视觉，而那颗钮才是这一屏的动作。 */
+.vc__card[data-selected='true'] {
+  border-color: var(--select);
+  box-shadow:
+    inset 0 0 0 1px var(--select),
+    0 0 0 5px rgba(var(--select-rgb), 0.07),
+    var(--vc-lift);
+}
+
+/* ★ 胶带**删了**（2026-10-16，用户："胶带可以删掉，或者换成非常轻的白色半透明贴角"）。
+   它整套（暖褐半透明 + 两侧虚线的毛边 + 悬停时被掀起 4°）表达的是"这张纸**贴在**什么上"，
+   而这一屏的卡要读成**浮在空气里**——两种隐喻不能同时在场。
+   ★ 删掉之后 `.vc__card` 的 `position: relative` 仍在用（`.vc__confirm` 那类不受影响），
+     入场动画 `vc-pin` 也留着：那是"出现"的动效，与"贴"的隐喻无关。 */
+
+/* ── 上半截：身份 ───────────────────────────────────────────────────────
+ * 名字 / 调性 / 状态，以及"这个音色现在用不了"那句话（`.vc__why`）。
+ * ★ 它的内边距**就是卡身的留白**（卡身自己 padding: 0，见 `.vc__card`），
+ *   所以上下两段各自带的左右内边距必须写成同一个数（18px）——
+ *   两个数一旦不一样，卡里就又长出第二条文字左缘（旧版正是这样）。 */
+.vc__top {
+  padding: 16px 18px 14px;
+}
+
+/* ── 名字那一行 = 选中它的那颗钮 ───────────────────────────────────────
+ * ★ 它是**块级按钮**（名字 + 调性两行都在里面），不是"名字旁边一颗小按钮"：
+ *   这一屏要选的就是这一整块，热区就该是这一整块。
+ * ★ 状态字（选它 / 当前音色）用**文字**说，不只靠描边——描边是给扫视用的，
+ *   而"我现在到底选的是哪个"必须读得出来。 */
+.vc__pick {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 2px 0 0;
+  border: none;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.vc__name {
+  font-family: var(--font-serif);
+  font-size: clamp(20px, 2.4vw, 23px);
+  font-weight: 600;
+}
+
+/* ★ 这里原来有一条 `.vc__mine`（名字旁边那枚「我录的」小标签）。
+   2026-10-16 用户把它划掉了：卡片上写着「我的声音」，名字本身就说清了它是谁的。 */
+
+/* 状态字：**中性色**，不用蓝也不用橙。
+   ★ 蓝对 `--surface` 只有 3.87:1（够非文字那条 3:1，不够正文级 4.5:1），而这行字是
+     12px 的正文级小字；橙则是用户点名要收走的那一支（"橙色不要同时出现在选中态、
+     状态字、试听 hover 上"）。所以：选中的那条用 `--ink`（17.85:1），
+     没选的那条用 `--ink-muted`（5.33:1）——"现在选的是哪个"靠**深浅**读，不靠色相。 */
+.vc__state {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+.vc__card[data-selected='true'] .vc__state {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.vc__tone {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--ink-muted);
+}
+
+/* ★ 这里原来还有一条 `.vc__foot`（我录的那条卡上的「录于某天」）。2026-10-16 用户划掉了：
+   日期对"要不要用这个声音"没有帮助，它是记账不是判据。
+   ★ 建它时用的模型**不在这里**：它只在"对不上"的时候由 `.vc__why` 说出来——
+     那才是判据（它是唯一能解释"为什么这张卡不能选"的东西）。 */
+
+/* 不能用时的原因。★ 它是**拦人的那句话**，所以排在试听钮之前、用 `--danger`：
+   一个不能选的卡上还摆着一颗亮着的播放钮，读起来是"能点只是我没点" */
+.vc__why {
+  margin: 10px 0 0;
+  padding: 9px 11px;
+  border-left: 3px solid var(--danger);
+  border-radius: 0 8px 8px 0;
+  background: var(--surface-soft);
+  color: var(--danger);
+  font-size: 12px;
+  line-height: 1.75;
+}
+
+/* ── 肖像位：裱的是"按下去会听到什么" ─────────────────────────────────── */
+
+/**
+ * ── 下半截：要听的那句话 + 那行钮 ───────────────────────────────────────
+ *
+ * ★ 2026-10-16 用户把这格从**暖相纸**改成了**冷纸**：
+ *   "现在最不匹配的是预览语料那一格的 `--card-paper` 暖米色……声音卡不像角色卡那样
+ *    真的裱照片，所以没必要借用暖相纸。预览区可以改成冷纸/雾蓝底，比如接近 `--paper`、
+ *    `--sky` 的浅冷色，边框用更轻的蓝灰。"
+ *
+ *   所以这里取 `--sky`（`#e8f3f4`，就是这一屏浮着的那片天的浅蓝）。
+ *   ★ 这一格里有真语料与按钮的文字，所以它是一层**要量的面**：
+ *     `scripts/check-scrim.mts` 的 `CARD_FACES` 已经有 `sky` 了，
+ *     四种墨色在那上面的对比度是脚本报出来的，不是手算抄进来的。
+ *
+ * ★ 第九轮改的是**它的形状**（文件头第 3 条）：从"卡里嵌一个四边描边的框"
+ *   改成"贴着卡底铺满整宽的一条"。起因是量出来的数：它的填色 rgb(232,243,244)
+ *   与卡外的天 rgb(225,239,239) 只差 **1.04:1** —— 四边被白卡包着时，
+ *   它读起来是"白卡上抠了个洞、透出后面的天"，而不是一个面。
+ *   铺满整宽之后，它的左右下三边**就是卡的边**，洞这个读法从几何上被取消了。
+ *
+ * ★ 描边只剩**顶上那一条**：那是上下两截的分界，也是"两段式"唯一的线。
+ *   原来那圈四边描边是"嵌在卡里的框"的一部分，跟框一起退场。
+ *
+ * ★ `margin-top: auto`：把这一条**压在卡底**。一排里的卡被网格拉伸成一样高，
+ *   于是三张卡的分界线落在同一条水平线上——我录的那张少了调性那一行（27px）
+ *   也不影响。写成固定间距就做不到这一点。
+ *
+ * ★ 填色**不许再深一档**：试过 #dcebee 那一类，`--ink-muted` 在上面会掉到 4.40:1，
+ *   破正文级 AA，而那颗不可点的试听钮写的正是 `--ink-muted`。所以"让人看出这是两段"
+ *   这件事交给上面那条线，不交给填色的深浅——能用的那一档深度不存在。
+ */
+.vc__plate {
+  /* ★ 角的三个值要跟卡自己对上：卡 5px 且带 1px 边，内侧就是 4px */
+  margin: auto 0 0;
+  padding: 15px 18px 17px;
+  border-radius: 0 0 4px 4px;
+  background: var(--sky);
+  border-top: 1px solid rgba(var(--select-rgb), 0.18);
+}
+
+.vc__line {
+  margin: 0 0 13px;
+  font-family: var(--font-serif);
+  font-size: 15px;
+  line-height: 1.75;
+  color: var(--ink-soft);
+}
+
+/**
+ * ★ 2026-10-16 用户要求它"更轻"："白底、细冷边、播放图标；播放中再用蓝色强调，
+ *   不用橙色抢视觉。"
+ *   - 底仍是 `--surface`（白），压在 `--sky` 那一格上，界限靠这圈细边；
+ *   - 静置时那条边是蓝的 30%（`--dot` 是墨色的 18%，在冷底上偏暖灰）；
+ *   - 悬停与"正在听"都转 `--select` 蓝——**橙色在这一屏一次都不出现**，
+ *     它只剩右上角那颗「＋新建声音」。
+ */
+.vc__listen {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 18px;
+  border: 1px solid rgba(var(--select-rgb), 0.3);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.vc__listen:hover:not(:disabled) {
+  border-color: var(--select);
+  color: var(--select);
+}
+
+.vc__listen:disabled {
+  color: var(--ink-muted);
+  cursor: default;
+}
+
+/* 正在响（取音频 + 播放中）。★ 是一个**状态**，不是一个动画：
+   它就是边与字转蓝 + 文字变"正在听…"，静止模式下照样读得出来 */
+.vc__listen[data-playing='true'] {
+  border-color: var(--select);
+  color: var(--select);
+  background: rgba(var(--select-rgb), 0.07);
+}
+
+.vc__listen-icon {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+}
+
+/* ── 那行钮：试听 +（我录的那张才有的）删掉 ───────────────────────────────
+ * ★ 一行，两个都在下半截里。第九轮新开这一层：在这之前删除那颗是卡底的独立一行，
+ *   于是"我录的那张"比另外两张多长出一截骨架（实测卡底 59px 空白 vs 14px）。 */
+.vc__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ── 删掉它（只有我录的那张卡有）────────────────────────────────────────
+ * ★ 它是一颗**安静的**入口，不是垃圾桶：删音色这件事的价钱是"录不回来"，
+ *   所以视觉上不该跟"听一句真的"抢。两步确认展开在卡上（不是另开一层浮层）——
+ *   就地展开的好处是"将要失去什么"那两条**就在那张卡上**，不必靠记住。
+ * ★ 2026-10-16 用户要求把「删掉它」三个字换成**一个图标**。图标钮那两条代价都补上了：
+ *   `aria-label`（没有可见文字之后读屏只剩它）与 `title`（鼠标停一下能看到删了会怎样），
+ *   做法同 `CreateLanding` 那颗优化钮。
+ * ★ 尺寸给 32px 见方：图标本身 17px，剩下的是**手指与光标要的那一圈**——
+ *   图标画得再准，热区只有 17px 就是一颗点不中的钮。
+ * ★ 第九轮它从"卡底左边孤零零一颗"挪到了这行钮的**最右**（`margin-left: auto`）。
+ *   理由是量出来的：旧版我录的那张在卡底留了 59px 空白、里面只有这一枚 17px 图标，
+ *   而另外两张同样位置只有 14px —— 同一款卡长出两副骨架。
+ *   现在三张卡的下半截结构完全一样（一句话 + 一行钮），这一颗只是那行右侧多一个安静的动作。
+ *   ★ 同一行不等于同权重：它是 32px 透明底图标钮（`--ink-muted`），点下去还有两步确认，
+ *     误触的代价是零。
+ */
+.vc__del {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* 靠到这一行的最右 */
+  margin-left: auto;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--ink-muted);
+  cursor: pointer;
+}
+
+.vc__del-icon {
+  width: 17px;
+  height: 17px;
+}
+
+.vc__del:hover {
+  background: var(--surface-soft);
+  color: var(--danger);
+}
+
+.vc__del:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* ★ 确认态**替掉**下半截（`VoicePicker.tsx` 里是一个二选一），不叠在它上面：
+   叠着就会出现"底下还压着一颗能 Tab 到的试听钮"——看不见却拿得到焦点。
+   ★ 位置与角跟 `.vc__plate` 逐条一致（压在卡底、下角 4px），所以两种状态之间
+     只是某一个格子在换内容，卡的外形不动。顶上那条线也保持"两段式"照旧成立。 */
+.vc__confirm {
+  margin: auto 0 0;
+  padding: 15px 18px 17px;
+  border-radius: 0 0 4px 4px;
+  border-top: 1px solid var(--dot);
+  background: var(--surface-soft);
+}
+
+.vc__confirm-title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.vc__confirm-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 1.8;
+  color: var(--ink-muted);
+}
+
+.vc__confirm-acts {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.vc__danger {
+  padding: 7px 14px;
+  border: none;
+  border-radius: 999px;
+  background: var(--danger);
+  color: var(--surface);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.vc__danger:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.vc__danger:disabled,
+.vc__cancel:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.vc__cancel {
+  padding: 7px 14px;
+  border: 1px solid var(--dot);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+/* ── 报数的凭据 ─────────────────────────────────────────────────────────
+ * ★ 删完不是一句"操作成功"，而是**说清删了什么、厂商那边确认了没有**。
+ *   它排在墙上方、可关：做过的事要留下能读的一句话。 */
+.vc__receipt {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 0 0 20px;
+  padding: 12px 14px;
+  border: 1px solid var(--dot);
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.vc__receipt-x {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+/* ── 卡脚：两件真事实 ───────────────────────────────────────────────────
+ * 音色 id（机器名）与它**绑定的模型**。后者是"音色绑定模型，换模型直接 400"
+ * 那条实测结论在界面上的落点——不写在这里，换模型的人就只能撞一次错误才知道 */
+/* ── 试听失败 ─────────────────────────────────────────────────────────── */
+
+.vc__error {
+  margin: 0 0 22px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--surface-soft);
+  color: var(--danger);
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+/* ★ 这里原来是「用自己的声音 · 还没做」那一块（`.vc__own` / `.vc__own-title` /
+   `.vc__own-body`）。2026-10-16 用户把它划掉了，而它要说的那件事**已经做出来了**：
+   右上角那颗「＋新建声音」→ `NewVoicePanel.tsx`。所以那一块不是被删掉的承诺，
+   是被兑现过的旧话。 */
+
+/* ── 焦点可见 ─────────────────────────────────────────────────────────── */
+
+.vc__pick:focus-visible,
+.vc__listen:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+/* ── 静止模式：给一个**摆正的、贴好的**终态 ─────────────────────────────
+ * ★ 不是"关掉动画"就完事：入场动画关掉后卡片会停在 `--rest` 那个歪角上，
+ *   看起来像坏了。所以这里连静置角一起归零。
+ * ★ 只清 transform，**故意不清 `border-color` 与 `box-shadow`**：
+ *   "这张卡能碰"要看得出来，而看得出来靠的就是那两道的差分（同 `.cw__card`）。
+ *   触屏（`hover: none`）与它共用这一段——那里没有 hover，但状态一直都在。 */
+@media (prefers-reduced-motion: reduce), (hover: none) {
+  .vc__card,
+  .vc__slot:nth-child(even) .vc__card {
+    --rest: 0deg;
+    animation: none;
+    transform: none;
+  }
+
+  .vc__card:hover,
+  .vc__card:focus-within {
+    transform: none;
+  }
+}
+
+/* 窄屏：页头改竖排，两张卡折成一列 */
+@media (max-width: 720px) {
+  .vc__head {
+    flex-direction: column;
+  }
+}
