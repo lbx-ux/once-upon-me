@@ -31,7 +31,7 @@
  *   ② 搁板是**通长**的：板不是每格一张，而是容器背景按行高平铺
  *      （`background-size: 100% var(--row-h); repeat-y`）。一行没摆满时
  *      平铺周期仍等于行高——按格画板的话末行右侧那片空处就没有板，看着是半截货架。
- *   ③ 封面走 384 档：书在这一屏只有 104–156px 宽，1024 档是阅读器一整页的。
+ *   ③ 封面走 384 档：书在这一屏只有 104–192px 宽，1024 档是阅读器一整页的。
  *      这条**截真请求**——只有 URL 走对了才会长这样。证据取两处并集
  *      （CDP 的 Network 事件 + 页面的 resource timeline）：冷编译那一趟
  *      CDP 那条链路会整条丢，只剩一处时这条判据是假红。
@@ -810,6 +810,12 @@ async function main(): Promise<void> {
           ' ' +
           (e.params?.exceptionDetails?.exception?.description ?? ''),
       )
+    /* ★ 红了就得**把话打出来**：一条只说"没通过"的判据，看不出是页面真的报错、
+      还是冷编译那一下的资源抖动——2026-10-17 加这一节时正是为了分辨这个。 */
+    if (errs.length > 0 || exceptions.length > 0) {
+      for (const one of errs) console.log(`   error: ${one}`)
+      for (const one of exceptions) console.log(`   异常：${one}`)
+    }
     check(errs.length === 0 && exceptions.length === 0, '控制台没有 error / 异常')
 
     console.log(bad === 0 ? '\n全过' : `\n${bad} 条没过`)
