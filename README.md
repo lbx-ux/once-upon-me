@@ -341,6 +341,30 @@ pnpm dev
 
 打开 http://localhost:3000
 
+#### 本地起后端（账号与权限那一半）
+
+```bash
+& .\server\run-local.cmd
+```
+
+**必须用这个脚本（或等价的 bash 一行），不要直接 `mvn spring-boot:run`。**
+理由只有一条，而它咬过人：Java 那一侧**不读** `.env.local`（它读进程环境，
+生产上读 `/etc/xiaozhujue/api.yml`），而 `APP_JWT_SECRET` 不带的话它会
+**自生成一把随机的**——症状是「登录返回 200，之后每个请求 401」，
+与"鉴权写错了"长得一模一样。`run-local.cmd` 就是把 `.env.local` 读进环境再跑 maven。
+
+等价的一条（Git Bash 里）：
+
+```bash
+set -a; . ./.env.local; set +a; mvn -o -f server/pom.xml spring-boot:run
+```
+
+★ 后端起在哪一个 H2 库上是**看谁的工作目录**决定的：spring-boot 插件给子进程设的
+working directory 是项目目录（`server/`），所以 `-f server/pom.xml` 那种写法用的是
+`server/.local-db/`——**账号都在那一个里**。用 `java -jar server/target/*.jar`
+从仓库根起（没有这个"项目目录"的概念）会落到 `<仓库>/.local-db/`，
+那是一个**空库**：症状是"我的账号怎么没了"。
+
 ### 全部脚本
 
 | 命令                | 作用                                                                                                                        |

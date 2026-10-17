@@ -284,3 +284,45 @@ pnpm build                                                      # ✓ Generating
   然后 `NEXT_MANIFEST_DBG=1 NEXT_DIST_DIR=.next-dbg pnpm build 2>&1 | tee /tmp/manifest-dbg.log`。
   **跑完记得删掉 `.next-dbg*`，并把 `tsconfig.json` 还回去**
   （`next build` 会把每个 `NEXT_DIST_DIR` 塞进 `include`，prettier 只修格式、不会删行）。
+
+---
+
+## 九、补丁曾经"落地了但没进主工作区"（2026-10-17 补记）
+
+**症状**：8 月那轮之后 `pnpm build` 又红了，报的还是 §一 那一句
+`Could not find the module "…\StorybookFlip.tsx#default" in the React Client Manifest`。
+
+**根因不是代码回退，是这份补丁当时只落在了一个 worktree 里**：§七 写的三样
+（`patches/next@15.5.27.patch` / `pnpm-workspace.yaml` 的 `patchedDependencies` /
+`pnpm-lock.yaml` 里的 `patch_hash`）**在主工作区一样都没有**，
+`node_modules/next/.../flight-manifest-plugin.js:356` 还是那句没修的 `if (concatenatedModId)`。
+`git log --all -- patches/` 是空的——它从没被提交过，所以换一个 checkout 就没有了。
+
+**改法**：把补丁从那个 worktree 原样搬回来（`patch_hash` 与 §七 记的
+`8ca8d32d30d91244da2b105ef3c04a1f94e2ac2d12d41ef81308b90e4a29cb0c` 逐字相同），
+`pnpm install` 落进 `node_modules`，并在 `pnpm-workspace.yaml` 里把"为什么打、升级 next 时
+要重做"写成注释（原来那条理由只活在工单里，而工单不在构建路径上）。
+
+★ 顺带验了**部署那条命令**能复现补丁：`pnpm install --frozen-lockfile` 之后
+`grep "concatenatedModId !== null"` 仍在——工单 10 在服务器上跑的就是这一条。
+另外补丁文件被 `.gitattributes` 的 `* text=auto eol=lf` 覆盖，索引与工作区都是 LF
+（`git ls-files --eol` 验过）：补丁的上下文行一旦被检出成 CRLF，在 Linux 上会打不上。
+
+**验证（2026-10-17，隔离产物目录 `.next-build-probe`）**：
+
+| 项                                 | 结果                                                        |
+| ---------------------------------- | ----------------------------------------------------------- |
+| `pnpm build`（修完之后）           | ✓ exit 0，`Generating static pages (6/6)`，**零警告零错误** |
+| manifest 里 `StorybookFlip.tsx`    | 在，且带 id（本次分到 **6079**，不是 0）                    |
+| 产物真起一次（`next start` :3999） | `GET /` = **200 / 31,205 B**，HTML 里有 `storybook__book`   |
+| 三道闸门 + 测试                    | 全绿，77 文件 / 919 条                                      |
+
+★ `6079` 这个数值得记一笔：它说明 id 是**哈希 + 盐链**出来的，模块集合一变就换人
+（§6.3）。上一次它撞到 `0`、这一次撞到 `6079`——**所以雷不在 `StorybookFlip` 身上，
+只在 Next 那一行**。换句话说：谁都不许用"把组件挪个位置/加个副本"的办法让它变绿。
+
+**同一轮里撞到的第二道墙（另一件事，别混）**：修完这条之后才露出来的
+`Invalid segment configuration export detected` 来自 22 个 BFF 路由的
+`export const runtime = AUTH_ROUTE_CONFIG.runtime`——Next 的静态分析读不了成员表达式。
+它已改成字面量，判据落在 `src/lib/route-config.test.ts`（三道闸门现在也照得到了）。
+两件事的先后是**真的先后**：段配置那条不修，编译根本走不到预渲染这一步。

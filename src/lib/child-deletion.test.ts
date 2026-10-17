@@ -13,10 +13,15 @@
  * - 一个位置失败不代表放弃其它位置，但 `complete` 必须是 false。
  */
 
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
 import { describe, expect, it, vi } from 'vitest'
 
 import {
   deleteChildEverywhere,
+  partialMessageOf,
   planDeletion,
   targetsOf,
   type DeletionDeps,
@@ -270,6 +275,79 @@ describe('删到一半失败：别的位置照删，但凭据算不完整', () =
     // 其它位置一样删干净了——"删到一半停下"会让剩下的一半更糟
     expect(receipt.places.find((one) => one.place === '角色卡与参考图')?.deleted).toBeGreaterThan(0)
     expect(await f.deps.profiles.load('kid-a')).toBeNull()
+  })
+})
+
+describe('★ 删到一半那句话：点名，而且只有没删干净时才有', () => {
+  /** 把某几个前缀的删除弄坏（真删走原实现，所以别的位置照样删得干净） */
+  function poison(f: Fixture, prefixes: string[]): void {
+    const realDelete = f.store.deletePrefix.bind(f.store)
+    f.store.deletePrefix = vi.fn(async (prefix: string) => {
+      if (prefixes.some((bad) => prefix.startsWith(bad))) throw new Error('磁盘满了')
+      return realDelete(prefix)
+    }) as typeof f.store.deletePrefix
+  }
+
+  it('缩略图那处失败 → 点出「缩略图缓存」，删干净的位置一个都不念', async () => {
+    const f = await fixture()
+    const { cardId } = await seedChild(f, 'kid-a')
+    await seedDerived(f, cardId, 'kid-a-sheet-aaaa', 'kid-a')
+    poison(f, ['thumbs/'])
+
+    const message = partialMessageOf(await deleteChildEverywhere('kid-a', f.deps)) ?? ''
+    expect(message).toContain('缩略图缓存')
+    // 只点没删干净的那个：把删干净的位置也念一遍，这句话就不值得信了
+    expect(message).not.toContain('角色卡与参考图')
+    expect(message).not.toContain('孩子的档案')
+    // ★ 底层原话**不进**这句话（它随凭据回去，排障时看响应体）——
+    //   家长要问的是"哪儿没删干净"，不是在弹窗里读 EACCES / 磁盘满了
+    expect(message).not.toContain('磁盘满了')
+  })
+
+  it('两处失败 → 两个名字都在，顺序照凭据上的位置顺序', async () => {
+    const f = await fixture()
+    const { cardId } = await seedChild(f, 'kid-a')
+    await seedDerived(f, cardId, 'kid-a-sheet-aaaa', 'kid-a')
+    poison(f, ['books/', 'thumbs/'])
+
+    const message = partialMessageOf(await deleteChildEverywhere('kid-a', f.deps)) ?? ''
+    expect(message).toContain('他的书')
+    expect(message).toContain('缩略图缓存')
+    // 凭据上的位置顺序是「…他的书、缩略图缓存」，这句话就照那个顺序念
+    expect(message.indexOf('他的书')).toBeLessThan(message.indexOf('缩略图缓存'))
+  })
+
+  it('★ 删干净时回 null —— 这样"删干净了却还挂着一句没删干净"写不出来', async () => {
+    const f = await fixture()
+    await seedChild(f, 'kid-a')
+    expect(partialMessageOf(await deleteChildEverywhere('kid-a', f.deps))).toBeNull()
+  })
+})
+
+/**
+ * 路由把那句话**接上**了没有。
+ *
+ * ★ 这一条是**护栏**，不是证明：真正的逻辑在上面那三条用例里（纯函数，
+ *   点不点名、什么时候回 null 都由它们钉着）。这里问的是一件纯函数测不到的事——
+ *   `DELETE` 那条路有没有把这句话放进响应体。
+ *   ★ 它值得一条用例，是因为这件事**恰恰坏过一次**：服务端原来回
+ *   `200 + { receipt }`（没有 `message`），界面写着"把服务端那句话说出来"，
+ *   于是两边读起来都对、而家长永远看到的是界面自己的兜底话。
+ *   "界面会显示服务端那句话"这种承诺，只有真跑到那条分支才算数。
+ */
+describe('★ DELETE 把"没删干净"那句话放进响应体（grep 证据）', () => {
+  const route = readFileSync(
+    join(fileURLToPath(new URL('../app/api/children', import.meta.url)), '[childId]', 'route.ts'),
+    'utf8',
+  )
+
+  it('用了 `partialMessageOf`，而且那一支回的是 500', () => {
+    expect(route).toMatch(/partialMessageOf\(receipt\)/)
+    expect(route).toMatch(/status: 500/)
+  })
+
+  it('那个从没抛出过的异常类与它那条够不着的分支都不在了', () => {
+    expect(route).not.toMatch(/DeletionPartialError/)
   })
 })
 

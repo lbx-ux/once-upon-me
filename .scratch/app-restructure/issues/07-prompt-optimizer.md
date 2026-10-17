@@ -70,12 +70,15 @@ prompt 的**输出**不可测（LLM），但下面这些可测：
 - [x] 关掉网络 → 按钮给的是错误，不是一句假的兜底文本
 - [x] 四条闸门：`format:check` / `lint` / `typecheck` / `test` 在本单的文件上全绿
       （`pnpm test` 399 条通过，其中本单 17 条）
-- [ ] `pnpm build` —— **没验成**：现在 `pnpm build` 会停在
+- [x] `pnpm build` —— **当时没验成**：那时 `pnpm build` 会停在
       `src/components/creation/CreateFlow.tsx:396`（`card-ready` 少一个 `anchors`），
       那是**另一会话正在改的照片卡那批**（`git status` 里 `CreateFlow.tsx`、
       `lib/creation/state.ts` 都是它的改动），与本单无关。
-      ★ 按"没测成不许记成测出来"的规矩勾留着，等那批落地再补跑。
+      ★ 按"没测成不许记成测出来"的规矩当时勾留着。
       本单涉及的编译是过的（`Compiled successfully`，只有那条 type error 被拦下）。
+      → **2026-10-17 补跑：绿**（exit 0 / 6 页静态生成，`format:check && lint && typecheck && test` 同样全绿）。
+      那条 type error 早已随照片卡落地消失；今天真正拦着 build 的是另外两件事
+      （22 个路由的段配置导出 + [11](11-client-manifest-build.md) 的 Next 补丁），都已修。
 
 ## 六、落在哪
 

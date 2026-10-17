@@ -44,10 +44,12 @@
  *
  * ## ★ 这一层不抛"删到一半"的异常
  *
- * `complete: false` 与每个位置的 `failed` 原话就写在凭据里，路由照着它回码。
- * （`child-deletion.ts` 那边导出了一个 `DeletionPartialError`，但它的
- * `deleteChildEverywhere` 从头到尾不抛它——那个 `instanceof` 分支是够不着的。
- * 这里不复制一个没人抛的类：多一个永远走不到的分支，就多一处会骗人的代码。）
+ * `complete: false` 与每个位置的 `failed` 原话就写在凭据里，路由照着它回码
+ * （**500 + 点名那句话**，见 `/api/books/<bookId>` 与 `/api/children/<childId>` 那两条 DELETE）。
+ * ★ `child-deletion.ts` 那边原先还导出一个从不抛出的 `DeletionPartialError`，
+ *   路由里挂着一条够不着的 `instanceof` 分支——2026-10-17 连同那个类一起删了。
+ *   现在两层的口径一致：**不抛异常，凭据说话**。多一个永远走不到的分支，
+ *   就多一处会骗人的代码。
  */
 
 import { bookDirOf, manifestPathOf } from './engine/index.ts'

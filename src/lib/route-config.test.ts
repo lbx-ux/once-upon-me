@@ -30,8 +30,22 @@ const SEGMENT_CONFIGS = [
   'config',
 ] as const
 
-/** 会话型 BFF：这几个目录下的路由依赖 cookie 与 `node:crypto`，两行字面量一个都不能少 */
-const BFF_DIRS = ['api/auth', 'api/admin', 'api/voices', 'api/permission-requests']
+/**
+ * 会话型 BFF 的判据：**它自己问那道闸**，而不是一份目录名单。
+ *
+ * ★ 2026-10-17 改过一次，原因是名单漏了。原来这里写死四个目录
+ *   （`api/auth` / `api/admin` / `api/voices` / `api/permission-requests`），
+ *   而当天实测：**11 个目录、35 条路由**都在读 cookie（`api/books`、`api/cards`、
+ *   `api/children`、`api/voice`、`api/optimize`、`api/assets` … 全都不在名单里）。
+ *   现状当时是干净的（43 条路由一个不漏），但那份干净**靠的是巧合**：
+ *   手写名单的错法很安静——新增一个会话路由目录时这一条不会红，
+ *   而它保护的恰好是"忘了写 `force-dynamic` 就会跨用户串数据"这种错。
+ *
+ * ★ 扫多了是安全的（多要求两行字面量），扫少了才是事故，所以判据取"源码里出现过
+ *   这些标记中的任何一个"。注释里出现这些词也会被算进来——那只是多要求两行，
+ *   可接受；反过来漏掉一条路就没得救了。
+ */
+const SESSION_MARKERS = ['requireCapability(', 'cookies()', 'sessionOf(', 'currentUserId('] as const
 
 function* walk(dir: string): Generator<string> {
   for (const name of readdirSync(dir)) {
@@ -74,9 +88,13 @@ describe('src/app 下的段配置导出', () => {
 
   it('会话型 BFF 的每个路由都自己写了那两行', () => {
     const routes = ALL_FILES.filter(
-      (f) => f.endsWith('route.ts') && BFF_DIRS.some((d) => rel(f).startsWith(d + '/')),
+      (file) =>
+        file.endsWith('route.ts') && SESSION_MARKERS.some((marker) => read(file).includes(marker)),
     )
-    expect(routes.length).toBeGreaterThan(20)
+    // ★ 下限而不是等号：判据是"扫法本身没坏"。今天实测 35 条；
+    //   哪天这些标记换了写法、或者文件改了名，这一条先红，
+    //   而不是安静地退化成"一条都没扫到，所以全绿"
+    expect(routes.length).toBeGreaterThan(30)
     const missing = routes.filter((file) => {
       const source = read(file)
       return (

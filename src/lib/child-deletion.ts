@@ -53,7 +53,6 @@
 import type { AssetStore } from './engine/providers/types.ts'
 import type { CardStore } from './engine/character-card/store.ts'
 import type { ProfileStore } from './engine/character-card/profile-store.ts'
-import { EngineError } from './engine/errors.ts'
 import { bookDirOf } from './engine/index.ts'
 import { THUMB_PREFIX, THUMB_WIDTHS } from './thumbs.ts'
 
@@ -362,16 +361,22 @@ export async function deleteChildEverywhere(
 }
 
 /**
- * 删到一半失败时抛的东西。★ 它**带着凭据**：调用方要能把"哪些删掉了、哪些没有"
- * 如实说给家长听，而不是只说一句"删除失败"——那会让人以为一样都没删，
- * 而"以为没删"与"确实删了一半"是两句不同的话。
+ * 删到一半时给家长的那句话：**点名**是哪几个位置没删干净。
+ *
+ * ★ 为什么这句话在这一层、不在路由或界面里拼：位置名（"他的书"、"缩略图缓存"）
+ *   是**凭据的词汇**，只有这一层知道一共有哪些位置。散到两处去拼，
+ *   早晚会有一处漏掉某个位置——而漏掉的那一个恰好就是没删干净的那个。
+ *
+ * ★ 干净删完时回 `null`，不给一句兜底的人话：调用方拿到 `null` 就不该有这句话出现，
+ *   于是"删干净了却还挂着一句'没删干净'"这种错**写不出来**。
+ *   路由那边正是拿它当唯一判据的（见 `/api/children/<childId>` 的 DELETE）。
+ *
+ * ★ 底层原话（`places[].failed`）**不进这句话**：家长要问的是"哪儿没删干净"，
+ *   不是在弹窗里读一句 `EACCES: permission denied`。原文仍随凭据一起回给调用方，
+ *   排障时去响应体里看——这样这句话也不会随着底层换实现而变样。
  */
-export class DeletionPartialError extends EngineError {
-  readonly receipt: DeletionReceipt
-  constructor(receipt: DeletionReceipt) {
-    const bad = receipt.places.filter((one) => one.failed).map((one) => one.place)
-    super('asset-write-failed', `这些位置没删干净：${bad.join('、')}`, { detail: receipt })
-    this.name = 'DeletionPartialError'
-    this.receipt = receipt
-  }
+export function partialMessageOf(receipt: DeletionReceipt): string | null {
+  const bad = receipt.places.filter((one) => one.failed).map((one) => one.place)
+  if (bad.length === 0) return null
+  return `这些位置没删干净：${bad.join('、')}。可以再删一次——重复删是安全的。`
 }

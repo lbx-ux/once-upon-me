@@ -21,7 +21,11 @@
  * ★ 拒绝的三种情形，话都不一样（合成一句"删除失败"等于什么都没说）：
  *   - 示例孩子 → 403：他的档案在 `public/` 里，删不掉；硬删只会让他"回来但没有形象"
  *   - 没有这个孩子 → 404
- *   - 删到一半失败 → 500 + **带上那张不完整的凭据**（哪些删了、哪些没有）
+ *   - 删到一半失败 → 500 + **带上那张不完整的凭据**（哪些删了、哪些没有），
+ *     并且 `message` **点名**是哪几个位置（`partialMessageOf`，与
+ *     `/api/books/<bookId>` 那条 DELETE 同一套话术）。★ 2026-10-17 之前这里
+ *     回的是 200 + 只有凭据：界面读不到那句话，于是家长看到的是自己那句兜底，
+ *     "点名"三个字停在注释里
  *
  * ★ 2026-10-17（工单 16）：三个动词原来**都没有登录闸**。真删这一条尤其要紧——
  *   它删的是"这个孩子名下的卡与书"，而那个孩子可以是**别人家的**。
@@ -40,7 +44,7 @@ import { parseChildBody } from '@/lib/children-body.ts'
 import { childProfileOf, isDemoChildId } from '@/lib/children-source.ts'
 import {
   deleteChildEverywhere,
-  DeletionPartialError,
+  partialMessageOf,
   planDeletion,
   type DeletionReceipt,
 } from '@/lib/child-deletion.ts'
@@ -206,18 +210,27 @@ export async function DELETE(
 
   try {
     const receipt = await deleteChildEverywhere(childId, await depsOf(guard.session.userId))
-    return Response.json({ receipt })
-  } catch (err) {
-    // ★ 删到一半失败：凭据**一起回去**。只说"删除失败"会让人以为一样都没删，
-    //   而"确实删了一半"与"什么都没删"要让家长做两件不同的事（前者不用重试，
-    //   后者可以重试）。重试本身是安全的：`deletePrefix` 对不存在的路径回 0
-    if (err instanceof DeletionPartialError) {
-      const failure = userFailureOf(err)
+    // ★ 判据取"这句话有没有"，不取 `receipt.complete`：两者等价（有一个位置失败就有一个名字），
+    //   但取这句话能让"回 500"与"有一句点名的解释"变成同一件事——
+    //   "回了 500 却没话说"这种组合就写不出来了
+    const message = partialMessageOf(receipt)
+    if (message !== null) {
+      // ★ 删到一半失败：**500 + 凭据 + 点名那句话**，与 `/api/books/<bookId>` 的 DELETE 同一套。
+      //   三样东西各有一个理由：
+      //   · **凭据一起回去**：只说"删除失败"会让家长以为一样都没删，而
+      //     "确实删了一半"与"什么都没删"要让人做两件不同的事（前者不用重试，
+      //     后者可以重试；重试本身是安全的：`deletePrefix` 对不存在的路径回 0）
+      //   · **500 而不是 200**：200 会让这一趟在日志与监控里长得像成功，而它不是
+      //   · **点名哪几个位置**：这一层存在的全部意义就是"删掉了"这三个字能被检查，
+      //     而"有些位置没删干净"没说是哪几处，等于把那份清单又还给了一次信任
+      //   ★ 这里不走 `userFailureOf`：手上没有异常，只有一张凭据（同删书那条）
       return Response.json(
-        { code: failure.code, message: failure.message, retryable: true, receipt: err.receipt },
-        { status: failure.status },
+        { code: 'asset-write-failed', message, retryable: true, receipt },
+        { status: 500 },
       )
     }
+    return Response.json({ receipt })
+  } catch (err) {
     const failure = userFailureOf(err)
     return Response.json(
       { code: failure.code, message: failure.message, retryable: failure.retryable },

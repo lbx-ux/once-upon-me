@@ -61,6 +61,15 @@ next-env.d.ts
 # 本地工具目录（编辑器的启动配置等，与作品无关）
 /.claude/
 
+# 本地 H2 文件库（`spring.datasource.url: jdbc:h2:file:./.local-db/…`）。
+# ★ `server/.gitignore` 里已经有一条同样内容的（模块内那一份），这一条管的是
+#   **仓库根**那一份：从仓库根用 `java -jar server/target/*.jar` 起的时候，
+#   `./.local-db` 落在根上，而它同样是本机数据、同样不该进仓库。
+#   2026-10-17 实测：多出这一个目录的副作用不止是 `git status` 多一行——
+#   `pnpm format:check` 会去读它，而那个文件被跑着的 JVM 锁着（EBUSY），
+#   于是闸门红在一件与格式完全无关的事上。
+.local-db/
+
 # 引擎验收脚本的产物（node scripts/engine-run.mts --out=.out/...）
 # 不是资产，是每次跑都能重出来的东西；进仓库会让人误以为那是预生成资产
 .out/
