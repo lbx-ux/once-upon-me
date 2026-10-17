@@ -1,0 +1,227 @@
+/**
+ * story-sheet.css —— 故事闸门那一屏（`StorySheet.tsx`）
+ *
+ * 版式：书名一行、重写那一块、然后每页一张卡（正文 / 画面 / 情节三个框）。
+ * 这一屏与运行视图**同宽**（`generation-run.css` 的 `min(1240px, 100%)` 由 `.gr` 给，
+ * 这一块是 `.gr` 的孩子，所以宽度不必再写一遍）。
+ *
+ * 四处判断：
+ *
+ * 1. **卡片用 `--surface-glass`，不用 `--surface`。** 这一屏铺着首页那片天
+ *    （`app/create/layout.tsx` 的 `StudioBackdrop`），而 8–20 张**全白**的卡压在
+ *    天光上会把背景切成一条一条——用户 2026-10-17 对上面那条阶段轨提的正是这件事
+ *    （"两个白色的背景不透明度减小一点"）。同一个令牌、同一套墨色门槛，
+ *    见 `globals.css` 里 `--surface-glass` 那一段。
+ * 2. **输入框铺 `--paper-glass`**（纸色玻璃，2026-10-17 第二次调）。原来它铺的是
+ *    **不透明**的 `--paper`——于是这一屏上**最大的一块白其实是框，不是卡**：
+ *    8–20 张卡，每张卡里两三个框都比卡更白更实，整屏读起来还是一张白纸。
+ *    用户第二次说的正是这件事：「白色背景的透明度增高一点，要不然和背景不符」。
+ *    代价写在 `globals.css` 里 `--paper-glass` 那一段：框与卡之间只剩一次很轻的
+ *    色阶，"哪里能打字"主要靠那一圈 1px 描边认。**这是用户要的那一头**，别又调回来。
+ * 3. **占位文字用 `--ink-muted` 显式指定**。原来这一屏没写规则，于是落到 Tailwind
+ *    preflight 那一条 `::placeholder { color: color-mix(in oklab, currentcolor 50%,
+ *    transparent) }` 上——那是一个**算出来的**灰，不在任何令牌上、也就没人量过它。
+ *    而这一句（"比如：结局改成她带着全班一起飞"）是这一格的说明，不是装饰。
+ *    与 `fields.css` 的 `.cf__input::placeholder` 同一写法（含 `opacity: 1`，
+ *    不写它 Firefox 会再调暗一档）。
+ * 4. **有问题的框只换描边与底色的温度，不换尺寸**：换尺寸会让整屏在改对的那一刻
+ *    "跳一下"，而这一屏本来就长——跳一下会让人以为自己改错了地方。
+ * 5. **窄屏是单列**：三个框在 560px 以下竖着排（`grid-template-columns` 那一处），
+ *    与运行视图底部那条同一个断点，不另发明一个。
+ */
+
+.ss {
+  display: grid;
+  gap: 14px;
+  margin-top: 8px;
+}
+
+/* ── 问题汇总（在最上面） ─────────────────────────────────────────────────── */
+
+.ss__problems {
+  padding: 12px 14px;
+  border: 1px solid rgba(var(--accent-rgb), 0.35);
+  border-radius: var(--card-radius);
+  background: rgba(var(--accent-rgb), 0.07);
+}
+
+.ss__problems-head {
+  margin: 0 0 6px;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.ss__problems-list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--danger);
+  font-size: 13.5px;
+  line-height: 1.8;
+}
+
+.ss__problems-list a {
+  color: inherit;
+}
+
+/* ── 书名与重写 ─────────────────────────────────────────────────────────── */
+
+.ss__title-row,
+.ss__rewrite {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--card-radius);
+  background: var(--surface-glass);
+  box-shadow: var(--sheet-shadow);
+}
+
+.ss__label {
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
+.ss__input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  background: var(--paper-glass);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14.5px;
+  line-height: 1.7;
+  resize: vertical;
+}
+
+/* 见文件头第 3 条：占位文字要落在一个**量过对比度**的令牌上，不能听浏览器的默认灰。
+   `opacity: 1` 与 `fields.css` 那边同一条理由：不写它 Firefox 会把 `--ink-muted`
+   再调暗一档，同一句示例在两家浏览器上是两种灰。 */
+.ss__input::placeholder {
+  color: var(--ink-muted);
+  opacity: 1;
+}
+
+.ss__input:focus-visible {
+  border-color: var(--accent);
+  outline: 2px solid rgba(var(--accent-rgb), 0.25);
+  outline-offset: 1px;
+}
+
+/* ★ 改坏了的那一格：橙色描边 + 淡橙底。**尺寸不动**（见文件头第 3 条） */
+.ss__input[data-bad='true'] {
+  border-color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.06);
+}
+
+.ss__input:disabled {
+  opacity: 0.66;
+}
+
+.ss__input--title {
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.ss__input--note {
+  min-height: 2.6em;
+}
+
+.ss__rewrite-acts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.ss__rewrite-btn {
+  min-height: 38px;
+  padding: 0 16px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.ss__rewrite-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.ss__rewrite-btn:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.ss__warn {
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
+.ss__bad {
+  margin: 0;
+  color: var(--danger);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.ss__hint {
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+/* ── 每一页 ─────────────────────────────────────────────────────────────── */
+
+.ss__pages {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ss__page {
+  display: grid;
+  grid-template-columns: 4.5em minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--card-radius);
+  background: var(--surface-glass);
+  box-shadow: var(--sheet-shadow);
+  /* 问题汇总里那些锚点跳过来时，别让标题贴着窗口上沿 */
+  scroll-margin-top: 90px;
+}
+
+.ss__no {
+  color: var(--ink-muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.ss__field {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* 「情节」那一行占满剩下的两列：它是整页的一句话，与正文/画面并排会挤成一团 */
+.ss__field:last-child {
+  grid-column: 2 / -1;
+}
+
+@media (max-width: 760px) {
+  .ss__page {
+    grid-template-columns: 1fr;
+  }
+
+  .ss__field:last-child {
+    grid-column: auto;
+  }
+}

@@ -24,6 +24,7 @@
 
 import { createHmac, timingSafeEqual } from 'node:crypto'
 
+import { cookies } from 'next/headers'
 import { NextResponse, type NextRequest } from 'next/server'
 
 import { backendFetch } from './backend.ts'
@@ -176,6 +177,34 @@ export async function fetchMe(
   }
 }
 
+/**
+ * **服务端组件**那一侧的"这是谁"（工单 16）。
+ *
+ * Route Handler 手上有一个 `NextRequest`，`sessionOf(request)` 直接就能读；
+ * 而 server component 手上只有 `cookies()`，没有 request——所以补这一条出口。
+ *
+ * ★ 两条纪律：
+ *
+ * 1. **判不出来就回 `null`**，不抛。页面照常渲染，只是"我的那部分"是空的
+ *    （与今天的行为一致：未登录时书架仍然打得开，架上是空的）。
+ *    回 null 与 `sessionOf` 回 null 是同一件事的两种入口，不是两套判断。
+ * 2. **验的是同一张票、同一个 `verifyToken`**（不是"再问一次 Java"）：
+ *    所以它不可能与上面那道闸说出不同的话来。多一跳问 `/api/auth/me`
+ *    只会多一处**可能**漂的地方，而 `sub` 就是 userId 这件事是票的契约。
+ *    ★ 代价说清楚：票还没过期、但人在后端已经被删掉时，这里回的是一个
+ *    已经不存在的 userId，读出来是一片空的目录——**空**是对的答案，
+ *    而"这个人不存在"要由真正要动钱的那条路去说（那时 `requireCapability`
+ *    会问后端，问到 401）。
+ */
+export async function currentUserId(): Promise<string | null> {
+  const jar = await cookies()
+  const token = jar.get(SESSION_COOKIE)?.value
+  if (!token) return null
+  const claims = verifyToken(token)
+  if (!claims || claims.scope !== 'session') return null
+  return claims.sub
+}
+
 /* ── 那道闸 ──────────────────────────────────────────────────────────────── */
 
 export type Guard =
@@ -225,6 +254,59 @@ export async function requireCapability(request: NextRequest, caps: Capability[]
   }
 
   return { ok: true, session, permissions: me.me.permissions }
+}
+
+/* ── 管理员那道闸（2026-10-17）────────────────────────────────────────────── */
+
+export type AdminGate = { ok: true } | { ok: false; response: NextResponse }
+
+/**
+ * 「这个人是管理员吗」——**问 Java**。
+ *
+ * ★ 为什么不在这一层判 `session.role === 'ADMIN'`：那张票里的 role 是**签发时**的，
+ *   而判据必须按"此刻"来——他被停用了、或者他的密码刚被改过，旧票就不该还能
+ *   改全站的模型配置。那两条判据（角色 + 新鲜度）都只写在
+ *   `AdminController#requireAdminFresh` 里。
+ * ★ 更要紧的一条：这里要守的不是"给不给看"，而是**给不给写**
+ *   （`/api/admin/model-config` 会把 api-key 写进磁盘上那份文件）。
+ *   前端说"我是管理员"不是证据，所以这条路必须有一个服务端的"是"才算数。
+ *
+ * ★ 用它的是**只在 Next 一侧存在**的管理资源（模型配置）。
+ *   转发给 Java 就能做完的那些（用户表、权限申请）不需要它——
+ *   那些路由直接把请求转过去，Java 自己会拒。
+ */
+export async function requireAdmin(request: NextRequest): Promise<AdminGate> {
+  if (!secret()) {
+    return fail(500, 'server-misconfigured', '服务端没配 APP_JWT_SECRET，登录态认不出来')
+  }
+  if (!sessionOf(request)) {
+    return fail(401, 'not-signed-in', '请先登录')
+  }
+
+  const result = await backendFetch<unknown>('/api/admin/check', {
+    method: 'GET',
+    token: sessionTokenOf(request) ?? '',
+  })
+  if (result.ok) return { ok: true }
+
+  // ★ Java 给的那句话原样用（`not-admin` / 「这一屏只有管理员能看」）——
+  //   与 `lib/admin/server.ts` 里那四种结果同一条纪律：这一层不编文案
+  if (result.status === 401 || result.status === 403) {
+    return { ok: false, response: failureJson(result.status, result.code, result.message) }
+  }
+  // ★ 判不了 ≠ 不是管理员。说清是判不了（见 `requireCapability` 里同样那一条）
+  return {
+    ok: false,
+    response: failureJson(
+      503,
+      'permission-unavailable',
+      `暂时判不了权限（${result.message}），请稍后再试`,
+    ),
+  }
+}
+
+function failureJson(status: number, code: string, message: string): NextResponse {
+  return NextResponse.json({ code, message }, { status })
 }
 
 /* ── 写 cookie ───────────────────────────────────────────────────────────── */

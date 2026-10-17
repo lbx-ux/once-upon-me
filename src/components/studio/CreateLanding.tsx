@@ -141,7 +141,7 @@ export type ChildOption = {
 
 export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
   const router = useRouter()
-  const { current: voiceId, setVoice, voices } = useVoice()
+  const { current: voiceId, setVoice, voices, voiceError } = useVoice()
   const { permissions, configured } = useAuth()
   /* ★ 三处"要登录才能做"的入口各有一份，共用一个 hook（`SignInGate`）：
      创作（这里）、生成人物（`NewCharacterButton`）、生成声音（`VoicePicker`）。 */
@@ -682,9 +682,12 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
           </div>
         )}
 
-        {optimizeError && (
+        {/* ★ 两件事共用这一句"没改成"（2026-10-17 工单 16 加了音色那一件）：
+            它们的下一步是同一个动作——**再点一次**。分成两个位置、两种长相的话，
+            同一屏上会出现两条"出错"的样子，而它们说的是同一类事 */}
+        {(optimizeError ?? voiceError) && (
           <p className="cl__warn" role="alert">
-            没改成：{optimizeError}
+            没改成：{optimizeError ?? voiceError}
           </p>
         )}
 

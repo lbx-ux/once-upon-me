@@ -1,4 +1,7 @@
 import CharacterWall from '@/components/studio/CharacterWall.tsx'
+import { currentUserId } from '@/lib/auth/session.ts'
+import { assetRoot } from '@/lib/books-runtime.ts'
+import { userSliceRoot } from '@/lib/asset-scope.ts'
 import { listWallItems } from '@/lib/children-list.ts'
 
 /**
@@ -24,5 +27,10 @@ export const dynamic = 'force-dynamic'
 export const metadata = { title: '角色卡 · 小主角' }
 
 export default async function CharacterPage() {
-  return <CharacterWall items={await listWallItems()} />
+  // ★ 2026-10-17（工单 16）：只列**自己**的孩子（别人的孩子在他那一片里不存在）。
+  //   未登录 = 空墙（同 shelf 那段口径；示例孩子也读不到了——他活在演示账号那一片里）
+  const userId = await currentUserId()
+  if (!userId) return <CharacterWall items={[]} />
+
+  return <CharacterWall items={await listWallItems(userSliceRoot(assetRoot(), userId))} />
 }

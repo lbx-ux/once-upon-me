@@ -38,6 +38,12 @@ yarn-error.log*
 .env*
 !.env.example
 
+# 管理页写出来的那份模型配置（2026-10-17）。**它里面是 API key**，
+# 所以与 .env.local 同一个待遇：只在服务器上、永不入库。
+# 单独列一行而不是靠上面的 `.env*`：这个名字不叫 .env.*，靠通配是漏的，
+# 而漏掉的后果是密钥被提交进一个公开仓库——撤不回来。
+models.runtime.json
+
 # vercel
 .vercel
 

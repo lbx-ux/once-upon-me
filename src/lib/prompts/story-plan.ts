@@ -10,7 +10,15 @@
 import type { AgeBand, BookForm } from '../engine/domain.ts'
 import { planJsonSchema } from '../schemas/story.ts'
 
-export const STORY_PLAN_VERSION = 'story-plan@v1'
+/**
+ * ☆ 2026-10-17 升到 v2：加了「家长看完第一版之后的新要求」那一段（`StoryPlanInput.reviseNote`）。
+ *
+ *   ★ 为什么改文案就要 +1（而不是偷偷改）：这一版进 `Provenance.promptVersion`，
+ *     横评数据、线上产物、以及"这一页是哪一版提示词生成的"都要靠它可比。
+ *     改了不升版，第二天量出来的数与昨天那份就不是一回事了，而屏幕上没有任何东西
+ *     会提示这件事。（`story-plan@v1` 的输出仍然合法——只是它没有那一段。）
+ */
+export const STORY_PLAN_VERSION = 'story-plan@v2'
 
 /** 适龄档 → 语言约束。这是 #3「RAG 技术应用」里"4 岁和 8 岁复杂度可对比"的对照物 */
 const AGE_RULES: Record<AgeBand, string> = {
@@ -52,6 +60,15 @@ export type StoryPlanInput = {
   wish?: string
   form: BookForm
   pages: number
+  /**
+   * 「让 AI 重写一版」时家长写的那句话（2026-10-17 的故事闸门）。
+   *
+   * ★ 它**只在这一条路上有值**：家长看完第一版故事之后说"结局改成她带着全班一起飞"，
+   *   重编时把这句话贴进去。第一次编的时候它是 undefined。
+   * ★ 措辞必须说清"重写整篇，不是打补丁"——不说的话，模型会保留原故事只改结尾，
+   *   而家长要的是"按我说的这个方向重新长一遍"（他会拿新版与旧版对着看）。
+   */
+  reviseNote?: string
 }
 
 /** system：身份、硬约束、输出形状。不随书变化，所以可以整段缓存 */
@@ -83,6 +100,20 @@ export function storyPlanUser(input: StoryPlanInput): string {
     `主题：${input.theme}。`,
     input.wish
       ? `家长希望孩子从中得到：${input.wish}。注意这是**给作者的暗线**，不许写成台词。`
+      : '',
+    '',
+    // ★ 重写那一段放在**最后**（紧跟表单字段说明之前）：它是这一轮的**追加指令**，
+    //   接在最后才像是"在刚才那些要求之上，另外还有这一条"。
+    //   ★ 措辞里三件事都是必需的：①这是家长看完第一版的意见；②**重写整篇**不是修补；
+    //     ③上面那些年龄与形态的硬约束一条都不放松——不说第③条，模型会把注意力
+    //     全放在新要求上，把"每句 12 字"这类规则丢掉。
+    input.reviseNote
+      ? [
+          '【家长看过你的第一版之后的意见——请**按这个方向重写整篇**】',
+          input.reviseNote,
+          '注意：上面那些年龄档的语言规则、页数、红线条一条都不放松；' +
+            '要重写的是故事本身（情节怎么发展、怎么收），不是只在原来的稿子上打补丁。',
+        ].join('\n')
       : '',
     '',
     FORM_RULES[input.form].replaceAll('{pages}', String(input.pages)),

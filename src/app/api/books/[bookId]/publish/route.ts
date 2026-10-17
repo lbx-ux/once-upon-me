@@ -23,7 +23,10 @@
  *   在这里加一道闸门就等于替用户决定"缺一页就不算一本书"，而他没有要求过这件事。
  */
 
-import { createFsStore, manifestPathOf, type Book } from '@/lib/engine/index.ts'
+import type { NextRequest } from 'next/server'
+import { manifestPathOf, type Book } from '@/lib/engine/index.ts'
+import { createUserStore } from '@/lib/asset-scope.ts'
+import { requireCapability } from '@/lib/auth/session.ts'
 import { assetRoot } from '@/lib/books-runtime.ts'
 
 export const runtime = 'nodejs'
@@ -32,11 +35,16 @@ export const dynamic = 'force-dynamic'
 const MISSING = '盘上没有这一本（也许已经在别处删掉了）。刷新一下书架看看——它多半已经不在了。'
 
 export async function POST(
-  _req: Request,
+  req: NextRequest,
   { params }: { params: Promise<{ bookId: string }> },
 ): Promise<Response> {
+  // ★ 2026-10-17（工单 16）：这条路原来**没有登录闸**——谁都能把别人的草稿翻成成品。
+  //   闸门放在最前面（与别的路由同一条次序：先认人，再动盘）
+  const guard = await requireCapability(req, [])
+  if (!guard.ok) return guard.response
+
   const { bookId } = await params
-  const store = await createFsStore(assetRoot())
+  const store = await createUserStore(assetRoot(), guard.session.userId)
   const path = manifestPathOf(bookId)
 
   let book: Book | null

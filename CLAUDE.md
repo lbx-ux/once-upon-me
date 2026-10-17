@@ -23,7 +23,12 @@
 | 设计令牌只在 `src/app/globals.css` 的 `:root` 定义一次                           | 组件层只消费 `var(--x)`；改配色只动那一块                            |
 | 组件样式与组件同目录同名（`Foo.tsx` / `foo.css`），在 `globals.css` 里 `@import` | 依赖属性选择器与兄弟关系，不用 CSS Modules（理由见 README 分层约定） |
 | `src/lib/engine/`（将来）不得 import React                                       | 一个 node 脚本要能跑完整本生成——这是「平台而非聚合」的技术证据       |
-| 真实密钥只写 `.env.local`                                                        | 仓库是公开的，密钥提交上去撤不回来                                   |
+| 真实密钥只写 `.env.local`，或管理页写出来的 `models.runtime.json`                | 两个都在 `.gitignore` 里；仓库是公开的，密钥提交上去撤不回来         |
+
+> 「四条硬约束」里的第四条 2026-10-17 扩了一次：管理页能换模型/接口地址/api-key 之后，
+> 密钥多了一个落点（`models.runtime.json`，管理页写、`serverEnv()` 读、压过 `.env.local`）。
+> 生产上建议用 `MODEL_CONFIG_FILE=/etc/xiaozhujue/models.json` 把它挪出仓库目录——
+> 那个目录是部署产物，重新部署会擦掉它。**两个落点都只有一条纪律：永不入库。**
 
 ## 已交付的测量值不是常数，是契约
 

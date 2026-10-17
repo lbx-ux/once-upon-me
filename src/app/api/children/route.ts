@@ -15,11 +15,18 @@
  *
  * POST 一件事：把「他是谁」落成一个 `children/<childId>.json`。
  * ★ 它**不**建角色卡（见下面的 `POST` 那段注释）。
+ *
+ * ★ 2026-10-17（工单 16）：两个动词原来**都没有登录闸**——孩子是谁、叫什么，
+ *   是这一整站里最私人的一件东西，而它对匿名请求是公开的。
+ *   现在匿名 401，登录的人只看得见自己那一片（别人的孩子在他那里不存在）。
  */
 
+import type { NextRequest } from 'next/server'
 import { assetRoot } from '@/lib/books-runtime.ts'
 import type { AgeBand } from '@/lib/engine/domain.ts'
-import { createFsStore, createProfileStore } from '@/lib/engine/index.ts'
+import { createProfileStore } from '@/lib/engine/index.ts'
+import { createUserStore, userSliceRoot } from '@/lib/asset-scope.ts'
+import { requireCapability } from '@/lib/auth/session.ts'
 // ★ 校验只有一份：新建与改名收的是同一份东西（见 children-body.ts 的文件头）
 import { parseChildBody } from '@/lib/children-body.ts'
 import { listChildPicker } from '@/lib/children-list.ts'
@@ -29,8 +36,13 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 /** 有哪些孩子。创作流第 1 步与「小主角」那一屏读的是同一份 */
-export async function GET(): Promise<Response> {
-  return Response.json({ children: await listChildPicker() })
+export async function GET(req: NextRequest): Promise<Response> {
+  const guard = await requireCapability(req, [])
+  if (!guard.ok) return guard.response
+
+  return Response.json({
+    children: await listChildPicker(userSliceRoot(assetRoot(), guard.session.userId)),
+  })
 }
 
 /**
@@ -62,7 +74,11 @@ function newChildId(): string {
  * ★ 名字的合法性判据在 `buildChildRecord` 里（引擎侧），这里不重写一遍：
  *   本层只做"JSON 的形状对不对"，不合格就交给引擎抛 `profile-invalid`。
  */
-export async function POST(req: Request): Promise<Response> {
+export async function POST(req: NextRequest): Promise<Response> {
+  // 新建一个档案不是一次生成（不调任何模型），所以不要任何能力
+  const guard = await requireCapability(req, [])
+  if (!guard.ok) return guard.response
+
   let raw: unknown
   try {
     raw = await req.json()
@@ -78,7 +94,7 @@ export async function POST(req: Request): Promise<Response> {
     )
   }
 
-  const store = await createFsStore(assetRoot())
+  const store = await createUserStore(assetRoot(), guard.session.userId)
   const profiles = createProfileStore(store)
 
   try {

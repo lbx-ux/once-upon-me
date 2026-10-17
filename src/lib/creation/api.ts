@@ -17,10 +17,15 @@ import { decodeBookFrame, type BookStreamFrame } from '@/lib/book-stream.ts'
 import type { ChildPickerItem } from '@/lib/children-list.ts'
 import type { CharacterAnchor } from '@/lib/engine/domain.ts'
 import type { EngineEvent } from '@/lib/engine/events.ts'
-// ★ `import type`：`run-pages.ts` 是服务端模块（它读 `book.json` 的形状），
-//   编译后这一行不存在，客户端包里不会出现它（与 `ChildPickerItem` 那条同一写法）
+// ★ `import type`：`run-pages.ts` 与 `schemas/story.ts` 都是服务端那一侧的模块
+//   （前者的形状来自 `book.json`），编译后这一行不存在（与 `ChildPickerItem` 那条同一写法）。
+//   ★ `StoryDoc` 是**闸门那一屏要摊出来的故事**：书名 + 每页草稿。
+//     它是模型写的、也是家长改的那一份——同一个形状是刻意的（见 `schemas/story.ts`）
+import type { StoryDoc } from '@/lib/schemas/story.ts'
 import type { RunPageView } from '@/lib/run-pages.ts'
 import { createSseDecoder } from '@/lib/engine/sse.ts'
+
+export type { StoryDoc }
 
 export type ApiFailure = { code: string; message: string; retryable: boolean }
 
@@ -40,16 +45,24 @@ const NO_RETRY_CODES = new Set([
   'invalid-request',
   'bad-json',
   'card-not-found',
+  // ★ 2026-10-17（故事闸门）多两条：书已经画过了、故事不在了。
+  //   两条都是"再点一次还是这样"，而文案里已经写清了该做什么（换主题 / 回书架）
+  'book-exists',
+  'story-not-found',
   'provider-not-configured',
   'card-invalid',
   'book-busy',
 ])
 
-async function postJson<T>(url: string, body: unknown): Promise<T> {
+async function postJson<T>(
+  url: string,
+  body: unknown,
+  method: 'POST' | 'PUT' = 'POST',
+): Promise<T> {
   let response: Response
   try {
     response = await fetch(url, {
-      method: 'POST',
+      method,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     })
@@ -169,21 +182,28 @@ export async function listChildren(): Promise<ChildPickerItem[]> {
 export type { ChildPickerItem }
 
 /**
- * 跑一本书，边收边回调。
+ * 三条流式请求（编故事 / 重写一版 / 逐页画 / 单页重做）共用的那一段：
+ * **fetch → 查状态码 → 用同一个解码器读帧**。
  *
- * ★ 返回的是一个**收尾**函数而不是 Promise<void>：调用方要能在卸载时喊停
+ * ★ 2026-10-17 抽出来的。在这之前 `createBook` 与 `rerunPage` 各有一份一模一样的
+ *   二十行，而这一轮又要加两条（重写、逐页画）——四份的话，改了其中一份的
+ *   状态码处理就会变成"有的入口报得清、有的入口只显示 HTTP 400"，
+ *   而那种差异只在出错时才看得见。
+ *
+ * ★ 返回的是一个**收尾**函数而不是 Promise：调用方要能在卸载时喊停
  *   （`AbortController`），否则用户点了"停止"之后，回调还会往一个已经消失的
  *   组件上写状态。
  */
-export function createBook(
-  body: ReturnType<typeof import('./state.ts').toBookBody>,
+function postStream(
+  url: string,
+  body: unknown,
   onFrame: (frame: BookStreamFrame) => void,
   signal?: AbortSignal,
 ): Promise<void> {
   return (async () => {
     let response: Response
     try {
-      response = await fetch('/api/books', {
+      response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -193,7 +213,7 @@ export function createBook(
       if (signal?.aborted) return
       throw new ApiError({
         code: 'network',
-        message: `连不上服务端（${err instanceof Error ? err.message : String(err)}）`,
+        message: `连不上服务端（${err instanceof Error ? err.message : String(err)}）。确认 dev server 还在跑`,
         retryable: true,
       })
     }
@@ -227,6 +247,88 @@ export function createBook(
 }
 
 /**
+ * 开一本：**①编故事**（故事闸门）。
+ *
+ * ★ 2026-10-17 起它**不再跑完一本书**：流结束时盘上只有故事草稿
+ *   （`books/<id>/story.json`）与过程日志，一张图都没有。
+ *   接着画是 `illustrateBook()`，而中间那一步是家长在 `StorySheet` 上过一遍。
+ *   ★ 名字没有跟着改成 `planBook`：界面上"开一本"仍然只有这一个入口，
+ *     而从调用方那一边看，它做的就是"开一本"（只不过这一本停在闸门前面）。
+ */
+export function createBook(
+  body: ReturnType<typeof import('./state.ts').toBookBody>,
+  onFrame: (frame: BookStreamFrame) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  return postStream('/api/books', body, onFrame, signal)
+}
+
+/**
+ * 读这一本的故事草稿（闸门那一屏要摊出来的东西）。
+ *
+ * ★ 形状的权威在 `lib/schemas/story.ts` 的 `PlanDraft`（**浏览器安全**的模块），
+ *   这里只搬类型——它同时是"模型写的那一份"与"家长改的那一份"，
+ *   两边同一个形状是这道闸门能成立的前提（见 `story-draft.ts` 文件头）。
+ */
+export async function fetchStory(bookId: string): Promise<StoryDoc> {
+  const response = await fetch(`/api/books/${encodeURIComponent(bookId)}/story`)
+  if (!response.ok) {
+    throw new ApiError({
+      code: `http-${response.status}`,
+      message: '读不回这一本的故事',
+      retryable: true,
+    })
+  }
+  const parsed = (await response.json()) as { story?: StoryDoc }
+  if (!parsed.story) {
+    throw new ApiError({ code: 'story-not-found', message: '这一本的故事不见了', retryable: false })
+  }
+  return parsed.story
+}
+
+/**
+ * 把改过的故事存回去（自动保存用）。
+ *
+ * ★ 它**不返回校验结论**：合不合法由 `lib/story-problems.ts` 那个纯函数在客户端算，
+ *   与服务端「就按这个画」那一关用的是**同一个函数**——所以不存在"这里说行、
+ *   那里说不行"。服务端只做信封校验（见 `story/route.ts` 文件头第 2 条）。
+ */
+export async function saveStory(bookId: string, doc: StoryDoc): Promise<{ savedAt: number }> {
+  return postJson<{ savedAt: number }>(`/api/books/${encodeURIComponent(bookId)}/story`, doc, 'PUT')
+}
+
+/** 「让 AI 重写一版」：家长写的那一句话 + SSE 的过程（与开一本同一个协议） */
+export function rewriteStory(
+  bookId: string,
+  note: string,
+  onFrame: (frame: BookStreamFrame) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  return postStream(
+    `/api/books/${encodeURIComponent(bookId)}/story/rewrite`,
+    { note },
+    onFrame,
+    signal,
+  )
+}
+
+/**
+ * 「就按这个画」：**②–⑦ 逐页画 / 封面 / 配音 / 装订**。
+ *
+ * ★ 请求体里的 `doc` 就是家长刚改完的那一份（不是"服务端自己有一份"）——
+ *   这样"画出来的"与"屏幕上那一段"是同一份数据，而不是两次读盘可能读岔的两份。
+ *   服务端仍会写回盘上（自动保存可能差最后一拍），并在画之前再校验一次。
+ */
+export function illustrateBook(
+  bookId: string,
+  doc: StoryDoc,
+  onFrame: (frame: BookStreamFrame) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  return postStream(`/api/books/${encodeURIComponent(bookId)}/illustrate`, doc, onFrame, signal)
+}
+
+/**
  * 重做**一页**（工单 01）。
  *
  * ★ 与 `createBook` 走同一个解码器、同一种帧——所以运行视图那边只有一个事件处理器。
@@ -256,55 +358,17 @@ export function rerunPage(
   onFrame: (frame: BookStreamFrame) => void,
   signal?: AbortSignal,
 ): Promise<void> {
-  return (async () => {
-    let response: Response
-    try {
-      response = await fetch(`/api/books/${encodeURIComponent(bookId)}/pages/${pageNo}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          kind: options.kind,
-          ...(options.voiceId ? { voiceId: options.voiceId } : {}),
-          ...(options.fixNote ? { fixNote: options.fixNote } : {}),
-          ...(options.body ? { body: options.body } : {}),
-        }),
-        ...(signal ? { signal } : {}),
-      })
-    } catch (err) {
-      if (signal?.aborted) return
-      throw new ApiError({
-        code: 'network',
-        message: `连不上服务端（${err instanceof Error ? err.message : String(err)}）`,
-        retryable: true,
-      })
-    }
-
-    if (!response.ok || !response.body) {
-      const text = await response.text()
-      let message = `服务端回了 HTTP ${response.status}`
-      let code = `http-${response.status}`
-      try {
-        const parsed = JSON.parse(text) as { code?: string; message?: string }
-        if (parsed.message) message = parsed.message
-        if (parsed.code) code = parsed.code
-      } catch {
-        /* 非 JSON：用状态码兜底 */
-      }
-      throw new ApiError({ code, message, retryable: !NO_RETRY_CODES.has(code) })
-    }
-
-    const decoder = createSseDecoder()
-    const reader = response.body.getReader()
-    const textDecoder = new TextDecoder()
-    for (;;) {
-      const { done, value } = await reader.read()
-      if (done) break
-      for (const sse of decoder.push(textDecoder.decode(value, { stream: true }))) {
-        const frame = decodeBookFrame(sse)
-        if (frame) onFrame(frame)
-      }
-    }
-  })()
+  return postStream(
+    `/api/books/${encodeURIComponent(bookId)}/pages/${pageNo}`,
+    {
+      kind: options.kind,
+      ...(options.voiceId ? { voiceId: options.voiceId } : {}),
+      ...(options.fixNote ? { fixNote: options.fixNote } : {}),
+      ...(options.body ? { body: options.body } : {}),
+    },
+    onFrame,
+    signal,
+  )
 }
 
 /**

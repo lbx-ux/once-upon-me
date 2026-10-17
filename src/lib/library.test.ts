@@ -14,7 +14,7 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { listBooks, noCovers, summarize } from './library.ts'
+import { booksOnly, listBooks, noCovers, summarize } from './library.ts'
 import { createMemoryStore } from './engine/providers/stores.ts'
 import type { Book } from './engine/index.ts'
 
@@ -201,6 +201,90 @@ describe('listBooks', () => {
     })
     expect(seen).toEqual(['b1'])
     expect(books[0]?.coverUrl).toBe('/api/assets/books/b1/cover.png?w=384')
+  })
+
+  /* ── 故事草稿（2026-10-17，故事闸门） ─────────────────────────────────── */
+
+  /** 一份最小但**合法**的故事草稿。★ 页数取自 `doc.nodes`，所以这里给三页 */
+  function draft(bookId: string, createdAt: number, title = '绿天空') {
+    return {
+      bookId,
+      input: {
+        child: { childId: 'k1', name: '小乐', nameReading: 'xiǎo lè', ageBand: '4-6' },
+        cardId: 'c1',
+        cardRevision: 1,
+        theme: '绿天空',
+        form: 'solo',
+      },
+      doc: {
+        title,
+        nodes: [1, 2, 3].map((pageNo) => ({
+          scene: `第 ${pageNo} 页的场景`,
+          body: [`第 ${pageNo} 页的正文`],
+          imagePrompt: `第 ${pageNo} 页的画面描述`,
+          mood: 'calm',
+        })),
+      },
+      provenance: { modelId: 'm', promptVersion: 'story-plan@v2', attempts: 1 },
+      planMs: 1000,
+      createdAt,
+    }
+  }
+
+  it('★ 只有 story.json 的目录也算书架上的一本，status 是 story', async () => {
+    const store = await createMemoryStore()
+    await store.putJson({ path: 'books/s1/story.json', value: draft('s1', 10) })
+
+    const books = await listBooks(store, noCovers)
+    expect(books.map((item) => item.bookId)).toEqual(['s1'])
+    expect(books[0]).toMatchObject({
+      status: 'story',
+      title: '绿天空',
+      // 页数来自故事里的页数；而"有几页有图"是 0——它真的还没画
+      pageCount: 3,
+      illustratedCount: 0,
+      hasNarration: false,
+      coverUrl: null,
+      createdAt: 10,
+    })
+  })
+
+  it('★ 两样都有时**清单说了算**：故事草稿是这一本曾经的样子，不是它的现状', async () => {
+    const store = await createMemoryStore()
+    await store.putJson({ path: 'books/b1/story.json', value: draft('b1', 900) })
+    await store.putJson({
+      path: 'books/b1/book.json',
+      value: book({ bookId: 'b1', createdAt: 100, status: 'draft' }),
+    })
+
+    const books = await listBooks(store, noCovers)
+    // 只出现一本，而它的状态是"画完了没装订"，不是"还没开始画"
+    expect(books).toHaveLength(1)
+    expect(books[0]?.status).toBe('draft')
+  })
+
+  it('story.json 读不回来（半截 / 信封不对）时跳过，不当成一本书', async () => {
+    const store = await createMemoryStore()
+    await store.put({
+      path: 'books/half/story.json',
+      bytes: new TextEncoder().encode('{"bookId": "ha'),
+      mime: 'application/json',
+    })
+    // 信封不对：没有 doc
+    await store.putJson({ path: 'books/nodoc/story.json', value: { bookId: 'nodoc' } })
+    await store.putJson({ path: 'books/ok/story.json', value: draft('ok', 1) })
+
+    expect((await listBooks(store, noCovers)).map((item) => item.bookId)).toEqual(['ok'])
+  })
+
+  it('booksOnly 把故事草稿摘出去（个人主页与角色墙都读它）', async () => {
+    const store = await createMemoryStore()
+    await store.putJson({ path: 'books/s1/story.json', value: draft('s1', 900) })
+    await store.putJson({ path: 'books/b1/book.json', value: book({ bookId: 'b1', createdAt: 1 }) })
+
+    const all = await listBooks(store, noCovers)
+    expect(all.map((item) => item.bookId)).toEqual(['s1', 'b1'])
+    expect(booksOnly(all).map((item) => item.bookId)).toEqual(['b1'])
   })
 })
 

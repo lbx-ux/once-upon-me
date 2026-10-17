@@ -22,9 +22,10 @@
  */
 
 import type { NextRequest } from 'next/server'
+import { createUserStore } from '@/lib/asset-scope.ts'
 import { assetRoot } from '@/lib/books-runtime.ts'
 import { assetUrlOf } from '@/lib/asset-url.ts'
-import { createCardStore, createFsStore } from '@/lib/engine/index.ts'
+import { createCardStore } from '@/lib/engine/index.ts'
 import { imageProviderOf } from '@/lib/engine/providers/registry.ts'
 import { cardFromPhoto } from '@/lib/photo-card.ts'
 // ★ 表单解析在 `lib/photo-form.ts`，不在这个文件里导出：Next 给 Route Handler
@@ -81,7 +82,7 @@ export async function POST(req: NextRequest): Promise<Response> {
   }
 
   const root = assetRoot()
-  const store = await createFsStore(root)
+  const store = await createUserStore(root, guard.session.userId)
   const cardStore = createCardStore(store)
 
   // ★ 直接取**图像**那一个，不用 `createProviders`（理由同 `/api/cards/revise`）：

@@ -14,6 +14,15 @@
 
 import { NO_PERMISSIONS, type Permissions } from '@/lib/auth/state.ts'
 
+/**
+ * 一个号的状态。★ 与 Java 的 `User.STATUS_ACTIVE` / `STATUS_DISABLED` 逐字一致。
+ *
+ * ★ 只有两个值，而不是"五个状态"：这个产品里账号只有"能用"与"停用"两件事。
+ *   多出来的状态（待验证、锁定…）每一个都意味着界面上要多一种显示方式，
+ *   而此刻没有任何一条规则要求它们。
+ */
+export type AdminUserStatus = 'ACTIVE' | 'DISABLED'
+
 /** 一行：一个人。★ 字段与 Java 的 `AdminUserRow` 逐字对应 */
 export type AdminUser = {
   userId: string
@@ -22,6 +31,8 @@ export type AdminUser = {
   nickname: string
   avatar: string
   role: string
+  /** `ACTIVE` / `DISABLED`。★ 认不出来的一律当 `ACTIVE`（与 `User.isActive` 同一口径） */
+  status: AdminUserStatus
   createdAt: string
   lastLoginAt: string | null
   permissions: Permissions
@@ -87,6 +98,11 @@ function parseUser(raw: unknown): AdminUser | null {
     nickname: str('nickname'),
     avatar: str('avatar'),
     role: str('role') || 'USER',
+    // ★ 只认确切的 `DISABLED`，别的一律当 `ACTIVE`：这一列是后来才加的，
+    //   老响应里根本没有它（`undefined`），而把"读不出来"当成"停用"会让管理页上
+    //   整张表看起来都被停过——那是比"少显示一条信息"严重得多的一种假象。
+    //   与 Java 的 `User.isActive`（null/空/ACTIVE 都算 active）是同一条口径。
+    status: str('status') === 'DISABLED' ? 'DISABLED' : 'ACTIVE',
     createdAt: str('createdAt'),
     lastLoginAt,
     permissions,
@@ -121,6 +137,41 @@ export function parseOverview(raw: unknown): AdminOverview | null {
     registrationOpen: value['registrationOpen'] === true,
     demoAccount: typeof value['demoAccount'] === 'string' ? value['demoAccount'] : null,
   }
+}
+
+/**
+ * 「这个用户做了多少东西」——管理页那一列的数（工单 16，2026-10-17）。
+ *
+ * ★★ 它**必须住在这一份文件里**，而不是住在算它的那一个（`usage.ts`）里：
+ *   界面上要显示它，而显示它的 `AdminScreen` 是**客户端组件**；
+ *   算它的那个模块要读磁盘（`asset-scope` → 引擎 → `node:fs/promises`），
+ *   被客户端组件 import 的后果是**整页 500**：
+ *
+ * ```
+ *   Module build failed: UnhandledSchemeError: Reading from "node:fs/promises"
+ *   ./src/lib/engine/providers/stores.ts ← usage.ts ← AdminScreen.tsx
+ * ```
+ *
+ *   ★ 这条是**端到端那一步照出来的**（`.out/verify-ownership.mjs` 里那条
+ *   "管理页打得开 → 200"），而在此之前 typecheck / lint / 单元测试全绿——
+ *   因为静态检查管不着"这个 import 把 node 带进了浏览器包"。
+ *   形状与文案在这里、数数的活儿在那边，这条界线与 `lib/voices/state.ts`
+ *   对 `client.ts` 的分工是同一条。
+ */
+export type AdminUsage = { books: number; cards: number; children: number }
+
+/**
+ * 那一列上的一句话。
+ *
+ * ★ 三种情形是三件不同的事，不能用一个写法糊过去：
+ *   · 数不出来（`undefined`）→「—」：这一列坏了，别说"0 本"（那是假数）
+ *   · 全零 →「还没有」：照实，而且比「0 本 · 0 张卡 · 0 个孩子」少一屏噪音
+ *   · 有东西 →「3 本 · 2 张卡 · 1 个孩子」
+ */
+export function usageTextOf(usage: AdminUsage | undefined): string {
+  if (!usage) return '—'
+  if (usage.books === 0 && usage.cards === 0 && usage.children === 0) return '还没有'
+  return `${usage.books} 本 · ${usage.cards} 张卡 · ${usage.children} 个孩子`
 }
 
 /** 四个开关在界面上的名字。★ 与 `Capability` 同一组，四处（这里 / session.ts / Java / 权限表）逐字一致 */

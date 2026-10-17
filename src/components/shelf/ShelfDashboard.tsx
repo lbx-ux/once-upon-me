@@ -192,18 +192,26 @@ export default function ShelfDashboard({ books }: ShelfDashboardProps) {
 
   const byId = useMemo(() => new Map(books.map((book) => [book.bookId, book])), [books])
   /**
-   * ★ 草稿**不进那一排**（工单 03）。
+   * ★ **还没画成一本书的**都进这一栏（工单 03，2026-10-17 扩了一档）。
    *
-   * 那一排是"我做过什么"，而它整套交互都建立在"每一本都读得完"上：
-   * 点开是阅读器、拖动是给成品排序。一本还没做完的书塞进去，会得到一个
-   * 点开就跳到"这本书还没做完"的阅读器、以及一个给草稿排位的位置——
-   * 而"下一篇要接着做的是哪一本"根本不是这一排要回答的问题。
+   * 那一排成品书架是"我做过什么"，而它整套交互都建立在"每一本都读得完"上：
+   * 点开是阅读器、拖动是给成品排序。还没画完的书塞进去，会得到一个点开就跳到
+   * "这本书还没做完"的阅读器、以及一个给草稿排位的位置——而"下一篇要接着做的是哪一本"
+   * 根本不是那一排要回答的问题。
    *
-   * 所以草稿单独一排摆在上面，带着它自己那两个动作（继续做 / 不要了）。
-   * ★ **它不离场**：藏起来的话，一本被放弃的草稿会占着盘、却没有任何入口找回来。
+   * 所以它们单独一排摆在上面，带着自己那几个动作。★ **它不离场**：藏起来的话，
+   * 一本被放弃的本子会占着盘、却没有任何入口找回来。
+   *
+   * | `status` | 盘上有什么 | 那一张卡上的动作 |
+   * | --- | --- | --- |
+   * | `'story'` | 只有故事（还没画） | 接着编（整张卡是链接） / 删除。**没有「制作为绘本」** |
+   * | `'draft'` | 画完了没装订 | 继续编辑 / 制作为绘本 / 删除 |
+   *
+   * ★ `'story'` 那一档**不给「制作为绘本」**：那一颗打的是 `publish`，而盘上还没有
+   *   `book.json`——它会以一个 404 告终。一颗必然失败的按钮比没有按钮糟。
    */
-  const drafts = useMemo(() => books.filter((book) => book.status === 'draft'), [books])
-  const published = useMemo(() => books.filter((book) => book.status !== 'draft'), [books])
+  const drafts = useMemo(() => books.filter((book) => book.status !== 'published'), [books])
+  const published = useMemo(() => books.filter((book) => book.status === 'published'), [books])
 
   /**
    * 摆出来的那一列。★ 末尾那一段不是多余的防御：`router.refresh()` 之后`books` 先变、
@@ -213,7 +221,7 @@ export default function ShelfDashboard({ books }: ShelfDashboardProps) {
   const shown = useMemo(() => {
     const listed = order
       .map((id) => byId.get(id))
-      .filter((book): book is BookSummary => !!book && book.status !== 'draft')
+      .filter((book): book is BookSummary => !!book && book.status === 'published')
     const seen = new Set(listed.map((book) => book.bookId))
     return [...listed, ...published.filter((book) => !seen.has(book.bookId))]
   }, [order, byId, published])
@@ -464,13 +472,16 @@ export default function ShelfDashboard({ books }: ShelfDashboardProps) {
         {announce}
       </p>
 
-      {/* ★ 草稿那一栏（工单 03）。它在上、成品的架子在下——因为它是**还没做完**的东西，
-          而"接着做哪一本"是进这一屏最先要看见的。编辑模式下不渲染：
-          排书架那套交互（拖动、✕）是给成品用的，草稿的次序没有意义。
+      {/* ★ 还没画成一本书的那一栏（工单 03 + 2026-10-17 的故事闸门）。它在上、成品的架子在下
+          ——因为它是**还没做完**的东西，而"接着做哪一本"是进这一屏最先要看见的。
+          编辑模式下不渲染：排书架那套交互（拖动、✕）是给成品用的，草稿的次序没有意义。
           ★ 2026-10-16 用户："用户点击退出之后，这个待编辑就放到书架上，状态设为「正在编辑」，
             然后用户可以选择是删除还是制作为绘本；书架应该增加一栏，用于存放编辑的书籍。"
             所以这一栏从「还没做完」改名为「正在编辑」，一张卡上给**三**个出口：
             继续编辑（整张卡本身就是那个链接）/ 制作为绘本 / 删除。
+          ★ 2026-10-17 这一栏里多了一种状态：「故事写好了、还没开始画」（`status: 'story'`）。
+            它只有**两个**出口——接着编 / 删除。（那一本还没有 `book.json`，
+            「制作为绘本」打的是 publish，会以 404 告终。）
           ★ 磁盘上那个状态字仍然是 `draft`，**没有**跟着改成 `editing`：
             它是迁移判据（`engine/domain.ts` 的 `Book.status`：缺省 = 成品），
             改它等于让所有老书重新分堆。改的只是**这一屏叫它什么**。 */}
@@ -480,50 +491,63 @@ export default function ShelfDashboard({ books }: ShelfDashboardProps) {
             正在编辑
           </h2>
           <p className="shelf__drafts-hint">
-            在运行视图里点过「退出」的书放在这里。可以接着编辑，也可以直接制作为绘本。
+            在运行视图里点过「退出」的放在这里。故事写好了还没开始画的也在这一栏——点开接着改。
           </p>
           <ul className="shelf__draftlist">
-            {drafts.map((book) => (
-              <li key={book.bookId} className="shelf__draft">
-                <Link className="shelf__draft-open" href={`/create?book=${book.bookId}`}>
-                  <span
-                    className="shelf__cover shelf__cover--draft"
-                    style={book.coverUrl ? { backgroundImage: `url(${book.coverUrl})` } : undefined}
-                    data-ready={book.coverUrl ? 'true' : undefined}
-                  />
-                  <span className="shelf__label">
-                    <span className="shelf__name">{book.title}</span>
-                    {/* ★ 「正在编辑」是一句**说明**，不是一个标签：它说的是这本书现在的状态，
-                        点不动。而"继续编辑"是那一下点击本身，所以它写在下一行 */}
-                    <span className="shelf__meta">
-                      {book.pageCount} 页 · 正在编辑
-                      {/* ★ 把动作**写出来**，不留给人猜：整张卡是一个链接，而"正在编辑"
-                          只说了状态、没说点它会怎样。一句「继续编辑」比一个箭头有用——
-                          会读的人先知道要去哪儿，读屏念到的也是这句话 */}
-                      <span className="shelf__meta-go">继续编辑 →</span>
+            {drafts.map((book) => {
+              /** 只有故事、一页没画（闸门那一屏停着的那一本） */
+              const onlyStory = book.status === 'story'
+              return (
+                <li key={book.bookId} className="shelf__draft">
+                  <Link className="shelf__draft-open" href={`/create?book=${book.bookId}`}>
+                    <span
+                      className="shelf__cover shelf__cover--draft"
+                      style={
+                        book.coverUrl ? { backgroundImage: `url(${book.coverUrl})` } : undefined
+                      }
+                      data-ready={book.coverUrl ? 'true' : undefined}
+                    />
+                    <span className="shelf__label">
+                      <span className="shelf__name">{book.title}</span>
+                      {/* ★ 「正在编辑」是一句**说明**，不是一个标签：它说的是这本书现在的状态，
+                          点不动。而"继续编辑"是那一下点击本身，所以它写在下一行 */}
+                      <span className="shelf__meta">
+                        {book.pageCount} 页 · {onlyStory ? '还没开始画' : '正在编辑'}
+                        {/* ★ 把动作**写出来**，不留给人猜：整张卡是一个链接，而"正在编辑"
+                            只说了状态、没说点它会怎样。一句「继续编辑」比一个箭头有用——
+                            会读的人先知道要去哪儿，读屏念到的也是这句话。
+                            ★ 只有故事的那一本说「继续编」：点进去是**改故事**那一屏，
+                              不是画桌——两个动作的名字不一样，因为去的地方不一样 */}
+                        <span className="shelf__meta-go">
+                          {onlyStory ? '继续编 →' : '继续编辑 →'}
+                        </span>
+                      </span>
                     </span>
-                  </span>
-                </Link>
-                <div className="shelf__draft-acts">
-                  <button
-                    type="button"
-                    className="shelf__make"
-                    disabled={busy}
-                    onClick={() => void makeBook(book.bookId, book.title)}
-                  >
-                    制作为绘本
-                  </button>
-                  <button
-                    type="button"
-                    className="shelf__discard"
-                    disabled={busy}
-                    onClick={() => askDeletion(book.bookId, book.title)}
-                  >
-                    删除
-                  </button>
-                </div>
-              </li>
-            ))}
+                  </Link>
+                  <div className="shelf__draft-acts">
+                    {/* ★ 「制作为绘本」只在**画完了**的那一档出现（见上面 `onlyStory` 那段） */}
+                    {!onlyStory && (
+                      <button
+                        type="button"
+                        className="shelf__make"
+                        disabled={busy}
+                        onClick={() => void makeBook(book.bookId, book.title)}
+                      >
+                        制作为绘本
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="shelf__discard"
+                      disabled={busy}
+                      onClick={() => askDeletion(book.bookId, book.title)}
+                    >
+                      删除
+                    </button>
+                  </div>
+                </li>
+              )
+            })}
           </ul>
         </section>
       )}

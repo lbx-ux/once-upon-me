@@ -1,12 +1,21 @@
 /**
  * index.ts —— 引擎的唯一入口
  *
- * ★ 这就是"引擎与 UI 的模块边界"本身。整个引擎对外只有两个动作：
+ * ★ 这就是"引擎与 UI 的模块边界"本身。整个引擎对外只有四个动作：
  *
  * ```ts
- * buildCharacterCard(...)  →  CharacterCard      （① 资产化：做一次，跨页跨书复用）
- * runBook(request, deps)   →  Promise<Book>      （②–⑦ 一条流水线，过程靠 emit 吐出来）
+ * buildCharacterCard(...)          →  CharacterCard        （① 资产化：做一次，跨页跨书复用）
+ * planBook(request, deps)          →  Promise<StoryPlan>   （② 编故事，停在闸门之前）
+ * illustrateBook(request, tree, …) →  Promise<Book>        （③–⑦ 逐页画 / 封面 / 配音 / 装订）
+ * runBook(request, deps)           →  Promise<Book>        （上面两步接起来）
  * ```
+ *
+ * ★ 为什么②③ 是**两个**动作（2026-10-17，「故事闸门」）：出图是这条流水线上唯一
+ *   真正花钱的一步，而它原来紧跟在编故事后面——家长在看到故事第一个字之前钱就花了。
+ *   拆开之后界面能把那一版故事摊出来给家长改，改完再画。
+ *   `runBook` 留着**不是为了兼容**：脚本、横评、离线跑测走的是它，而它必须是这两个动作的
+ *   **复合**（不是另写一条），否则"引擎不碰 React"能跑通的那条路，与实际产品走的那条路
+ *   就分了家——而分家的那一天起，跑测量出来的就不是线上那件事了。
  *
  * 三条接口约定，UI 那边只需要知道这些：
  *
@@ -33,6 +42,7 @@ import type {
   Illustration,
   Narration,
   StoryNode,
+  StoryTree,
 } from './domain.ts'
 import { childWordOf } from './domain.ts'
 import { linearOrder } from './tree.ts'
@@ -46,6 +56,11 @@ import { digest } from './digest.ts'
 import { toDataUrl } from './providers/http.ts'
 import type { ProviderBundle } from './providers/types.ts'
 import type { StoryPlanInput } from '../prompts/story-plan.ts'
+// ★ `PlanDraft` 是**模型吐回来的那张故事表**（书名 + 每页草稿），
+//   而它同时就是"家长看到、能改的那一份"（`lib/story-draft.ts` 存的就是它）。
+//   两个用途同一个形状是刻意的：中间再立一个"给界面看的"类型，就得写一层转换，
+//   而那一层转换正是"家长改的东西与拿去画的东西"分家的地方。
+import type { PlanDraft } from '../schemas/story.ts'
 
 export type {
   AgeBand,
@@ -152,15 +167,72 @@ export type RunDeps = {
   onEvent?: (event: ReturnType<ReturnType<typeof createEventFactory>>) => void
   /** 时钟是依赖：测试要能钉住时间，资产指纹才稳定 */
   now?: () => number
+  /**
+   * 事件序号**从哪儿接着数**（2026-10-17，「故事闸门」）。
+   *
+   * ★ 编故事与逐页画现在是**两个请求**，而它们往**同一个** `events.jsonl` 追加。
+   *   序号从 1 重来的话，日志里会出现两条 `seq: 1`——而 `seq` 正是"重放能重建
+   *   同一串界面状态"与"SSE 断线后对齐"的依据。与 `RerunDeps.startSeq`
+   *   是同一个字段、同一条理由。
+   * ★ 缺省仍是 0，所以整本一次跑完的那条路（脚本、离线跑测）一个字都不用改。
+   */
+  startSeq?: number
 }
 
-export async function runBook(request: BookRequest, deps: RunDeps): Promise<Book> {
+/**
+ * ①编故事 的产物。
+ *
+ * ★ `doc` 与 `tree` 是**同一份东西的两种形状**，不是两份数据：`doc` 是模型吐回来的
+ *   那张表（家长改的是它、盘上存的也是它），`tree` 由 `buildTree` 从它派生。
+ *   两个都回，是为了不让调用方自己再派生一遍——那会是同一个校验的第二份实现。
+ */
+export type StoryPlan = {
+  tree: StoryTree
+  /** 书名 + 每页草稿。它会进 `books/<id>/story.json`，家长改完再递回来 */
+  doc: PlanDraft
+  modelId: string
+  promptVersion: string
+  /** 第几次调用才成功（1 = 一次过，是判据 1 的原始数据） */
+  attempts: number
+  /**
+   * 这一步花了多久（机器时间）。
+   * ★ ②的 `stats.elapsedMs` 靠它把"编故事"算进去——见 `illustrateBook` 里那段。
+   */
+  elapsedMs: number
+  /**
+   * 这一步最后发出的事件序号。**②接着数要用它。**
+   *
+   * ★ 不给 `createEventFactory` 加一个"读当前号"的口子：那会让工厂多出一份
+   *   "可以被读"的状态，而调用方真正要知道的只是"我发到哪儿了"，
+   *   在这一层顺手记一下（`emit` 本来就把事件还给我们）就够了。
+   */
+  lastSeq: number
+}
+
+export type PlanDeps = RunDeps & {
+  /**
+   * 「让 AI 重写一版」时家长写的那句话。**不传 = 第一次编**。
+   * ★ 它只是提示词里多出来的一段（见 `prompts/story-plan.ts` 的 `reviseNote`），
+   *   引擎这边**不多一条"重写"的路**：重写与初编的差别只在输入，不在流水线。
+   */
+  reviseNote?: string
+}
+
+/**
+ * ①编故事 —— 只做这一步，停在闸门之前。
+ *
+ * ★ `validateCard` 在这一步做，**不是只在②**：卡不合格时不该让家长先改完一整篇故事，
+ *   再被告知"这张卡画不了"（而且它本来就是 `runBook` 里排在规划之前的那一关）。
+ */
+export async function planBook(request: BookRequest, deps: PlanDeps): Promise<StoryPlan> {
   const now = deps.now ?? (() => Date.now())
-  const emit = createEventFactory(now)
+  const emit = createEventFactory(now, deps.startSeq ?? 0)
+  let lastSeq = deps.startSeq ?? 0
   const forward = (payload: EngineEventPayload): void => {
-    deps.onEvent?.(emit(payload))
+    const event = emit(payload)
+    lastSeq = event.seq
+    deps.onEvent?.(event)
   }
-  const { providers } = deps
   const startedAt = now()
 
   const cardProblems = validateCard(request.card)
@@ -168,6 +240,7 @@ export async function runBook(request: BookRequest, deps: RunDeps): Promise<Book
     throw new EngineError('card-invalid', `角色卡不合格：${cardProblems.join('；')}`)
   }
 
+  const reviseNote = deps.reviseNote?.trim() ?? ''
   const planInput: StoryPlanInput = {
     childName: request.child.name,
     nameReading: request.child.nameReading,
@@ -178,13 +251,69 @@ export async function runBook(request: BookRequest, deps: RunDeps): Promise<Book
     wish: request.wish,
     form: request.form,
     pages: request.pages ?? (request.form === 'solo' ? 20 : 8),
+    // ★ 有才传（与请求体那几个可选字段同一条写法）：传一个空串进去，
+    //   提示词那边"没写"与"写了个空的"就分不出来了。
+    //   ★ 它是**提示词那一段**的输入，所以走 `StoryPlanInput` 而不是 `PlanOptions`——
+    //     措辞归 `prompts/` 管（README §二：提示词不散落），引擎这一层只负责把它递过去
+    ...(reviseNote !== '' ? { reviseNote } : {}),
   }
 
   const plan = await planStory(planInput, {
-    text: providers.text,
+    text: deps.providers.text,
     form: request.form,
     emit: forward,
   })
+
+  return {
+    tree: plan.tree,
+    doc: plan.doc,
+    modelId: plan.modelId,
+    promptVersion: plan.promptVersion,
+    attempts: plan.attempts,
+    elapsedMs: now() - startedAt,
+    lastSeq,
+  }
+}
+
+export type IllustrateDeps = RunDeps & {
+  /**
+   * 这一本**前面那一段**（①编故事）已经花掉的机器时间。②的 `stats.elapsedMs` 会把它加上。
+   *
+   * ★ 为什么不是一个"开始时刻"：家长可能把故事改上十分钟，而那十分钟**不是生成**。
+   *   记成"从按下开始到装订完"的话，`stats.elapsedMs` 这个数就同时表示两件事
+   *   （机器跑了多久 / 人想了多久），而它是 #14「端到端耗时」与 §10.1 的数据源。
+   *   所以口径定成**机器跑的总时长**，人看故事与改故事的时间一律不算——
+   *   两条路（脚本 / 界面）因此仍然可比。
+   */
+  planMs?: number
+  /**
+   * 这一本是什么时候**开始做**的（账单上的 `createdAt`）。
+   * ★ 脚本那条路传的是编故事开始的那一刻（与拆开之前逐字相同）；界面那条路传
+   *   故事草稿的 `createdAt`——两者说的是同一件事：这一本是从哪一刻开始的。
+   */
+  createdAt?: number
+}
+
+/**
+ * ③–⑦ 逐页画 / 封面 / 配音 / 装订 —— 收的 `tree` 就是**真拿去画的那一棵**。
+ *
+ * ★ 它**不重做规划**：家长改过的那一版故事就是 `tree`，在这里再编一次故事
+ *   等于把家长改的东西丢掉，而且再花一次文本调用的钱。
+ */
+export async function illustrateBook(
+  request: BookRequest,
+  tree: StoryTree,
+  deps: IllustrateDeps,
+): Promise<Book> {
+  const now = deps.now ?? (() => Date.now())
+  const emit = createEventFactory(now, deps.startSeq ?? 0)
+  const forward = (payload: EngineEventPayload): void => {
+    deps.onEvent?.(emit(payload))
+  }
+  const { providers } = deps
+  const startedAt = deps.createdAt ?? now()
+  /** ①那一段的机器时间。★ 见 `IllustrateDeps.planMs`：口径是机器时间，不是挂钟 */
+  const planMs = deps.planMs ?? 0
 
   const referenceBytes = await providers.store.read(request.card.reference.path)
   if (!referenceBytes) {
@@ -195,7 +324,7 @@ export async function runBook(request: BookRequest, deps: RunDeps): Promise<Book
   }
   const referenceDataUrl = toDataUrl(referenceBytes, request.card.reference.mime)
 
-  const { illustrations, errors } = await illustrateAll(linearOrder(plan.tree), {
+  const { illustrations, errors } = await illustrateAll(linearOrder(tree), {
     image: providers.image,
     vision: providers.vision,
     store: providers.store,
@@ -223,7 +352,7 @@ export async function runBook(request: BookRequest, deps: RunDeps): Promise<Book
     store: providers.store,
     card: request.card,
     bookId: bookIdOf(request),
-    title: plan.tree.title,
+    title: tree.title,
     emit: forward,
     now,
   })
@@ -249,7 +378,7 @@ export async function runBook(request: BookRequest, deps: RunDeps): Promise<Book
       fatal: false,
     })
   } else {
-    const narrated = await narrateAll(linearOrder(plan.tree), {
+    const narrated = await narrateAll(linearOrder(tree), {
       voice: providers.voice,
       voiceId: request.voiceId,
       store: providers.store,
@@ -264,11 +393,12 @@ export async function runBook(request: BookRequest, deps: RunDeps): Promise<Book
   }
 
   const stats = summarize({
-    elapsedMs: now() - startedAt,
-    planAttempts: plan.attempts,
+    // ★ 机器时间 = ① + ②（见 `IllustrateDeps.planMs`）。一次跑完那条路上
+    //   `planMs` 就是刚才那一段的实测值，所以两种走法的口径是同一个。
+    elapsedMs: planMs + (now() - startedAt),
     illustrations,
     errors,
-    nodesPlanned: plan.tree.nodes.length,
+    nodesPlanned: tree.nodes.length,
     // ★ 封面是一次**真实的付费调用**，必须进账。原来的口径只数页图，
     //   加了封面却不改这里，`imageCalls` 就会比实际少一次——
     //   而这个数字是 §10.1 与 #14 的数据源，"少一次"是账目错，不是舍入。
@@ -279,8 +409,8 @@ export async function runBook(request: BookRequest, deps: RunDeps): Promise<Book
     bookId: bookIdOf(request),
     cardId: request.card.cardId,
     cardRevision: request.card.revision,
-    form: plan.tree.form,
-    tree: plan.tree,
+    form: tree.form,
+    tree,
     cover,
     illustrations,
     // 硬失败页要跟着书走，不能只闪一下事件流——这就是 illustrateAll 注释里
@@ -312,6 +442,29 @@ export async function runBook(request: BookRequest, deps: RunDeps): Promise<Book
     stats: toRecord(stats),
   })
   return book
+}
+
+/**
+ * 编故事 + 逐页画，一次跑完（②–⑦ 那条老路）。
+ *
+ * ★ 它就是上面两个动作的**复合**，逐字节等价于拆开之前的那一个 `runBook`：
+ *   `createdAt` 与 `planMs` 都由这里给，所以 `stats` 也是同一个。
+ *   脚本（`scripts/engine-run.ts`）、离线跑测、横评走的是它——
+ *   而它们走的必须是**同一条代码路径**（见文件头那段）。
+ */
+export async function runBook(request: BookRequest, deps: RunDeps): Promise<Book> {
+  const now = deps.now ?? (() => Date.now())
+  const startedAt = now()
+  const plan = await planBook(request, deps)
+  return illustrateBook(request, plan.tree, {
+    ...deps,
+    // ★ 序号接着①数（见 `RunDeps.startSeq`）：整本一条流的话这条其实无所谓，
+    //   但少了它，日志里就会有两段都从 1 开始的事件——而"整本一条流"不是
+    //   永久成立的前提，它只是今天的跑法
+    startSeq: plan.lastSeq,
+    planMs: plan.elapsedMs,
+    createdAt: startedAt,
+  })
 }
 
 /**
@@ -613,10 +766,14 @@ export function bookIdOf(request: BookRequest): string {
 /**
  * 统计口径写死在这里，因为 #14「端到端耗时与成本实测」与 §10.1 的 r_redraw
  * 都要从这几个数算出来。口径一变，历史数据就不可比——所以它不是"顺手记几个数"。
+ *
+ * ★ 2026-10-17 拆流水线时删掉了一个 `planAttempts` 形参：它**从来没有被读过**
+ *   （`BookStats` 里没有这个字段），是"规划重试几次"那个数在这条路上的一具空壳——
+ *   而拆开之后②手上根本没有规划这回事，再传一个 0 进去就是编。那个数今天落在
+ *   故事草稿的 `provenance.attempts` 上（`lib/story-draft.ts`），有读者。
  */
 function summarize(input: {
   elapsedMs: number
-  planAttempts: number
   illustrations: Illustration[]
   errors: { pageNo: number; message: string }[]
   nodesPlanned: number

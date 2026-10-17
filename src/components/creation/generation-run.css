@@ -38,7 +38,9 @@
   list-style: none;
   border: 1px solid var(--hairline);
   border-radius: var(--card-radius);
-  background: var(--surface);
+  /* ★ 2026-10-17：从 `--surface`（纯白）换成 `--surface-glass`（见 globals.css 那段
+     与 §六 的实测）。这一屏铺着天光，全白的板压上去把背景切成三块 */
+  background: var(--surface-glass);
   box-shadow: var(--sheet-shadow);
 }
 
@@ -223,7 +225,8 @@
   padding: 14px 14px 14px 20px;
   border: 1px solid var(--hairline);
   border-radius: var(--card-radius);
-  background: var(--surface);
+  /* ★ 与上面那条阶段轨同一个令牌（2026-10-17）：这两块是用户说的"两个白色的背景" */
+  background: var(--surface-glass);
   box-shadow: var(--sheet-shadow);
 }
 
@@ -234,6 +237,28 @@
   color: var(--ink-muted);
   font-size: 15px;
   line-height: 1.7;
+}
+
+/* 自动保存那行小字（闸门那一屏）。★ 它是 `.gr__story` 里的一段行内元素，
+   所以只在有话说的时候才占位置（`GenerationRun` 那边按状态决定渲不渲染） */
+.gr__save {
+  margin-left: 8px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.gr__save[data-state='saved'] {
+  color: var(--ink-muted);
+}
+
+.gr__save[data-state='saving'] {
+  color: var(--ink-muted);
+  opacity: 0.75;
+}
+
+/* 没存上要说得出颜色来。★ 用 `--danger` 而不是橙：这一条说的是"你的改动可能丢" */
+.gr__save[data-state='failed'] {
+  color: var(--danger);
 }
 
 .gr__composer-acts {

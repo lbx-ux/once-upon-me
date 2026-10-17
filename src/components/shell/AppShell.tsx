@@ -88,6 +88,7 @@ import { useEffect, useRef, useState } from 'react'
 import gsap from 'gsap'
 
 import { useAuth } from '@/components/auth/AuthProvider.tsx'
+import ProfileBackdrop from '@/components/account/ProfileBackdrop.tsx'
 import StudioBackdrop from '@/components/shell/StudioBackdrop.tsx'
 import HelpDialog from '@/components/shell/HelpDialog.tsx'
 import { avatarSrc } from '@/lib/avatars.ts'
@@ -329,11 +330,25 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
    */
   const navItems = user?.role === 'ADMIN' ? [...NAV, ADMIN_ITEM] : NAV
 
+  /**
+   * 这一屏的背景用哪一层。
+   *
+   * ★ 两副面孔指的是**同一格**（`.shell` 的第一个孩子、`position: *; inset: 0`），
+   *   所以这里是二选一，不是两个都挂——两层一起铺会互相盖，而它们谁该在上面
+   *   没有答案。理由分别写在两个组件自己的文件头里。
+   * ★ 判据是**路径**（`usePathname`，与上面那几格导航同一个来源）而不是"现在有没有
+   *   登录"：`/account` 未登录时也长这样（那一屏自己会画一句"还没有人登录过"），
+   *   而"登不登录"这件事此刻还不知道（`user` 首屏是 null，要等一次 `/api/auth/me`）——
+   *   拿它当判据会让背景在首屏抖一次。
+   */
+  const onProfileScreen = pathname === '/account'
+
   return (
     <div className="shell" data-collapsed={collapsed}>
-      {/* 背景：与首页第一幕同一片天。放在 DOM 最前面、`position: fixed`，
+      {/* 背景：`/account` 是那片蓝底（`ProfileBackdrop`），其余几屏是与首页
+          第一幕同一片天。放在 DOM 最前面、两层的 `inset` 都是 0，
           所以侧栏与内容区自然压在它上面（层序与首页 `.scene-backdrop` 同一个处理） */}
-      <StudioBackdrop />
+      {onProfileScreen ? <ProfileBackdrop /> : <StudioBackdrop />}
       <nav className="shell__side" aria-label="工作台" ref={sideRef}>
         {/* ★ 牌子是侧栏的第一行，直接挂在 `<nav>` 上，**没有包一层**。
             ★ 2026-10-17 的来回，写在这里免得下一个人再走一遍：

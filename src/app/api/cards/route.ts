@@ -31,7 +31,6 @@ import {
   cardDigest,
   checklistOf,
   createCardStore,
-  createFsStore,
   promptFragmentOf,
   validateCard,
   type AnchorSlot,
@@ -45,6 +44,7 @@ import {
   DEFAULT_CARD_STYLE,
 } from '@/lib/prompts/character-sheet.ts'
 import { whitened } from '@/lib/whiten-backdrop.ts'
+import { createUserStore, userSliceRoot } from '@/lib/asset-scope.ts'
 import { assetRoot } from '@/lib/books-runtime.ts'
 import { assetUrlOf } from '@/lib/asset-url.ts'
 import { EngineError } from '@/lib/engine/errors.ts'
@@ -71,10 +71,18 @@ const SHEET_SIZE = '1440x1440'
 
 /* ───────────────────────── GET：已有的卡 ───────────────────────── */
 
-export async function GET(): Promise<Response> {
+export async function GET(req: NextRequest): Promise<Response> {
+  // ★ 2026-10-17（工单 16）：这条路原来**没有入参、也没有闸门**——
+  //   于是它列的是"这台服务器上的全部角色卡"（帮助弹窗里那句
+  //   「书架上是这台服务器做过的全部作品」就是这么来的）。
+  const guard = await requireCapability(req, [])
+  if (!guard.ok) return guard.response
+
   // ★ 取数在 `lib/cards-list.ts`，与工作台「小主角」选择器、角色页同一份实现：
   //   "同 cardId 只留最新一版"这条是 ADR-0007 的 revision 语义，不该有三份
-  return Response.json({ cards: await listCardItems() })
+  return Response.json({
+    cards: await listCardItems(userSliceRoot(assetRoot(), guard.session.userId)),
+  })
 }
 
 /* ───────────────────────── POST：出一张形象 ───────────────────────── */
@@ -155,7 +163,7 @@ export async function POST(req: NextRequest): Promise<Response> {
   }
 
   const root = assetRoot()
-  const store = await createFsStore(root)
+  const store = await createUserStore(root, guard.session.userId)
   const cardStore = createCardStore(store)
 
   // ★ 锚点先校验一次，**必须在出图之前**。

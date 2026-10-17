@@ -9,16 +9,27 @@
  *
  * ★ 没有 env：这一步不调任何外部接口，纯本地指针。把 env 塞进来会让人以为
  *   这一下要花钱（ADR-0008 那条约定是给"真要调模型"的路用的）。
+ *
+ * ★ 2026-10-17（工单 16）：补上登录闸（原来没有）。这一下动的是**卡号上那个
+ *   一字节的指针**——没有闸的话，谁都能把别人的"现在用第几版"改掉，
+ *   而症状要到那个人下一次做书时才看得出来（用的是另一版的脸）。
  */
 
-import { createCardStore, createFsStore } from '@/lib/engine/index.ts'
+import type { NextRequest } from 'next/server'
+import { createCardStore } from '@/lib/engine/index.ts'
 import { assetRoot } from '@/lib/books-runtime.ts'
+import { createUserStore } from '@/lib/asset-scope.ts'
+import { requireCapability } from '@/lib/auth/session.ts'
 import { userFailureOf } from '@/lib/provider-messages.ts'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-export async function POST(req: Request): Promise<Response> {
+export async function POST(req: NextRequest): Promise<Response> {
+  // 不要任何能力：改指针不是一次生成
+  const guard = await requireCapability(req, [])
+  if (!guard.ok) return guard.response
+
   let raw: unknown
   try {
     raw = await req.json()
@@ -42,7 +53,7 @@ export async function POST(req: Request): Promise<Response> {
     )
   }
 
-  const store = await createFsStore(assetRoot())
+  const store = await createUserStore(assetRoot(), guard.session.userId)
   const cardStore = createCardStore(store)
   try {
     await cardStore.setLatest(cardId, revision)

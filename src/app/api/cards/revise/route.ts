@@ -30,7 +30,7 @@ import {
   CHARACTER_REVISE_VERSION,
 } from '@/lib/prompts/character-sheet.ts'
 import { assetRoot } from '@/lib/books-runtime.ts'
-import { createCardStore, createFsStore, promptFragmentOf } from '@/lib/engine/index.ts'
+import { createCardStore, promptFragmentOf } from '@/lib/engine/index.ts'
 // ★ 直接取**图像**那一个，不用 `createProviders`：那一个会把文本/视觉/语音一起建起来，
 //   于是"没填文本模型"会让"再画一版"报一句"还差：文本模型名"——而这件活根本不用文本模型。
 //   一个按组构造的适配器工厂，就该按组用（同样的用法在 /api/settings/probe 里）。
@@ -38,6 +38,7 @@ import { imageProviderOf } from '@/lib/engine/providers/registry.ts'
 import { normalizeReference, referenceDataUrlOf } from '@/lib/engine/image/normalize.ts'
 import { userFailureOf } from '@/lib/provider-messages.ts'
 import { requireCapability } from '@/lib/auth/session.ts'
+import { createUserStore } from '@/lib/asset-scope.ts'
 import { serverEnv } from '@/lib/settings/server-env.ts'
 
 export const runtime = 'nodejs'
@@ -102,7 +103,7 @@ export async function POST(req: NextRequest): Promise<Response> {
   }
 
   const root = assetRoot()
-  const store = await createFsStore(root)
+  const store = await createUserStore(root, guard.session.userId)
   const cardStore = createCardStore(store)
 
   // 改的是"这个孩子现在的形象"。没有形象就没有可改的上一版——这条要明说，

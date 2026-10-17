@@ -33,7 +33,8 @@ import {
   type SampleProblem,
 } from '@/lib/audio/capture.ts'
 import { PREVIEW_LINE } from '@/lib/settings/preview-line.ts'
-import { newConsentRef, type MyVoice } from '@/lib/voices/store.ts'
+import { newConsentRef } from '@/lib/voices/consent.ts'
+import type { MyVoice } from '@/lib/voices/state.ts'
 import { useVoice } from '@/components/voices/VoiceProvider.tsx'
 
 /** 厂商上限 60 秒。★ 到点自动停，但**不是**在理想的 20 秒处停——
@@ -205,12 +206,15 @@ export default function NewVoicePanel({ onClose }: { onClose: () => void }) {
       }
       const data = (await response.json()) as { voiceId?: string; modelId?: string; name?: string }
       if (!data.voiceId) throw new Error('厂商那边没有回 voice_id')
+      // ★ 2026-10-17（工单 16）：这里原来还带一个 consentRef——那份记录住在
+      //   localStorage 时，它被原样存下来。现在记录住在账号上（voices 表），
+      //   而凭据号是**一次性**的东西：进了持久层，下一次有人读它就会以为
+      //   那是一次仍然有效的授权。所以它只走请求，不进记录。
       voice = {
         voiceId: data.voiceId,
         name: data.name ?? name,
         modelId: data.modelId ?? '',
         createdAt: Date.now(),
-        consentRef,
       }
     } catch (err) {
       // ★ 失败就说失败：卡片不出现、本地记录不写。绝不"先记下来，回头再慢慢修"——

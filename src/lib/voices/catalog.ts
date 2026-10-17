@@ -23,8 +23,7 @@
  *   一个我们没核过的结论，宁可不给，也不能长得像给过了。
  */
 
-import { DEFAULT_VOICES, type VoiceOption } from '@/lib/voices/state.ts'
-import type { MyVoice } from './store.ts'
+import { DEFAULT_VOICES, type MyVoice, type VoiceOption } from '@/lib/voices/state.ts'
 
 export type CatalogVoice = VoiceOption & {
   /** 来源。★ 标在**来源**上，不是记录里的一个字段——字段会说谎，来源不会（同角色墙的「示例」） */

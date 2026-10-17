@@ -21,7 +21,6 @@
  */
 
 import { assetRoot } from '@/lib/books-runtime.ts'
-import { createFsStore } from '@/lib/engine/index.ts'
 import {
   bookOnDisk,
   deleteBookEverywhere,
@@ -29,23 +28,33 @@ import {
   type BookDeletionReceipt,
 } from '@/lib/book-deletion.ts'
 import { userFailureOf } from '@/lib/provider-messages.ts'
+import { createUserStore } from '@/lib/asset-scope.ts'
+import { requireCapability } from '@/lib/auth/session.ts'
+
+import type { NextRequest } from 'next/server'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 const MISSING = '盘上没有这一本（也许已经在别处删掉了）。刷新一下书架看看——它多半已经不在了。'
 
-async function depsOf(): Promise<BookDeletionDeps> {
-  const store = await createFsStore(assetRoot())
+async function depsOf(userId: string): Promise<BookDeletionDeps> {
+  const store = await createUserStore(assetRoot(), userId)
   return { store }
 }
 
 export async function DELETE(
-  _req: Request,
+  req: NextRequest,
   { params }: { params: Promise<{ bookId: string }> },
 ): Promise<Response> {
+  // ★ 2026-10-17（工单 16）：这条路原来**没有登录闸**（实测确认）。
+  //   现在删的是"你自己那一片里的那一本"——别人的书号在你这片里根本不存在，
+  //   所以下面那个 404 天然就把"删别人的书"挡住了。
+  const guard = await requireCapability(req, [])
+  if (!guard.ok) return guard.response
+
   const { bookId } = await params
-  const deps = await depsOf()
+  const deps = await depsOf(guard.session.userId)
   if (!(await bookOnDisk(bookId, deps))) {
     return Response.json({ code: 'book-not-found', message: MISSING }, { status: 404 })
   }

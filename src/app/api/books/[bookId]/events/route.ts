@@ -22,28 +22,41 @@
  *   带 `%` 的 id 直接抛错，而这类错在本地永远碰不到，只在别人手上碰得到）。
  */
 
+import type { NextRequest } from 'next/server'
 import { createFsEventLog } from '@/lib/event-log.ts'
 import { encodeBookFrameToText, type BookStreamFrame } from '@/lib/book-stream.ts'
-import { assetRoot, bookExists, isRunning } from '@/lib/books-runtime.ts'
+import { assetRoot, bookExists, isRunning, runKeyOf } from '@/lib/books-runtime.ts'
+import { createUserStore, userSliceRoot } from '@/lib/asset-scope.ts'
+import { requireCapability } from '@/lib/auth/session.ts'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 export async function GET(
-  _req: Request,
+  req: NextRequest,
   ctx: { params: Promise<{ bookId: string }> },
 ): Promise<Response> {
+  // ★ 2026-10-17（工单 16）：这条路原来**没有登录闸**。日志里有整本的提示词与
+  //   每一页的去向，是"我的东西"里最详细的一份。现在：匿名 401，
+  //   别人的书号在你那一片里根本不存在（读出来是空日志 + `bookReady: false`）。
+  const guard = await requireCapability(req, [])
+  if (!guard.ok) return guard.response
+
   const { bookId } = await ctx.params
-  const log = await createFsEventLog(assetRoot())
+  const store = await createUserStore(assetRoot(), guard.session.userId)
+  const log = await createFsEventLog(userSliceRoot(assetRoot(), guard.session.userId))
   const { events, skipped } = await log.read(bookId)
 
   const frames: BookStreamFrame[] = [
     ...events.map((event): BookStreamFrame => ({ kind: 'engine', event })),
     {
       kind: 'status',
-      running: isRunning(bookId),
-      bookReady: await bookExists(bookId),
+      running: isRunning(runKeyOf(guard.session.userId, bookId)),
+      bookReady: await bookExists(store, bookId),
       skippedLines: skipped,
+      // ★ 书号在同一帧上（2026-10-17）：这一条路的调用方本来就有它（URL 里），
+      //   但两处回同一个形状，客户端那边的帧处理器就不必分情况
+      bookId,
     },
   ]
 

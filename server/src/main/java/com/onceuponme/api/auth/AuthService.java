@@ -168,6 +168,15 @@ public class AuthService {
       throw ApiException.badRequest("bad-password", "密码不对");
     }
 
+    // ★ 停用的号口径是"密码也不对"，不是"你被停用了"。两句不同的话是有意的：
+    //   说"这个号被停用了"等于向任何一个会猜账号的人确认这个号存在、而且它曾经能用。
+    //   ★ 它**不进** `guard`（不记一次失败）：被停用的人多半是本人，而他无论输对输错
+    //   都进不来——记账只会让一个正在被停用的人连着把号锁上，那是纯粹的坏。
+    //   没权限的那件事，站长在管理页上会告诉他。
+    if (!User.isActive(user)) {
+      throw ApiException.badRequest("bad-password", "密码不对");
+    }
+
     guard.clear(name);
     return new IssuedSession(touchLogin(user), viewOf(user));
   }
@@ -222,6 +231,23 @@ public class AuthService {
       // ★ 票是有效的、但人没了（被删号，或者库被换过）：这不是"没登录"，
       //   所以不是 401 的一句"请登录"，而是一句说得清的 401
       throw ApiException.unauthorized("这个账号已经不在了，请重新登录");
+    }
+    /*
+     * ★ 停用的号，**此刻**就进不来（2026-10-17，管理页的"停号"）。
+     *
+     * ★ 这一句必须排在**密码代次那一句之前**，而且这个次序是实测出来的
+     * （`AdminUsersIntegrationTest#disablingKillsLiveSessionsImmediately` 第一版就红在这儿）：
+     * 停号会顺手把 `passwordChangedAt` 顶一下（见 `AdminService#setStatus`），
+     * 于是下面那条"密码改过了"也会命中——两句都是 401，可**报出去的那一句是错的**。
+     * 被停用的人会看到"密码改过了，请重新登录"，然后拿同一个密码反复试，
+     * 永远不知道自己是被停用了。两句都对，但一句有用、一句误导。
+     *
+     * ★ 这句话是**说给本人听的**，所以与登录那一条不同，可以说实话：
+     * 他手里已经有一张有效的票（证明过身份），含糊其辞只会让他以为是坏了。
+     * 而登录那条（还没有票、也就还没证明身份）回的是"密码不对"——两处的口径不同是有意的。
+     */
+    if (!User.isActive(user)) {
+      throw ApiException.unauthorized("这个账号已被停用，请联系管理员");
     }
     // ★ 判据是"票里的密码代次与库里现在这一代是否相等"，**不是**比时间（见 JwtService 上那段）
     if (session.passwordVersion() != passwordVersionOf(user)) {

@@ -1,16 +1,26 @@
 /**
- * /api/books —— 书架这一排的读、写次序、跑一本新书
+ * /api/books —— 书架这一排的读、写次序、**开一本新书（只做①编故事）**
  *
  * ```
  *   GET   /api/books   书架上那几本的摘要（按 `shelf/order.json` 排好）
  *   PUT   /api/books   记住那一排的次序（用户拖完之后）
- *   POST  /api/books   跑一本书，过程以 SSE 吐出来（工单 02）
+ *   POST  /api/books   开一本：**编故事**，过程以 SSE 吐出来（工单 02）
  * ```
  *
  * POST 那一条的正文在下面；这一节说的是它。
  *
  * 这是 `engine/events.ts` 那句"传输不在这里，在 app/api 那一层"的兑现处。
- * 引擎侧一行没改：`runBook(request, {providers, onEvent})` 原样收进一个流。
+ * 引擎侧只调了一个动作：`planBook(request, {providers, onEvent})` 收进一个流。
+ *
+ * ★★ 2026-10-17（「故事闸门」）：这条路由**不再跑完一本书**，它只做 ①编故事，
+ *    然后把那一版故事写进 `books/<id>/story.json` 就结束。
+ *    ②逐页画在 `POST /api/books/<id>/illustrate`，家长点「就按这个画」之后才发生。
+ *
+ *    ★ 为什么**不新开一个 `/api/books/plan`**：那样"开一本"就有两个入口，
+ *      而界面只会用其中一个——另一条路从第二天起开始漂（`shelf-order.ts` 那段
+ *      "两处手写的数会各自漂移"是同一个教训）。URL 留着，职责收窄。
+ *    ★ 能力闸门也跟着收窄成 `['text']`：这一步只调文本模型，不出一张图。
+ *      要图的那一步在自己的路由上要 `['image']`（见 `illustrate/route.ts`）。
  *
  * 四条不显然的约定，都在这里摁住：
  *
@@ -28,15 +38,18 @@
  *
  * ★ 三种"还没开始"的失败（请求不合法 / 卡找不到 / 这本书正在跑）走的是**普通 HTTP 错误码**，
  *   不是流：它们都发生在第一个字节之前，用一个能读的状态码比在流里说一句更诚实。
+ *   ★ 2026-10-17 多了第四种：**这本书已经画过了**（`book-exists`，409）。理由见下面那一段。
+ *
+ * ★ 故事草稿**先写盘、再发收尾的那条 status 帧**：反过来的话，客户端一收到"结束了"
+ *   就去 `GET /story`，而那一份可能还没落盘——症状是"编完故事，屏幕上说读不到这一本"。
  */
 
 import type { NextRequest } from 'next/server'
 import {
   bookIdOf,
   createCardStore,
-  createFsStore,
   createProviders,
-  runBook,
+  planBook,
   type Book,
   type BookRequest,
   type EngineEvent,
@@ -44,11 +57,13 @@ import {
 import { parseCreateBody } from '@/lib/book-api.ts'
 import { encodeBookFrameToText, type BookStreamFrame } from '@/lib/book-stream.ts'
 import { createFsEventLog } from '@/lib/event-log.ts'
-import { assetRoot, finishRun, tryStartRun } from '@/lib/books-runtime.ts'
+import { assetRoot, bookExists, finishRun, runKeyOf, tryStartRun } from '@/lib/books-runtime.ts'
 import { userFailureOf } from '@/lib/provider-messages.ts'
+import { storyInputOf, writeStory } from '@/lib/story-draft.ts'
 import { coverUrlOf as coverUrlIn, runtimeAssetUrl } from '@/lib/book-source.ts'
 import { listBooks, noCovers, SHELF_COVER_WIDTH } from '@/lib/library.ts'
 import { applyOrder, loadOrder, pruneOrder, saveOrder } from '@/lib/shelf-order.ts'
+import { createUserStore, userSliceRoot } from '@/lib/asset-scope.ts'
 import { requireCapability } from '@/lib/auth/session.ts'
 import { serverEnv } from '@/lib/settings/server-env.ts'
 
@@ -84,9 +99,14 @@ function jsonError(status: number, code: string, message: string, extra?: unknow
  *   这条接口现在没有别的消费者（那一屏是服务端直接读盘），但"书架按什么次序摆"
  *   只能有一个答案——接口回一个默认序、页面摆另一个，就是把同一件事说了两遍。
  */
-export async function GET(): Promise<Response> {
+export async function GET(req: NextRequest): Promise<Response> {
+  // ★ 2026-10-17（工单 16）：这条路原来**连登录都不要求**，所以它数的是
+  //   "这台服务器上的全部书"。现在只看自己那一片——未登录就是 401（没有账号 = 没有书）。
+  const guard = await requireCapability(req, [])
+  if (!guard.ok) return guard.response
+
   try {
-    const store = await createFsStore(assetRoot())
+    const store = await createUserStore(assetRoot(), guard.session.userId)
     const coverUrlOf = (book: Book): string | null =>
       coverUrlIn(book, (path) => runtimeAssetUrl(path, SHELF_COVER_WIDTH))
     const books = applyOrder(await listBooks(store, coverUrlOf), await loadOrder(store))
@@ -116,6 +136,11 @@ export async function GET(): Promise<Response> {
  *    这里再多一道闸门只会变成第二个真相（真要有几万本，先出问题的是 `listBooks`）。
  */
 export async function PUT(req: NextRequest): Promise<Response> {
+  // ★ 次序是**每个人自己那一份**（`shelf/order.json` 也落在作用域里），
+  //   所以这条也要认人——否则拖动一次就会把次序写进公共那一份
+  const guard = await requireCapability(req, [])
+  if (!guard.ok) return guard.response
+
   let raw: unknown
   try {
     raw = await req.json()
@@ -128,7 +153,7 @@ export async function PUT(req: NextRequest): Promise<Response> {
   }
 
   try {
-    const store = await createFsStore(assetRoot())
+    const store = await createUserStore(assetRoot(), guard.session.userId)
     const existing = await listBooks(store, noCovers)
     const ids = pruneOrder(
       order as string[],
@@ -142,9 +167,10 @@ export async function PUT(req: NextRequest): Promise<Response> {
 
 export async function POST(req: NextRequest): Promise<Response> {
   // ★ 闸门在**解析请求体之前**：这是三道闸里唯一真管用的那道（界面那两道只是体验）。
-  //   要的正好是"跑一本书最少要的两件事"——文本与图像（与 `canCreate` 同一条口径）。
+  //   要的是这一步真正需要的**一样**能力：文本（编故事不出图）。
+  //   ★ 2026-10-17 之前这里要 `['text', 'image']`——那时候这一个请求会把整本画完。
   //   判不了权限时它回 503 而不是放行，见 `session.ts` 文件头第 3 条。
-  const guard = await requireCapability(req, ['text', 'image'])
+  const guard = await requireCapability(req, ['text'])
   if (!guard.ok) return guard.response
 
   let raw: unknown
@@ -162,9 +188,9 @@ export async function POST(req: NextRequest): Promise<Response> {
   const body = parsed.value
 
   const root = assetRoot()
-  const store = await createFsStore(root)
+  const store = await createUserStore(root, guard.session.userId)
   const cardStore = createCardStore(store)
-  const log = await createFsEventLog(root)
+  const log = await createFsEventLog(userSliceRoot(root, guard.session.userId))
 
   const card =
     body.cardRevision === undefined
@@ -195,9 +221,35 @@ export async function POST(req: NextRequest): Promise<Response> {
     ...(body.status ? { status: body.status } : {}),
   }
   const bookId = bookIdOf(request)
+  /** 租约按人记：见 `runKeyOf` 那段（同一个主题在两个人手上是同一个书号） */
+  const runKey = runKeyOf(guard.session.userId, bookId)
+  /** ①的输入原样留下来（`story.json` 要它）：②与"重写一版"都靠它，不让客户端再传一遍 */
+  const storyInput = storyInputOf(body, card.revision)
+
+  /**
+   * ★ 已经画过的书，**不许再编一遍故事**。
+   *
+   * 书号是"卡 + 版 + 形态 + 主题"的指纹，**不含时间戳**（`bookIdOf` 那段）。
+   * 所以同一个孩子 + 同一个主题 = 同一个书号 = 同一个目录，而那个目录里已经躺着
+   * 一本画好的书。旧代码在这里是**直接重跑整本**（把上一本的书页图覆盖掉、再付一次钱），
+   * 而屏幕上什么都没说——用户以为只是"再开一本"。
+   *
+   * ★ 换成一句明说的拒绝，代价讲清楚：**同一个主题做不出第二本**。
+   *   想再来一本，改一个字就是另一个书号（"会飞的绿天空" → "会飞的绿天空2"）；
+   *   想改这一本，走书架「正在编辑」那一栏。
+   *   （这不是新造的约束，是这条指纹本来就有的约束——只是以前它是**静悄悄**的。）
+   */
+  if (await bookExists(store, bookId)) {
+    return jsonError(
+      409,
+      'book-exists',
+      '这个主题你已经有一本了（在书架上）。想再来一本就把主题改一个字——主题不一样就是另一本；想改这一本，去书架的「正在编辑」找它。',
+      { bookId },
+    )
+  }
 
   // 同一本书不许两轮同时跑：书号一样 = 目录一样，两份日志会交叉写入
-  if (!tryStartRun(bookId)) {
+  if (!tryStartRun(runKey)) {
     return jsonError(409, 'book-busy', '这本书正在生成中——等它跑完再点，或者改一个主题再试', {
       bookId,
     })
@@ -215,7 +267,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       store,
     })
   } catch (err) {
-    finishRun(bookId)
+    finishRun(runKey)
     const failure = userFailureOf(err)
     return jsonError(failure.status, failure.code, failure.message, {
       retryable: failure.retryable,
@@ -223,8 +275,12 @@ export async function POST(req: NextRequest): Promise<Response> {
   }
 
   // 重开一轮先截断：不截断就会把两轮混成一条时间线，重放出来的过程是假的
+  // ★ 第二次来到这一条（上一次只编了故事、没画）时也截断：被弃掉的那一版故事
+  //   不该留在日志里——`frames.ts` 的 `deskOf` 里 `total` 只增不减，
+  //   12 页重写成 8 页之后会多出 4 个永远填不上的格子
   await log.truncate(bookId)
 
+  const startedAt = Date.now()
   const encoder = new TextEncoder()
   let clientGone = false
 
@@ -250,9 +306,26 @@ export async function POST(req: NextRequest): Promise<Response> {
       }
 
       try {
-        await runBook(request, { providers, onEvent })
+        const plan = await planBook(request, { providers, onEvent })
         await chain
-        send({ kind: 'status', running: false, bookReady: true })
+        // ★ 先写盘、再发收尾帧（文件头最后那一段）
+        await writeStory(store, {
+          bookId,
+          input: storyInput,
+          doc: plan.doc,
+          provenance: {
+            modelId: plan.modelId,
+            promptVersion: plan.promptVersion,
+            attempts: plan.attempts,
+          },
+          planMs: plan.elapsedMs,
+          createdAt: startedAt,
+        })
+        // ★ `bookReady: false` 是这一条路的**正常终态**，不是失败：闸门就停在"故事好了、
+        //   书还没有"这一刻。客户端收到它之后去 `GET /story` 把故事摊出来。
+        // ★ `bookId` 非给不可：①没有 `book-ready` 事件（书还没画完），而客户端
+        //   从这一刻起就要知道书号——取故事要用它、`sessionStorage` 也要记它
+        send({ kind: 'status', running: false, bookReady: false, bookId })
       } catch (err) {
         const failure = userFailureOf(err)
         // 先把已经发生的事件写完再报错，否则日志会缺掉最后几条（它们真的发生过）
@@ -264,7 +337,7 @@ export async function POST(req: NextRequest): Promise<Response> {
           retryable: failure.retryable,
         })
       } finally {
-        finishRun(bookId)
+        finishRun(runKey)
         try {
           controller.close()
         } catch {

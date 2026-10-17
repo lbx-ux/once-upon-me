@@ -21,6 +21,7 @@
  */
 
 import type { Env } from '@/lib/engine/providers/registry.ts'
+import { readOverrides } from './runtime-config.ts'
 
 /**
  * 从 `process.env` 取的那几项。**写全**，不写成 `startsWith('LLM_')` 那种：
@@ -58,11 +59,17 @@ const KEYS = [
 ] as const
 
 /**
- * 这一趟生成要用的那张表。
+ * 这一趟生成要用的那张表。**两层**：管理页写的那份覆盖 → `process.env` 兜底。
  *
- * ★ 每次调用都现读一遍（不做模块级缓存）：读 20 个环境变量是纳秒级的事，
- * 而缓存住它会在"改完 .env.local 重启一下"与"没重启"之间造出一种
- * 只在生产上才出现的差别。
+ * ★ 每次调用都现读一遍（不做模块级缓存）：读 20 个环境变量加一个几 KB 的 JSON
+ * 是微秒级的事，而缓存住它会在"改完 .env.local 重启一下"与"没重启"之间
+ * 造出一种只在生产上才出现的差别。
+ * ★ 而这一条现在是**功能的一部分**：管理页改完模型**立刻生效**，
+ * 靠的就是"每次现读"。加了缓存，用户点完保存会以为没保存上。
+ *
+ * ★ 顺序：**文件压过环境变量**。`.env.local` 是站长的"基线"，管理页改的是"眼下要用的"。
+ * 某一项在文件里没有，就用环境变量那一份——所以"恢复默认"就是把它从文件里去掉，
+ * 而不是往文件里写一个 `.env` 里的值（写进去之后，基线再改也不会跟上了）。
  */
 export function serverEnv(): Env {
   const env: Env = {}
@@ -72,5 +79,14 @@ export function serverEnv(): Env {
     const trimmed = raw.trim()
     if (trimmed !== '') env[key] = trimmed
   }
+
+  for (const [key, value] of Object.entries(readOverrides())) {
+    // ★ 只认清单上那些名字（与上面那条同一条纪律）：文件是**管理员能写**的东西，
+    //   更要守住这张清单——不然往文件里塞一个 `LLM_DEBUG_DUMP` 就能进引擎
+    if (!(KEYS as readonly string[]).includes(key)) continue
+    const trimmed = value.trim()
+    if (trimmed !== '') env[key] = trimmed
+  }
+
   return env
 }

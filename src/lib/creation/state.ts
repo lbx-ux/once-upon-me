@@ -20,6 +20,9 @@ import {
   AGE_BANDS,
   childWordOf,
   type AgeBand,
+  // ★ 形态是**从叶子模块取的类型**（与上面那几个常量同一个入口）：
+  //   引擎对 UI 的接口分两半，`domain.ts` 这一半是浏览器安全的（见文件头那段）
+  type BookForm,
   type CharacterAnchor,
   type Gender,
 } from '@/lib/engine/domain.ts'
@@ -169,7 +172,7 @@ type BookBody = {
   cardId: string
   theme: string
   wish?: string
-  form: 'solo'
+  form: BookForm
   pages?: number
   voiceId?: string
   status?: 'draft' | 'published'
@@ -187,6 +190,18 @@ export type RunOptions = {
   voiceId?: string
   /** 草稿还是成品。运行视图传 `'draft'`——「确定生成」才是把它翻成成品那一步 */
   status?: 'draft' | 'published'
+  /**
+   * 形态（GLOSSARY「形态」）。**不传 = 独读版**。
+   *
+   * ★ 这个缺省是**产品这一周的样子**，不是引擎的缺省：界面上只有独读版一条路
+   *   （`CreateLanding` 没有"共读版"那一格，共读版整套交互在 W3）。
+   *   引擎那边没有缺省——`BookRequest.form` 是必填。
+   * ★ 2026-10-17（故事闸门）加它，是因为**闸门那一屏自己要校验故事**
+   *   （`story-problems.ts` 要拿形态去跑 `buildTree`），而"独读版不许有选择点"这条
+   *   判据在共读版上是反的。写死一个 `'solo'` 在客户端，症状就是
+   *   "共读版的每一页都被报成'独读版不许有选择点'"。
+   */
+  form?: BookForm
 }
 
 /**
@@ -206,9 +221,8 @@ export type RunForm = {
 /**
  * 运行视图的请求体。
  *
- * ★ 形态这一周只做独读版（`form: 'solo'`），共读版整套交互在 W3。
- *   页数不在这里定死：产品定义是 20 页，但演示要能缩小规模，
- *   所以它由调用方给（弹窗那一格），入口在 `/home` 的弹窗上。
+ * ★ 形态由调用方给（`options.form`），缺省是独读版——理由写在 `RunOptions.form` 那段：
+ *   这一周的界面只做独读版，而**闸门那一屏的校验**也要知道形态（判据不能有两个家）。
  * ★ 三个可选字段一律**有才传**（与 `wish` 同一条写法）：
  *   传一个空串进去，引擎那边"没填"与"填了个空的"就分不出来了。
  */
@@ -240,7 +254,7 @@ export function toBookBody(form: RunForm, options: RunOptions = {}): BookBody {
     cardId: form.cardId,
     theme: form.theme.theme.trim() || wish,
     ...(wish !== '' ? { wish } : {}),
-    form: 'solo',
+    form: options.form ?? 'solo',
     ...(options.pages !== undefined ? { pages: options.pages } : {}),
     ...(options.voiceId ? { voiceId: options.voiceId } : {}),
     ...(options.status ? { status: options.status } : {}),

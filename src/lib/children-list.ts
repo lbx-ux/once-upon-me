@@ -16,7 +16,7 @@ import { assetRoot } from './books-runtime.ts'
 import { assetUrlOf } from './asset-url.ts'
 import { listCardItems, type CardListItem } from './cards-list.ts'
 import { listChildren, type ChildSource, type ResolvedChild } from './children-source.ts'
-import { listBooks, noCovers } from './library.ts'
+import { booksOnly, listBooks, noCovers } from './library.ts'
 import {
   cardDigest,
   createCardStore,
@@ -81,13 +81,18 @@ export type ChildWallItem = ChildListItem & {
 
 export async function listWallItems(root: string = assetRoot()): Promise<ChildWallItem[]> {
   const store = await createFsStore(root)
-  const [children, cards, books] = await Promise.all([
+  const [children, cards, allBooks] = await Promise.all([
     listChildren(root),
     listCardItems(root),
     // 只要"用他做过几本"，这一屏不摆封面 → `noCovers`（见它的注释：
     // 不设默认值，是因为"忘了给"与"这本书没有封面"不该是同一个 null）
     listBooks(store, noCovers),
   ])
+  /**
+   * ★ 故事草稿**不算**（`booksOnly`，2026-10-17）：这一句写的是"用他做过 **N 本书**"，
+   *   而只有故事、一页没画的本子还不是一本书。把它算进来，那个数就不再是它说的话。
+   */
+  const books = booksOnly(allBooks)
   const items = joinChildrenWithCards(children, cards)
 
   const cardIdsOf = new Map<string, Set<string>>()

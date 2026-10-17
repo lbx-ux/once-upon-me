@@ -1,6 +1,6 @@
 # 05 —— 密钥搬到服务端：`serverEnv()` 与"请求体里不再有 env"
 
-`Status:` **open**
+`Status:` **done**（2026-10-17；密钥只剩服务端一个来源，十条花钱的路都过了 requireCapability）
 
 ## 要做什么
 

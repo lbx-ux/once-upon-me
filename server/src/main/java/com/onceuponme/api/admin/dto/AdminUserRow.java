@@ -19,6 +19,8 @@ public record AdminUserRow(
     String nickname,
     String avatar,
     String role,
+    /** `ACTIVE` / `DISABLED`。★ 这一屏要一眼看出"哪几个已经被停过"——见下方 `of` 里的归一 */
+    String status,
     String createdAt,
     String lastLoginAt,
     Permissions permissions) {
@@ -31,6 +33,11 @@ public record AdminUserRow(
         user.getNickname(),
         user.getAvatar(),
         user.getRole(),
+        // ★ 归一成两个值之一再出去：这一列是后来才加的，老数据可能是 null 或空串，
+        //   而界面上的判据只有"是不是停用"这一条——让前端自己去猜 null 是什么意思，
+        //   就是把这个判断second份实现（它们必然会开始不一样）。
+        //   认不出的一律当 `ACTIVE`，与 `User.isActive` 同一条口径。
+        User.isActive(user) ? User.STATUS_ACTIVE : User.STATUS_DISABLED,
         Times.iso(user.getCreatedAt()),
         // ★ 从没登录过就是 null（不是空串）：界面上那一格要显示"还没来过"，
         //   而这与"登录时间是一串空"是两件事

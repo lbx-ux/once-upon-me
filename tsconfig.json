@@ -30,12 +30,17 @@
   "include": [
     "**/*.ts",
     "**/*.tsx",
+    ".next-audit/types/**/*.ts",
+    ".next-gate/types/**/*.ts",
+    ".next-pfbg/types/**/*.ts",
     ".next-session/types/**/*.ts",
     ".next-shelfbig/types/**/*.ts",
     ".next-ui15/types/**/*.ts",
+    ".next-uia/types/**/*.ts",
+    ".next-verify/types/**/*.ts",
     ".next/types/**/*.ts",
     "next-env.d.ts",
-    ".next-uia/types/**/*.ts"
+    ".next-own/types/**/*.ts"
   ],
   "exclude": ["node_modules"]
 }

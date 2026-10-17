@@ -48,10 +48,10 @@ export default function BooklistWall({ entries }: BooklistWallProps) {
             与 `.shelf__sub` / `.vc__sub` 同一条规矩（`scripts/check-scrim.mts` 钉着）。
             （原来举的例子是「创作」那一屏的 `.cl__sub`，它 2026-10-15 撤了——
             这里换成本屏的同伴，免得下一个照着找的人扑空。） */}
-        <p className="blw__sub">
-          12 个主题各一本，按页写好了正文、画面说明与配音稿——翻开就能读。 这 12 本是
-          <b>样书</b>：给你家孩子生成的那条路在「创作」。
-        </p>
+        {/* ★ 两句话之间**不许换行**：JSX 会把换行折成一个空格，
+            中文句号后面于是多出一个空格（原句「翻开就能读。 这 12 本」就是这么来的）。 */}
+        {/* prettier-ignore */}
+        <p className="blw__sub">12 个主题各一本，每本 16 页：翻开一屏是一整幅画，配一段朗读，12 本都配齐了。这 12 本是人写的<b>样书</b>，不是给谁家孩子做的——要给你家孩子生成一本，去「创作」。</p>
       </header>
 
       <ul className="blw__grid">

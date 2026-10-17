@@ -20,9 +20,27 @@
 
 import { manifestPathOf, isDraft, type Book } from './engine/index.ts'
 import type { AssetStore } from './engine/providers/types.ts'
+import { readStory, STORY_FILE, type StoryDraft } from './story-draft.ts'
 
-/** 书架上那一排怎么分组。判据的那一份在 `engine/domain.ts`（`Book.status` + `isDraft`） */
-export type BookStatus = 'draft' | 'published'
+/**
+ * 书架上那一本是**什么状态**。
+ *
+ * ★ 2026-10-17（故事闸门）多了 `'story'` 这一档：`books/<id>/story.json` 在、
+ *   `book.json` 不在 —— **故事写好了、还没开始画**。它与另外两个值说的是同一件事：
+ *   **盘上有什么**。
+ *
+ * | 值 | 盘上有什么 | 界面上叫什么 |
+ * | --- | --- | --- |
+ * | `'story'` | 只有 `story.json`（+ 过程日志） | 还没开始画 |
+ * | `'draft'` | 有 `book.json`，`status: 'draft'` | 正在编辑 |
+ * | `'published'` | 有 `book.json`，其余（含没有 status 的老书） | 成品 |
+ *
+ * ★ 三者**不是同一件事的三个进度条刻度**：前两个的区别是"有没有图"，
+ *   后两个的区别是"用户说了算不算"。合成一个数字（比如 33% / 66% / 100%）就会
+ *   把"没有图"与"没装订"说成同一根轴上的事，而它们的判据、能做的动作、
+ *   以及"要不要花钱"都不一样。
+ */
+export type BookStatus = 'story' | 'draft' | 'published'
 
 export type BookSummary = {
   bookId: string
@@ -34,11 +52,13 @@ export type BookSummary = {
   /** 这本书有没有朗读（`narrations` 非空） */
   hasNarration: boolean
   /**
-   * 草稿还是成品（工单 03）。
+   * 草稿还是成品（工单 03），见 `BookStatus` 那张表。
    *
    * ★ **缺省是成品**，判据在引擎那边只有一处（`isDraft`）：盘上老的 `book.json`
    *   与随仓库提交的演示书都**没有这个字段**，把它们判成草稿会让它们
    *   凭空从书架消失——而用户只会以为书丢了。
+   * ★ `'story'` 这一档**不看清单**（清单还没写），它看的是"目录里有没有 `book.json`"
+   *   ——见 `listBooks`。
    */
   status: BookStatus
   cardId: string
@@ -48,8 +68,36 @@ export type BookSummary = {
    *
    * ★ 与 `ResolvedBook.coverUrl` 同一条规矩：没有封面就照实没有，
    *   **不许拿第一页冒充封面**——那是"图没到位就留一个诚实的兜底"这条。
+   * ★ 故事草稿**一定**是 `null`：一页都还没画，当然没有封面。
    */
   coverUrl: string | null
+}
+
+/**
+ * 只留"已经画成一本书"的那些（**故事草稿不算**）。
+ *
+ * ★ 它不是"顺手写的 filter"，而是一条判据：**故事草稿还不是一本书**。
+ *   两个地方要用它，理由各是各的、但结论一样：
+ *
+ * - 个人主页的"最近的书"点进去是**阅读器**（`/reader/<id>`）——
+ *   一本还没画的点进去是空的；
+ * - 角色墙那句"用他做过 **N 本书**"数的是书，把只有故事的本子算进去，
+ *   那个数就不再是"做过几本"了。
+ *
+ * ★ 写成函数而不是两处各写一遍 `status !== 'story'`：这两处的**措辞**将来
+ *   一定会分头改（"还没画的不算" / "读不开的不算"），而它们说的其实是同一件事。
+ *
+ * ★ 返回类型把 `'story'` 从 `status` 里**减掉**：调用方拿到它之后就再也不必处理
+ *   那一档了（个人主页那一屏的 `RecentBook` 只有"草稿 / 成品"两种标签，
+ *   把 `'story'` 留在类型里就是逼它在下游再判一次）。
+ */
+export function booksOnly(
+  books: readonly BookSummary[],
+): (BookSummary & { status: Exclude<BookStatus, 'story'> })[] {
+  return books.filter(
+    (book): book is BookSummary & { status: Exclude<BookStatus, 'story'> } =>
+      book.status !== 'story',
+  )
 }
 
 /**
@@ -89,6 +137,28 @@ export function summarize(book: Book, coverUrl: string | null): BookSummary {
 }
 
 /**
+ * 一份**故事草稿** → 一行摘要（2026-10-17，故事闸门）。
+ *
+ * ★ 它读的是 `story.json`（`lib/story-draft.ts`），不是清单：这一本还没有清单。
+ *   两个数都是真数——页数是**故事里的页数**（`doc.nodes.length`），
+ *   而 `illustratedCount` / `hasNarration` 是 0 / false，因为它们真的还没有。
+ * ★ 封面是 `null`：一页都没画，当然没有封面（见 `BookSummary.coverUrl` 那段）。
+ */
+export function summarizeStory(bookId: string, draft: StoryDraft): BookSummary {
+  return {
+    bookId,
+    title: draft.doc.title.trim() === '' ? '(还没有名字)' : draft.doc.title,
+    pageCount: draft.doc.nodes.length,
+    illustratedCount: 0,
+    hasNarration: false,
+    status: 'story',
+    cardId: draft.input.cardId,
+    createdAt: draft.createdAt ?? 0,
+    coverUrl: null,
+  }
+}
+
+/**
  * 列书。读不到、或半截 JSON（进程被杀时最后写的那一件）都跳过——
  * 一本读不出来的书不该让整个书架 500（`book-source.ts` 对同一件事的处理是一样的）。
  *
@@ -96,6 +166,11 @@ export function summarize(book: Book, coverUrl: string | null): BookSummary {
  * 路径 → 地址那条翻译只有一条（`book-source.ts` 的 `runtimeAssetUrl`，经过
  * `coverUrlOf` 递进来），这里只负责把每一本 `book` 交出去。不显示封面的调用方
  * 传 `noCovers`。
+ *
+ * ★ 2026-10-17：**一个目录只有 `story.json` 没有 `book.json`**（故事写好了、还没画）
+ *   也算书架上的一本（`status: 'story'`）。不认它的话，家长在闸门那一屏改完故事、
+ *   关掉标签页之后**再也没有入口回到那一段故事**——它还在盘上，只是界面上找不到。
+ *   ★ 判据是"这个目录里有没有 `book.json`"，不是"清单里那个 status"：清单还没写呢。
  */
 export async function listBooks(
   store: AssetStore,
@@ -107,9 +182,11 @@ export async function listBooks(
   } catch {
     return []
   }
-  const manifests = paths.filter((path) => path.endsWith('/book.json'))
   const books: BookSummary[] = []
-  for (const path of manifests) {
+  /** 有清单的书号。收尾时用来判断"哪些目录只有故事" */
+  const withManifest = new Set<string>()
+
+  for (const path of paths.filter((one) => one.endsWith('/book.json'))) {
     // ★ `readJson` 对半截 JSON 是**抛错**的（不是返回 null——这条是 library.test.ts 抓出来的）。
     //   进程被杀时最后写的那一件就是这种形状，而 `book-source.ts` 对同一件事的处理是
     //   "不存在与半截 JSON 都当作这里没有这本书"。一本读不出来的书不该让整个书架 500。
@@ -119,8 +196,21 @@ export async function listBooks(
     } catch {
       book = null
     }
-    if (book) books.push(summarize(book, coverUrlOf(book)))
+    if (book) {
+      books.push(summarize(book, coverUrlOf(book)))
+      withManifest.add(book.bookId)
+    }
   }
+
+  for (const path of paths.filter((one) => one.endsWith(`/${STORY_FILE}`))) {
+    // 书号 = 目录名。★ 不读 `story.json` 里的 `bookId` 字段：那是**写进去的**，
+    //   而目录名是它唯一的家（`bookDirOf` 那一段"三处各写一遍会漂"是同一个道理）
+    const bookId = path.slice('books/'.length, path.length - `/${STORY_FILE}`.length)
+    if (withManifest.has(bookId)) continue
+    const draft = await readStory(store, bookId)
+    if (draft) books.push(summarizeStory(bookId, draft))
+  }
+
   // 新的在前。同一毫秒（不可能但便宜）按书号兜底，保证顺序稳定
   return books.sort((a, b) => b.createdAt - a.createdAt || a.bookId.localeCompare(b.bookId))
 }

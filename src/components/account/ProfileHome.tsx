@@ -13,8 +13,18 @@
  *   "左边是这个人、右边是他的东西"——这是参考稿里唯一真正值得抄的东西，
  *   **配色没有抄**（那是另一套蓝，本仓库的令牌只在 `globals.css` 的 `:root` 定义一次，
  *   CLAUDE.md 的硬约束）。抄的是**信息怎么分区**，不是它长什么颜色。
+ *   ★ 2026-10-17 当天晚些时候改口了：用户说「复刻一下背景」，于是**配色也抄了**
+ *   ——但抄的方式是把它变成一组 `--pf-*` 令牌 + 一层 `ProfileBackdrop`
+ *   （整屏那三团蓝光晕）＋ 身份卡顶上那张水彩（`SCENE` 那里有全部理由）。
+ *   上面那句"配色没有抄"因此只对了一半：抄了，但仍然是**这一屏自己的令牌组**，
+ *   全站那颗橙一个像素都没动。两句话都留着——第二句是这句话的下文。
  * ★ 右边**没有作品**时写一句「目前还没有作品，快去创作吧」（用户 2026-10-17 的原话），
  *   句子里那句"快去创作吧"配着头顶那颗「新建绘本」——不是一句干着急的话。
+ *
+ * ★ **版式上最要紧的一条**：身份卡里**只有一个焦点区**，就是顶上那一格
+ *   （`.pf__stage`：水彩 + 压在左下角的头像 + 一条胶带）。原来那个位置是一颗
+ *   光秃秃的 64px 头像 + 四行字，读起来像一张表单；现在这一格与右栏那些书
+ *   一样，是**一件被摆在纸上的东西**。
  *
  * ★ 三条判断：
  *
@@ -127,11 +137,34 @@ function tagLabelOf(book: RecentBook): string {
 }
 
 /**
+ * 身份卡顶上那张水彩（2026-10-17，用户「复刻一下背景」时一起要的）。
+ *
+ * ★ 用的是 `public/art/cloud.webp`——**本站自己那 12 张主题插画里的一张**，
+ *   不是外面找来的图。理由三条，按重要性排：
+ *   1. **它没有脸。** 参考稿那张 `cover.jpg` 是从 `login/assets` 拿的场景图；
+ *      而本站可选的横图里，几本书的内页（`public/book/spread-*`）都是**有人的**——
+ *      裁成 1.9:1 的横幅必然把头切掉一半，那是"图没到位"而不是"风格不同"。
+ *   2. **它是冷的。** 这一屏整屏转蓝，而 `public/art/` 里另外两张浅底的
+ *      （`balloon` 的暖橘云、`paint` 的绿池塘）摆进那张卡都是一块不在调子里的斑。
+ *   3. **它经得起裁。** 源图 1280×720（1.78），横幅盒约 1.9:1，
+ *      纵向只多出 **约 11px** 的余量——几乎不裁，云团整个留着。
+ *      （书里那几张是 1.50，裁到 1.9 要切掉四成高度，构图必坏。）
+ *
+ * ★ 它不是 `next/image`：一张装饰性的本地 webp、`alt=""`、没有 LCP 意义——
+ *   与侧栏那颗 `brand/mark.webp`、文章里几处同一个处理（README §五「刻意未做」）。
+ *   `width`/`height` 给的是**渲染尺寸的近似**，只为占位不让卡片跳；
+ *   真正的尺寸由 `.pf__stage` 的 `aspect-ratio` 定（见 profile-home.css）。
+ */
+const SCENE = '/art/cloud.webp'
+
+/**
  * 头像位置的兜底：**没有头像时**画的那个圈。
  * ★ 与侧栏那一格**同一个图形**（AppShell 的 `AVATAR_ICON`）——两处指的是同一件事，
  *   长得不一样才是错的。
  * ★ 它现在的读者变窄了：以前是"这一屏唯一的头像位"，现在只在"没挑过 / 认不出来"
  *   时才出现（有头像时上面画的是那个 SVG）。**没有删掉**，因为那两个状态是真的会发生的。
+ * ★ 它现在**压在那张水彩的左下角**（`.pf__avatar` 是绝对定位，见 css），
+ *   与挑过的那张 `<img>` 同一个盒子——挑与不挑之间只该换"画的是什么"。
  */
 function AvatarPlaceholder() {
   return (
@@ -183,9 +216,10 @@ export default function ProfileHome({
   const heading = (
     <header className="pf__head">
       <h1 className="pf__title">个人主页</h1>
-      {/* ★ 页头压在天空带里（`(studio)` 的 layout 给了 `StudioBackdrop`），
-          所以次级文字是 `--ink-on-sky` 而不是 `--ink-muted`（十带表，
-          `studio-backdrop.css` 文件头） */}
+      {/* ★ 页头直接坐在那层蓝底上（`AppShell` 在这一屏挂的是 `ProfileBackdrop`，
+          不是 `StudioBackdrop`），所以次级文字是 `--pf-ink-on-wash`
+          而不是 `--ink-muted`（那张表与那条"这一层上不许用谁"的法律，
+          见 `profile-backdrop.css` 文件头） */}
       <p className="pf__sub">这个站上「谁在用」就记在这儿。</p>
     </header>
   )
@@ -309,15 +343,30 @@ export default function ProfileHome({
             账号信息与退出），它们是同一件事的三个层次，竖着排是**对的**——
             错的是原来把它们和"我做过什么"排在同一条轴上。 */}
         <aside className="pf__card">
-          <div className="pf__identity">
+          {/* ── 那张水彩 + 压在它左下角的头像（2026-10-17，参考稿的 `.id-card__stage`）──
+              ★ 头像从 `.pf__identity` 里**搬进了这一格**：参考稿把它放在画面左下角，
+                而"头像在名字上面"与"头像压在照片角上"是两种版式，不能各留一半。
+                搬进来之后 `.pf__identity` 只剩四行字，那片竖排的左缘反而更整齐。
+              ★ 画的顺序（css 里定）：水彩 → 一层往纸色收的渐变 → 头像与胶带。
+                那层渐变（`.pf__stage::after`）是**承重的**：没有它，水彩的底边
+                与白卡之间是一条硬边，而头像那圈白描边也就没有东西可以咬住。 */}
+          <div className="pf__stage">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img className="pf__scene" src={SCENE} alt="" width={664} height={352} />
             {/* ★ 挑过的就画那一个；没挑过 / 认不出来才是那个空圈。
                 认不出来时不报错、也不回落成某一个默认头像——见 `lib/avatars.ts` 文件头 */}
             {myAvatar ? (
               /* eslint-disable-next-line @next/next/no-img-element */
-              <img className="pf__avatar" src={myAvatar} alt="" width={72} height={72} />
+              <img className="pf__avatar" src={myAvatar} alt="" width={92} height={92} />
             ) : (
               <AvatarPlaceholder />
             )}
+            {/* 一条手撕胶带。★ 它说的是"这张照片是贴在这张卡上的"——
+                与角色墙那块 mat、手写标签同一支笔（"物件"那一支），不是装饰花纹 */}
+            <span className="pf__tape" aria-hidden="true" />
+          </div>
+
+          <div className="pf__identity">
             <p className="pf__kicker">个人主页</p>
             <p className="pf__name">{displayName}</p>
             {/* ★ 短账号没有手机号（`AuthUser.phone` 可空），那时这一行**根本不渲染**：
@@ -325,9 +374,9 @@ export default function ProfileHome({
                 而"这个人没有手机号"这件事由下面那张表里的「手机号」那格说
                 （那里写的是账号本身，见 `maskPhone` 的兜底） */}
             {user.phone ? <p className="pf__phone">{maskPhone(user.phone)}</p> : null}
-            {/* ★ 这两枚标签**都是真的数**：一个是这台服务器上有几张卡，
-                一个是有几本真的会念。参考稿那两枚（"创作中""38 次朗读"）
-                是编的——这里不编。 */}
+            {/* ★ 这两枚标签**都是真的数**（2026-10-17 工单 16 起：都是**这个人的**数）：
+                一个是他的角色卡有几张，一个是有几本真的会念。参考稿那两枚
+                （"创作中""38 次朗读"）是编的——这里不编。 */}
             <div className="pf__tags">
               <span className="pf__tag">{counts.cards} 张角色卡</span>
               <span className="pf__tag pf__tag--soft">{narrated} 本可朗读</span>
@@ -423,11 +472,10 @@ export default function ProfileHome({
           <header className="pf__work-head">
             <div>
               <h2 className="pf__work-title">我的创作</h2>
-              {/* ★ 这句话里那个说法是**有意的**（文件头第 2 条）：这些书是真的，
-                  但它们此刻还没跟这个人关联——同一台服务器上谁打开都看到这一批。 */}
-              <p className="pf__work-sub">
-                这台服务器上做过的每一本，新的在最上面——还没有按账号分开。
-              </p>
+              {/* ★ 2026-10-17（工单 16）：这句话原来写的是"这台服务器上做过的每一本，
+                  还没有按账号分开"——那句话当时是对的，现在不对了，所以连同它上面
+                  那段注释一起改掉（留着一句过期的话，比没有这句话更坏）。 */}
+              <p className="pf__work-sub">你做过的每一本，新的在最上面。</p>
             </div>
             <Link className="pf__new" href="/home">
               新建绘本

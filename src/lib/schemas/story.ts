@@ -93,6 +93,17 @@ export type NodeDraft = {
 
 export type PlanDraft = { title: string; nodes: NodeDraft[] }
 
+/**
+ * 同一份东西的**另一个名字**（2026-10-17，故事闸门）。
+ *
+ * ★ 为什么值得一个别名而不是到处写 `PlanDraft`：从"编故事"这一步开始，
+ *   这张表同时是**三个东西**——模型吐回来的原始输出、家长在 `StorySheet` 上看到并
+ *   逐条改的那一份、以及 `books/<id>/story.json` 里躺着的那一份。
+ *   名字跟着**用途**走（那是"故事"，不是"plan 的内部草案"），而形状必须是同一个：
+ *   一旦有人为界面另立一个类型，转换那一层就是"改的东西"与"画的东西"分家的地方。
+ */
+export type StoryDoc = PlanDraft
+
 /** 把已校验的对象收窄成上面那个形状（校验器只保证形状，不替我们做类型体操） */
 export function asPlanDraft(value: Record<string, unknown>): PlanDraft {
   return {

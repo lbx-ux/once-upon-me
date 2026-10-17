@@ -7,18 +7,30 @@
  * 标题走 `--font-serif`（黑体在大字号上读起来像产品发布页，衬线才像一本书上的字），
  * 面板走 `--surface` + `--hairline` + 18px + `--sheet-shadow`（"一张纸离开桌面一点点"）。
  *
- * ★ 页头压在天空带里（`(studio)/layout.tsx` 给了 `StudioBackdrop`），
- *   所以 `.pf__sub` 是 `--ink-on-sky`——十带表里 `--ink-muted` 压在天上前四段只有
- *   3.99–4.29:1，破了正文级 AA（表在 `studio-backdrop.css` 文件头）。
- *   ★ 那张纸**以下**的一切（`.pf__section`、右边那一栏、密码那几格）都在天空带以外，
- *     所以它们用的是普通的 `--ink-muted`——不要把这一条推广到整屏。
+ * ★ **这一屏的背景是它自己的那一层**（2026-10-17 用户「复刻一下背景」）：
+ *   `ProfileBackdrop`（同目录）在 `/account` 上顶掉了工作台那片天
+ *   （`AppShell` 按路径二选一）。于是压在这一层上的文字只有两种颜色可以用：
+ *
+ *     `--ink`（正文与标题）       13.99:1
+ *     `--pf-ink-on-wash`（次级）    6.96:1
+ *
+ *   而 `--ink-muted`（4.18:1）与 `--pf-accent`（4.05:1）在这层上**不许做文字**——
+ *   它们要出现在这一屏，就得待在一张纸里（`.pf__card` / `.pf__pw` / `.pf__book`）。
+ *   四个数与量法都在 `profile-backdrop.css` 文件头那张表里，
+ *   由 `node scripts/check-scrim.mts` 的「个人主页那层蓝底」那一节重新算。
+ *   ★ 这条**不是**"灰字这一屏一律变深"：纸**里面**的灰字仍然是 `--ink-muted`
+ *     （在 `--surface` 上 5.33:1，比在蓝底上好得多，没必要动）。
+ *     判据是"它在不在纸上"，不是"它是不是灰的"。
  *
  * ★ **这一屏的强调色不是全站那颗橙，是另开的一组蓝**（用户 2026-10-17 的原话：
- *   「这个个人主页的效果应该是蓝色的，不要橙色的」）。四个令牌定义在 `globals.css`
- *   的 `:root` 里（`--pf-accent` / `--pf-accent-rgb` / `--pf-hairline` / `--pf-paper`），
+ *   「这个个人主页的效果应该是蓝色的，不要橙色的」）。这一组令牌定义在 `globals.css`
+ *   的 `:root` 里（`--pf-accent` / `--pf-accent-rgb` / `--pf-hairline` / `--pf-paper`，
+ *   加上当天的整屏背景那几颗：`--pf-wash-bottom` / `--pf-glow-*-rgb` / `--pf-ink-on-wash`），
  *   与 `--beam` / `--select` 同一个做法：**按用途另开一组，各定义一次**。
  *   CLAUDE.md 那条硬约束管的是"令牌只在一处定义"，不是"全站只能有一个颜色"——
- *   所以这一屏改配色只动 `:root` 里那四行，这个文件里**一颗色值都没有**。
+ *   所以这一屏改配色只动 `:root` 里那几行，这个文件里**一颗色值都没有**
+ *   （唯一一处例外是 `.pf__primary` / `.pf__tape` 里那几个 `rgba(23,23,29,·)` 的影与
+ *   `rgba(55,82,99,·)` 的影——那些是**影**不是色，与 `--card-shadow` 同一种东西）。
  *
  * ★ 因此头像那个圈用的是 `--pf-paper`（冷的一档），不是全站的 `--card-paper`（暖相纸）。
  *   原因不是"暖的不好看"，是**这一屏整体转冷了**：一块暖相纸摆在一屏冷色里
@@ -80,8 +92,13 @@
   margin: 8px 0 0;
   font-size: 13px;
   line-height: 1.8;
-  /* ★ 压在天上（见文件头） */
-  color: var(--ink-on-sky);
+  /* ★ 这一行**直接坐在那层蓝底上**（它不在任何一张纸里），所以用
+     `--pf-ink-on-wash`：`--ink-muted` 在那层最深的一点上只有 4.16:1，破了 AA。
+     量法与读数写在 `profile-backdrop.css` 文件头那张表里。
+     ★ 2026-10-17 之前它用的是 `--ink-on-sky`（当时这一屏压着的是工作台那片天）。
+     那枚令牌的读者是书架那几屏，这一屏换了背景之后就该用自己这一颗——
+     两个值眼下相同，但名分不同，谁改谁负责。 */
+  color: var(--pf-ink-on-wash);
 }
 
 .pf__card {
@@ -95,10 +112,21 @@
 }
 
 /* ★ 还没读完本机登录态的那一瞬间（见 ProfileHome 文件头第 3 条）。
-   框壳与 `--blank` 的那副面孔**同高**，所以从它切到"已经登录"或"还没登录"
-   都不会让整页跳一下。高度写死是这一条的全部意义——它不是一个好看的骨架屏 */
+   这一壳在 **SSR 的 HTML 里就有了**——`ready` 要等 `/api/auth/me` 那一趟回来才翻，
+   所以它真的会被看见。`min-height` 的全部意义是别让那一眼是一根 46px 的纸片。
+
+   ★ **它不是"两张真面孔一样高"**（这一行原来那句是假的，2026-10-17 量过）：
+     未登录那张卡 **131px**、已登录那张 **778px**，一个常数不可能同时等于两者。
+     取的是**小的那一个**，判据是"宁可不够、不可过头"：
+       · 未登录这条路：131 → 131，一次抖动都没有；
+       · 已登录这条路：131 → 778，卡片**向下长**——页头与卡片上沿都不动，
+         右栏那一列与它同起一行，也不跟着走。
+     反过来取 778 会让**未登录**的人先看见一张 778px 的空纸再往下收 647px。
+     向下长比向上收好：向上收是把内容从视口外**抽走**，那一下更扎眼。
+   ★ 三个数都是 1440×900、卡片宽 380px 下量的（不写 min-height 时这一壳自然高 46px，
+     差在 `.pf__lede` 一行 21px 与 `.pf__primary` 44px）。改这一屏的间距要重新量。 */
 .pf__card--blank {
-  min-height: 236px;
+  min-height: 131px;
 }
 
 .pf__lede {
@@ -130,46 +158,157 @@
 /* ── 身份那一段 ───────────────────────────────────────────────────────────
  * ★ 2026-10-17 从"一行 flex"改成**竖排**：参考稿里头像在上、名字在它下面，
  *   而这一栏现在只有 380px 宽——横排的话 72px 的头像 + 名字 + 手机号
- *   会把这一行挤成三截。竖排之后这四行有一个共同的左缘，读下来是一条线。 */
+ *   会把这一行挤成三截。竖排之后这几行有一个共同的左缘，读下来是一条线。
+ * ★ 同一天晚些时候**头像从这里搬去了 `.pf__stage`**（压在画面上），
+ *   所以这一段现在只剩四行字。`gap: 4px` 与 `justify-items: start` 都还是为它们写的。 */
 .pf__identity {
   display: grid;
   justify-items: start;
   gap: 4px;
 }
 
+/* ── 身份卡顶上的那一格：水彩 + 压在左下角的头像 + 胶带（2026-10-17）───────
+ * 版式照参考稿的 `.id-card__stage`（`E:\match\profile\profile.css:133`）。
+ *
+ * ★ 高度用 `aspect-ratio` + 上下限，**不是**参考稿那样写死 230px：
+ *   参考稿的 `body` 有 `min-width: 1080px`，它的卡永远 430px 宽；
+ *   而这一屏在 900px 以下会塌成一栏，那张卡会变成一千多像素宽——
+ *   写死高度的话横幅会从 1.9:1 被拉成 6:1 的一条，云就没了。
+ *   三档合起来的效果：窄屏随宽度走比例、宽到一定程度封顶 200px。
+ *   ★ 这几个数是**算的**：左栏 380px − 左右各 24px 内边距 = 332px 内容宽，
+ *     332 / 1.9 ≈ 175px；源图 1280×720 是 1.78，所以纵向只多出约 11px 的余量，
+ *     几乎不裁。改版心宽度要连着看这一条。
+ *
+ * ★ 底铺 `--pf-paper`：图没解码出来之前那一格要有颜色，不能是白的——
+ *   与 `.pf__cover`（还没出封面的书）同一颗色，都是"这里本该有张画"。 */
+.pf__stage {
+  position: relative;
+  aspect-ratio: 1.9;
+  min-height: 148px;
+  max-height: 200px;
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--pf-paper);
+}
+
+.pf__scene {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* ★ 参考稿是 `center 32%`，这里取 50%：上面那条约 11px 的余量太窄，
+     纵向偏置最多只能挪 11px，写 32% 与写 50% 差不出 4px。**不抄一个在这张图上
+     没有意义的数**——那是"看起来很像参考稿"，不是"复刻"。 */
+  object-position: 50% 50%;
+  /* ★ `saturate/contrast` 是参考稿原样（`profile.css:146`）。它挂在**一张静态小图**上，
+     一次性光栅化、不进任何循环——与 README §五 那条"大图上任何 transform 都是
+     每帧重采样一整屏"管的是两件事（那条说的是满屏 fixed 的图与动画）。 */
+  filter: saturate(0.96) contrast(0.98);
+}
+
+/* 水彩底下那层往纸色收的渐变。★ 它是**承重的**，不是滤镜：
+ *   1. 图的下缘与白卡之间没有它是一条硬边；
+ *   2. 头像那圈 4px 白描边得有东西可以咬住——压在浓颜色上时那圈白是"贴纸"，
+ *      压在浅纸上时才是"照片的边"。
+ *   `z-index: 0` 让它压在图上、但**在头像下面**（头像与胶带都是 1）——
+ *   参考稿那一行也是显式写的（`profile.css:153`）。
+ *
+ * ★ **这一条是这一屏唯一一处没照抄参考稿的地方**，而且是必须的：
+ *   参考稿的三档（0.04 → 0.78@72% → 0.96）是对着一张**饱和度不错的风景照**
+ *   （`login/assets/cover.jpg`）调的——那里图本身够深，压到 0.78 仍然看得见。
+ *   本站那张 `art/cloud.webp` **本身就是一片很浅的蓝白**（天空 + 一朵白云），
+ *   套同一层纸光之后整格合成到 245 上下，浏览器实测出来就是"卡片顶上有一块空白"。
+ *   ★ 判据不是"看着淡"，是把两种 α 各自与图逐像素合成后**摆出来看**：
+ *     原样的那一版云几乎消失，改后的这一版云上沿到中部清楚、只剩底部往纸色收。
+ *     复现：`python -I` 跑一份一次性脚本（在 `.out/banner/stage-sim.png`，未进仓库），
+ *     它对每个候选图 × 每个 α 档位做 `cover` 裁切 + 那层线性渐变 + 头像与胶带，
+ *     拼成一张对照表。**换图先重跑这张表**，别照着一个 245 的数改。
+ *   ★ 四档仍是"上薄下厚、到底几乎全纸"，方向没有变，只是把雾从 72% 推到 80%，
+ *     并把前 50% 从 0.04→0.78 的斜坡改成 0.03→0.06 的平台——云上那半现在留住了。 */
+.pf__stage::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(var(--paper-rgb), 0.03),
+    rgba(var(--paper-rgb), 0.06) 50%,
+    rgba(var(--paper-rgb), 0.62) 80%,
+    rgba(var(--paper-rgb), 0.94)
+  );
+  pointer-events: none;
+}
+
+/* 一条手撕胶带（参考稿的 `.id-card__tape`）。★ 半透明白 + 一点点旋角：
+ *   它要读成"贴在照片上的一小条纸"，所以**不能**是不透明的——不透明的白块
+ *   会读成"图上有个白色矩形"。那个 −4° 是这一格里唯一一处不对称，
+ *   而它正是"手贴的"这件事的全部表达。 */
+.pf__tape {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  z-index: 1;
+  width: 76px;
+  height: 22px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.62);
+  transform: translateX(-50%) rotate(-4deg);
+  box-shadow: 0 6px 14px -12px rgba(55, 82, 99, 0.4);
+}
+
 /* 「个人主页」那三个字。★ 它是这一栏的**分类名**，不是标题的重复——
-   与侧栏那一格的 `shell__group-label`（"工作台"）同一个身份 */
+   与侧栏那一格的 `shell__group-label`（"工作台"）同一个身份。
+   ★ `margin` 归零（原来上面那 12px 是让开那颗 64px 头像的；头像搬走之后
+   那 12px 变成一段说不清的空隙，而它现在的邻居是 `.pf__card` 的 `gap`）。 */
 .pf__kicker {
-  margin: 12px 0 0;
+  margin: 0;
   color: var(--ink-muted);
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.08em;
 }
 
+/* ── 压在画面左下角的那个头像 ──────────────────────────────────────────────
+ * ★ 位置与尺寸照参考稿的 `.avatar`（`profile.css:170`）：`left: 18px; bottom: 14px`，
+ *   92px，4px 白描边。它会盖住水彩的左下角——这正是参考稿的做法，
+ *   而"头像 + 一张被它压住的画"是这一格的全部内容。
+ * ★ 它是**绝对定位**，所以挑与不挑之间只换"画的是什么"（那颗 `<img>` 与
+ *   `AvatarPlaceholder` 共用这一个盒子），位置与尺寸一点都不动。
+ * ★ 那圈边用 `--surface`（白）：它是**卡的颜色**，于是读作"头像贴在卡上"，
+ *   而不是"头像周围画了一圈白"。 */
 .pf__avatar {
+  position: absolute;
+  left: 18px;
+  bottom: 14px;
+  z-index: 1;
   display: grid;
   place-items: center;
-  flex: 0 0 64px;
-  width: 64px;
-  height: 64px;
-  border: 1px solid var(--pf-hairline);
+  width: 92px;
+  height: 92px;
+  border: 4px solid var(--surface);
   border-radius: 999px;
-  /* ★ 暖相纸：它是一张照片的位置（见文件头最后一段），而 `--ink-muted`
-     在这一档上是 4.63:1，量过的（globals.css 的 `--pf-paper` 那条） */
+  overflow: hidden;
+  /* ★ 这一屏的实物底（`--pf-paper`，冷的一档），不是全站的 `--card-paper`（暖相纸）
+     ——这一屏整体转冷，一块暖相纸摆在这里会是唯一一个不在调子里的东西。
+     而 `--ink-muted` 在这一档上是 4.63:1，量过的（globals.css 的 `--pf-paper` 那条）。 */
   background: var(--pf-paper);
   color: var(--ink-muted);
+  box-shadow: 0 12px 26px -16px rgba(55, 82, 99, 0.45);
 }
 
+/* 空圈里那个记号。★ 从 30px 放到 38px：盒子从 64 长到 92，
+   记号不跟着长的话那个圈会显得空。 */
 .pf__avatar svg {
-  width: 30px;
-  height: 30px;
+  width: 38px;
+  height: 38px;
 }
 
-/* 挑过的头像本身。★ 与 `.pf__avatar`（那个空圈）**同一个 64px 的方框**：
- *   挑与不挑之间只该换"画的是什么"，格子不能跟着跳。
+/* 挑过的头像本身。★ 与 `.pf__avatar`（那个空圈）**同一个 92px 的盒子**：
+ *   挑与不挑之间只该换"画的是什么"，盒子不能跟着跳。
  * ★ 圆角 999px 把 SVG 自己那个圆底再切一次：认不出的 id 退回空圈、
- *   以后换一批矢量形状，这一圈都得是圆的。 */
+ *   以后换一批矢量形状，这一圈都得是圆的（`overflow: hidden` 那一句
+ *   已经把 `<img>` 的方角也切掉了，这一条是给"将来没有那样一层"的情况留的）。 */
 img.pf__avatar {
   object-fit: cover;
   border-radius: 999px;
@@ -452,7 +591,8 @@ img.pf__avatar {
 
 .pf__work-sub {
   margin: 6px 0 0;
-  color: var(--ink-muted);
+  /* ★ 与 `.pf__sub` 同一条：这一行也在那层蓝底上，不在纸里 */
+  color: var(--pf-ink-on-wash);
   font-size: 13px;
   line-height: 1.7;
 }
@@ -725,11 +865,25 @@ section.pf :focus-visible {
      那一行是「标签 + 输入 + 按钮 + 回话」四列，而这里要**三行输入 + 一行按钮**。
      挤进同一个网格只会把 `grid-template-columns` 撑成一串只对某一行成立的数字。
    ★ 三行都用同一套 `.pf__box / .pf__input`（与改昵称那一格同一个外观）：
-     同一个页面里两个输入框长得不一样，是"两件事"的假信号。 */
+     同一个页面里两个输入框长得不一样，是"两件事"的假信号。
+   ★ **2026-10-17 它自己变成了一张纸。** 起因是这一屏换了背景：整屏铺上那层蓝底
+     之后，"密码"这一段是**唯一一段直接坐在页面底上的正文**，于是它里面三样东西
+     全踩线——`.pf__save` 的字色是 `--pf-accent`（在蓝底上 4.12:1）、
+     `.pf__rename-label` 与 `.pf__status` 是 `--ink-muted`（4.16:1）。
+     包成一张 `--surface` 的纸之后三个数一起回到 5.16 / 5.33 / 5.33（都已过线），
+     而**一个颜色都没改**。这也是 `profile-backdrop.css` 文件头那条法律的正常用法：
+     不在这层上的颜色，就给它一张纸。
+   ★ 它顺带修好一件事：`padding-left: 88px` 那两条（`.pf__pw-actions` / `.pf__hint`）
+     现在对齐的是**纸里**那个输入列，本来就该是这样。 */
 .pf__pw {
   display: grid;
   gap: 10px;
   margin-top: 12px;
+  padding: 20px 24px 22px;
+  border: 1px solid var(--pf-hairline);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--sheet-shadow);
 }
 
 .pf__pw-row {

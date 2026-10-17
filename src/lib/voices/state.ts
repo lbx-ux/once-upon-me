@@ -8,7 +8,8 @@
  *   所以搬过来的是三样东西，一样不多：
  *
  *     1. 两个预置音色（`DEFAULT_VOICES`）——原样搬，连同那段实测记录；
- *     2. "当前选了哪一个"这一个字符串（原来住在 `settings.speech.voice` 里）；
+ *     2. "当前选了哪一个"这一个字符串（原来住在 `settings.speech.voice` 里，
+ *        2026-10-17 起住在服务端的 `voices` 表里）；
  *     3. "这本书会不会有朗读"这条判据（原来的 `speechReady`）。
  *
  * ★ `speechReady(settings)` 的判据**必须换掉**，这是这一轮最重要的一处语义变化。
@@ -18,7 +19,7 @@
  *
  *     · 站里配齐了语音吗   ← `GET /api/auth/me` 的 `configured`（服务端环境变量）
  *     · 这个人有语音权限吗 ← 同一个响应的 `permissions`（站长在管理页勾的）
- *     · 挑了一个音色吗     ← 本机（这一份文件）
+ *     · 挑了一个音色吗     ← **账号上**（`GET /api/voices` 的 `current`；2026-10-17 之前在本机）
  *
  *   ★ 三条要**分开说**，不能合成一个布尔。合成之后字面上只有两种可能
  *   （"能用"/"不能用"），而用户看到"不能用"时下一步该做什么，恰恰取决于缺的是哪一条：
@@ -73,37 +74,79 @@ export const DEFAULT_VOICES: VoiceOption[] = [
   },
 ]
 
-/* ── 「选了哪一个」这一格（本机）──────────────────────────────────────────── */
+/* ── 「我有哪些音色、在用哪一个」（服务端那一份的形状）────────────────────── */
 
 /**
- * 存哪个音色。
+ * ★★ 2026-10-17（工单 16）：这一格**从本机搬到了账号上**。
  *
- * ★ 换了一个 key（原来是 `xiaozhujue.settings.v1` 里 `speech.voice` 那一格）。
- *   新 key 只放一个字符串——原来那一份里另外几个字段（baseUrl / model / apiKey）
- *   要么已经不存在了，要么是密钥，而**没有做迁移**：那个存储块里存着的东西
- *   正是这一轮要删掉的那套 BYO key 配置，为了一个 id 去读一个已经作废的形状，
- *   留下的是一条"以后还要记得它"的线。挑音色是一次点击的事。
+ * 原来它是一对 localStorage 函数（`loadCurrentVoice` / `saveCurrentVoice`）加
+ * `store.ts` 里那一份"我录的"列表。搬走的理由只有一条，而它足够：
+ * **换台设备就没了**——"我录的声音"看起来像账号的属性，却住在一台设备的浏览器里。
+ * 用户 2026-10-17 定的口径是「音色一并挂到账号上」。
+ *
+ * ★ 那一对函数**删掉**了，不是留着当"这台设备上次选的"：两处都记着"当前是哪个"
+ * 就是两份真相，而它们一定会打架（这台选 A、账号里是 B，下一次做书用哪个
+ * 取决于先读了谁）。现在唯一的来源是服务端（`GET /api/voices`）。
+ *
+ * 形状与 Java 的 `VoiceController.Body` / `Row` 逐字段对应。
  */
-export const CURRENT_VOICE_KEY = 'xiaozhujue.voice.v1'
-
-/** 读回选中的音色 id。没有就是空串（= 还没挑）。★ 只在客户端调 */
-export function loadCurrentVoice(): string {
-  if (typeof window === 'undefined') return ''
-  try {
-    return (window.localStorage.getItem(CURRENT_VOICE_KEY) ?? '').trim()
-  } catch {
-    // 隐私模式：本次会话里照样能选，只是下次打开要重选。**不许**改成"那我存别处"
-    return ''
-  }
+export type MyVoice = {
+  /** 厂商回的 voice_id（预置音色的那两个 id 也可能出现在这里：被选过就有一行） */
+  voiceId: string
+  /** 用户起的名字 */
+  name: string
+  /**
+   * ★ 建它时的 TTS_MODEL。实测跨模型直接 400（`[cosyvoice]Engine error [411]`），
+   *   所以这一条不是记账，是判据：当前模型与它对不上时，这张卡**不许选**
+   *   （判在 `catalog.ts`）。
+   */
+  modelId: string
+  /** 毫秒时间戳（服务端给的是 ISO 字符串，`parseMyVoices` 转过来） */
+  createdAt: number
 }
 
-export function saveCurrentVoice(voiceId: string): void {
-  if (typeof window === 'undefined') return
-  try {
-    window.localStorage.setItem(CURRENT_VOICE_KEY, voiceId)
-  } catch {
-    /* 同上：存不下不是错，静默即可 */
+/** 这一组接口回的整份东西：我的音色 + 现在用哪一个 */
+export type MyVoices = {
+  voices: MyVoice[]
+  /** 空串 = 还没挑（**不是 null**：界面上那一格就是一个字符串） */
+  current: string
+}
+
+/**
+ * 把服务端回的读成上面那个形状。**认不出就整份拒绝**（回 `null`），
+ * 与 `admin/state.ts`、`auth/state.ts` 同一条纪律：半个列表比没有更坏——
+ * 它会显示成"你只录过这一条"，而真相可能是"有两条，另一条没画出来"。
+ */
+export function parseMyVoices(raw: unknown): MyVoices | null {
+  if (!raw || typeof raw !== 'object') return null
+  const source = raw as Record<string, unknown>
+  const list = source['voices']
+  const current = source['current']
+  if (!Array.isArray(list) || typeof current !== 'string') return null
+
+  const voices: MyVoice[] = []
+  for (const item of list) {
+    const one = parseMyVoice(item)
+    if (!one) return null
+    voices.push(one)
   }
+  return { voices, current: current.trim() }
+}
+
+function parseMyVoice(raw: unknown): MyVoice | null {
+  if (!raw || typeof raw !== 'object') return null
+  const item = raw as Record<string, unknown>
+  const voiceId = str(item['voiceId'])
+  const name = str(item['name'])
+  const modelId = str(item['model'])
+  const createdAt = Date.parse(str(item['createdAt']))
+  // ★ 不 `as MyVoice` 硬转：这一份是**跨进程来的**，字段缺一个就该整份拒绝
+  if (voiceId === '' || name === '' || !Number.isFinite(createdAt)) return null
+  return { voiceId, name, modelId, createdAt }
+}
+
+function str(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
 }
 
 /* ── 「这本书会不会有朗读」这一条判据 ─────────────────────────────────────── */

@@ -1,7 +1,8 @@
 import { redirect } from 'next/navigation'
 
 import AdminScreen from '@/components/admin/AdminScreen.tsx'
-import { readOverview } from '@/lib/admin/server.ts'
+import { readModelConfig, readOverview, readRequests } from '@/lib/admin/server.ts'
+import { usageByUser } from '@/lib/admin/usage.ts'
 
 /**
  * /admin —— 管理页（工作台的一屏，追加工单 09）
@@ -25,7 +26,11 @@ export const dynamic = 'force-dynamic'
 export const metadata = { title: '管理 · 小主角' }
 
 export default async function AdminPage() {
-  const result = await readOverview()
+  // ★ 两次取数**并行**发出去，而不是先等用户表再等申请列表：
+  //   两条各自打一次 Java，串行等的话这一屏的首屏时间就是两个往返之和。
+  //   ★ 而"申请列表那一半坏了"与"用户表那一半坏了"是两件事——前者只是少一列
+  //   （见 `readRequests` 的注释），后者才是整页读不到，所以两半各判各的。
+  const [result, requests] = await Promise.all([readOverview(), readRequests()])
 
   if (result.kind === 'signed-out') {
     redirect(`/login?next=${encodeURIComponent('/admin')}`)
@@ -54,5 +59,17 @@ export default async function AdminPage() {
     )
   }
 
-  return <AdminScreen initial={result.overview} />
+  // ★ 模型配置是**在这一步之后**才读的，没有并进上面那个 `Promise.all`：
+  //   那份数据里虽然没有 key 的值，但它仍然只该进管理员的进程。
+  //   它是本地读一个文件（不发请求），所以"等确认完再读"的代价约等于零。
+  //   `readOverview` 已经确认过角色了——非管理员在上面的 `forbidden` 就 return 掉了。
+  return (
+    <AdminScreen
+      initial={result.overview}
+      initialRequests={requests.kind === 'ok' ? requests.requests : []}
+      requestsError={requests.kind === 'ok' ? null : requests.message}
+      modelConfig={readModelConfig()}
+      usage={await usageByUser()}
+    />
+  )
 }

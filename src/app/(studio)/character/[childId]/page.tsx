@@ -1,6 +1,9 @@
 import { notFound } from 'next/navigation'
 
 import ChildDetail from '@/components/studio/ChildDetail.tsx'
+import { userSliceRoot } from '@/lib/asset-scope.ts'
+import { currentUserId } from '@/lib/auth/session.ts'
+import { assetRoot } from '@/lib/books-runtime.ts'
 import { childDetailOf } from '@/lib/children-list.ts'
 import { isDemoChildId } from '@/lib/children-source.ts'
 
@@ -21,13 +24,17 @@ export const dynamic = 'force-dynamic'
 
 export async function generateMetadata({ params }: { params: Promise<{ childId: string }> }) {
   const { childId } = await params
-  const detail = await childDetailOf(childId)
+  const userId = await currentUserId()
+  const detail = userId ? await childDetailOf(childId, userSliceRoot(assetRoot(), userId)) : null
   return { title: detail ? `${detail.item.profile.name} · 小主角` : '角色卡 · 小主角' }
 }
 
 export default async function ChildPage({ params }: { params: Promise<{ childId: string }> }) {
   const { childId } = await params
-  const detail = await childDetailOf(childId)
+  // ★ 2026-10-17（工单 16）：未登录、或者这个孩子不在**自己**那一片里 → 404。
+  //   别人的 childId 打进来也走这一条（不是"读出来再判是不是他的"）
+  const userId = await currentUserId()
+  const detail = userId ? await childDetailOf(childId, userSliceRoot(assetRoot(), userId)) : null
   if (!detail) notFound()
 
   return (

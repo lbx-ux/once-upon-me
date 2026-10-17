@@ -508,6 +508,13 @@ for (const face of CARD_FACES) {
 const PF_SURFACE = { r: 255, g: 255, b: 255 }
 const pfAccent = parseHex(globals, 'pf-accent')
 const pfPaper = parseHex(globals, 'pf-paper')
+/**
+ * ★ 这一行原来在**下面**（个人主页那几行检查之后），而那几行会先写 `fail`——
+ *   于是它们一旦不过，这支脚本抛的是 `ReferenceError: Cannot access 'fail'
+ *   before initialization`，而不是把它标红。**量具坏了会装成"跑通了"**，
+ *   所以把声明提到第一处写入之前。
+ */
+let fail = false
 const PF_CHECKS: [string, number, number][] = [
   [
     '--pf-accent / --surface（12px 标签的字色）',
@@ -535,7 +542,281 @@ console.log(
   `     ${fmt(pfOnPaper)}:1  门槛 3（图形）  ${pfOnPaper >= 3 ? '' : '✗ '}--pf-accent / --pf-paper（头像记号）`,
 )
 
-let fail = false
+/**
+ * ── 个人主页那层蓝底（`ProfileBackdrop`，2026-10-17）─────────────────────────
+ *
+ * 用户拿参考稿说「复刻一下背景」，`/account` 从此铺的是**四条渐变**而不是工作台那片天
+ * （`AppShell` 按路径二选一）。这一层与 `.sb` 的取法**相反**：
+ *
+ *   · `.sb` 是 `absolute`、随文档滚动，所以"哪一行字压在天上"按文档分段量（上面那十段表）；
+ *   · 这一层是 `fixed`、整屏不随滚动，而"哪一行字压在哪儿"仍然是个确定答案——
+ *     **取整屏最深的那一个采样点**就够（这一层全是极浅的冷色，最深点是个常数）。
+ *
+ * ★ 取最深点而不是逐段算，理由与下面"运行视图那两层玻璃"那一条逐字相同：
+ *   固定背景 + 会滚动的正文，逐段算会得出"这一屏的上半页可以、下半页不行"
+ *   这种没法照着排版的结论。保守界的代价只是"最深那一点也得过线"。
+ *
+ * ★ 这一层与那三团光晕的 α、位置**逐字照搬参考稿**。所以这张表有两个用处：
+ *   一是拦住"顺手把光晕调浓一点"，二是**把这一屏的排版法律写下来**——
+ *   `--ink-muted`(4.16) 与 `--pf-accent`(4.12) 在这层上**做文字不过线**，
+ *   于是它们必须待在一张纸里（`.pf__card` / `.pf__pw` / `.pf__book`）。
+ *   那两行刻意**不断言**（它们是"不许用"，不是"要达标"），但必须印出来：
+ *   下一个往上加字的人要先看见这两个数。
+ *
+ * ★ 数字与现场（2026-10-17，1440×900 实测；最深一点落在 **1265,90**，
+ *   也就是第二团光晕的圆心）：
+ *   `--ink` **13.99**:1（页头大标题）· `--pf-ink-on-wash` **6.96**:1（直接坐在底上的次级文字）
+ *   · `--ink-muted` **4.18**:1 ✗ · `--pf-accent` **4.05**:1 ✗
+ *   · 侧栏那层纸压在这层上：`--ink-muted` **4.80** · `--accent`（全站那颗橙在这个
+ *   固定背景上的唯一落点）**4.66** —— 两条都过 4.5，所以侧栏一个颜色都不用改。
+ */
+const pfbCss = await readFile('src/components/account/profile-backdrop.css', 'utf8')
+const PFB_BODY = blockMust(pfbCss, '.pfb')
+
+/** `--pf-glow-N-rgb: R, G, B`（与 `--paper-rgb` 同一种写法，所以另写一个小解析） */
+function parseTriple(text: string, name: string): Rgb {
+  const hit = must(
+    new RegExp(`--${name}:\\s*(\\d+)\\s*,\\s*(\\d+)\\s*,\\s*(\\d+)`).exec(text),
+    `globals.css 里的 --${name}（形如 \`--x-rgb: 1, 2, 3\`）`,
+  )
+  return { r: Number(hit[1]), g: Number(hit[2]), b: Number(hit[3]) }
+}
+
+/** 最底下那一层：`linear-gradient(180deg, var(--paper), var(--pf-wash-bottom))` */
+const PFB_BASE = (() => {
+  must(
+    /linear-gradient\(\s*180deg\s*,\s*var\(--paper\)\s*,\s*var\(--pf-wash-bottom\)\s*\)/.exec(
+      PFB_BODY,
+    ),
+    '.pfb 的 linear-gradient（形如 `linear-gradient(180deg, var(--paper), var(--pf-wash-bottom))`）',
+  )
+  return { top: PAPER, bottom: parseHex(globals, 'pf-wash-bottom') }
+})()
+
+/**
+ * 上面那三团。★ 顺序就是层序（写在最前的最上），所以合成时要从后往前叠。
+ *
+ * ★ 半径那一档**不是** `0.42 × 视口`：`radial-gradient(circle at …)` 不写尺寸时，
+ *   圆的半径默认是**到最远那个角**的距离，色标里的百分比再乘在**那条半径**上。
+ *   当成长边的一半算，1440×900 下会把第一团从 616px 算成 605px——
+ *   差得不大，但那是"算错了刚好看着像对的"，所以按定义算。
+ */
+const PFB_GLOWS = (() => {
+  const re =
+    /radial-gradient\(\s*circle at ([\d.]+)% ([\d.]+)%\s*,\s*rgba\(var\(--pf-glow-(\d)-rgb\),\s*([\d.]+)\)\s*,\s*transparent ([\d.]+)%\s*\)/g
+  const out = [...PFB_BODY.matchAll(re)].map((m) => ({
+    cx: Number(m[1]) / 100,
+    cy: Number(m[2]) / 100,
+    color: parseTriple(globals, `pf-glow-${m[3]}-rgb`),
+    a: Number(m[4]),
+    r: Number(m[5]) / 100,
+  }))
+  if (out.length < 3) {
+    throw new Error(
+      `解析失败：.pfb 里应该有三条 rgba(var(--pf-glow-N-rgb), α) 的 radial-gradient，实得 ${out.length} 条`,
+    )
+  }
+  return out
+})()
+
+/** 到最远那个角的距离——`circle` 的默认尺寸（farthest-corner） */
+function farthestCorner(cx: number, cy: number, w: number, h: number): number {
+  return Math.max(
+    Math.hypot(cx, cy),
+    Math.hypot(w - cx, cy),
+    Math.hypot(cx, h - cy),
+    Math.hypot(w - cx, h - cy),
+  )
+}
+
+/** 一点上的颜色：底 → 最下面那团 → 中间那团 → 最上面那团（CSS 的层序） */
+function washAt(x: number, y: number): Rgb {
+  const t = Math.min(1, Math.max(0, y / VIEWPORT.h))
+  let c: Rgb = {
+    r: PFB_BASE.top.r + (PFB_BASE.bottom.r - PFB_BASE.top.r) * t,
+    g: PFB_BASE.top.g + (PFB_BASE.bottom.g - PFB_BASE.top.g) * t,
+    b: PFB_BASE.top.b + (PFB_BASE.bottom.b - PFB_BASE.top.b) * t,
+  }
+  for (const glow of [...PFB_GLOWS].reverse()) {
+    const cx = glow.cx * VIEWPORT.w
+    const cy = glow.cy * VIEWPORT.h
+    const R = farthestCorner(cx, cy, VIEWPORT.w, VIEWPORT.h) * glow.r
+    const a = R <= 0 ? 0 : glow.a * Math.max(0, 1 - Math.hypot(x - cx, y - cy) / R)
+    if (a <= 0) continue
+    c = {
+      r: glow.color.r * a + c.r * (1 - a),
+      g: glow.color.g * a + c.g * (1 - a),
+      b: glow.color.b * a + c.b * (1 - a),
+    }
+  }
+  return c
+}
+
+/** 整屏扫一遍，取最暗的那一点（= 对文字最不利的那一点） */
+const PFB_DARKEST = (() => {
+  let best = { x: 0, y: 0, c: washAt(0, 0), l: 1 }
+  for (let iy = 0; iy <= 180; iy++) {
+    for (let ix = 0; ix <= 288; ix++) {
+      const x = (ix / 288) * VIEWPORT.w
+      const y = (iy / 180) * VIEWPORT.h
+      const c = washAt(x, y)
+      const l = luminance(c)
+      if (l < best.l) best = { x, y, c, l }
+    }
+  }
+  return best
+})()
+
+/* ★ 侧栏也压在这一层上（`.shell__side` 自己那层 α=0.78 的纸），
+   而那一层纸的 α 原来是照着**天空**定的。换背景就得重新量——
+   它是全站的主色（橙）在这一屏唯一的落点，破了没人会发现。 */
+const PFB_SIDEBAR = SIDE_PAPER === null ? null : over(PFB_DARKEST.c, SIDE_PAPER)
+
+type WashRow = { label: string; v: number; limit: number | null }
+const PF_WASH_ROWS: WashRow[] = [
+  {
+    label: '--ink / 那层蓝底最深处（页头大标题）',
+    v: contrast(PFB_DARKEST.l, luminance(parseHex(globals, 'ink'))),
+    limit: THRESHOLD,
+  },
+  {
+    label: '--pf-ink-on-wash / 那层蓝底最深处（直接坐在底上的次级文字）',
+    v: contrast(PFB_DARKEST.l, luminance(parseHex(globals, 'pf-ink-on-wash'))),
+    limit: THRESHOLD,
+  },
+  {
+    /* ★ 这两行 limit 是 null：不是"要达标"，是"**不许这么用**"。
+       印出来是为了让下一个往这层上加字的人先看见这两个数。 */
+    label: '--ink-muted / 那层蓝底最深处  ← 这一层上不许做文字，放进纸里用',
+    v: contrast(PFB_DARKEST.l, luminance(parseHex(globals, 'ink-muted'))),
+    limit: null,
+  },
+  {
+    label: '--pf-accent / 那层蓝底最深处  ← 同上，因此 `.pf__pw` 是一张纸',
+    v: contrast(PFB_DARKEST.l, luminance(pfAccent)),
+    limit: null,
+  },
+]
+if (PFB_SIDEBAR) {
+  PF_WASH_ROWS.push(
+    {
+      label: `--ink-muted / 侧栏那层纸(${fmt(SIDE_PAPER)} 的纸)压在蓝底上`,
+      v: contrast(luminance(PFB_SIDEBAR), luminance(parseHex(globals, 'ink-muted'))),
+      limit: THRESHOLD,
+    },
+    {
+      label: `--accent / 侧栏那层纸压在蓝底上（全站那颗橙在这一屏唯一的落点）`,
+      v: contrast(luminance(PFB_SIDEBAR), luminance(parseHex(globals, 'accent'))),
+      limit: THRESHOLD,
+    },
+  )
+}
+
+console.log('')
+console.log(
+  `   个人主页那层蓝底（ProfileBackdrop，固定背景，最深一点在 ${Math.round(PFB_DARKEST.x)},${Math.round(PFB_DARKEST.y)}）：`,
+)
+for (const row of PF_WASH_ROWS) {
+  const ok = row.limit === null ? null : row.v >= row.limit
+  if (ok === false) fail = true
+  const mark = ok === null ? '— ' : ok ? '' : '✗ '
+  console.log(`     ${fmt(row.v)}:1  ${mark}${row.label}`)
+}
+
+/**
+ * ── 运行视图那两层玻璃（2026-10-17） ─────────────────────────────────────────
+ *
+ * 上面那条阶段轨、底下那条输入条，以及故事闸门那一屏的每一张卡，铺的是
+ * `--surface-glass`（半透明白）而不是 `--surface`（纯白）：它们**压在天光上**，
+ * 而全白的板压上去会把背景切成三块（用户的原话是"两个白色的背景不透明度减小一点"）。
+ *
+ * ★ 为什么它必须进这支脚本：上面 `CARD_FACES` 量的是**实心**面（`parseHex` 读的就是
+ *   一个十六进制值）——半透明的面叠在天光上根本算不出来，"跳过"就等于这一层
+ *   成了没人检查过的正文面。而这一层上真的落着 13–15px 的字：
+ *   `.gr__name`（阶段轨的格名）/ `.gr__story`（底部那句话）/ `.ss__label`（闸门的字段名）。
+ *
+ * ★ 取**整条天空带最暗的那一个采样点**：这三块的位置是流动的（底部那条是 `sticky`，
+ *   滚到哪儿就压在哪儿），所以定一个**保守的界**比逐段算更诚实——逐段算会得出
+ *   "第 3 段可以、第 7 段不行"这种没法照着排版的结论。保守的代价只是 α 收得高一点。
+ *
+ * ★ 合成口径与前两张表**逐字相同**：先在 gamma 编码空间混色（CSS 就是这么叠的），
+ *   再按 WCAG 线性化算对比度。
+ *
+ * ★ 卡在门槛上的是 **`--accent`**（不是 `--ink-muted`）：两条线的斜率差不多，
+ *   而 accent 起跑就低一档。实测 2026-10-17：α=0.80 → 4.90/4.76；
+ *   α=0.68 → 4.65/4.52；α=0.60 → 4.49/4.37（**两个都破**）。
+ *   所以这个令牌的底是 **α ≈ 0.69**，现取 0.70。
+ *   ★ 这条值得写进脚本而不是只写进 CSS：它是一支未来会被用来"再调薄一点"的杠杆，
+ *     而"底在哪"必须能被重新量出来，不能靠上一版注释里的一个估计数。
+ *
+ * ★ **闸门那些框（`--paper-glass`）故意不在这里单开一行**：框是**叠在**卡片那层
+ *   `--surface-glass` 之上的，两层白只会让合成结果更不透明（0.45 压在 0.70 上 = 0.835）。
+ *   也就是说这一张表算的是**最稀的那一层**，它就是下界——给框再加一行只会得到
+ *   一组必然更高的数，那种"永远会过"的断言不是闸门，是装饰。
+ */
+const GLASS_ALPHA = must(
+  Number(
+    /--surface-glass:\s*rgba\(\s*255\s*,\s*255\s*,\s*255\s*,\s*([\d.]+)\s*\)/.exec(globals)?.[1],
+  ),
+  'globals.css 的 --surface-glass（形如 `--surface-glass: rgba(255, 255, 255, 0.88)`）',
+)
+
+/** 白按 α 压在一个底色上：与 `over()` 同一条 over 公式，只是这一层的颜色是白 */
+function whiteOver(base: Rgb, alpha: number): Rgb {
+  const k = Math.min(1, Math.max(0, alpha))
+  return {
+    r: 255 * k + base.r * (1 - k),
+    g: 255 * k + base.g * (1 - k),
+    b: 255 * k + base.b * (1 - k),
+  }
+}
+
+/**
+ * 整条天空带里最暗的那一点。
+ * ★ 采样格网与上面那张表同一套密度（`BANDS × COLS × ROWS_PER_BAND`）：
+ *   上表要把结果按段归好，这里要的是**全局最暗的那一个**，所以在同一个格网上再扫一遍。
+ *   两处密度取自同几个常量，所以不存在"玻璃面量的是另一套格点"。
+ */
+const darkestSky = (() => {
+  let worst = { L: Infinity, px: { r: 0, g: 0, b: 0 } }
+  const regionLeft = SIDE_W
+  const regionW = VIEWPORT.w - SIDE_W
+  for (let b = 0; b < BANDS; b++) {
+    const y0 = (b * SKY_H) / BANDS
+    const y1 = ((b + 1) * SKY_H) / BANDS
+    for (let c = 0; c < COLS; c++) {
+      const x = regionLeft + ((c + 0.5) * regionW) / COLS
+      for (let r = 0; r < ROWS_PER_BAND; r++) {
+        const y = y0 + ((r + 0.5) * (y1 - y0)) / ROWS_PER_BAND
+        const px = over(skyAt(x, y), combined(y, x))
+        const L = luminance(px)
+        if (L < worst.L) worst = { L, px }
+      }
+    }
+  }
+  return worst
+})()
+
+const glassBase = whiteOver(darkestSky.px, GLASS_ALPHA)
+const GLASS_CR: Record<string, number> = Object.fromEntries(
+  Object.entries(INKS).map(([name, rgb]) => [name, contrast(luminance(glassBase), luminance(rgb))]),
+) as Record<string, number>
+
+console.log('')
+console.log(
+  `   运行视图那两层玻璃（--surface-glass α=${GLASS_ALPHA}，压在天光上）—— 与纸同一条门槛：`,
+)
+console.log(
+  `     取的是整条天空带最暗的那一点：合成后 rgb(${Math.round(glassBase.r)},` +
+    `${Math.round(glassBase.g)},${Math.round(glassBase.b)})（那一处天光 rgb(${Math.round(
+      darkestSky.px.r,
+    )},${Math.round(darkestSky.px.g)},${Math.round(darkestSky.px.b)})）`,
+)
+for (const [name, v] of Object.entries(GLASS_CR)) {
+  if (v < THRESHOLD) fail = true
+  console.log(`     ${name.padEnd(12)} ${fmt(v)}:1 ${v >= THRESHOLD ? ' ' : '✗'}`)
+}
+
 /** ★ 交界不许换色。天空带**最后一段**的冷暖度与它下面那块纯纸必须同号——
  *  异号就是"往上滚是天、往下滚又变橙"那个割裂感本身。
  *  判据用**均值**不用极值：云是暖的（R>B），那属于画面内容，不是接缝；

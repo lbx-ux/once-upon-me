@@ -1,95 +1,27 @@
 /**
- * voices/voices.test.ts —— 我录的那份记录与那张合并表
+ * voices/voices.test.ts —— 「预设 + 我录的」那张合并表
  *
- * 两组断言各管一件真实会出的事：
- * - **存储坏了**：localStorage 里是半截 JSON、或者某一条少了 voiceId——整屏不该打不开，
- *   也不该显示一个用不了的音色；
- * - **模型对不上**：跨模型 400 是实测过的，所以"不许选"必须是这一层算出来的，
- *   而不是等用户点进去撞错误。
+ * ★ 2026-10-17（工单 16）：这个文件里原来还有一组"我录的那份记录怎么存、怎么读"
+ *   ——那一份住在 localStorage，所以那一组测的是"半截 JSON、坏一条丢一条"。
+ *   记录搬到账号上之后，那些事**不再由这一层负责**（读回来的是服务端给的一份，
+ *   `parseMyVoices` 认不出来就整份拒绝，判据在 `state.test.ts`）。
+ *   把它们留在这里就是留一组测着别的东西的用例——比没有更坏。
+ *
+ * ★ 留下来的这一组管的是**模型对不上**：跨模型 400 是实测过的，
+ *   所以"不许选"必须是这一层算出来的，而不是等用户点进去撞错误。
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 
-import { DEFAULT_VOICES } from '@/lib/voices/state.ts'
+import { DEFAULT_VOICES, type MyVoice } from '@/lib/voices/state.ts'
 import { voiceCatalog, findVoice } from './catalog.ts'
-import {
-  addMyVoice,
-  loadMyVoices,
-  MY_VOICES_KEY,
-  newConsentRef,
-  removeMyVoice,
-  type MyVoice,
-} from './store.ts'
-
-/** 一个够用的 localStorage 替身（node 环境里没有 window） */
-function fakeStorage(): void {
-  const map = new Map<string, string>()
-  vi.stubGlobal('window', {
-    localStorage: {
-      getItem: (key: string) => map.get(key) ?? null,
-      setItem: (key: string, value: string) => void map.set(key, value),
-      removeItem: (key: string) => void map.delete(key),
-    },
-  })
-}
 
 const one = (over: Partial<MyVoice> = {}): MyVoice => ({
   voiceId: 'qwen-audio-3.0-tts-flash-xiaozhujue-abc123',
   name: '我的声音',
   modelId: 'qwen-audio-3.0-tts-flash',
   createdAt: 1_760_000_000_000,
-  consentRef: 'local:test',
   ...over,
-})
-
-beforeEach(() => {
-  fakeStorage()
-})
-
-describe('我录的音色：存与读', () => {
-  it('加进去、读回来、新的在前', () => {
-    addMyVoice(one({ voiceId: 'v-old', createdAt: 1 }))
-    addMyVoice(one({ voiceId: 'v-new', createdAt: 2 }))
-    expect(loadMyVoices().map((v) => v.voiceId)).toEqual(['v-new', 'v-old'])
-  })
-
-  it('同一个 voiceId 只留一条（否则同一支声音会有两张卡）', () => {
-    addMyVoice(one({ voiceId: 'v1', name: '先起的' }))
-    addMyVoice(one({ voiceId: 'v1', name: '后起的' }))
-    const mine = loadMyVoices()
-    expect(mine).toHaveLength(1)
-    expect(mine[0]?.name).toBe('后起的')
-  })
-
-  it('删掉之后就没了，且不会把别的删掉', () => {
-    addMyVoice(one({ voiceId: 'v1' }))
-    addMyVoice(one({ voiceId: 'v2' }))
-    expect(removeMyVoice('v1').map((v) => v.voiceId)).toEqual(['v2'])
-    expect(loadMyVoices().map((v) => v.voiceId)).toEqual(['v2'])
-  })
-
-  it('★ 存储坏掉时当作空，不抛（半截 JSON / 不是数组）', () => {
-    window.localStorage.setItem(MY_VOICES_KEY, '{"voiceId":')
-    expect(loadMyVoices()).toEqual([])
-    window.localStorage.setItem(MY_VOICES_KEY, '"一个字符串"')
-    expect(loadMyVoices()).toEqual([])
-  })
-
-  it('★ 坏的那一条丢掉，好的留下（缺 voiceId 的记录是会真发生的：手改过、或旧版本写过）', () => {
-    window.localStorage.setItem(
-      MY_VOICES_KEY,
-      JSON.stringify([{ name: '没有 id' }, one({ voiceId: 'v-ok' }), { voiceId: 'v-no-name' }]),
-    )
-    expect(loadMyVoices().map((v) => v.voiceId)).toEqual(['v-ok'])
-  })
-
-  it('凭据号每次都不一样，且看不出是谁', () => {
-    const a = newConsentRef(1_760_000_000_000)
-    const b = newConsentRef(1_760_000_000_000)
-    expect(a).not.toBe(b)
-    expect(a.startsWith('local:')).toBe(true)
-    expect(a).not.toMatch(/[一-龥]/)
-  })
 })
 
 describe('合并表', () => {
@@ -121,5 +53,16 @@ describe('合并表', () => {
     const table = voiceCatalog([one()], 'qwen-audio-3.0-tts-flash')
     expect(findVoice(table, 'v-nope')).toBeNull()
     expect(findVoice(table, DEFAULT_VOICES[0]!.id)?.source).toBe('preset')
+  })
+})
+
+describe('凭据号', () => {
+  it('每次都不一样，且看不出是谁', async () => {
+    const { newConsentRef } = await import('./consent.ts')
+    const a = newConsentRef(1_760_000_000_000)
+    const b = newConsentRef(1_760_000_000_000)
+    expect(a).not.toBe(b)
+    expect(a.startsWith('local:')).toBe(true)
+    expect(a).not.toMatch(/[一-龥]/)
   })
 })

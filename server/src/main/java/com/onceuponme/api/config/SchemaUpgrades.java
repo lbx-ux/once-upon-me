@@ -52,7 +52,11 @@ public class SchemaUpgrades implements ApplicationRunner {
   private static final List<AddedColumn> ADDED_COLUMNS =
       List.of(
           // 改密码用的"密码代次"。见 AuthService#requireUser
-          new AddedColumn("users", "password_changed_at", "DATETIME NULL"));
+          new AddedColumn("users", "password_changed_at", "DATETIME NULL"),
+          // 账号状态：ACTIVE / DISABLED。管理页的"停号"。见 AuthService#requireUser
+          // ★ `NOT NULL DEFAULT 'ACTIVE'`：已经在库里的那些人一律是正常状态——
+          //   补一列的意义正是"原来就有的都照旧"，而不是把他们一起停掉
+          new AddedColumn("users", "status", "VARCHAR(16) NOT NULL DEFAULT 'ACTIVE'"));
 
   private final DataSource dataSource;
 

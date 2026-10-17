@@ -1,6 +1,6 @@
 # 06 —— `SettingsProvider` 收缩成 `VoiceProvider`，删掉那个抽屉
 
-`Status:` **open**
+`Status:` **done**（2026-10-17；SettingsProvider → VoiceProvider，设置抽屉与 /api/settings/probe 一起删了）
 
 ## 要做什么
 

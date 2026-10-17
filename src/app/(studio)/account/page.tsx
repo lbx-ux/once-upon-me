@@ -1,9 +1,10 @@
 import ProfileHome, { type RecentBook } from '@/components/account/ProfileHome.tsx'
 import { assetRoot } from '@/lib/books-runtime.ts'
 import { coverUrlOf, runtimeAssetUrl } from '@/lib/book-source.ts'
+import { createUserStore, userSliceRoot } from '@/lib/asset-scope.ts'
+import { currentUserId } from '@/lib/auth/session.ts'
 import { listCardItems } from '@/lib/cards-list.ts'
-import { createFsStore } from '@/lib/engine/providers/stores.ts'
-import { listBooks, SHELF_COVER_WIDTH } from '@/lib/library.ts'
+import { booksOnly, listBooks, SHELF_COVER_WIDTH } from '@/lib/library.ts'
 
 /**
  * /account —— 个人主页（登录之后侧栏底部那一格指向这里）
@@ -19,10 +20,12 @@ import { listBooks, SHELF_COVER_WIDTH } from '@/lib/library.ts'
  *   档位是**封闭表**（`thumbs.ts`），多用一个档就多一份要维护的派生资产。
  *   理由与那个文件里"档位是封闭表"那条同源。
  *
- * ★ 这一屏**不读登录态**。身份住在 cookie 里、由客户端那一半读（`AuthProvider`），
- *   所以服务端给的是"这台服务器上的全部作品"——不是"这个人的"。
- *   组件里那两处说明（`.pf__work-sub`、以及文件头第 2 条）写的正是这件事。
- *   等书真的挂到 userId 上，这里再改成按人过滤。
+ * ★ 2026-10-17（工单 16）：这一屏**读登录态了**。原来这里写着"身份住在 cookie 里、
+ *   由客户端那一半读，所以服务端给的是这台服务器上的全部作品——等书真的挂到
+ *   userId 上，这里再改成按人过滤"。那个"等"就是本单：现在服务端自己就能读 cookie
+ *   （`currentUserId`），两处取数都落在**这个人的那一片**上。
+ *   ★ 未登录时给一个空的一份（0 张卡、0 本书），不重定向——与书架同一屏口径。
+ *   ★ 组件里那句"这台服务器上做过的全部"也跟着这句话一起过期了（`.pf__work-sub`）。
  *
  * ★ 取数是 `force-dynamic`：这两个数会随着人做书、做卡而变，
  *   缓存住的话"刚做完一本，个人主页还是 3"。
@@ -41,9 +44,15 @@ export const metadata = { title: '个人主页 · 小主角' }
 const RECENT_LIMIT = 5
 
 export default async function AccountPage() {
-  const store = await createFsStore(assetRoot())
-  const [cards, books] = await Promise.all([
-    listCardItems(),
+  const userId = await currentUserId()
+  if (!userId) {
+    return <ProfileHome counts={{ cards: 0, books: 0 }} books={[]} />
+  }
+
+  const root = assetRoot()
+  const store = await createUserStore(root, userId)
+  const [cards, allBooks] = await Promise.all([
+    listCardItems(userSliceRoot(root, userId)),
     /* ★ 封面那条翻译只有一处（`book-source.ts` 的 `coverUrlOf`）：
        自己写一遍 `book.cover?.asset.path` 就是在抄第二份——
        而抄错的那一次的症状是"个人主页上这一本没有封面"，看不出是拼错了。 */
@@ -51,6 +60,13 @@ export default async function AccountPage() {
       coverUrlOf(book, (path) => runtimeAssetUrl(path, SHELF_COVER_WIDTH)),
     ),
   ])
+
+  /**
+   * ★ 故事草稿**不进这一屏**（`booksOnly`，2026-10-17）：这里的每一本点进去都是
+   *   **阅读器**（`/reader/<id>`），而只有故事、一页没画的本子点进去是空的。
+   *   那一本在书架上（`/shelf` 的「正在编辑」），那里点进去是接着改故事。
+   */
+  const books = booksOnly(allBooks)
 
   /**
    * 收窄成组件要的那几个字段（`RecentBook`）。

@@ -1,7 +1,8 @@
 import ShelfDashboard from '@/components/shelf/ShelfDashboard.tsx'
+import { createUserStore } from '@/lib/asset-scope.ts'
+import { currentUserId } from '@/lib/auth/session.ts'
 import { assetRoot } from '@/lib/books-runtime.ts'
 import { coverUrlOf, runtimeAssetUrl } from '@/lib/book-source.ts'
-import { createFsStore } from '@/lib/engine/providers/stores.ts'
 import { listBooks, SHELF_COVER_WIDTH } from '@/lib/library.ts'
 import { applyOrder, loadOrder } from '@/lib/shelf-order.ts'
 
@@ -26,6 +27,13 @@ import { applyOrder, loadOrder } from '@/lib/shelf-order.ts'
  *   用户拖动之后新次序要立刻成立，而"立刻"的正确含义是**下一次首屏就是它**——
  *   存在浏览器里的话，首屏只能按默认序渲染、挂载之后再跳一次，那正是上面刚说过的
  *   "挂载前后两副面孔"。所以顺序跟着书一起在服务端读出来（`lib/shelf-order.ts`）。
+ *
+ * ★ 2026-10-17（工单 16）：架子上只有**自己**那几本。
+ *   未登录时这一屏是**空架**——与"还没做过故事"是同一屏，不重定向、不报错
+ *   （其它几屏同一条口径：未登录照旧能打开，只是少了"我的"那部分）。
+ *   ★ 所以这里有一个 `if (!userId)` 的分岔，而不是"给一个没有作用域的 store"：
+ *     后者正是 `asset-scope.ts` 那条 `requireUserId` 防的事——
+ *     漏掉闸的症状必须是**看得见的**（空／500），不能是"两组陌生人共用一片"。
  */
 
 export const dynamic = 'force-dynamic'
@@ -33,7 +41,10 @@ export const dynamic = 'force-dynamic'
 export const metadata = { title: '书架 · 小主角' }
 
 export default async function ShelfPage() {
-  const store = await createFsStore(assetRoot())
+  const userId = await currentUserId()
+  if (!userId) return <ShelfDashboard books={[]} />
+
+  const store = await createUserStore(assetRoot(), userId)
   // 封面走 384 档（`SHELF_COVER_WIDTH`）：这一屏的书只有 104–156px 宽，
   // 1024 档是给阅读器一整页用的，一屏六本按 1024 拉就是六张 159 KB
   const books = await listBooks(store, (book) =>

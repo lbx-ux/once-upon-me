@@ -557,3 +557,137 @@
   line-height: 1.8;
   color: var(--ink-muted);
 }
+
+/* ── 「帮助」里那条权限申请（2026-10-17 第二次改）──────────────────────
+ * ★ 它替掉的是原来那句「发邮件到 ……」。这一段是本弹窗里**唯一可以动手的地方**，
+ *   别处都是读的——所以它长得像一张小表单（框、输入、按钮），不像一段说明。
+ *   与上面那几段挤在同一个网格里的话，读的人会以为它也是"一段话"。
+ * ★ 配色只取现成的令牌：`--accent`（按钮与勾上的框）、`--hairline`（线）、
+ *   `--danger`（发失败那一条），一个新颜色都没有。 */
+.help__req {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 12px 13px;
+  border: 1px solid var(--hairline);
+  border-radius: 11px;
+  background: var(--surface-soft);
+}
+
+.help__req-boxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  flex-basis: 100%;
+}
+
+.help__req-box {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  font-size: 13px;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+/* ★ 勾选框不重新画：原生那颗在三个浏览器里都认得出来，而自己画一颗
+ *   要连带管焦点环、禁用态、高对比度——这里没有一处值得付那份代价。
+ *   只把它对齐到文字基线上。 */
+.help__req-box input {
+  align-self: center;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.help__req-hint {
+  font-size: 11.5px;
+  color: var(--ink-muted);
+}
+
+.help__req-note {
+  flex: 1 1 200px;
+  min-width: 0;
+  padding: 7px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: var(--surface);
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.help__req-note::placeholder {
+  color: var(--ink-muted);
+}
+
+.help__req-go {
+  padding: 7px 18px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: var(--accent);
+  font: inherit;
+  font-size: 13px;
+  color: var(--surface);
+  cursor: pointer;
+}
+
+/* ★ 一样都没勾时按钮是禁用的（服务端也会挡，但让按钮先一步不可按，
+ *   省掉的是"点一下、等一个来回、被拒"）。不做成灰得看不见——
+ *   它仍然要**看得出是一个按钮**，只是现在不能按。 */
+.help__req-go:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.help__req-go:focus-visible,
+.help__req-note:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ★ 提示与报错各占一整行，不挤在按钮旁边：两句都长，挤着会被折成两截 */
+.help__req-hintline,
+.help__req-bad,
+.help__req-warn {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.help__req-hintline {
+  color: var(--ink-muted);
+}
+
+.help__req-bad {
+  color: var(--danger);
+}
+
+/* ★ 「读不到你之前的申请」用警示色而不是错误色：它不是一次失败，
+ *   只是这一格暂时看不到——表单照常能用 */
+.help__req-warn {
+  color: var(--danger);
+}
+
+/* ★ 「已经提过了」那一句：它是这一段的**终态**，所以要长得像答复，不像提示。
+ *   里面仍然要给一句"接下来会怎样"（处理完不用重新登录），
+ *   否则一个人看完只知道"我提了"，不知道还要不要做别的。 */
+.help__waiting {
+  display: grid;
+  gap: 4px;
+  margin: 4px 0 0;
+  padding: 11px 13px;
+  border: 1px solid var(--accent);
+  border-radius: 11px;
+  background: var(--surface-soft);
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--ink);
+}
+
+.help__waiting-sub {
+  font-size: 12px;
+  color: var(--ink-muted);
+}

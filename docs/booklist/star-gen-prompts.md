@@ -198,4 +198,7 @@
    它会用 `scripts/make-webp.py` 把封面转成 `book-cover`（3:4，≤150KB）、跨页转成 `book-spread`（3:2，≤220KB），落盘到 `public/booklist/star/`。
 4. 落盘后逐张核对（§六 清单）：九张都是黄昏、爸爸九张无正脸、星星数逐页对得上且全是小亮点、路灯/窗/杯子/毯子状态逐页对得上、四边满版无白边、主体没被中缝切开。
 5. 跑几何验收：`python -I scripts/check-booklist-art.py public/booklist/star --subject-hair`（本书用头发代理，<0.35 才过；有两个黑头发的人+黄昏暗天，若报高或位置不符请裁图看）。
+
+```
+
 ```

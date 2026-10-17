@@ -8,12 +8,19 @@
  * 运行视图上那两个弹窗（重画 / 重配）要的东西一次给全：正文、页级描述、场景、
  * **组装好的提示词**、这一页现在的图与录音。形状与那些"为什么要这个字段"的判断
  * 都在 [`lib/run-pages.ts`](../../../../../../lib/run-pages.ts)，这里只做取数。
+ *
+ * ★ 2026-10-17（工单 16）：这条路原来**没有登录闸**，而且读的是根上那一份。
+ *   它回的是整本的正文与逐页提示词，是"我的东西"里最像草稿的一件——
+ *   所以现在：匿名 401，登录的人只看得见自己那一片（别人的书号在这里不存在 → 404）。
  */
 
+import type { NextRequest } from 'next/server'
+import { createUserStore } from '@/lib/asset-scope.ts'
+import { requireCapability } from '@/lib/auth/session.ts'
 import { assetRoot } from '@/lib/books-runtime.ts'
 import { runtimeAssetUrl } from '@/lib/book-source.ts'
 import { runPagesOf } from '@/lib/run-pages.ts'
-import { createCardStore, createFsStore, type Book } from '@/lib/engine/index.ts'
+import { createCardStore, type Book } from '@/lib/engine/index.ts'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -27,11 +34,15 @@ export const dynamic = 'force-dynamic'
 const PREVIEW_WIDTH = 768
 
 export async function GET(
-  _req: Request,
+  req: NextRequest,
   ctx: { params: Promise<{ bookId: string }> },
 ): Promise<Response> {
+  // 不要任何能力：读自己已经做出来的东西不需要"再开一项权限"
+  const guard = await requireCapability(req, [])
+  if (!guard.ok) return guard.response
+
   const { bookId } = await ctx.params
-  const store = await createFsStore(assetRoot())
+  const store = await createUserStore(assetRoot(), guard.session.userId)
 
   let book: Book | null
   try {

@@ -19,7 +19,7 @@ import {
   storyPlanUser,
   type StoryPlanInput,
 } from '../prompts/story-plan.ts'
-import { asPlanDraft, planDraftCodec, planJsonSchema } from '../schemas/story.ts'
+import { asPlanDraft, planDraftCodec, planJsonSchema, type PlanDraft } from '../schemas/story.ts'
 import { formatFailures, parseWith } from '../schemas/schema.ts'
 import { EngineError } from './errors.ts'
 import type { BookForm, StoryTree } from './domain.ts'
@@ -29,6 +29,15 @@ import type { TextDelta, TextGenerator, TextRequest } from './providers/types.ts
 
 export type PlanOutcome = {
   tree: StoryTree
+  /**
+   * 模型吐回来的那张表（书名 + 每页草稿），也就是 `tree` 的**原材料**。
+   *
+   * ★ 2026-10-17（故事闸门）加它：家长看到、能改的那一份**就是它**，
+   *   盘上的 `books/<id>/story.json` 存的也是它（`lib/story-draft.ts`）。
+   *   已经建好的 `tree` 不能反过来当编辑界面用——它上面带着 `nodeId` / `pathFromRoot` /
+   *   `next` 这些**派生出来**的东西，让家长去改它们既没有意义，也不可能改对。
+   */
+  doc: PlanDraft
   /** 第几次调用才成功。1 = 一次过，是判据 1 的原始数据 */
   attempts: number
   /** 每一次的失败原因，横评表要逐条列 */
@@ -133,6 +142,7 @@ export async function planStory(input: StoryPlanInput, opts: PlanOptions): Promi
     })
     return {
       tree: built.tree,
+      doc: plan,
       attempts: attempt,
       failures,
       modelId: response.modelId,

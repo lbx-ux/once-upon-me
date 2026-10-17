@@ -58,7 +58,7 @@ const BLOCKED_LABEL: Record<SpeechBlock, string> = {
 }
 
 export default function VoicePicker() {
-  const { current, setVoice, voices, forgetVoice, speechBlock } = useVoice()
+  const { current, setVoice, voices, forgetVoice, speechBlock, voiceError } = useVoice()
   /* ★ 录一条声音是**这台机器上的一个账号**才会有的东西（厂商那边的音色挂在账号下），
      所以没登录时先请他去登录——见 `SignInGate` */
   const gate = useSignInGate()
@@ -189,13 +189,24 @@ export default function VoicePicker() {
       }
       const data = (await response.json()) as { released?: boolean }
       const wasCurrent = current === voice.id
-      forgetVoice(voice.id)
+      /**
+       * ★ 2026-10-17（工单 16）：删除是**两次请求**，而这句话要说清两次的结果。
+       *   上面那一次打的是厂商（解绑），下面这一次把**账号里那条记录**删掉。
+       *   ★ 记录那一次要 `await`：不 await 就只能猜它成没成，
+       *   而这句话有一半是关于隐私的（"厂商那边删干净了没有"），猜错就是撒谎。
+       */
+      const recordGone = await forgetVoice(voice.id)
       setConfirming(null)
       setReceipt(
-        (data.released
-          ? `已删掉「${voice.name}」：厂商侧已解绑（再拿它合成会 400）。`
-          : `「${voice.name}」这条记录删了，但厂商没有确认解绑——它可能还留在你的账号里。`) +
-          (wasCurrent ? '当前音色已清空，去挑一个。' : ''),
+        [
+          data.released
+            ? `已删掉「${voice.name}」：厂商侧已解绑（再拿它合成会 400）。`
+            : `「${voice.name}」厂商没有确认解绑——它可能还留在你的账号里。`,
+          recordGone ? '' : '但它还留在你的音色列表里（那一次没成，上面那句说了为什么）。',
+          wasCurrent && recordGone ? '当前音色已清空，去挑一个。' : '',
+        ]
+          .filter((line) => line !== '')
+          .join(''),
       )
     } catch (err) {
       setError(`没删掉：${err instanceof Error ? err.message : String(err)}`)
@@ -448,9 +459,12 @@ export default function VoicePicker() {
         })}
       </ul>
 
-      {error && (
+      {/* ★ 两个来源合成一处：`error` 是这一屏自己的请求（试听 / 删除），
+          `voiceError` 是 Provider 那几条（挑一个 / 记一条 / 删一条记录）。
+          分两行画的话，同一次失败会看起来像两件事 */}
+      {(error ?? voiceError) && (
         <p className="vc__error" role="alert">
-          {error}
+          {error ?? voiceError}
         </p>
       )}
 

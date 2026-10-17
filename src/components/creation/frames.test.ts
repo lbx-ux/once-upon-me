@@ -17,7 +17,16 @@ import { describe, expect, it } from 'vitest'
 
 import type { EngineEvent, EngineEventPayload } from '@/lib/engine/events.ts'
 
-import { deskOf, drawnCount, drawnRatio, EMPTY_DESK, railOf, toneOf } from './frames.ts'
+import {
+  deskOf,
+  drawnCount,
+  drawnRatio,
+  EMPTY_DESK,
+  railOf,
+  storyDeskOf,
+  toneOf,
+  withStoryTitle,
+} from './frames.ts'
 import { STUB_RUN_EVENTS } from './fixtures/stub-run.events.ts'
 
 /** 造事件：`seq` 自增，`stage` 默认跟着走。与引擎的工厂同一形状，但只填用得上的 */
@@ -498,6 +507,53 @@ describe('阶段轨（4 格，不是原型里那 5 个节点）', () => {
     const rail = railOf(desk, true)
     expect(rail[1]?.state).toBe('now')
     expect(rail[3]?.state).toBe('done')
+  })
+})
+
+describe('★ 闸门那一屏：故事草稿造出来的那张桌子（2026-10-17）', () => {
+  const story = { title: '绿气球回家', nodes: [{}, {}, {}] }
+
+  it('「编故事」那一格是已完成、「逐页画」是 0 / N —— 一条事件都不需要', () => {
+    const rail = railOf(storyDeskOf(story), false)
+    expect(rail[0]?.state).toBe('done')
+    expect(rail[1]?.state).toBe('todo')
+    expect(rail[1]?.note).toBe('0 / 3')
+  })
+
+  it('它不摆格子（闸门那一屏的正文是 StorySheet，不是画框）', () => {
+    const desk = storyDeskOf(story)
+    expect(desk.frames).toEqual([])
+    expect(desk.total).toBe(3)
+    expect(desk.title).toBe('绿气球回家')
+  })
+
+  it('书名对到家长手上那一份：`plan-ready` 说的是①那一版，改过的是这一版', () => {
+    // 家长在闸门上把书名改了，②那一条流回的每一帧都把 desk 折回①的书名
+    const fromLog = deskOf(
+      stream([
+        {
+          kind: 'plan-ready',
+          stage: 'planning',
+          form: 'solo',
+          title: '绿气球回家',
+          nodeCount: 3,
+          choicePages: [],
+        },
+        { kind: 'illustration', pageNo: 1, attempt: 1, assetPath: 'a', modelId: 'm' },
+      ]),
+    )
+    const shown = withStoryTitle(fromLog, { title: '绿气球回我们家' })
+    expect(shown.title).toBe('绿气球回我们家')
+    // 只有书名变，格子与格数一点都不动（它是覆一层，不是重折一遍）
+    expect(shown.frames).toBe(fromLog.frames)
+    expect(shown.total).toBe(3)
+  })
+
+  it('没有故事时（画完的那一本从书架进来）原样返回，连对象都不换', () => {
+    const desk = deskOf(STUB_RUN_EVENTS)
+    expect(withStoryTitle(desk, null)).toBe(desk)
+    // 书名本来就一致时也不造新对象（它在 useMemo 里，每次渲染换一张桌子没必要）
+    expect(withStoryTitle(desk, { title: '小宇的云' })).toBe(desk)
   })
 })
 

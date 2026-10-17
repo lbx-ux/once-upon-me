@@ -36,6 +36,38 @@ public class User {
   private LocalDateTime lastLoginAt;
   /** 密码最后一次改动的时刻。★ 早于它签发的票会被作废（见 `AuthService#requireUser`） */
   private LocalDateTime passwordChangedAt;
+  /**
+   * 账号状态。★ 只有 {@link #STATUS_ACTIVE} 与 {@link #STATUS_DISABLED} 两个值。
+   *
+   * <p>★ 它**不是**"登录一次就不查了"的东西：`AuthService#requireUser` 每次请求都看一眼，
+   * 所以站长按下"停号"之后，那个人**此刻**手里那张票立刻不好使了——不是等他下次登录。
+   * 与"密码代次"（`passwordChangedAt`）同一条道理，只是那一列还管"改密码踢下线"。
+   *
+   * <p>★ 为什么另加一列而不是复用 `passwordHash = NULL`：那个 NULL 的含义已经定死了，
+   * 是"还没设过密码"。两种含义挤在一列里，下一个人必然把"停用"读成"还没设密码"。
+   */
+  private String status;
+
+  /** 正常。缺省值就是它（见 `db/schema.sql` 与 `SchemaUpgrades` 的 DEFAULT） */
+  public static final String STATUS_ACTIVE = "ACTIVE";
+
+  /** 已停用。站长在管理页停的——登不进来，已经登着的会话也当场作废 */
+  public static final String STATUS_DISABLED = "DISABLED";
+
+  public static boolean isActive(User user) {
+    // ★ 认不出的一律当**正常**：这一列是后来才加的，老数据（或手改过的库）可能是空串。
+    //   判成"停用"的话，一次升级会把所有人关在门外——而那种故障看起来像"登录全坏了"，
+    //   没人会往"多了个 status 列"上想
+    return user.status == null || user.status.isBlank() || STATUS_ACTIVE.equals(user.status);
+  }
+
+  public String getStatus() {
+    return status;
+  }
+
+  public void setStatus(String status) {
+    this.status = status;
+  }
 
   public Long getId() {
     return id;

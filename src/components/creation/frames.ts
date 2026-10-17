@@ -374,6 +374,52 @@ export function narratedCount(desk: DeskState): number {
   return desk.frames.filter((frame) => frame.narrated).length
 }
 
+/**
+ * 一份**故事草稿** → 一张只有"书名 + 总页数"的画桌（2026-10-17，故事闸门）。
+ *
+ * ★ 它存在的理由只有一个：**上面那一行阶段轨要读 `desk`**（`railOf`），而闸门那一屏
+ *   还没有任何事件发生——②一步都没跑，日志里只有①的几条。
+ *   用它造一张"编故事已完成、逐页画 0 / N"的桌子，阶段轨那四格就自动是对的，
+ *   不必在 `railOf` 里再开一条"故事阶段"的分支（那会让那四格的判据分家）。
+ *
+ * ★ **事实来源是 `story.json`，不是事件日志**：`/create?book=` 走进来时日志多半在，
+ *   但"这一本的故事是什么"这件事的权威是盘上那一份草稿（它可以被家长改过，
+ *   而改过的那一份不会回头去发一条事件）。日志只用来重放"过程"。
+ *
+ * ★ 它**不摆格子**（`frames: []`）：闸门那一屏的正文是 `StorySheet`，不是画框。
+ *   摆一排空框会让家长以为"已经在画了"。
+ */
+export function storyDeskOf(story: { title: string; nodes: readonly unknown[] }): DeskState {
+  return {
+    ...EMPTY_DESK,
+    frames: [],
+    notes: [],
+    title: story.title,
+    total: story.nodes.length,
+  }
+}
+
+/**
+ * 画桌上顶着的书名，对到**家长手上那一份故事**上（2026-10-17，故事闸门）。
+ *
+ * ★ 为什么单要这一层：`desk.title` 只有一个来源——日志里那条 `plan-ready`
+ *   （`book-ready` **不带书名**，这条是实测的，不是推的：那条事件的字段就是
+ *   `{bookId, path, stats}`）。而书名在闸门那一屏是**能改的**（`StorySheet` 第一格），
+ *   改完点「就按这个画」，②那一条流每回一帧都重新折一次 `deskOf(events)`——
+ *   折出来的书名仍是①当时那一版。于是从开跑一直到装订完，屏幕上顶着一个
+ *   **已经不是这一本要印的名字**的名字，而 `book.json` 的 `tree.title` 里是新的那个。
+ *   （这条只有真做才会露出来：改书名 + 点画 + 读 `book.json`。界面上一切正常。）
+ *
+ * ★ 只在 `story` 还在手上时用（闸门那一屏、以及从闸门开跑的那一轮）。
+ *   已经画完的那一本从书架进来时 `story` 是 `null`，那时候日志就是唯一的事实，
+ *   不该被覆。
+ * ★ 相等时**原样返回**（不造新对象）：它在 `useMemo` 里，多造一个对象等于每次渲染
+ *   都换一张桌子。
+ */
+export function withStoryTitle(desk: DeskState, story: { title: string } | null): DeskState {
+  return story === null || desk.title === story.title ? desk : { ...desk, title: story.title }
+}
+
 /* ───────────────────────── 阶段轨（工单 05） ───────────────────────── */
 
 /**

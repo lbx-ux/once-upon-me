@@ -181,6 +181,18 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* ── 「作品」那一列（2026-10-17 工单 16）─────────────────────────────────
+ * ★ 与 `.adm__time` 同一条：数字用等宽数字排（`tabular-nums`），
+ *   不然「3 本」与「11 本」在一列里左右不齐，扫一眼读不出多少。
+ * ★ 刻意**不和 `.adm__muted` 一样淡**：这一列是这一屏唯一的"产出"证据，
+ *   而一个全灰的列会与"没有这一列"看起来差不多。 */
+.adm__usage {
+  color: var(--ink);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .adm__muted {
   color: var(--ink-muted);
 }
@@ -274,4 +286,649 @@
   font-size: 13px;
   line-height: 1.8;
   color: var(--danger);
+}
+
+/* ── 建一个新号（2026-10-17）───────────────────────────────────────────
+ * ★ 折在 `<details>` 里，摊开时也就一行三个控件——它是一天一两次的事，
+ *   而这一屏的日常是改某一行的开关。摊开常驻的话，最上面那一眼会被两个
+ *   空输入框占着（见 `AdminScreen` 里 `NewUser` 的注释）。
+ * ★ 配色仍然只取现成的令牌，一个新颜色都没有。 */
+.adm__new {
+  margin: 0 0 22px;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.adm__new > summary {
+  padding: 11px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  cursor: pointer;
+  /* ★ 去掉浏览器那个三角，自己画一个——三个浏览器的三角都不一样大，
+   *   而这一行右边什么都没有，它的大小直接决定这一块的高度 */
+  list-style: none;
+}
+
+.adm__new > summary::-webkit-details-marker {
+  display: none;
+}
+
+.adm__new > summary::before {
+  content: '＋';
+  display: inline-block;
+  width: 16px;
+  color: var(--ink-muted);
+  font-weight: 400;
+}
+
+.adm__new[open] > summary::before {
+  content: '－';
+}
+
+.adm__newform {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 2px 16px 16px;
+  border-top: 1px solid var(--hairline);
+}
+
+.adm__newfield {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-top: 12px;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+.adm__newfield input {
+  min-width: 210px;
+  padding: 7px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.adm__newfield input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.adm__newgo {
+  padding: 8px 18px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: var(--accent);
+  font: inherit;
+  font-size: 13px;
+  color: var(--surface);
+  cursor: pointer;
+}
+
+.adm__newgo:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* ★ 提示与错误各占一整行（`flex-basis: 100%`），不挤在按钮旁边：
+ *   这两句话都长，挤着会被折成两截。 */
+.adm__newhint,
+.adm__newbad {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.adm__newhint {
+  color: var(--ink-muted);
+}
+
+.adm__newbad {
+  color: var(--danger);
+}
+
+/* ── 权限申请队列（2026-10-17）─────────────────────────────────────────
+ * ★ 一条申请是一张**纸**，不是表格里的一行：它字数多（说明那句、要哪几项）、
+ *   还要放两个按钮，塞进表格格子会挤成一条。待处理的那几条竖着排，一屏能看三四条。
+ * ★ 待处理与已处理的**不共用样式**：前者是"要你动手的"，后者是"记录"。
+ *   长得一样的话，站长会以为自己还有事没做。 */
+/* ── 折叠头（「模型配置」那一块，2026-10-17）─────────────────────────────
+ * ★ 那一块有四张卡，把下面那两样（申请队列、用户表）推到了几屏之外，
+ *   而站长每天要动的正是它们。用户原话：「这两个做一个下拉框的样式」——
+ *   后来他自己收回到"就模型那折就行"（见 `Fold.tsx` 文件头那段）。
+ * ★ 收起的判据是 `hidden`（孩子**不卸载**，仍然挂着）：`Fold.tsx` 判断 3 记着
+ *   为什么——把孩子从 DOM 里拿掉会让模型配置那四张卡卸载，**改到一半的值跟着没**，
+ *   而且每展开一次就重新拉四遍模型候选。
+ * ★ 默认展开：收起是"我要看下面的"，不是"我看不见这些东西"（判断 1）。 */
+.adm__fold-head {
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* 整个标题行是一颗按钮，所以它得把原来 `.adm__queue-title` 那套排布接下来
+ * （flex + baseline + 10px 间距），否则标题、计数胶囊、"改完立刻生效"那句
+ * 会挤成一团。 */
+.adm__fold-btn {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.adm__fold-name {
+  font-weight: 600;
+}
+
+.adm__fold-caret {
+  /* ★ 按基线对齐会让箭头吊在半空——它得自己居中（其余几个字跟着基线走） */
+  align-self: center;
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
+  color: var(--ink-muted);
+  transition: transform 0.16s ease;
+}
+
+.adm__fold-btn[aria-expanded='false'] .adm__fold-caret {
+  transform: rotate(-90deg);
+}
+
+/* 悬停给的是箭头变色，不是整行变色：这一行里还有胶囊与那句小字，
+ * 整行变色会把它们一起染上（而那两样各有各的意思） */
+.adm__fold-btn:hover .adm__fold-caret {
+  color: var(--accent);
+}
+
+.adm__fold-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+.adm__fold-btn:focus-visible .adm__fold-caret {
+  color: var(--accent);
+}
+
+/* ★ 收起之后把这一块的下边距收紧一点：头那一行本来就带着 12px，
+ *   两块挨着的时候会连成一段读不出意义的白。 */
+.adm__fold[data-open='false'] {
+  margin-bottom: 16px;
+}
+
+/* ★ 与全站同一条契约：停掉动效时箭头换角度这件事照旧发生（那是状态，不是动效），
+ *   只是不再有那 0.16s 的过渡。 */
+@media (prefers-reduced-motion: reduce) {
+  .adm__fold-caret {
+    transition: none;
+  }
+}
+
+.adm__queue {
+  margin: 0 0 26px;
+}
+
+.adm__queue-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.adm__queue-count {
+  padding: 2px 9px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--accent);
+  /* ★ 一行，不许折：它是个胶囊，折成两行就成了一个看不懂的圆角方块，
+   *   而这件事在**两位数**的时候才会发生（「12 条待处理」比「2 条待处理」宽）
+   *   ——也就是等到真有人申请了一堆才会撞上，那时没人会想到是这里。
+   *   `.adm__queue-title` 那一行本来就是 `flex-wrap: wrap`，折在这里没有任何意义。 */
+  white-space: nowrap;
+}
+
+/* ★ 没有待处理时那个小标签变灰（`data-zero`）：一个橙色的「没有待处理的」
+ *   看起来仍然像"有事"，而这一行的用处就是一眼看出**有没有事**。 */
+.adm__queue-count[data-zero='true'] {
+  border-color: var(--hairline);
+  color: var(--ink-muted);
+}
+
+.adm__queue-bad {
+  margin: 0 0 12px;
+  padding: 11px 14px;
+  border-left: 3px solid var(--danger);
+  border-radius: 0 10px 10px 0;
+  background: var(--surface-soft);
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--danger);
+}
+
+.adm__queue-hint {
+  margin-left: 6px;
+  color: var(--ink-muted);
+}
+
+.adm__queue-empty {
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px dashed var(--hairline);
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--ink-muted);
+}
+
+.adm__req {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 20px;
+  margin-bottom: 10px;
+  padding: 13px 16px;
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.adm__req-who {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 240px;
+}
+
+.adm__req-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.adm__req-account {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+.adm__req-time {
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+.adm__req-wants {
+  display: flex;
+  gap: 18px;
+  margin: 0;
+}
+
+.adm__req-wants dt {
+  font-size: 11px;
+  color: var(--ink-muted);
+}
+
+.adm__req-wants dd {
+  margin: 3px 0 0;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+/* ★ 「这次要的」用强调色：站长在那儿做决定，而「他已有的」只是背景信息 */
+.adm__req-asks {
+  color: var(--accent);
+}
+
+.adm__req-note {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--ink-muted);
+}
+
+.adm__req-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.adm__req-go,
+.adm__req-no {
+  padding: 6px 15px;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.adm__req-go {
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--surface);
+}
+
+.adm__req-no {
+  border: 1px solid var(--hairline);
+  background: var(--surface-soft);
+  color: var(--ink-muted);
+}
+
+.adm__req-go:disabled,
+.adm__req-no:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.adm__req-go:focus-visible,
+.adm__req-no:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ★ 处理过的折在下面（见 `RequestQueue` 文件头第 1 条）：它们是记录，
+ *   不是待办；而**一条都不能删**——被拒的那条是"我上次已经拒过他"的唯一证据。 */
+.adm__req-done {
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--ink-muted);
+}
+
+.adm__req-done > summary {
+  padding: 5px 2px;
+  cursor: pointer;
+}
+
+.adm__req-donelist {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.adm__req-donelist li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+  padding: 7px 2px;
+  border-top: 1px solid var(--hairline);
+}
+
+.adm__req-donestatus {
+  font-size: 12px;
+}
+
+.adm__req-donelist li[data-status='REJECTED'] .adm__req-donestatus {
+  color: var(--danger);
+}
+
+/* ── 账号那一列（停用 / 改密码 / 删除，2026-10-17）────────────────────
+ * ★ 三个按钮**都是文字的**，不用图标：这一列里的三个动作后果差得很远
+ *   （一个可逆、一个会把他踢下线、一个不可逆），而图标表达不了这种差别。
+ * ★ 删除用 `--danger`：它是这一屏唯一不可逆的动作，颜色是它唯一能有的提示
+ *   （另外那两道保险是二次确认与按钮上的账号名，见 `AdminScreen` 文件头第 5 条）。 */
+.adm__td--acts {
+  white-space: nowrap;
+}
+
+.adm__act {
+  margin-right: 6px;
+  padding: 4px 9px;
+  border: 1px solid var(--hairline);
+  border-radius: 7px;
+  background: var(--surface-soft);
+  font: inherit;
+  font-size: 12px;
+  color: var(--ink-muted);
+  cursor: pointer;
+}
+
+.adm__act:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.adm__act[data-danger='true']:hover:not(:disabled) {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.adm__act:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.adm__act:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ★ 停用的人整行淡下去（不是只加一个小标签）：这一屏要一眼看出"哪几个已经不在了"，
+ *   而只靠账号旁边一个 badge，视线扫过四个开关时是看不出来的。
+ *   ★ 用 `opacity` 而不是把颜色写死成灰：四个开关的两种状态各有底色，
+ *     写死颜色会连它们一起弄坏。 */
+.adm__table tbody tr[data-status='DISABLED'] {
+  opacity: 0.55;
+}
+
+.adm__badge[data-off='true'] {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+/* ── 模型配置（2026-10-17）──────────────────────────────────────────────
+ * ★ 一个能力一张卡，与"权限申请"那一列同一种纸：这一屏上"要你动手的东西"
+ *   都长这样，而用户表是一张表——两件事本来就不像。
+ * ★ 「现在生效的是什么」那一行用**等宽字**：它是一句配置（模型名 @ 主机名），
+ *   站长会拿它去和厂商控制台对照，等宽下才对得齐。 */
+.adm__models {
+  margin: 0 0 26px;
+}
+
+/* ★ 与「改完立刻生效」那句并排：它是这一块最反直觉的一件事
+ *   （所有人对"配置改动"的默认预期都是要重启），所以要挨着标题，不能塞在角落 */
+.adm__model-tip {
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--ink-muted);
+}
+
+.adm__model {
+  margin-bottom: 12px;
+  padding: 13px 16px 14px;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.adm__model-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 14px;
+  margin-bottom: 10px;
+}
+
+.adm__model-name {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--ink);
+}
+
+.adm__model-hint {
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--ink-muted);
+}
+
+/* ★ 引擎自己那一句：`flex-basis: 100%` 让它独占一行，不挤在名字旁边——
+ *   它可能很长（语音那一句带音色与警告），挤着会折成两截读不成句 */
+.adm__model-live {
+  flex-basis: 100%;
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--accent);
+  word-break: break-word;
+}
+
+.adm__model-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+}
+
+.adm__model-field {
+  display: flex;
+  flex: 1 1 220px;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.adm__model-label {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+/* ★ 来源那一粒小字：三种来源三种颜色。它比这一格的值更要紧——
+ *   「我改了没生效」十次里有九次是"改的那份被另一个来源压着" */
+.adm__model-source {
+  padding: 1px 7px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  font-size: 10.5px;
+  white-space: nowrap;
+  color: var(--ink-muted);
+}
+
+.adm__model-source[data-src='admin'] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.adm__model-source[data-src='none'] {
+  border-style: dashed;
+}
+
+.adm__model-field input {
+  min-width: 0;
+  padding: 7px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px;
+  color: var(--ink);
+}
+
+.adm__model-field input::placeholder {
+  font-family: inherit;
+  color: var(--ink-muted);
+}
+
+.adm__model-field input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* ★ 提醒（视觉回落、换语音模型即失效）：用 `--danger` 的竖条而不是一个小图标——
+ *   这两句话都是"改了之后会有一个你现在还看不见的后果" */
+/* ── 「模型名」那一格的候选（2026-10-17）───────────────────────────────────
+ * 站长问的是「不是输入地址，就可以获取模型列表了吗」——能，列表来自
+ * `{接口地址}/models`（`lib/settings/model-list.ts`）。这一行说的是**候选从哪儿来**。
+ *
+ * ★ 拉不到时**不用红字**：红在这个仓库里只有一个意思——"这一轮真的坏了"
+ *   （globals.css 里 `--danger` 那一条）。"没有候选"不是坏的，那一格照样能手填；
+ *   何况语音那一路的地址很可能压根没有 `/models`，红字会变成一张卡上的常驻噪音。
+ *   所以这一行永远是灰的，靠那句话本身说清发生了什么。 */
+.adm__model-cand {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--ink-muted);
+}
+
+.adm__model-cand code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  word-break: break-all;
+  color: var(--ink);
+}
+
+.adm__model-warn {
+  margin: 10px 0 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--danger);
+  border-radius: 0 8px 8px 0;
+  background: var(--surface-soft);
+  font-size: 12px;
+  line-height: 1.75;
+  color: var(--danger);
+}
+
+.adm__model-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.adm__model-note {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--ink-muted);
+}
+
+.adm__model-note[data-bad='true'] {
+  color: var(--danger);
+}
+
+/* ★ 文件路径：等宽 + 可断行。站长会照着它去 SSH 上找那个文件 */
+.adm__models-file {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.8;
+  color: var(--ink-muted);
+}
+
+.adm__models-file code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  word-break: break-all;
+  color: var(--ink);
 }

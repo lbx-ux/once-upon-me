@@ -1,4 +1,7 @@
 import CreateLanding from '@/components/studio/CreateLanding.tsx'
+import { userSliceRoot } from '@/lib/asset-scope.ts'
+import { currentUserId } from '@/lib/auth/session.ts'
+import { assetRoot } from '@/lib/books-runtime.ts'
 import { listCardItems } from '@/lib/cards-list.ts'
 import { listChildren } from '@/lib/children-source.ts'
 import { assetUrlOf } from '@/lib/asset-url.ts'
@@ -38,7 +41,15 @@ export const dynamic = 'force-dynamic'
 export const metadata = { title: '创作 · 小主角' }
 
 export default async function CreateHome() {
-  const [cards, children] = await Promise.all([listCardItems(), listChildren()])
+  // ★ 2026-10-17（工单 16）：两处取数都只在自己那一片里找（未登录 = 还没有主角）
+  const userId = await currentUserId()
+  const root = assetRoot()
+  const [cards, children] = userId
+    ? await Promise.all([
+        listCardItems(userSliceRoot(root, userId)),
+        listChildren(userSliceRoot(root, userId)),
+      ])
+    : [[], []]
   const nameOf = new Map(children.map((item) => [item.profile.childId, item.profile.name]))
   return (
     <CreateLanding

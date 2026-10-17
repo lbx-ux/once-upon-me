@@ -36,8 +36,17 @@ export type BookStreamFrame =
    *   下面却贴一个『可以再点一次』"这种自相矛盾（实测差点就这么上了）。
    */
   | { kind: 'fatal'; code: string; message: string; retryable?: boolean }
-  /** 重放的收尾帧：这一轮还在跑吗、成品在不在、日志里有没有读不出来的行 */
-  | { kind: 'status'; running: boolean; bookReady: boolean; skippedLines?: number }
+  /**
+   * 这一轮收尾时的一句实况：还在跑吗、成品在不在、日志里有没有读不出来的行。
+   *
+   * ★ `bookId` 是 2026-10-17（故事闸门）加的，而且是**可选的**：
+   *   编故事那一条**没有** `book-ready` 事件（那一本连一页都还没画），
+   *   可客户端从那一刻起就要知道书号——它要去 `GET /story` 取故事、
+   *   要往 `sessionStorage` 记一笔"刚才那一本"。书号放在这一帧上是它唯一的位置：
+   *   `status` 本来就是"这一次跑在哪儿"的传输层事实（与 `delta` / `fatal` 同一条理由，
+   *   它**不落盘**，所以重放那条路不必认识它——那边书号本来就在 URL 里）。
+   */
+  | { kind: 'status'; running: boolean; bookReady: boolean; skippedLines?: number; bookId?: string }
 
 export const BOOK_FRAME_KINDS = ['engine', 'delta', 'fatal', 'status'] as const
 

@@ -18,4 +18,8 @@ public record Permissions(boolean text, boolean image, boolean vision, boolean s
   public static Permissions all() {
     return new Permissions(true, true, true, true);
   }
+
+  // ★ 这里原来有一个 `empty()`，给"一样都没勾就提交"那条校验用。
+  //   2026-10-17 申请改成"四项一起开通"之后它没有调用方了，所以删掉——
+  //   留着一个没人用的方法，下一个人会以为某处还在靠它挡着什么。
 }

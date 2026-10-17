@@ -22,11 +22,19 @@
  *   - 示例孩子 → 403：他的档案在 `public/` 里，删不掉；硬删只会让他"回来但没有形象"
  *   - 没有这个孩子 → 404
  *   - 删到一半失败 → 500 + **带上那张不完整的凭据**（哪些删了、哪些没有）
+ *
+ * ★ 2026-10-17（工单 16）：三个动词原来**都没有登录闸**。真删这一条尤其要紧——
+ *   它删的是"这个孩子名下的卡与书"，而那个孩子可以是**别人家的**。
+ *   现在三处都过同一道闸，并且 `depsOf(userId)` 拿到的是**调用者那一片**：
+ *   别人的 childId 在这里读不到档案 → 走那句 404「没有这个孩子」。
  */
 
+import type { NextRequest } from 'next/server'
 import { assetRoot } from '@/lib/books-runtime.ts'
 import type { AgeBand } from '@/lib/engine/domain.ts'
-import { createCardStore, createFsStore, createProfileStore } from '@/lib/engine/index.ts'
+import { createCardStore, createProfileStore } from '@/lib/engine/index.ts'
+import { createUserStore, userSliceRoot } from '@/lib/asset-scope.ts'
+import { requireCapability } from '@/lib/auth/session.ts'
 // ★ 与 `POST /api/children` 共用同一份"这段请求体算不算一份档案"（见该文件文件头）
 import { parseChildBody } from '@/lib/children-body.ts'
 import { childProfileOf, isDemoChildId } from '@/lib/children-source.ts'
@@ -46,21 +54,24 @@ const DEMO_REFUSAL =
   '这是随仓库发布的示例角色，删不掉——他的档案在 public/demo/ 里，是仓库内容。' +
   '真把他名下的图删掉的话，下一次列目录他会从 public/ 回来，变成一个"没有形象的孩子"。'
 
-async function depsOf(): Promise<Parameters<typeof planDeletion>[1]> {
-  const store = await createFsStore(assetRoot())
+async function depsOf(userId: string): Promise<Parameters<typeof planDeletion>[1]> {
+  const store = await createUserStore(assetRoot(), userId)
   return { store, cardStore: createCardStore(store), profiles: createProfileStore(store) }
 }
 
-/** 三种拒绝合在一处，两个动词共用（预演与真删对同一件事必须给出同一句话） */
+/** 三种拒绝合在一处，三个动词共用（预演与真删对同一件事必须给出同一句话） */
 async function refuse(
   childId: string,
+  userId: string,
 ): Promise<{ response: Response; receipt?: DeletionReceipt } | null> {
   if (await isDemoChildId(childId)) {
     return {
       response: Response.json({ code: 'demo-child', message: DEMO_REFUSAL }, { status: 403 }),
     }
   }
-  const found = await childProfileOf(childId)
+  // ★ 查的是**调用者那一片**里的档案：别人的 childId 在这里不存在 → 那句 404。
+  //   示例孩子照旧先判（它在 public/ 里，与谁那一片无关）
+  const found = await childProfileOf(childId, userSliceRoot(assetRoot(), userId))
   if (!found) {
     return {
       response: Response.json(
@@ -73,15 +84,19 @@ async function refuse(
 }
 
 export async function GET(
-  _req: Request,
+  req: NextRequest,
   { params }: { params: Promise<{ childId: string }> },
 ): Promise<Response> {
+  // 预演要的是"我这一片里他会带走什么"，所以先认人再算（工单 16）
+  const guard = await requireCapability(req, [])
+  if (!guard.ok) return guard.response
+
   const { childId } = await params
-  const denied = await refuse(childId)
+  const denied = await refuse(childId, guard.session.userId)
   if (denied) return denied.response
 
   try {
-    const receipt = await planDeletion(childId, await depsOf())
+    const receipt = await planDeletion(childId, await depsOf(guard.session.userId))
     return Response.json({ receipt })
   } catch (err) {
     const failure = userFailureOf(err)
@@ -114,11 +129,15 @@ export async function GET(
  *   而验证步骤就是读回来确认它没被刷掉。守卫在别人的用例里生效，不算验过。
  */
 export async function PATCH(
-  req: Request,
+  req: NextRequest,
   { params }: { params: Promise<{ childId: string }> },
 ): Promise<Response> {
+  // 改档案不要能力（不调模型），但**要认人**：不然就能改别人家孩子的名字
+  const guard = await requireCapability(req, [])
+  if (!guard.ok) return guard.response
+
   const { childId } = await params
-  const denied = await refuse(childId)
+  const denied = await refuse(childId, guard.session.userId)
   if (denied) return denied.response
 
   let raw: unknown
@@ -136,7 +155,7 @@ export async function PATCH(
     )
   }
 
-  const { profiles } = await depsOf()
+  const { profiles } = await depsOf(guard.session.userId)
   try {
     // 名字合不合法、年龄档在不在 `AGE_BANDS` 里，由引擎判（`buildChildRecord`
     // 会抛 `profile-invalid`）——这一层不重写一遍判据
@@ -173,15 +192,20 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _req: Request,
+  req: NextRequest,
   { params }: { params: Promise<{ childId: string }> },
 ): Promise<Response> {
+  // ★ 真删。闸门在**最前面**，理由见文件头：删的是"这个孩子名下的卡与书"，
+  //   而这个孩子可以是别人家的——没有这一道，一个 DELETE 就能把陌生人的作品清掉
+  const guard = await requireCapability(req, [])
+  if (!guard.ok) return guard.response
+
   const { childId } = await params
-  const denied = await refuse(childId)
+  const denied = await refuse(childId, guard.session.userId)
   if (denied) return denied.response
 
   try {
-    const receipt = await deleteChildEverywhere(childId, await depsOf())
+    const receipt = await deleteChildEverywhere(childId, await depsOf(guard.session.userId))
     return Response.json({ receipt })
   } catch (err) {
     // ★ 删到一半失败：凭据**一起回去**。只说"删除失败"会让人以为一样都没删，

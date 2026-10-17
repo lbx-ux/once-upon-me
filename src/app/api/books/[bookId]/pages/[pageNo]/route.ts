@@ -26,7 +26,6 @@ import type { NextRequest } from 'next/server'
 import {
   childWordOf,
   createCardStore,
-  createFsStore,
   createProviders,
   maxSeqOf,
   rerunNarration,
@@ -37,10 +36,11 @@ import {
 import { encodeBookFrameToText, type BookStreamFrame } from '@/lib/book-stream.ts'
 import { childProfileOf } from '@/lib/children-source.ts'
 import { createFsEventLog } from '@/lib/event-log.ts'
-import { assetRoot, finishRun, tryStartRun } from '@/lib/books-runtime.ts'
+import { assetRoot, finishRun, runKeyOf, tryStartRun } from '@/lib/books-runtime.ts'
 import { userFailureOf } from '@/lib/provider-messages.ts'
 import { parseRerunBody } from '@/lib/rerun-api.ts'
 import { requireCapability } from '@/lib/auth/session.ts'
+import { createUserStore, userSliceRoot } from '@/lib/asset-scope.ts'
 import { serverEnv } from '@/lib/settings/server-env.ts'
 
 export const runtime = 'nodejs'
@@ -89,7 +89,7 @@ export async function POST(
   if (!guard.ok) return guard.response
 
   const root = assetRoot()
-  const store = await createFsStore(root)
+  const store = await createUserStore(root, guard.session.userId)
   const cardStore = createCardStore(store)
 
   let book: Book | null
@@ -123,10 +123,12 @@ export async function POST(
    *   读不到就用中性词——不是报错：重画的诱因多半是"这一页画歪了"，
    *   不该因为档案没了就连重画都不给。
    */
-  const child = await childProfileOf(card.childId)
+  const child = await childProfileOf(card.childId, userSliceRoot(root, guard.session.userId))
   const childWord = child ? childWordOf(child.profile.lookTags, child.profile.gender) : undefined
 
-  if (!tryStartRun(bookId)) {
+  // 租约按人记（`runKeyOf`）：整本在跑的时候挡住的是同一个账号的那一次重画
+  const runKey = runKeyOf(guard.session.userId, bookId)
+  if (!tryStartRun(runKey)) {
     return jsonError(409, 'book-busy', '这本书正在忙（整本生成或另一页重做中），等它完再说')
   }
 
@@ -134,7 +136,7 @@ export async function POST(
   try {
     providers = await createProviders({ env: serverEnv(), mode: 'live', assetRoot: root, store })
   } catch (err) {
-    finishRun(bookId)
+    finishRun(runKey)
     const failure = userFailureOf(err)
     return Response.json(
       { code: failure.code, message: failure.message, retryable: failure.retryable },
@@ -143,7 +145,7 @@ export async function POST(
   }
 
   // 序号从日志里已有的最大值接上去（文件头第 2 条）。**不 truncate**（第 1 条）
-  const log = await createFsEventLog(root)
+  const log = await createFsEventLog(userSliceRoot(root, guard.session.userId))
   const { events: already } = await log.read(bookId)
   const startSeq = maxSeqOf(already)
 
@@ -195,7 +197,7 @@ export async function POST(
           retryable: failure.retryable,
         })
       } finally {
-        finishRun(bookId)
+        finishRun(runKey)
         try {
           controller.close()
         } catch {

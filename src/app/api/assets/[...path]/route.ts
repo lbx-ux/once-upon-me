@@ -12,16 +12,26 @@
  * 2. **缓存头按内容指纹来**。我们的资产文件名里就带指纹（`ref.<指纹>.png`），
  *    所以可以放心让浏览器长期缓存；不带指纹的（`book.json`、`events.jsonl`）
  *    一律 `no-store`——那些会在同一路径上被改写。
- * 3. **只读，且只认这几个前缀**。`cards/`、`books/`、`assets/` 是引擎与卡存储写的三处；
- *    别的一律 404，免得这个出口变成"整个磁盘的读接口"。
+ * 3. **只读，只认这几个前缀，而且只认你自己那一片**。`cards/`、`books/`、`assets/`
+ *    是引擎与卡存储写的三处；别的一律 404，免得这个出口变成"整个磁盘的读接口"。
+ *    ★ 2026-10-17（工单 16）补上后一半：这条路原来**不认人**——书号是"卡 + 主题指纹"
+ *    推出来的，猜得出来，所以知道 id 就能拿到别人的整本 `book.json`（含每页 prompt）
+ *    与朗读音频。现在它要求登录，并且读的是**请求者自己那一片**
+ *    （`asset-scope.ts` 的 `createUserStore`）：别人的 id 在你自己那一片里
+ *    根本不存在，于是 404——**不是"读了再判"，是那一片里没有这个键**。
+ *    ★ 演示书与灵感书单不受影响：那两条走 `public/demo`、`public/booklist`，
+ *    是静态文件，压根不经这条路。
  * 4. **`?w=<档>` 要缩略图**（`lib/thumbs.ts` 那五个档）。缩出来的 WebP 落盘缓存，
  *    第二次就是纯读盘。★ 缩不动（图坏了、sharp 装不上）时**回原图**而不是 500：
  *    一个性能优化不该变成一次故障——这是这一层与"密钥没配"那类错误唯一的不同。
  */
 
+import { createUserStore } from '@/lib/asset-scope.ts'
 import { assetRoot } from '@/lib/books-runtime.ts'
-import { createFsStore } from '@/lib/engine/index.ts'
 import type { AssetStore } from '@/lib/engine/providers/types.ts'
+import { requireCapability } from '@/lib/auth/session.ts'
+
+import type { NextRequest } from 'next/server'
 import { isResizableImage, renderThumb, thumbKeyOf, thumbWidthOf } from '@/lib/thumbs.ts'
 
 export const runtime = 'nodejs'
@@ -85,9 +95,15 @@ async function readOrNull(store: AssetStore, relative: string): Promise<Uint8Arr
 }
 
 export async function GET(
-  req: Request,
+  req: NextRequest,
   ctx: { params: Promise<{ path: string[] }> },
 ): Promise<Response> {
+  // ★ 只要"登录了"（不要求任何能力）：看不见的书也不该看得见图。
+  //   匿名 → 401。★ 未登录时界面上那些 `<img>` 会是一张碎图，但未登录的人
+  //   本来也没有书可看（书架是空的），所以那不是一个"小明忽然看不见图"的故障。
+  const guard = await requireCapability(req, [])
+  if (!guard.ok) return guard.response
+
   const { path } = await ctx.params
   const relative = path.map((segment) => decodeURIComponent(segment)).join('/')
 
@@ -95,7 +111,7 @@ export async function GET(
     return new Response('不认识的资产前缀', { status: 404 })
   }
 
-  const store = await createFsStore(assetRoot())
+  const store = await createUserStore(assetRoot(), guard.session.userId)
   const name = relative.split('/').pop() ?? ''
   const cacheable = FINGERPRINTED.test(name)
 

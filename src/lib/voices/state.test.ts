@@ -7,38 +7,21 @@
  *
  * ★ 顺序也测：一个没权限的人不该先被告知"你还没挑音色"。
  *   先挑半天音色然后还是不行，是这个判断最容易犯的那个错。
+ *
+ * ★ 2026-10-17（工单 16）起这里还管第二件事：**服务端回来的那一份怎么读**
+ *   （`parseMyVoices`）。它原来测的是 localStorage 里的半截 JSON，
+ *   而那一份搬到账号上之后，坏数据的形状变成了"跨进程来的字段缺一个"。
  */
 
-import { afterEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 
 import {
-  CURRENT_VOICE_KEY,
-  loadCurrentVoice,
   narrationBlockOf,
   NARRATION_BLOCK_MESSAGE,
-  saveCurrentVoice,
+  parseMyVoices,
   speechBlockOf,
   CONTACT_EMAIL,
 } from './state.ts'
-
-/** 一个够用的假 localStorage。★ 不引 jsdom：这一份是纯函数，只需要三个方法 */
-function stubStorage(initial: Record<string, string> = {}): void {
-  const map = new Map(Object.entries(initial))
-  Object.defineProperty(globalThis, 'window', {
-    configurable: true,
-    value: {
-      localStorage: {
-        getItem: (key: string) => map.get(key) ?? null,
-        setItem: (key: string, value: string) => void map.set(key, value),
-      },
-    },
-  })
-}
-
-afterEach(() => {
-  // 别把 window 留给下一个测试文件
-  Reflect.deleteProperty(globalThis, 'window')
-})
 
 describe('narrationBlockOf · 缺的是哪一条', () => {
   const ok = { serverHasSpeech: true, allowed: true, voiceId: 'longjielidou_v3.6' }
@@ -85,47 +68,42 @@ describe('speechBlockOf · 试听那类事要的那一条', () => {
   })
 })
 
-describe('「选了哪一个」那一格', () => {
-  it('没存过 → 空串（= 还没挑）', () => {
-    stubStorage()
-    expect(loadCurrentVoice()).toBe('')
-  })
+describe('★ 服务端那一份读回来是什么样（工单 16）', () => {
+  const row = {
+    voiceId: 'longanlingxi',
+    name: '灵灵',
+    model: 'qwen-audio-3.0-tts-flash',
+    createdAt: '2026-10-17T04:05:06+08:00',
+  }
 
-  it('存进去再读回来是同一个', () => {
-    stubStorage()
-    saveCurrentVoice('longanlingxi')
-    expect(loadCurrentVoice()).toBe('longanlingxi')
-  })
-
-  it('用的是一个**新** key，而不是原来那份设置里的一格', () => {
-    // ★ 换了 key 就是换了 key：两条断言一起把这件事钉住，免得有人"顺手兼容一下"
-    //   又把这一个字符串放回那份装着密钥形状的存储里去
-    stubStorage({ 'xiaozhujue.settings.v1': '{"speech":{"voice":"longanlingxi"}}' })
-    expect(loadCurrentVoice()).toBe('')
-    saveCurrentVoice('yun')
-    expect(globalThis.window.localStorage.getItem(CURRENT_VOICE_KEY)).toBe('yun')
-  })
-
-  it('storage 抛错时不炸（隐私模式下照样能用，只是下次要重选）', () => {
-    Object.defineProperty(globalThis, 'window', {
-      configurable: true,
-      value: {
-        localStorage: {
-          getItem: () => {
-            throw new Error('nope')
-          },
-          setItem: () => {
-            throw new Error('nope')
-          },
-        },
-      },
+  it('读得回来：id、名字、模型、时间（ISO → 毫秒）', () => {
+    const parsed = parseMyVoices({ voices: [row], current: 'longanlingxi' })
+    expect(parsed?.current).toBe('longanlingxi')
+    expect(parsed?.voices[0]).toEqual({
+      voiceId: 'longanlingxi',
+      name: '灵灵',
+      modelId: 'qwen-audio-3.0-tts-flash',
+      createdAt: Date.parse('2026-10-17T04:05:06+08:00'),
     })
-    expect(loadCurrentVoice()).toBe('')
-    expect(() => saveCurrentVoice('yun')).not.toThrow()
   })
 
-  it('服务端（没有 window）读回来是空串，不抛', () => {
-    expect(loadCurrentVoice()).toBe('')
-    expect(() => saveCurrentVoice('yun')).not.toThrow()
+  it('current 是空串 = 还没挑（不是 null：界面那一格就是一个字符串）', () => {
+    expect(parseMyVoices({ voices: [], current: '' })).toEqual({ voices: [], current: '' })
+  })
+
+  it('★ 认不出来就**整份拒绝**，不是丢掉坏的那一条', () => {
+    // ★ 半个列表比没有更坏：它会显示成"你只录过这一条"，
+    //   而真相可能是"有两条，另一条没画出来"——用户会以为那条没了，然后重录一遍
+    expect(parseMyVoices({ voices: [row, { voiceId: 'x' }], current: '' })).toBeNull()
+    expect(parseMyVoices({ voices: [{ ...row, createdAt: '不是时间' }], current: '' })).toBeNull()
+    expect(parseMyVoices({ voices: [row] })).toBeNull()
+    expect(parseMyVoices({ voices: 'longanlingxi', current: '' })).toBeNull()
+    expect(parseMyVoices(null)).toBeNull()
+  })
+
+  it('模型可以是空串（录它时没记下来），但 id 与名字不能空', () => {
+    const parsed = parseMyVoices({ voices: [{ ...row, model: '' }], current: '' })
+    expect(parsed?.voices[0]?.modelId).toBe('')
+    expect(parseMyVoices({ voices: [{ ...row, voiceId: '  ' }], current: '' })).toBeNull()
   })
 })

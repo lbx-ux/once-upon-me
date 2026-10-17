@@ -42,6 +42,13 @@ CREATE TABLE IF NOT EXISTS users (
   --   缺了就 ALTER（幂等）。2026-10-17 实测过：本地那个 H2 文件库是加这一列之前建的，
   --   没有那条补丁时 `mvn spring-boot:run` 直接起不来（Column not found + 一屏栈）
   password_changed_at DATETIME DEFAULT NULL,
+  -- ★ 账号状态（2026-10-17，管理页要能"停号"）。`ACTIVE` / `DISABLED` 两个值。
+  --   为什么是**另加一列**而不是复用 `password_hash = NULL` 或者别的巧妙法子：
+  --   NULL 那个哈希的含义已经定死了，是"这个人还没设过密码"（上面那一行写着），
+  --   两种含义挤在一列里，下一个人一定会把"停用"读成"还没设密码"。
+  -- ★ 状态是**每次请求现读**的（`AuthService#requireUser` 与 `#login` 各判一次），
+  --   所以停用对一个已经登着的会话是**即时**生效的——不是"等他下次登录"。
+  status        VARCHAR(16)  NOT NULL DEFAULT 'ACTIVE',
   PRIMARY KEY (id),
   CONSTRAINT uk_users_account UNIQUE (account)
 );
@@ -91,4 +98,77 @@ CREATE TABLE IF NOT EXISTS sms_codes (
   expires_at DATETIME    NOT NULL,
   attempts   INT         NOT NULL DEFAULT 0,
   PRIMARY KEY (phone)
+);
+
+-- ── 权限申请（2026-10-17）─────────────────────────────────────────────────
+-- 用户 2026-10-17 的原话：「现在是用户要发邮件，可以修改一下，帮助这有一个发送请求，
+-- 点击发送请求之后，就可以先管理者申请权限了，然后管理端就接收到申请，
+-- 这也比发邮件好一点，管理端也可以清楚的看到是谁发送的请求」。
+--
+-- ★ 四个 `wants_*` 列**照抄 `user_permissions` 的四个名字**（不是另起一套简写）：
+--   申请的是"哪几个能力"，而批准的动作就是把这四列原样搬进 `user_permissions`。
+--   名字一样，那次搬运才是一行直白的赋值；换个名字就得有一张映射表，
+--   而那张表迟早会有一格写错——错法是"点了通过、结果开的是另一个能力"。
+--
+-- ★ `status` 三态（PENDING / APPROVED / REJECTED），**不是"有就是没处理"**：
+--   拒掉的那一条必须留着。它是"这个人申请过、被拒了"的唯一记录，
+--   而"看不见已处理的申请"会让申请人反复提交同一件事、让站长反复拒同一件事。
+--
+-- ★ `note` 就是原来那封邮件里写的东西（"你要用的是哪一项、用来做什么"）。
+--   ★ 它**可空**：四个勾选已经说清了"要哪几项"，说明是加分项不是门槛——
+--     拿它当必填只会逼人写一句"想做绘本"。
+CREATE TABLE IF NOT EXISTS permission_requests (
+  id           BIGINT      NOT NULL AUTO_INCREMENT,
+  user_id      BIGINT      NOT NULL,
+  wants_text   TINYINT     NOT NULL DEFAULT 0,
+  wants_image  TINYINT     NOT NULL DEFAULT 0,
+  wants_vision TINYINT     NOT NULL DEFAULT 0,
+  wants_speech TINYINT     NOT NULL DEFAULT 0,
+  note         VARCHAR(500) DEFAULT NULL,
+  -- PENDING / APPROVED / REJECTED
+  status       VARCHAR(16) NOT NULL DEFAULT 'PENDING',
+  created_at   DATETIME    NOT NULL,
+  -- 谁批的、什么时候。★ 只有管理员能动，所以这两列就是一张"谁开的这个口子"的账
+  decided_at   DATETIME    DEFAULT NULL,
+  decided_by   BIGINT      DEFAULT NULL,
+  PRIMARY KEY (id)
+);
+
+-- ★ 列表按"待处理在前、新的在前"取，这条索引就是给那个排序用的。
+--   没有它，管理页每次打开都要全表排序一遍——现在只有五个人看不出差别，
+--   而这张表是**只增不减**的（已拒的也留着），所以它一定会长大。
+CREATE INDEX IF NOT EXISTS idx_permission_requests_status
+  ON permission_requests (status, created_at);
+
+-- ── 音色（2026-10-17，工单 16）─────────────────────────────────────────────
+-- 用户 2026-10-17 定的口径：「音色一并挂到账号上」。它原来住在浏览器
+-- localStorage 的两个 key 里（当前选的那个 + 我录过的那几条），
+-- 而"我录的声音"看起来像账号的属性、实际却在一台设备上——换台设备就没了。
+--
+-- ★ 这张表里**一个字节的音频都没有**，那不是漏了：样本除了上传给厂商那一次，
+--   不进磁盘、不进库、不进日志（§8.3 要的是"拿到 voice_id 后立即删"，
+--   我们的实现比它更严）。这里只有厂商回的 voice_id、当时的模型、用户起的名字与时间。
+--
+-- ★ `model` 不是记账，是**判据**：克隆出来的音色绑死在创建它时的 TTS 模型上
+--   （实测跨模型直接 400 `[411]`），所以当前模型与它对不上时那张卡不许选。
+--
+-- ★ 唯一键 `(user_id, voice_id)`：同一个人手上同一条嗓子只该有一行。
+--   没有它的话，"选两次同一个"会插两行，而 `chosen` 会在两行之间打架。
+--
+-- ★ 列名用 `chosen` 而不是 `current`：后者是 MySQL 的保留字，
+--   而这一列会被拼进 SQL（MyBatis 那层）。
+CREATE TABLE IF NOT EXISTS voices (
+  id         BIGINT       NOT NULL AUTO_INCREMENT,
+  user_id    BIGINT       NOT NULL,
+  -- 厂商侧的 voice_id（预置那两个也在内：第一次被选中时才落一行）
+  voice_id   VARCHAR(128) NOT NULL,
+  -- 用户起的名字。★ 预置音色给的是控制台里那个名字
+  name       VARCHAR(64)  NOT NULL DEFAULT '',
+  -- 创建它时的 TTS 模型。见上面那条说明
+  model      VARCHAR(128) NOT NULL DEFAULT '',
+  -- 是不是"下次做书用这一个"。★ 一个人最多一条为真（由 VoiceService 保证）
+  chosen     TINYINT      NOT NULL DEFAULT 0,
+  created_at DATETIME     NOT NULL,
+  PRIMARY KEY (id),
+  CONSTRAINT uk_voices_user_voice UNIQUE (user_id, voice_id)
 );
