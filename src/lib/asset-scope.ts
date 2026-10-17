@@ -34,6 +34,7 @@
 
 import { join } from 'node:path'
 
+import { withDemoCards } from './card-source.ts'
 import { EngineError } from './engine/errors.ts'
 import { createFsStore } from './engine/index.ts'
 import type { AssetRef } from './engine/domain.ts'
@@ -167,12 +168,25 @@ export function userSliceRoot(root: string, userId: string | null | undefined): 
   return join(root, scopePrefixOf(requireUserId(userId)))
 }
 
-/** 一个人那一片的 store（真的磁盘）。路由与页面用这个 */
+/**
+ * 一个人那一片的 store（真的磁盘）。路由与页面用这个。
+ *
+ * ★ 2026-10-17：它现在**多垫了一层示例卡**（`card-source.ts` 的 `withDemoCards`）。
+ *   为什么垫在这里、而不是让每个路由自己记得加：这一层是**唯一**一个
+ *   "请求读资产时走的那个 store"，而有十来条路由（建书、出图、重画一页、
+ *   换一版、【/api/assets】……）都靠它。`createCardStore(store)` 与
+ *   `providers.store.read(card.reference.path)` 两拨读法都会经过这里，
+ *   少一处没垫的症状是"示例小主角选得中、一点生成就 404 找不到参考图"——
+ *   那种错只在真去生成时才出现，而它恰好是这一条最该通的地方。
+ *   ★ 只对 `cards/` 生效：书与档案各有各的收口函数（`resolveBook` /
+ *   `listChildren`），在这里再开一个入口就是同一份字节有两条路。
+ *   ★ 写与删**永远落在你自己那一片**（示例卡改不动、也删不掉）。
+ */
 export async function createUserStore(
   root: string,
   userId: string | null | undefined,
 ): Promise<AssetStore> {
-  return scopedStore(await createFsStore(root), userId)
+  return withDemoCards(scopedStore(await createFsStore(root), userId))
 }
 
 /**

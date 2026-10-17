@@ -7,3 +7,21 @@
 #   的传递依赖，需要 postinstall 编译原生绑定。缺了它 eslint 会报解析错误。
 allowBuilds:
   unrs-resolver: true
+
+# patchedDependencies：给依赖打补丁（补丁文件本体在 patches/，两者必须一起改）
+#
+#   next@15.5.27 —— `pnpm build` 的预渲染会在 `/` 上炸：
+#   `Could not find the module "…/\src\components\book\StorybookFlip.tsx#default"
+#   in the React Client Manifest`。根因在 Next 里那一行
+#   `if (concatenatedModId)`：webpack 把客户端组件拼进 scope 后，子模块自己没有 id，
+#   于是用父 scope 的 id——而那句话把合法的 id `0` 当成了"没有 id"，
+#   于是这一条被静默丢掉，只到预渲染那一刻才炸。
+#   判据应是 `!== null`，与它上一行兄弟判断（`modId !== null`）一致。
+#   实测数据、复现步骤与"为什么不改 next.config 躲开"写在
+#   `.scratch/app-restructure/issues/11-client-manifest-build.md`（含 §6.2 的表）。
+#
+# ★ 升级 next 时必须重做这条：补丁的 key 绑死了版本号，升级后 pnpm 会报
+#   `ERR_PNPM_PATCH_NOT_APPLIED`——那时要么把这一行补回新版本，要么确认上游已修，
+#   别让补丁悄悄消失（消失了就是 build 又在预渲染那一刻红）。
+patchedDependencies:
+  next@15.5.27: patches/next@15.5.27.patch

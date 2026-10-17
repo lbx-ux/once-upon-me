@@ -9,7 +9,8 @@
  *
  * 1. **只列运行期的书**（资产根下 `books/<id>/book.json`），不列 `public/demo` 里那本。
  *    理由是"我的故事"这个标题：随仓库提交的演示书不是用户做的，混进来就是往
- *    "已创作故事"里灌一个假数。演示书有自己的入口（首页"看一本成品"）。
+ *    "已创作故事"里灌一个假数。演示书有自己的入口（`/shelf` 空态那条线；
+ *    首页那颗「看一本成品」2026-10-17 起改指 `/booklist`，走的是另一批样书）。
  * 2. **摘要里的每个数都来自清单本身**，一个都不推算。页数 = `tree.nodes.length`，
  *    有图页数 = `illustrations` 里真的有条目的那些，"有朗读" = `narrations` 非空。
  *    推算出来的数（比如"大概 20 分钟能读完"）不进这里——那是另一种编。
@@ -140,16 +141,20 @@ export function summarize(book: Book, coverUrl: string | null): BookSummary {
  * 一份**故事草稿** → 一行摘要（2026-10-17，故事闸门）。
  *
  * ★ 它读的是 `story.json`（`lib/story-draft.ts`），不是清单：这一本还没有清单。
- *   两个数都是真数——页数是**故事里的页数**（`doc.nodes.length`），
- *   而 `illustratedCount` / `hasNarration` 是 0 / false，因为它们真的还没有。
- * ★ 封面是 `null`：一页都没画，当然没有封面（见 `BookSummary.coverUrl` 那段）。
+ *   页数是**故事里的页数**（`doc.nodes.length`）。
+ * ★ `drawn` 是**盘上真的落了图的那几页**（调用方数 `page-*.png` 得到）。
+ *   它可能不是 0：这一本可能正在画（用户点完「就按这个画」又退出去的那一段），
+ *   也可能画到一半进程被杀过。原来这里恒为 0、书架上就写"还没开始画"——
+ *   而用户看到的盘上已经有好几张图了（2026-10-17 实测报的 bug，原话是
+ *   "他告诉我正在生成中，我看不到画的什么"）。
+ * ★ 封面是 `null`：`cover.png` 是装订那一步的产物，而这一本还没装订。
  */
-export function summarizeStory(bookId: string, draft: StoryDraft): BookSummary {
+export function summarizeStory(bookId: string, draft: StoryDraft, drawn = 0): BookSummary {
   return {
     bookId,
     title: draft.doc.title.trim() === '' ? '(还没有名字)' : draft.doc.title,
     pageCount: draft.doc.nodes.length,
-    illustratedCount: 0,
+    illustratedCount: drawn,
     hasNarration: false,
     status: 'story',
     cardId: draft.input.cardId,
@@ -208,7 +213,18 @@ export async function listBooks(
     const bookId = path.slice('books/'.length, path.length - `/${STORY_FILE}`.length)
     if (withManifest.has(bookId)) continue
     const draft = await readStory(store, bookId)
-    if (draft) books.push(summarizeStory(bookId, draft))
+    // ★ 2026-10-17（用户实测报的 bug）：这一本**可能已经在画了**——他点完
+    //   「就按这个画」、从运行视图退出、回到书架。原来这一行恒为 0，于是书架上
+    //   写着「还没开始画」，而盘上已经躺着几张页图（他看到的正是这一句）。
+    //   判据用**已经落图的那几页**，不用"在不在跑"那个进程内的租约：
+    //   半路被杀的那一本也该照实说"画到第几页"，而那件事租约不知道。
+    //   数的是 `paths` 里同一目录下的 `page-*.png`（封面不算：它是另一件事，
+    //   而且 `illustratedCount` 在清单那条路上数的也是正文页）。
+    const prefix = `books/${bookId}/page-`
+    const drawn = paths.filter(
+      (one) => one.startsWith(prefix) && one.endsWith('.png') && !one.includes('/thumbs/'),
+    ).length
+    if (draft) books.push(summarizeStory(bookId, draft, drawn))
   }
 
   // 新的在前。同一毫秒（不可能但便宜）按书号兜底，保证顺序稳定

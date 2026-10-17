@@ -66,6 +66,7 @@ import type { EngineEvent } from '@/lib/engine/events.ts'
 import type { StoryDoc } from '@/lib/schemas/story.ts'
 import { storyProblemsOf, storyProblemText } from '@/lib/story-problems.ts'
 import {
+  ApiError,
   createBook,
   fetchStory,
   illustrateBook,
@@ -84,6 +85,7 @@ import Desk from './Desk.tsx'
 import RedrawDialog from './RedrawDialog.tsx'
 import RevoiceDialog from './RevoiceDialog.tsx'
 import StorySheet from './StorySheet.tsx'
+import { entryPhaseOf } from './phase.ts'
 import {
   deskOf,
   EMPTY_DESK,
@@ -99,6 +101,17 @@ import {
  * 1.2 秒是"读完自己写的这一句"的量级。
  */
 const AUTOSAVE_MS = 1200
+
+/**
+ * 正在跑的那一本，隔多久重读一次日志（毫秒）。
+ *
+ * ★ 这一屏那时**没有连着 SSE**（那条流属于「就按这个画」那一次请求，退出这一屏就断了），
+ *   所以进度只能靠重读 `events.jsonl`。原来说的是"刷新这一页就能看到"——
+ *   而用户实测报的原话是"**我看不到画的什么**"：一个要人手动刷几十次的界面，
+ *   等于没有进度。
+ * ★ 5 秒：一本 5 页的书几十条事件，重读一次几 KB；而页是分钟级的，5 秒足够。
+ */
+const RUN_POLL_MS = 5000
 
 /**
  * 这一次生成的输入。★ 只有这几样——`wish` / `theme` 都在 `form.theme` 里，
@@ -156,6 +169,13 @@ type SaveState = 'idle' | 'saving' | 'saved' | 'failed'
 
 export default function GenerationRun({ plan, resume }: GenerationRunProps) {
   const [desk, setDesk] = useState<DeskState>(EMPTY_DESK)
+  /**
+   * 初始那一格**故意不叫 `entryPhaseOf`**：`status` 要等日志读回来才知道，
+   * 在那之前只能说"接着做"（`'replaying'` 是那一屏的中性态）——照"没有日志 =
+   * 这一轮没成"渲染，会在读盘那几百毫秒里闪一句错话。
+   * ★ 故事在手时例外：闸门那一屏不必等日志（它的正文来自 `story.json`），
+   *   所以那一种立刻就能定下来。
+   */
   const [phase, setPhase] = useState<Phase>(
     resume ? (resume.story ? 'story' : 'replaying') : 'planning',
   )
@@ -278,49 +298,34 @@ export default function GenerationRun({ plan, resume }: GenerationRunProps) {
     startedRef.current = true
 
     if (resume) {
-      /* ① 只有故事：直接进闸门那一屏。这一屏的**正文**来自 `story.json`
-         （它可以被家长改过），不是事件流——而日志在这一刻也可能压根不在
-         （进程被杀过、目录被手工清过）。所以 `desk` 由 `storyDeskOf` 造。 */
-      if (resume.story) {
-        setDesk(storyDeskOf(resume.story))
-        /* ★ 日志仍然**尽力读一遍**，但只用来备好"接下来那一段"（2026-10-17 补）。
-           原来这一支直接 `return`，于是 `eventsRef` 从空的开始——点「就按这个画」
-           之后第一帧一到（`stage(begin, illustrating)`，带 `pageNo: 1`），
-           `deskOf` 手上只有这一条事件，`total` 就按 `pageNo` 兜到 1、`title` 是 null：
-           屏幕上变成「编故事 **还没轮到** ｜ 逐页画 0 / 1」，大标题退回"开始创作中"，
-           而家长明明刚改完那一版故事。**根因是①的 `plan-ready` 只在日志里**
-           （它带着书名与格数，而那两样是阶段轨前两格的判据）。
-           ★ 只填 `eventsRef`、**不动 `desk`**：闸门那一屏的桌子就该是"书名 + N 页、
-             还没有格子"那一张（`storyDeskOf` 的理由），日志过一会儿才到，
-             期间桌子若换来换去，家长会看见书名跳一下。
-           ★ 顺手把 `status` 那一刻的服务端状态也认下来（同一份响应里，不要白不要）：
-             它说的是"这一本此刻在不在跑"——上一次点了画、进程半路被杀的话就是它。 */
-        void replayFrames(resume.bookId)
-          .then(({ events, status }) => {
-            /* ★ 只在"这一屏还没往下走"时认这份日志：点「就按这个画」快过这一次读盘的话，
-               整份覆盖会把已经到的那几条新帧冲掉（重放回来的那一份里也有它们，
-               于是画桌上会出现两条同一个 `seq` 的提醒）。 */
-            if (eventsRef.current.length > 0) return
-            eventsRef.current = events
-            setServerRunning(status?.running ?? false)
-          })
-          // 读不回日志**不是**错误：故事在手，这一屏照旧能改、能画。
-          // （走到②时服务端会自己读日志接 `startSeq`，客户端这一份只是显示用）
-          .catch(() => undefined)
-        return
-      }
+      /* ① 只有故事：默认进闸门那一屏（正文来自 `story.json`，不是事件流——
+         而日志在这一刻也可能压根不在，进程被杀过、目录被手工清过）。
+         ★ 但**判据不在这里**：`entryPhaseOf`（`phase.ts`，纯函数、有测试）说了算，
+           它带着"服务器上正在跑就进运行视图"那一条（用户实测报的 bug）。
+           这一支的 `desk` 先按故事造一张，等日志回来之后若判成别的屏再换。 */
+      if (resume.story) setDesk(storyDeskOf(resume.story))
 
       void replayFrames(resume.bookId)
         .then(({ events, status }) => {
+          /* ★ 只在"这一屏还没往下走"时认这份日志：点「就按这个画」快过这一次读盘的话，
+             整份覆盖会把已经到的那几条新帧冲掉（重放回来的那一份里也有它们，
+             于是画桌上会出现两条同一个 `seq` 的提醒）。 */
+          if (eventsRef.current.length > 0) return
           eventsRef.current = events
-          setDesk(deskOf(events))
           setServerRunning(status?.running ?? false)
-          setPhase(status?.bookReady ? 'ready' : status?.running ? 'replaying' : 'failed')
-          // 每页的内容（正文 / 提示词 / 录音）另取一次（工单 08）
-          if (status?.bookReady) void loadRunPages(resume.bookId)
+
+          const phase = entryPhaseOf({ hasStory: resume.story !== undefined, status })
+          if (phase === 'story') return // 闸门：桌子就是上面那张（书名 + N 页、没有格子）
+          // 运行视图 / 成品：桌子交给日志折——哪几页画好了都在里面
+          setDesk(deskOf(events))
+          setPhase(phase)
+          if (phase === 'ready') void loadRunPages(resume.bookId)
         })
         .catch(() => {
-          // 读不回日志不是错误：如实说这一轮没了，不摆一个转下去的圈
+          // ★ 读不回日志：**故事在手就不是错误**（这一屏照旧能改、能画，走到②时
+          //   服务端会自己读日志接 `startSeq`，客户端这一份只是显示用）；
+          //   没有故事可依靠才如实说这一轮没了，不摆一个转下去的圈
+          if (resume.story !== undefined) return
           setFatal('读不回这一轮的过程日志。回「创作」重新做一本吧。')
           setPhase('failed')
         })
@@ -372,6 +377,48 @@ export default function GenerationRun({ plan, resume }: GenerationRunProps) {
         setPhase('failed')
       })
   }, [plan, resume, onFrame, loadRunPages, rememberBookId])
+
+  /* ── 正在跑的那一本：隔几秒重读一次日志（用户实测报的"看不到画的什么"）─────── */
+
+  /**
+   * 排下一轮的那个计数器。★ 用 `setTimeout` 链而不是 `setInterval`：
+   *   每一轮**读完之后**才排下一轮，读得慢时不会堆起来（`setInterval` 在慢网络下
+   *   会同时挂好几条"读同一份日志"的请求，而它们的结果还会互相覆盖）。
+   */
+  const [pollTick, setPollTick] = useState(0)
+
+  useEffect(() => {
+    // 只有"服务器在跑、而这一屏没连着那条流"时才拨（`phase === 'running'` 时
+    // 有 SSE 在喂，不需要也不该再插一手）
+    if (!bookId || !serverRunning || phase !== 'replaying') return
+    let stopped = false
+
+    const timer = setTimeout(() => {
+      void replayFrames(bookId)
+        .then(({ events, status }) => {
+          if (stopped) return
+          eventsRef.current = events
+          setDesk(deskOf(events))
+          setServerRunning(status?.running ?? false)
+          if (status?.bookReady) {
+            // 跑完了：书已经在盘上，画桌自己会切成"成品"那一张
+            setPhase('ready')
+            void loadRunPages(bookId)
+          } else {
+            setPollTick((n) => n + 1)
+          }
+        })
+        .catch(() => {
+          // 读不回来就停在这儿：不反复重试，也不把已经画出来的那几格擦掉
+          if (!stopped) setServerRunning(false)
+        })
+    }, RUN_POLL_MS)
+
+    return () => {
+      stopped = true
+      clearTimeout(timer)
+    }
+  }, [bookId, serverRunning, phase, pollTick, loadRunPages])
 
   /* ── 自动保存（文件头第 6 条） ───────────────────────────────────────── */
 
@@ -517,9 +564,25 @@ export default function GenerationRun({ plan, resume }: GenerationRunProps) {
       setPhase((current) => (current === 'ready' ? current : 'replaying'))
     } catch (err) {
       setNote(err instanceof Error ? err.message : String(err))
-      // ★ 失败退回闸门那一屏（故事还在，改一改就能再点一次）：
-      //   停在"正在画"会让人以为还在跑，而那时候服务端早就结束了
-      setPhase('story')
+      /* ★ 409 `book-busy`：这一本**已经在画了**（多半是另一个标签页点的，或者就是
+         用户刚才点了、退出、又点回来）。这时候把人留在闸门上只会看到一句错话，
+         而他想看的正是"画到哪儿了"——直接切到运行视图，并让那个轮询接着跑
+         （见上面 `RUN_POLL_MS` 那一段）。用户实测的原话是"他告诉我正在生成中，
+         我看不到画的什么"。 */
+      if (err instanceof ApiError && err.code === 'book-busy' && bookId) {
+        setServerRunning(true)
+        setPhase('replaying')
+        void replayFrames(bookId)
+          .then(({ events }) => {
+            eventsRef.current = events
+            setDesk(deskOf(events))
+          })
+          .catch(() => undefined)
+      } else {
+        // ★ 别的失败退回闸门那一屏（故事还在，改一改就能再点一次）：
+        //   停在"正在画"会让人以为还在跑，而那时候服务端早就结束了
+        setPhase('story')
+      }
     } finally {
       setWorking(null)
     }
@@ -613,8 +676,11 @@ export default function GenerationRun({ plan, resume }: GenerationRunProps) {
           '正在一页一页做。不想等的话可以先离开，这一轮不会停——做完之后在书架的「正在编辑」里找它，在那里接着编辑。'}
         {phase === 'replaying' &&
           (serverRunning
-            ? '刷新把这条连接断了，但服务器上这一轮还在跑。它跑完之后刷新这一页就能看到。'
-            : '这一轮没有跑完（刷新把连接断了）。下面是你已经做出来的部分。')}
+            ? /* ★ 2026-10-17 改了后半句：原来写的是"刷新这一页就能看到"——用户实测
+                 报的正是"我看不到画的什么"。现在这一屏自己每 5 秒重读一次日志
+                 （`RUN_POLL_MS`），所以照实说它会自己长出来，别让人去手动刷。 */
+              '这一轮在服务器上跑着，下面这几格会自己长出来——不想等可以先去做别的。'
+            : '这一轮没有跑完（连接断了）。下面是你已经做出来的部分。')}
         {phase === 'ready' &&
           (published
             ? '这本已经装订好了。'

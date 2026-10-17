@@ -151,6 +151,28 @@ class VoiceIntegrationTest {
   }
 
   @Test
+  @DisplayName("★ 只给 id 选一个预置音色：落下来的那一条**名字不能是空的**")
+  void choosingAPresetByIdOnlyStillRecordsAName() throws Exception {
+    signUp("13777770008", "yuzhi-123456");
+    String token = login("13777770008", "yuzhi-123456");
+
+    // ★ 与界面按「选它」时**逐字相同**：body 里只有 voiceId
+    //   （`VoiceProvider#setVoice`，它假定服务端已经记着名字与模型）。
+    //   这个假定对预置音色不成立——豆豆 / 灵灵是代码里的常量，第一次被选中才落一行。
+    choose(token, "longjielidou_v3.6", null);
+
+    // ★ 判据取「名字非空」，而且特意要求它等于 id：这不是"随便给个名字就行"，
+    //   而是"空标签必须回退到那个真的东西"（前端的 `parseMyVoices` 见到空名字
+    //   会整份拒绝，症状是整屏「音色列表不是我们认识的形状」，2026-10-17 实测到过）
+    mvc.perform(get("/api/voices").header("Authorization", "Bearer " + token))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.current").value("longjielidou_v3.6"))
+        .andExpect(jsonPath("$.voices.length()").value(1))
+        .andExpect(jsonPath("$.voices[0].voiceId").value("longjielidou_v3.6"))
+        .andExpect(jsonPath("$.voices[0].name").value("longjielidou_v3.6"));
+  }
+
+  @Test
   @DisplayName("没登录：401，而不是一份空列表（空列表会被读成「你没录过」）")
   void anonymousIsRefused() throws Exception {
     mvc.perform(get("/api/voices")).andExpect(status().isUnauthorized());

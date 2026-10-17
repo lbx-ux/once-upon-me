@@ -115,16 +115,24 @@
    这一壳在 **SSR 的 HTML 里就有了**——`ready` 要等 `/api/auth/me` 那一趟回来才翻，
    所以它真的会被看见。`min-height` 的全部意义是别让那一眼是一根 46px 的纸片。
 
-   ★ **它不是"两张真面孔一样高"**（这一行原来那句是假的，2026-10-17 量过）：
-     未登录那张卡 **131px**、已登录那张 **778px**，一个常数不可能同时等于两者。
+   ★ **它不是"两张真面孔一样高"**（这一行原来那句是假的，2026-10-17 量过；
+     同一天晚些时候已登录那一张又矮了一截，见下面那句）：
+     未登录那张卡 **131px**、已登录那张 **620px**，一个常数不可能同时等于两者。
      取的是**小的那一个**，判据是"宁可不够、不可过头"：
        · 未登录这条路：131 → 131，一次抖动都没有；
-       · 已登录这条路：131 → 778，卡片**向下长**——页头与卡片上沿都不动，
+       · 已登录这条路：131 → 620，卡片**向下长**——页头与卡片上沿都不动，
          右栏那一列与它同起一行，也不跟着走。
-     反过来取 778 会让**未登录**的人先看见一张 778px 的空纸再往下收 647px。
+     反过来取 620 会让**未登录**的人先看见一张 620px 的空纸再往下收 489px。
      向下长比向上收好：向上收是把内容从视口外**抽走**，那一下更扎眼。
-   ★ 三个数都是 1440×900、卡片宽 380px 下量的（不写 min-height 时这一壳自然高 46px，
-     差在 `.pf__lede` 一行 21px 与 `.pf__primary` 44px）。改这一屏的间距要重新量。 */
+   ★ **已登录那个数是会变的，未登录那个不会**——这正是取小的那一个的好处：
+     2026-10-17 拆掉"挑一个头像"那一排（44px 的缩略图 + 18px 的外边距 + 一行回话）
+     与「登录方式」那一行之后，它从 778 掉到 620，而这一条 `min-height` **一个字都不用改**。
+     反过来说：改这一屏的间距时**只有"未登录"那个数需要重量**，
+     它就是 `.pf__lede` 一行 21px + `.pf__primary` 44px + 卡的上下内边距
+     ——不写 `min-height` 时这一壳自然高 46px，那 85px 的差就是这两件东西。
+   ★ 两个数都是 1440×900 下量的（131 是卡片宽 1096px 时量的——未登录那张卡是
+     整宽的，不是 380px 的左栏）；卡片宽 380px 时未登录那一路同样是 131。
+   ★ 已登录那一路只在 **380px 的左栏**下成立，因为它是**左栏那一张卡**的高度。 */
 .pf__card--blank {
   min-height: 131px;
 }
@@ -273,8 +281,11 @@
  * ★ 位置与尺寸照参考稿的 `.avatar`（`profile.css:170`）：`left: 18px; bottom: 14px`，
  *   92px，4px 白描边。它会盖住水彩的左下角——这正是参考稿的做法，
  *   而"头像 + 一张被它压住的画"是这一格的全部内容。
- * ★ 它是**绝对定位**，所以挑与不挑之间只换"画的是什么"（那颗 `<img>` 与
- *   `AvatarPlaceholder` 共用这一个盒子），位置与尺寸一点都不动。
+ * ★ **2026-10-17 起这一个盒子里只装一样东西**：站点那唯一一张头像
+ *   （`lib/avatars.ts`）。原来这里在"这个人挑过的那张 `<img>`"与
+ *   "`AvatarPlaceholder` 那个表示空着的圈"之间换着画，所以这一条规则下面还挂着
+ *   `.pf__avatar svg`（那个圈里的记号）与 `img.pf__avatar`（那颗图自己的圆角与
+ *   `object-fit`）——**两条都只为"两种画法共用一个盒子"服务**，随那条分支一起删了。
  * ★ 那圈边用 `--surface`（白）：它是**卡的颜色**，于是读作"头像贴在卡上"，
  *   而不是"头像周围画了一圈白"。 */
 .pf__avatar {
@@ -289,84 +300,18 @@
   border: 4px solid var(--surface);
   border-radius: 999px;
   overflow: hidden;
-  /* ★ 这一屏的实物底（`--pf-paper`，冷的一档），不是全站的 `--card-paper`（暖相纸）
-     ——这一屏整体转冷，一块暖相纸摆在这里会是唯一一个不在调子里的东西。
-     而 `--ink-muted` 在这一档上是 4.63:1，量过的（globals.css 的 `--pf-paper` 那条）。 */
+  /* ★ `object-fit: cover` 对现在这张 256×256 的方图是**空操作**（盒子也是 1:1），
+     留着是挡住"以后换一张不是 1:1 的"那一次：不加的话那张图会被压扁，
+     而压扁的头像是那种谁都不会去查的坏法。
+   ★ `background` 也留着：它是 `<img>` 还没解码出来、或那张图 404 时露出的底色
+     （`alt=""` 不会留碎图标，见 CLAUDE.md §不糊弄）。值是这一屏的实物底
+     `--pf-paper`（冷的一档），而盒子里那张云是暖的——这不矛盾，那条法律讲的是
+     **物件在冷的光里**（`profile-backdrop.css` 文件头），一个被压在画面角上的
+     头像正是物件。 */
+  object-fit: cover;
   background: var(--pf-paper);
   color: var(--ink-muted);
   box-shadow: 0 12px 26px -16px rgba(55, 82, 99, 0.45);
-}
-
-/* 空圈里那个记号。★ 从 30px 放到 38px：盒子从 64 长到 92，
-   记号不跟着长的话那个圈会显得空。 */
-.pf__avatar svg {
-  width: 38px;
-  height: 38px;
-}
-
-/* 挑过的头像本身。★ 与 `.pf__avatar`（那个空圈）**同一个 92px 的盒子**：
- *   挑与不挑之间只该换"画的是什么"，盒子不能跟着跳。
- * ★ 圆角 999px 把 SVG 自己那个圆底再切一次：认不出的 id 退回空圈、
- *   以后换一批矢量形状，这一圈都得是圆的（`overflow: hidden` 那一句
- *   已经把 `<img>` 的方角也切掉了，这一条是给"将来没有那样一层"的情况留的）。 */
-img.pf__avatar {
-  object-fit: cover;
-  border-radius: 999px;
-}
-
-/* ── 「挑一个头像」那一排（工单 08）─────────────────────────────────────
- * ★ 位置在 `pf__meta` 下面、昵称上面：它是**这一屏最上面那个头像的操作**，
- *   与它挨着才读得出来这两处是同一件事（原来这里是一行"还没传过"的说明）。
- * ★ 用 `flex-wrap`：窄屏时六个换行，而不是把那一排挤成六个更小的格子——
- *   缩到 30px 以下就看不出画的是什么了，而"看得出是什么"正是这一排唯一的用处。 */
-.pf__avatars {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-  margin: 18px 0 0;
-}
-
-.pf__avatar-pick {
-  display: grid;
-  place-items: center;
-  padding: 3px;
-  border: 2px solid transparent;
-  border-radius: 999px;
-  background: none;
-  cursor: pointer;
-  /* ★ 只动边框与底色，不做 scale：这一排挨得紧，一个放大会挤到旁边那个 */
-  transition:
-    border-color 0.15s ease,
-    background-color 0.15s ease;
-}
-
-.pf__avatar-pick:hover {
-  background: var(--surface-soft);
-}
-
-/* 当前那个。★ 用 `aria-checked` 而不是另挂一个 class：
- *   状态只有一份（就是读屏读到的那个），视觉跟着它走，不可能漂。 */
-.pf__avatar-pick[aria-checked='true'] {
-  border-color: var(--pf-accent);
-}
-
-.pf__avatar-pick img {
-  display: block;
-  border-radius: 999px;
-}
-
-/* ★ 挑的这一刻给一个"正在存"的样子。不做 spinner：一次请求几十毫秒，
- *   转圈会在它自己转起来之前就消失（同 AppShell 那条 `PENDING_SHOW_AFTER_MS` 的账）。 */
-.pf__avatar-pick[aria-busy='true'] {
-  opacity: 0.55;
-}
-
-/* 键盘走到哪一格。★ `:focus-visible` 而不是 `:focus`：鼠标点过之后留一圈边，
- *   在这排只有 44px 的方格里看起来像"选中了两个"。 */
-.pf__avatar-pick:focus-visible {
-  outline: 2px solid var(--pf-accent);
-  outline-offset: 2px;
 }
 
 .pf__who {
@@ -418,15 +363,31 @@ img.pf__avatar {
   color: var(--ink-muted);
 }
 
-/* ★ 退出登录在两栏模式里**独占一行**（原来它挤在身份那一行右边）。
-   它是这一栏里唯一一个不可逆的动作，所以底色与字色都换成 danger 那一支。 */
-.pf__card .pf__ghost {
-  width: 100%;
+/* ── 这一栏底部那两个动作（2026-10-17）────────────────────────────────────
+ * ★ 两根按钮并排、一静一重。★ 它们**为什么不是**原来那条
+ *   「.pf__card .pf__ghost 全是红的」：那条规则成立的前提是"这张卡里只有一个
+ *   ghost，而它恰好是不可逆的那个"。多出「修改密码」之后它就不成立了——
+ *   把改密码也涂成 danger 是在说"这件事很危险"，而它不比改昵称危险多少。
+ *   **改成让危险自己说出来**（`.pf__ghost--danger`），而不是让"在卡片里"背这个锅：
+ *   下一个人在这张卡里再放一颗按钮时，不必先知道那条规则才知道它会长什么颜色。 */
+.pf__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 4px;
+}
+
+/* 这一栏里唯一**不可逆**的那一个（退出登录）。★ 底色与字色都换成 danger 那一支，
+   并且**独占半行**（`flex: 1`）：它右边不该有别的按钮挨着，
+   一次误点的代价是"重新登录一次"而不是"关掉一个输入框"。 */
+.pf__ghost--danger {
+  flex: 1;
   border-color: rgba(164, 48, 12, 0.22);
   color: var(--danger);
 }
 
-.pf__card .pf__ghost:hover {
+.pf__ghost--danger:hover {
   border-color: var(--danger);
 }
 
@@ -491,7 +452,7 @@ img.pf__avatar {
   border-top: 1px solid var(--pf-hairline);
 }
 
-.pf__rename-label {
+.pf__field-label {
   color: var(--ink-muted);
   font-size: 13px;
 }
@@ -525,7 +486,22 @@ img.pf__avatar {
   font-size: 14px;
 }
 
-.pf__input:focus-visible {
+/* ★ 框里的那个 `<input>` **自己不画焦点圈**——它的圈是外面那个 `.pf__box`
+   （`:focus-within` 那一句，圆角 14px、贴着框的形状）。
+   ★ 这一条原来写作 `.pf__input:focus-visible { outline: none }`，**从来没生效过**：
+     它是 (0,2,0)，而下面那条 `section.pf :focus-visible` 是 (0,2,1)（多一个类型
+     选择器），后者赢——与那段注释里为"圈的**颜色**"记的是同一场权重战，
+     只是这一处的赌注没人发现。症状是**点进输入框会看到两个圈**：
+     外面一个贴着框的圆角圈、里面一个贴着输入框的**直角**圈
+     （`<input>` 没有圆角，所以那个圈是长方形的）。2026-10-17 用户按着截图问
+     「出现了一个椭圆和长方形的框」——就是这一对。
+   ★ 修法不是在 `.pf__input` 上加 `!important`，而是**把选择器写到够重**：
+     `.pf__box .pf__input:focus-visible` 是 (0,3,0)，三个类比 (0,2,1) 的两个类多，
+     稳稳压过，且照样与文件顺序无关（同一把尺子，见下面 `section.pf` 那段）。
+   ★ 判据是**量出来的**，不是看着对：聚焦之后
+     `getComputedStyle(input).outlineStyle` 必须是 `none`，
+     而 `.pf__box` 的 `box-shadow` 那一圈还在（它是**唯一**该在的那个）。 */
+.pf__box .pf__input:focus-visible {
   outline: none;
 }
 
@@ -790,21 +766,16 @@ img.pf__avatar {
   line-height: 1.55;
 }
 
-/* ── 密码那一段（横跨整宽，在两栏下面）─────────────────────────────────── */
-
-.pf__section {
-  margin: 34px 0 14px;
-  font-family: var(--font-serif);
-  font-size: 18px;
-  font-weight: 600;
-}
+/* ★ `.pf__section`（那行「密码」标题）随"改密码改成弹窗"一起删了：标题现在住在
+   `Dialog` 的标题栏里（`.dlg__title`），而且**全站六个弹窗共用**那一份。
+   留着 `.pf__section` 只会是一段没人用的样式——下一个人照它写一个同名标题，
+   就会得到一行"看起来对但不参与任何弹窗规矩"的字。 */
 
 .pf__ghost:focus-visible,
 .pf__save:focus-visible,
 .pf__new:focus-visible,
 .pf__book:focus-visible,
-.pf__quick-item:focus-visible,
-.pf__avatar-pick:focus-visible {
+.pf__quick-item:focus-visible {
   outline: 2px solid var(--pf-accent);
   outline-offset: 2px;
 }
@@ -845,7 +816,7 @@ section.pf :focus-visible {
     grid-template-columns: minmax(0, 1fr) auto auto;
   }
 
-  .pf__rename-label {
+  .pf__field-label {
     grid-column: 1 / -1;
   }
 
@@ -860,30 +831,24 @@ section.pf :focus-visible {
   }
 }
 
-/* ── 改密码那三格（2026-10-16 加的）────────────────────────────────────────
+/* ── 改密码那三格（2026-10-16 加的；**2026-10-17 搬进弹窗**）───────────────
    ★ 为什么它自成一格（`.pf__pw`）而不是塞进上面那个 `.pf__rename` 的网格：
-     那一行是「标签 + 输入 + 按钮 + 回话」四列，而这里要**三行输入 + 一行按钮**。
+     那一行是「标签 + 输入 + 保存 + 回话」四列，而这里要**三行输入**。
      挤进同一个网格只会把 `grid-template-columns` 撑成一串只对某一行成立的数字。
    ★ 三行都用同一套 `.pf__box / .pf__input`（与改昵称那一格同一个外观）：
      同一个页面里两个输入框长得不一样，是"两件事"的假信号。
-   ★ **2026-10-17 它自己变成了一张纸。** 起因是这一屏换了背景：整屏铺上那层蓝底
-     之后，"密码"这一段是**唯一一段直接坐在页面底上的正文**，于是它里面三样东西
-     全踩线——`.pf__save` 的字色是 `--pf-accent`（在蓝底上 4.12:1）、
-     `.pf__rename-label` 与 `.pf__status` 是 `--ink-muted`（4.16:1）。
-     包成一张 `--surface` 的纸之后三个数一起回到 5.16 / 5.33 / 5.33（都已过线），
-     而**一个颜色都没改**。这也是 `profile-backdrop.css` 文件头那条法律的正常用法：
-     不在这层上的颜色，就给它一张纸。
-   ★ 它顺带修好一件事：`padding-left: 88px` 那两条（`.pf__pw-actions` / `.pf__hint`）
-     现在对齐的是**纸里**那个输入列，本来就该是这样。 */
+   ★ **它不再是一张纸了。** 原来它横跨整宽坐在页面底上，是一段**唯一直接坐在那层蓝底
+     上的正文**，于是三样东西全踩线（`.pf__save` 的字色在蓝底上 4.12:1、
+     `.pf__field-label` 与回话是 `--ink-muted` 4.16:1），当时靠"给它一张 `--surface`
+     的纸"把三个数拉回 5.16 / 5.33 / 5.33。现在**装它的东西就是那张纸**
+     ——`Dialog` 的面板本身就是 `--surface` 的一张圆角纸（`dialog.css` 的 `.dlg`），
+     所以这里不再画第二张：`margin / padding / border / background / box-shadow`
+     五项全部撤掉，只留"三行之间隔 10px"这条排版。
+     ★ 这也是 `profile-backdrop.css` 那条法律的正常用法：**不在这层上的颜色，
+       就给它一张纸**——而"纸"可以是一张弹窗，不必是一段盖在正文上的白底。 */
 .pf__pw {
   display: grid;
   gap: 10px;
-  margin-top: 12px;
-  padding: 20px 24px 22px;
-  border: 1px solid var(--pf-hairline);
-  border-radius: 18px;
-  background: var(--surface);
-  box-shadow: var(--sheet-shadow);
 }
 
 .pf__pw-row {
@@ -893,17 +858,24 @@ section.pf :focus-visible {
   gap: 12px;
 }
 
-.pf__pw-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  /* 与上面三格的标签列对齐：按钮落在输入框下面，而不是贴在最左边 */
+/* 失败那一句。★ **占着位置**（`min-height` 一行）：不占的话那句红字一出现，
+   下面那句提示与整个底栏会往下跳一下，而"改密码"这件事上抖一下是最不该有的。
+   ★ 颜色与 `.dlg__hint--warn` 是同一支 `--danger`；**它俩的差别只在语义**
+     （一条是"你填错了"，一条是"接下来会发生什么"），不是色号。 */
+.pf__pw-error {
+  margin: 2px 0 0;
+  min-height: 18px;
   padding-left: 88px;
+  color: var(--danger);
+  font-size: 12.5px;
 }
 
-.pf__hint {
+/* 底栏顶上那句说明。★ 与上面那三格的**标签列对齐**（76px + 12px = 88px），
+   所以它读起来是"这整块输入的事"，而不是一条独立的免责声明。 */
+.pf__pw-hint {
   margin: 0;
   padding-left: 88px;
   color: var(--ink-muted);
   font-size: 12.5px;
+  line-height: 1.7;
 }

@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "cardId": "xiaoman-r1",
+  "childId": "xiaoman",
+  "revision": 1,
+  "anchors": [
+    {
+      "slot": "bone",
+      "value": "方中带圆的脸、下巴短、颊部有两团肉"
+    },
+    {
+      "slot": "eyes",
+      "value": "黑亮杏眼、眼尾微微上挑、单层眼皮"
+    },
+    {
+      "slot": "hair",
+      "value": "齐耳短发、右侧别一枚黄色小鸭发卡"
+    },
+    {
+      "slot": "build",
+      "value": "头身比约 1:4.5，肩窄、手脚小"
+    },
+    {
+      "slot": "skin",
+      "value": "白净偏粉的肤色，鼻尖略深"
+    },
+    {
+      "slot": "wardrobe",
+      "value": "藕荷色连衣裙 + 白短袜 + 蓝布鞋"
+    }
+  ],
+  "style": {
+    "key": "warm-handdrawn",
+    "promptFragment": "温暖手绘绘本插画：水彩铺色打底 + 细彩铅轮廓线收形，可见纸质纹理，高明度低饱和的粉彩色板，柔和的左上方统一光源，阴影无硬边",
+    "ratio": "1:1"
+  },
+  "reference": {
+    "path": "cards/xiaoman-r1/ref.f324801f9e05.jpg",
+    "digest": "f324801f9e05",
+    "bytes": 327226,
+    "mime": "image/jpeg"
+  },
+  "provenance": {
+    "modelId": "Google Generative AI（手工出图）",
+    "promptVersion": "character-card@v1+bg-white",
+    "cardRevision": 1,
+    "generatedAt": 1792131637968
+  },
+  "createdAt": 1792131637968
+}

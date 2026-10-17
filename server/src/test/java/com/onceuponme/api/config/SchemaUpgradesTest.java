@@ -81,4 +81,55 @@ class SchemaUpgradesTest {
     }
     return false;
   }
+
+  /**
+   * 历史坏值：音色那一行落下来时**没有名字**（2026-10-17 之前，
+   * 界面按「选它」只送 voiceId，而预置音色是第一次被选中才落一行的）。
+   *
+   * <p>★ 判据挑的是"只有真修了才会不一样"的那些：空名字那一行**补成它自己的 id**、
+   * 有名字那一行**一个字不动**、再跑一遍不报错。只验"没有空名字了"的话，
+   * 一个 `DELETE FROM voices WHERE name = ''` 的实现也能过——而那是把用户的选择删掉。
+   */
+  @Test
+  @DisplayName("★ 历史坏值：空名字那行补成它的 id、有名字的不动、再跑一遍不报错")
+  void repairsBlankVoiceNames() throws Exception {
+    JdbcDataSource dataSource = legacyDatabase();
+    try (Connection connection = dataSource.getConnection();
+        Statement statement = connection.createStatement()) {
+      statement.execute(
+          "CREATE TABLE IF NOT EXISTS voices ("
+              + "id BIGINT NOT NULL AUTO_INCREMENT,"
+              + "user_id BIGINT NOT NULL,"
+              + "voice_id VARCHAR(64) NOT NULL,"
+              + "name VARCHAR(64) NOT NULL,"
+              + "model VARCHAR(64) DEFAULT NULL,"
+              + "chosen BOOLEAN NOT NULL DEFAULT FALSE,"
+              + "created_at DATETIME NOT NULL,"
+              + "PRIMARY KEY (id))");
+      statement.execute("DELETE FROM voices");
+      statement.execute(
+          "INSERT INTO voices (user_id, voice_id, name, chosen, created_at)"
+              + " VALUES (1, 'longjielidou_v3.6', '', TRUE, CURRENT_TIMESTAMP)");
+      statement.execute(
+          "INSERT INTO voices (user_id, voice_id, name, chosen, created_at)"
+              + " VALUES (1, 'v-mine-1', '我的声音', FALSE, CURRENT_TIMESTAMP)");
+    }
+
+    new SchemaUpgrades(dataSource).run(null);
+
+    try (Connection connection = dataSource.getConnection();
+        Statement statement = connection.createStatement();
+        ResultSet rows =
+            statement.executeQuery("SELECT voice_id, name, chosen FROM voices ORDER BY voice_id")) {
+      assertThat(rows.next()).isTrue();
+      assertThat(rows.getString("voice_id")).isEqualTo("longjielidou_v3.6");
+      assertThat(rows.getString("name")).as("空名字补成它自己的 id").isEqualTo("longjielidou_v3.6");
+      assertThat(rows.getBoolean("chosen")).as("他选的那一个还是他选的那一个").isTrue();
+
+      assertThat(rows.next()).isTrue();
+      assertThat(rows.getString("name")).as("有名字的那一行一个字不动").isEqualTo("我的声音");
+    }
+
+    assertThatCode(() -> new SchemaUpgrades(dataSource).run(null)).doesNotThrowAnyException();
+  }
 }

@@ -17,7 +17,7 @@
  */
 
 import { readResult, unreachable, type Result } from '@/lib/auth/response.ts'
-import { parseMyVoices, type MyVoices } from './state.ts'
+import { CONTACT_EMAIL, parseMyVoices, type MyVoices } from './state.ts'
 
 export type VoiceOk<T> = { ok: true; data: T }
 export type VoiceFail = { ok: false; message: string; status: number }
@@ -37,8 +37,16 @@ async function call(path: string, init: RequestInit): Promise<VoiceOk<MyVoices> 
   const parsed = parseMyVoices(result.data)
   if (!parsed) {
     // ★ 认不出来时说**形状**的问题，不伪造一份空的——那会显示成"你还没录过音色"，
-    //   而真相可能是"有两条，一条都没画出来"
-    return { ok: false, message: '服务端回的音色列表不是我们认识的形状，刷新一次试试', status: 200 }
+    //   而真相可能是"有两条，一条都没画出来"。
+    // ★ 2026-10-17 补了后半句，因为**"刷新一次试试"是错的建议**：实测到的那一次
+    //   （服务端给预置音色落了一行空名字）刷新一百次也一样——那一份记录本身坏了，
+    //   它不是用户这边的事。所以这句话现在说"说一声"，与 `no-permission` 那类
+    //   "不是你造成的"用同一条出口（`CONTACT_EMAIL`）。
+    return {
+      ok: false,
+      message: `服务端回的这份音色记录读不出来（多半是里面某一条缺了名字或时间）。这不是你这边能改的——说一声 ${CONTACT_EMAIL}`,
+      status: 200,
+    }
   }
   return { ok: true, data: parsed }
 }

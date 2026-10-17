@@ -47,8 +47,6 @@ export type AuthUser = {
    * 界面上它要长成一句能读的兜底（打码手机号），不是一块空白。
    */
   nickname: string
-  /** 默认头像的 id。空串 = 还没挑过（界面上是那个"头像空着"的圈） */
-  avatar: string
   role: string
   /** 首次登录时间，带时区的 ISO 8601（服务端补的 `+08:00`） */
   createdAt: string
@@ -130,7 +128,6 @@ export function parseUser(raw: unknown): AuthUser | null {
   const userId = value['userId']
   const account = value['account']
   const nickname = value['nickname']
-  const avatar = value['avatar']
   const role = value['role']
   const createdAt = value['createdAt']
   const phone = value['phone']
@@ -140,7 +137,6 @@ export function parseUser(raw: unknown): AuthUser | null {
   if (typeof account !== 'string' || !/^\d{6,11}$/.test(account)) return null
   // ★ 昵称是空串时照样认——空串是"还没起过"，不是坏数据（与后端那条同名判断同一个口径）
   if (typeof nickname !== 'string') return null
-  if (typeof avatar !== 'string') return null
   if (typeof role !== 'string') return null
   if (typeof createdAt !== 'string') return null
   // ★ 手机号可空，但**给了就必须是个号**：一个 `"abc"` 会让打码那一格吐出原样
@@ -152,7 +148,6 @@ export function parseUser(raw: unknown): AuthUser | null {
     account,
     phone: phone as string | null,
     nickname,
-    avatar,
     role,
     createdAt,
     permissions,

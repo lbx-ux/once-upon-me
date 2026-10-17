@@ -350,7 +350,10 @@
   color: var(--ink-soft);
 }
 /* 本书自己的按钮样式。**刻意不复用 hero-orbit.css 的 .btn** ——
-   跨组件借用样式会把两节的改版绑在一起；这几十行重复是有意的。 */
+   跨组件借用样式会把两节的改版绑在一起；这几十行重复是有意的。
+   ★ 2026-10-17：它是 `<Link>`（一颗真 `<a href="/home">`）了，所以补 `text-decoration: none`
+   —— 全局没有 `a` 的重置，这个仓库里每条链接样式自己写。别的属性原样够用：
+   `border: 0`（button 的默认边框）与 `color: #fff`（a 默认会被 UA 染成蓝的）都在这儿了。 */
 .book-cta {
   display: inline-flex;
   align-items: center;
@@ -363,6 +366,7 @@
   font: inherit;
   font-size: 15px;
   font-weight: 500;
+  text-decoration: none;
   cursor: pointer;
   box-shadow: 0 8px 24px rgba(23, 23, 29, 0.18);
   transition:

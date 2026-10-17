@@ -95,7 +95,8 @@ export type ShelfDashboardProps = {
   books: BookSummary[]
 }
 
-/** 空态那条线出去的成品书。与首页那颗「看一本成品」是同一本（ADR-0003 的演示书） */
+/** 空态那条线出去的成品书（ADR-0003 的演示书）。
+ *  ★ 2026-10-17：首页那颗「看一本成品」改指 `/booklist` 了，演示书现在只剩这一个入口。 */
 const DEMO_BOOK_ID = 'xiaoyu-r1-4fe055c5723b'
 
 /**
@@ -491,7 +492,8 @@ export default function ShelfDashboard({ books }: ShelfDashboardProps) {
             正在编辑
           </h2>
           <p className="shelf__drafts-hint">
-            在运行视图里点过「退出」的放在这里。故事写好了还没开始画的也在这一栏——点开接着改。
+            在运行视图里点过「退出」的放在这里。故事写好了还没开始画的也在这一栏——点开接着改；
+            已经在画的那一本点开是画桌（那一本还没装订，所以还没有「制作为绘本」）。
           </p>
           <ul className="shelf__draftlist">
             {drafts.map((book) => {
@@ -512,14 +514,29 @@ export default function ShelfDashboard({ books }: ShelfDashboardProps) {
                       {/* ★ 「正在编辑」是一句**说明**，不是一个标签：它说的是这本书现在的状态，
                           点不动。而"继续编辑"是那一下点击本身，所以它写在下一行 */}
                       <span className="shelf__meta">
-                        {book.pageCount} 页 · {onlyStory ? '还没开始画' : '正在编辑'}
+                        {book.pageCount} 页 ·{' '}
+                        {/* ★ 2026-10-17（用户实测报的 bug）：只有故事的那一本**不一定**还没开始画。
+                            他点完「就按这个画」、从运行视图退出之后，盘上已经躺着几张页图，
+                            而这一行原来恒写"还没开始画"——他的原话是"他告诉我正在生成中，
+                            我看不到画的什么"。现在照实说画到第几页（`illustratedCount` 是
+                            盘上真数出来的页图数）。 */}
+                        {onlyStory
+                          ? book.illustratedCount > 0
+                            ? `画到第 ${book.illustratedCount} 页`
+                            : '还没开始画'
+                          : '正在编辑'}
                         {/* ★ 把动作**写出来**，不留给人猜：整张卡是一个链接，而"正在编辑"
                             只说了状态、没说点它会怎样。一句「继续编辑」比一个箭头有用——
                             会读的人先知道要去哪儿，读屏念到的也是这句话。
-                            ★ 只有故事的那一本说「继续编」：点进去是**改故事**那一屏，
-                              不是画桌——两个动作的名字不一样，因为去的地方不一样 */}
+                            ★ 只有故事的那一本：**一页没画**说「继续编」（点进去是改故事那一屏），
+                              **已经画上了**说「看它画」（点进去是运行视图那一屏：正在跑的那一本
+                              现在会直接落到画桌上，见 `GenerationRun` 那一支） */}
                         <span className="shelf__meta-go">
-                          {onlyStory ? '继续编 →' : '继续编辑 →'}
+                          {onlyStory
+                            ? book.illustratedCount > 0
+                              ? '看它画 →'
+                              : '继续编 →'
+                            : '继续编辑 →'}
                         </span>
                       </span>
                     </span>

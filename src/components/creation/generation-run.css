@@ -210,11 +210,28 @@
   bottom: 0;
   z-index: 5;
   margin-top: 26px;
-  /* 它左右要顶到窗口边（否则滚动时画框会从它两侧露出来），
-     所以负边距吃掉 `.gr` 的左右留白，再在里面自己补回来 */
-  margin-inline: -20px;
-  padding: 0 20px calc(14px + env(safe-area-inset-bottom, 0px));
-  background: linear-gradient(to bottom, rgba(244, 248, 249, 0), var(--paper) 14px);
+  /* ★★ 2026-10-17（用户实测问的"为什么这个底下有一层白色的底子"）：
+     这里原来有两样东西，一起撤了：
+
+     1. `margin-inline: -20px` + `padding: 0 20px` —— 让这条**顶到窗口边**，
+        再在两侧留出 20px 的带子；
+     2. `background: linear-gradient(to bottom, rgba(244,248,249,0), var(--paper) 14px)`
+        —— 那两条 20px 的带子 + 下方 14px **铺的是一层不透明的 `--paper`**。
+
+     实测（1280×900）：条子的盒子 38..1241，而它里面那张卡的盒子是 58..1221
+     —— 于是左右各露出 20px、下方露出 14px 的纸色；用户圈的就是这两条。
+     ★ 更坏的是它**悄悄取消了"玻璃"这件事**：`--surface-glass` 是 0.70 的白，
+       压在**不透明的纸**上，透出来的是 `--paper`；而阶段轨那一块透的是天光。
+       用户第一次说的"上面和下面两个白色的背景"里，**下面这一块其实一直没变透**。
+     ★ 顺带量清楚了一件事：桌子（`.dk`）的左右边缘**正好等于那张卡的边缘**
+       （58..1221），所以撤掉衬底不会让画框从两侧露出来——那两条带子里
+       本来就是空白（`elementFromPoint` 回的是 `.gr__composer` 自己）。
+
+     现在：`margin-inline: 0`（盒子与卡片等宽，没有多余的带子）、
+     没有背景（带子与下方露出来的就是天光）、只留 `padding-bottom`
+     给 iOS 那条安全区（桌面上是 0）。卡片本身的尺寸与位置**一个像素没动**。 */
+  padding: 0 0 calc(14px + env(safe-area-inset-bottom, 0px));
+  background: none;
 }
 
 .gr__composer-inner {

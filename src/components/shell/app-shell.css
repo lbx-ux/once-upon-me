@@ -216,15 +216,22 @@
   height: 20px;
 }
 
-/* 挑过的头像。★ 与 `.shell__icon` **同一个 22px 的方框**，不是"图片自己多大就多大"：
- *   换头像时那一格不能跳，收起侧栏只剩图标时位置也纹丝不动
+/* 那**唯一一个**默认头像。★ 与 `.shell__icon` 同一个 20px 的方框，不是"图片自己多大就多大"：
+ *   进个人主页时那一格不能跳，收起侧栏只剩图标时位置也纹丝不动
  *   （与上面 `.shell__glyph` 那句"转圈与图标共用同一个格子"同一条理由）。
- * ★ `border-radius: 50%`：这几个 SVG 自己画了一个圆底，但**不靠它**——
- *   认不出的 id 退回空圈、以后换了矢量形状，这一圈都得是圆的。 */
+ * ★ 这里原来写的是 22px，而 `.shell__glyph` 那一格是 `flex: 0 0 20px`——
+ *   于是 `<img>` 被撑成 20×22，再被 `border-radius: 50%` 裁成**椭圆**（横向压掉 9%）。
+ *   换成位图之前看不出来：那时六个 SVG 都自己带 `viewBox`，怎么压都还是圆的；
+ *   `object-fit` 缺省是 `fill`，**位图就会实打实地被拉扁**。20 是照 `.shell__icon` 对齐的那一档，
+ *   改 20 而不是把格子改成 22——格子是跟图标列同一条竖线的那个数（见 `.shell__collapse-arrow`）。
+ * ★ `object-fit: cover`：与 `.pf__avatar` 同一条纪律，图再怎么换都不可能被拉变形。
+ * ★ `border-radius: 50%`：这一圈是圆的，不靠图自己画一个圆底——
+ *   认不出的地址退回空圈、以后换了矢量形状，都得是圆的。 */
 .shell__avatar {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
+  object-fit: cover;
   display: block;
 }
 
@@ -647,18 +654,15 @@
   outline-offset: 2px;
 }
 
-/* ★ 提示与报错各占一整行，不挤在按钮旁边：两句都长，挤着会被折成两截 */
-.help__req-hintline,
+/* ★ 提示与报错各占一整行，不挤在按钮旁边：两句都长，挤着会被折成两截
+ *   （2026-10-17 第三次改：`help__req-hintline` 撤了——它写的那句
+ *   「开通是四项一起给的」在它上面那段答案里已经说过一遍） */
 .help__req-bad,
 .help__req-warn {
   flex-basis: 100%;
   margin: 0;
   font-size: 12px;
   line-height: 1.7;
-}
-
-.help__req-hintline {
-  color: var(--ink-muted);
 }
 
 .help__req-bad {

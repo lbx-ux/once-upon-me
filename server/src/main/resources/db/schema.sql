@@ -1,15 +1,27 @@
 -- ============================================================================
--- 小主角的账号表 —— 三张，一张不多
+-- 小主角的账号与配置表 —— 六张，一张不多
+--
+-- ★ 这句原来是"三张，一张不多"（2026-10-15 写第一版时确实是三张）。
+--   到现在这六张是：users / user_permissions / voices /
+--   permission_requests / sms_send_log / sms_codes ——
+--   每加一张都有它当时非加不可的理由，而那些理由各自写在那一张上面。
+--   ★ 把总数写在这里是因为它会过期：这一行 2026-10-17 就过期过一次
+--   （加了 voices 之后没人改它）。改表的时候顺手改这一行。
 --
 -- ★ 这个文件是**唯一一份**建表语句：本地那份 H2（`local` profile）与服务器上的
 --   MySQL 8 都读它。所以它只写两种库都认的那一小块 SQL：
 --     · 没有 `ENGINE=` / `DEFAULT CHARSET=` —— 库级设定（建库时 utf8mb4）就够了，
 --       写了就变成"只有 MySQL 认"，本地那一半立刻跑不起来；
---     · 没有 `CREATE INDEX IF NOT EXISTS` —— MySQL 8 **不支持**它，
---       而写在 CREATE TABLE 里的 `KEY idx (...)` H2 又不认。
---       所以次级索引一条都没有：这几张表在可预见的规模里是几百行，
---       真到了要索引那天，请在服务器上手工 `ALTER TABLE ... ADD INDEX`（MySQL-only 的写法），
---       而不是往这个文件里塞一句本地跑不通的话。
+--     · 没有 `CREATE INDEX IF NOT EXISTS` —— MySQL 8 **不支持**它（实测：
+--       `You have an error in your SQL syntax ... near 'IF NOT EXISTS idx_...'`）。
+--       ★ 这一条 2026-10-17 在服务器上真的炸过一次：工单 09 往文件末尾加了一句
+--       `CREATE INDEX IF NOT EXISTS`，本地（H2）一直好好的，而上到 MySQL 那一刻
+--       **整个后端起不来**——`spring.sql.init` 挂在那句上，进程直接退。
+--       所以：**次级索引一律写成建表语句里的 `KEY 名字 (列)`**，两个库都认
+--       （`KEY` 那种写法 2026-10-17 在 H2 的 MySQL 兼容档与 MySQL 8.0.46 上各测过一次，
+--       见 `permission_requests` 那条与工单 03 的记录）。
+--       ★ 而"给**已经建过**的表补索引"没有 `IF NOT EXISTS` 可用：
+--       那种情况按 `config/SchemaUpgrades` 的做法来（先问库，再 ALTER）。
 -- ★ 时间戳一律由 Java 写（没有 `DEFAULT CURRENT_TIMESTAMP`）：两边时钟语义不同，
 --   而"这条记录是什么时候来的"是审计要用的东西，不该由数据库的方言决定。
 -- ============================================================================
@@ -131,14 +143,14 @@ CREATE TABLE IF NOT EXISTS permission_requests (
   -- 谁批的、什么时候。★ 只有管理员能动，所以这两列就是一张"谁开的这个口子"的账
   decided_at   DATETIME    DEFAULT NULL,
   decided_by   BIGINT      DEFAULT NULL,
-  PRIMARY KEY (id)
+  PRIMARY KEY (id),
+  KEY idx_permission_requests_status (status, created_at)
 );
 
--- ★ 列表按"待处理在前、新的在前"取，这条索引就是给那个排序用的。
+-- ★ 列表按"待处理在前、新的在前"取，这条索引就是给那个排序用的
+--   （写在建表语句里，不是一句 CREATE INDEX —— 理由见文件头那一条）。
 --   没有它，管理页每次打开都要全表排序一遍——现在只有五个人看不出差别，
 --   而这张表是**只增不减**的（已拒的也留着），所以它一定会长大。
-CREATE INDEX IF NOT EXISTS idx_permission_requests_status
-  ON permission_requests (status, created_at);
 
 -- ── 音色（2026-10-17，工单 16）─────────────────────────────────────────────
 -- 用户 2026-10-17 定的口径：「音色一并挂到账号上」。它原来住在浏览器

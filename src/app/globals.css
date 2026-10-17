@@ -20,6 +20,7 @@
 @import '../components/shelf/shelf.css';
 @import '../components/admin/admin.css';
 @import '../components/shell/app-shell.css';
+@import '../components/shell/settings-dialog.css';
 @import '../components/shell/studio-backdrop.css';
 @import '../components/studio/create-landing.css';
 @import '../components/studio/generation-setup-dialog.css';

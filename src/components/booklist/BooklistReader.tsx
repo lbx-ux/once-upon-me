@@ -13,8 +13,10 @@
  *   ★ 半页**不切文件**：同一张图挂两次，靠 `background-size: 200% 100%` +
  *     `background-position` 各取一半（`book/flip.ts` 顶部那段叶模型）。所以这一屏
  *     不会出现"一页两张图"——那是**一张图跨两个书页**。
- *   ★ 另一台阅读器（`reader/ReaderBook.tsx`）每一面装的是一整页（方形插画 + 下文），
- *     那是"一页一图一句"那条产品定义的形状。两台不吃同一份 DOM，也不共用样式的类名。
+ *   ★ 另一台阅读器（`reader/ReaderBook.tsx`）那一屏是"一页一图一句"那条产品定义的形状。
+ *     两台不吃同一份 DOM，也不共用样式的类名；**共用的只有 `reader/use-narration.ts`**
+ *     那一份朗读逻辑（含 2026-10-17 的自动朗读）——两份会漂成两个脾气的是行为，
+ *     不是长相，所以分界线画在这里。
  *
  * ---------------------------------------------------------------------------
  * 四条实现上的讲究，每条对应一处真会发生的错
@@ -30,11 +32,17 @@
  *
  * 朗读则照 `ReaderBook.tsx` 判据 ① 那条：**8 段音频全在才给控件**。
  * 一本只有 5 段能响的书，那个按钮证的是反面。
+ *
+ * 朗读那一套（含"自动朗读"这一趟）2026-10-17 起搬去 `reader/use-narration.ts`：
+ * 两台的类名不同、屏的口径也不同（这边一个跨页 = 两页），但**行为必须一样**——
+ * 侧栏那个阅读偏好说的是"两个阅读器都算"。
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { flipState } from '@/components/book/flip.ts'
+import { useNarration } from '@/components/reader/use-narration.ts'
+import { useTurnMode } from '@/lib/use-reading-prefs.ts'
 import { THEMES } from '@/lib/themes.ts'
 
 import { SPREADS_PER_BOOK, PAPER_PAGES_PER_BOOK, type BooklistBook } from './booklist.ts'
@@ -87,46 +95,28 @@ export default function BooklistReader({ book, coverUrl, art, audio }: BooklistR
 
   const theme = THEME_BY_KEY.get(book.key)
 
-  /* ── 朗读 ─────────────────────────────────────────────────────────────── */
+  /* ── 朗读 ────────────────────────────────────────────────────────────────
+   * 整块在 `reader/use-narration.ts` 里，与 `/reader/<bookId>` 那台**共用同一份**
+   * （文件头那段写了为什么）。这一层只提供两样它算不出来的东西：
+   * 当前是第几屏（落定的那个），以及怎么翻页。
+   */
 
-  /** 正在朗读的那个跨页（null = 没在放）。★ 朗读属于"你正在看的那一跨页" */
-  const [speaking, setSpeaking] = useState<number | null>(null)
-  const [audioFailed, setAudioFailed] = useState<number | null>(null)
-  const audioRef = useRef<HTMLAudioElement>(null)
+  const { turnMode } = useTurnMode()
+  /** 落定后的那一屏：`0` = 封面，`leafCount` = 封底（= 跨页数 + 1） */
+  const opening = Math.round(q)
+  /** 页翻到位了没有。★ 是个布尔，所以 60fps 的 `q` 不会把它抖成每帧都变 */
+  const settled = Math.abs(q - qTarget) < 0.02
 
-  /** ★ 判据 ①：**只要有一段没有朗读，这个控件就不出现**（与 `/reader` 同一条） */
-  const fullyNarrated = audio.length === SPREADS_PER_BOOK && audio.every((url) => url !== null)
-
-  const stopSpeaking = useCallback(() => {
-    const el = audioRef.current
-    if (el) {
-      el.pause()
-      el.currentTime = 0
-    }
-    setSpeaking(null)
-  }, [])
-
-  const toggleSpeaking = useCallback(
-    (spread: number) => {
-      const el = audioRef.current
-      const url = audio[spread - 1] ?? null
-      if (!el || !url) return
-      if (speaking === spread) {
-        stopSpeaking()
-        return
-      }
-      // 换一段必须重设 src：不重设就会从上一段的播放位置接着放（症状是"点了没声"）
-      el.src = url
-      setAudioFailed(null)
-      // `play()` 返回 promise，被手势打断或文件读不到时会 reject。
-      // 不接住就是"界面上什么都没发生"，而那是这一屏最不该有的失败方式
-      void el.play().catch(() => setAudioFailed(spread))
-      setSpeaking(spread)
-    },
-    [audio, speaking, stopSpeaking],
-  )
-
-  useEffect(() => () => audioRef.current?.pause(), [])
+  const narration = useNarration({
+    urls: audio,
+    opening,
+    settled,
+    // 直接把 `setQTarget` 递进去：它的身份是稳定的（见 `ReaderBook` 里那条注释）
+    goTo: setQTarget,
+    mode: turnMode,
+  })
+  /** ★ 单独取出来：`narration` 每次渲染都是新对象，而 `turn` 的依赖要的是稳定身份 */
+  const { takeOver } = narration
 
   /* ── 静止模式：读一次、订阅一次。reduced 下不跑补间，直接落在目标上 ───────── */
 
@@ -167,11 +157,15 @@ export default function BooklistReader({ book, coverUrl, art, audio }: BooklistR
 
   const turn = useCallback(
     (delta: number) => {
-      // 翻页就停：朗读是"这一跨页的"，翻走了还在念上一段是错的
-      stopSpeaking()
+      // 翻页就停：朗读属于"你正看着的那一跨页"，翻走了还在念上一段是错的。
+      // ★ 自动朗读那一趟正在念时人自己翻页 = **人接管，这一趟结束**
+      //   （`takeOver()` 里的注释写了为什么不是"声音跟着新页继续念"）。
+      //   ★ 自动朗读自己往下翻不走这里：它走 hook 里的 `goTo`，
+      //     否则每念完一页都会把自己关掉。
+      takeOver()
       setQTarget((current) => Math.min(leafCount, Math.max(0, current + delta)))
     },
-    [leafCount, stopSpeaking],
+    [leafCount, takeOver],
   )
 
   /** 焦点在容器里时，左右键与空格翻页。**不在 window 上接**（见文件头第 2 条） */
@@ -214,13 +208,18 @@ export default function BooklistReader({ book, coverUrl, art, audio }: BooklistR
 
   /* ── 页码：读作**书页号**（8 个跨页 = 16 页），与"一本至少 16 页"同一个口径 ── */
 
+  /**
+   * ★ 只剩一个字符串，不再带 `spread` 那个字段：翻页这件事现在归 `opening`
+   *   （hook 用它），而旧那份里封底给的是 `spread: 0`——0 既不是"没有跨页"
+   *   也不是"第 0 个跨页"，正是一个会被下游读成别的东西的哨兵值
+   *   （`reader-model.ts` 的 `readoutOf` 为同一类坑记过一次账）。
+   */
   const readout = useMemo(() => {
-    const near = Math.round(q)
-    if (near <= 0) return { label: '封面', spread: 0 }
-    if (near >= leafCount) return { label: '封底', spread: 0 }
-    const first = near * 2 - 1
-    return { label: `第 ${first}–${first + 1} 页`, spread: near }
-  }, [q, leafCount])
+    if (opening <= 0) return '封面'
+    if (opening >= leafCount) return '封底'
+    const first = opening * 2 - 1
+    return `第 ${first}–${first + 1} 页`
+  }, [opening, leafCount])
 
   const showImage = useCallback((leaf: number) => Math.abs(leaf - q) <= IMAGE_WINDOW, [q])
 
@@ -231,19 +230,29 @@ export default function BooklistReader({ book, coverUrl, art, audio }: BooklistR
    */
   const bookX = q < 0.5 ? '25%' : q > leafCount - 0.5 ? '-25%' : '0%'
 
-  const currentSpread = readout.spread
-  const canSpeak = currentSpread > 0 && (audio[currentSpread - 1] ?? null) !== null
   const narratedCount = audio.filter((url) => url !== null).length
 
   /** 没有朗读控件时**说清为什么**（与 `/reader` 那条同一个写法，宁可不给也不骗人） */
   const narrationNote =
-    audioFailed !== null
-      ? `第 ${audioFailed} 个跨页的朗读没加载出来（音频读不到，这一页请自己念）`
+    narration.audioFailed !== null
+      ? // ★ hook 报的就是屏序号，这一屏的口径正好也是"第几个跨页"——不用换算
+        `第 ${narration.audioFailed} 个跨页的朗读没加载出来（音频读不到，这一页请自己念）`
       : narratedCount === 0
         ? '这本书还没有录朗读'
         : narratedCount < SPREADS_PER_BOOK
           ? `这本书只有 ${narratedCount}/${SPREADS_PER_BOOK} 段有朗读，所以没有给朗读控件——只对几段能响的按钮，证的是反面`
           : null
+
+  /**
+   * 自动朗读开着时多说一句"在哪儿改"。
+   * ★ 与 `/reader` 那条同一个理由：这一屏也没有侧栏，那句话不是多嘴。
+   * ★ 出错那一条优先（`narrationNote === null` 是前提）：那时这一趟已经被停掉了
+   *   （`use-narration.ts` 读到音频读不出来就不往下走）。
+   */
+  const autoNote =
+    narration.fullyNarrated && turnMode === 'auto' && narrationNote === null
+      ? '自动朗读开着（念完一页自己翻）。想自己翻，到工作台左下角的「设置」里选「我自己翻」。'
+      : null
 
   return (
     <section
@@ -318,19 +327,21 @@ export default function BooklistReader({ book, coverUrl, art, audio }: BooklistR
           ‹
         </button>
         <p className="blr__readout" aria-live="polite">
-          {readout.label}
+          {readout}
           <span className="blr__total"> · 共 {PAPER_PAGES_PER_BOOK} 页</span>
         </p>
-        {fullyNarrated && (
+        {/* 文案、禁用态与 `aria-label` 来自 `use-narration.ts`：这一屏与
+            `/reader/<bookId>` 那台**共用同一份**（文件头那段写了为什么） */}
+        {narration.fullyNarrated && (
           <button
             type="button"
             className="blr__audio"
-            onClick={() => currentSpread > 0 && toggleSpeaking(currentSpread)}
-            disabled={!canSpeak}
-            aria-pressed={speaking !== null && speaking === currentSpread}
-            aria-label={canSpeak ? '朗读这一页' : '封面与封底没有朗读'}
+            onClick={narration.toggle}
+            disabled={narration.button.disabled}
+            aria-pressed={narration.button.pressed}
+            aria-label={narration.button.ariaLabel}
           >
-            {speaking !== null && speaking === currentSpread ? '■ 停止' : '▶ 朗读'}
+            {narration.button.label}
           </button>
         )}
         <button
@@ -350,16 +361,11 @@ export default function BooklistReader({ book, coverUrl, art, audio }: BooklistR
 
       {/* 朗读音频。`preload="none"`：8 段音频不该在打开这一屏时全拉下来 */}
       <audio
-        ref={audioRef}
+        ref={narration.audioRef}
         preload="none"
         aria-hidden="true"
-        onEnded={() => setSpeaking(null)}
-        onError={() =>
-          setSpeaking((spread) => {
-            if (spread !== null) setAudioFailed(spread)
-            return null
-          })
-        }
+        onEnded={narration.onEnded}
+        onError={narration.onError}
       />
 
       <p className="blr__meta">
@@ -367,6 +373,7 @@ export default function BooklistReader({ book, coverUrl, art, audio }: BooklistR
         {PAPER_PAGES_PER_BOOK} 页）
       </p>
       {narrationNote && <p className="blr__meta blr__meta--note">{narrationNote}</p>}
+      {autoNote && <p className="blr__meta blr__meta--note">{autoNote}</p>}
     </section>
   )
 }

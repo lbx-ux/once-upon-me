@@ -29,6 +29,17 @@ export type AdminUser = {
   account: string
   phone: string | null
   nickname: string
+  /**
+   * 库里的头像 id。**现在没有任何地方读它**（2026-10-17：用户要求"只提供一个默认
+   * 头像、不可以切换"，于是头像不再是用户数据，前端也没有了那条挑头像的通路）。
+   *
+   * ★ 它**留在这里是刻意的**，与 `AuthUser.avatar` 那次删除（`lib/auth/state.ts`）
+   *   不是同一条判断：那一份是"界面上那个人是谁"，字段只该有读者；而这一份的
+   *   文件头写着**逐字对应 Java 的 `AdminUserRow`**——它是后端那张表的镜子。
+   *   从镜子里抹掉一格，镜子里的人和真人就对不上了，而下一个照镜子的人
+   *   （比如要查"这个人库里到底存的什么"）会以为那一格不存在。
+   * ★ 真要清掉它，得连着 Java 的 DTO 与 `avatars` 那一列一起清——那是迁移，不是这一轮。
+   */
   avatar: string
   role: string
   /** `ACTIVE` / `DISABLED`。★ 认不出来的一律当 `ACTIVE`（与 `User.isActive` 同一口径） */

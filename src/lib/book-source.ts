@@ -5,8 +5,8 @@
  * 所以查找顺序是**两个来源、一个函数**：
  *
  * ```
- *   1. 运行期：ASSET_ROOT/books/<id>/book.json        （家长刚做出来的那本）
- *   2. 预生成：public/demo/books/<id>/book.json        （随仓库提交，断网也在）
+ *   1. 运行期：ASSET_ROOT/u/<用户>/books/<id>/book.json  （家长刚做出来的那本）
+ *   2. 预生成：public/demo/books/<id>/book.json          （随仓库提交，断网也在）
  * ```
  *
  * ★ 为什么必须是一个函数：两个来源、两种 URL 前缀。页面里各写一遍查找顺序，
@@ -14,13 +14,32 @@
  *
  * ★ 服务端专用。客户端拿到的是**已经算好的 URL 列表**（见 `readerPages`），
  *   它不需要知道这本书来自哪儿，也不该知道。
+ *
+ * ★★ 2026-10-17：运行期那一条**多了一段 `u/<用户>`**（资产按用户分目录，工单 16）。
+ *    这一层原来拼的是裸根 `books/<id>/book.json`，而那个文件已经搬走了——
+ *    症状是用户实测报的"书架里看得见这本，点进去说**找不到这本书**"：
+ *    书架那一头读的是**这个人自己那一片**（`(studio)/shelf/page.tsx` 的
+ *    `createUserStore`），这一头却还在老地方找。
+ *    所以现在**由调用方把自己那一片递进来**，与 `/api/assets` 那条路由同一条口径
+ *    （它也 `createUserStore(assetRoot(), userId)`）。
+ *
+ *    ★ 这个参数是**必给的**（`AssetStore | null`，不是可选），这是刻意的：
+ *      "这本书从谁那一片读"必须是一个**当场写下来的决定**，不能有一个
+ *      "什么都不传就……"的缺省。传 `null` 的含义是**这个人没有那一片**
+ *      （没登录）→ 于是**只有演示书那一条**，与书架未登录时给空架子同一条口径
+ *      （「权限是结构性的，不是过滤」）。
+ *      ★ 脚本若真要读裸根，那一句话就是 `createUnscopedStore(assetRoot())`——
+ *        `asset-scope.ts` 特意让那个名字**每次出现都要被解释一遍**。
+ *    ★ 代价说清楚：运行期的书因此**只有它的主人在登录状态下读得到**——
+ *      图那一头本来就是这条口径（资产路由也要会话），所以这不是新加的约束，
+ *      是让正文那一头**别再假装人人可读**。
  */
 
 import { readFile, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { assetUrlOf } from './asset-url.ts'
-import { assetRoot } from './books-runtime.ts'
 import { isResizableImage, READER_PAGE_WIDTH } from './thumbs.ts'
+import type { AssetStore } from './engine/providers/types.ts'
 import { linearOrder, manifestPathOf, type Book, type StoryNode } from './engine/index.ts'
 
 /** 预生成演示书在 `public/` 下的位置。导出脚本与这一层**共用**这串字面量 */
@@ -96,11 +115,28 @@ export function demoAssetPathFor(assetPath: string, webpSiblings: ReadonlySet<st
   return webpSiblings.has(swapped.split('/').pop() ?? '') ? swapped : assetPath
 }
 
+/** 磁盘上的一份清单。演示书走这一条（它随仓库提交，不属于谁那一片） */
 async function readBook(path: string): Promise<Book | null> {
   try {
     return JSON.parse(await readFile(path, 'utf8')) as Book
   } catch {
     // 不存在、或半截 JSON（进程被杀时最后写的那一件）——都当作"这里没有这本书"
+    return null
+  }
+}
+
+/**
+ * 某个人那一片里的一份清单。路径是**逻辑**路径（`books/<id>/book.json`），
+ * 前缀由 `scopedStore` 加——这一层不知道账号存在（`asset-scope.ts` 纪律 1）。
+ *
+ * ★ `readJson` 两个实现对坏 JSON 的反应不一样（内存 store 直接抛，磁盘 store 吞成 null），
+ *   所以这里自己兜一层：判据必须是"**任何**读不回来的情况都当它不存在"，
+ *   而它同时决定阅读器是出书还是出「找不到这本书」——不能两家口径。
+ */
+async function readBookFrom(store: AssetStore, path: string): Promise<Book | null> {
+  try {
+    return await store.readJson<Book>(path)
+  } catch {
     return null
   }
 }
@@ -118,9 +154,26 @@ export function runtimeAssetUrl(path: string, width: number): string {
   return assetUrlOf(path, isResizableImage(path) ? width : undefined)
 }
 
-export async function resolveBook(bookId: string): Promise<ResolvedBook | null> {
-  const runtimePath = join(assetRoot(), manifestPathOf(bookId))
-  const runtime = await readBook(runtimePath)
+/**
+ * 一个书号 → 这一本书。
+ *
+ * `store` 是**请求者自己那一片**（登录之后才有）；`null` = 他没有那一片，
+ * 于是只剩演示书。见文件头 ★★ 那一段：这个参数是必给的，缺省不存在。
+ *
+ * 顺序是**先你自己的、再演示那本**——不是"先新的再旧的"：同一本书可能既是
+ * 你刚做出来的（书号是确定性的），又是随仓库提交的演示书，这时给你看**你自己那份**
+ * （`demoAssetPathFor` 上面那段注释记的正是这件事）。
+ */
+export async function resolveBook(
+  bookId: string,
+  store: AssetStore | null,
+): Promise<ResolvedBook | null> {
+  const manifestPath = manifestPathOf(bookId)
+  const runtime = store
+    ? await readBookFrom(store, manifestPath)
+    : // 没有那一片就**不去别处找**：裸根是迁移之前的老地方，
+      // 现在盘上的新书一本也不会落在那儿（见文件头）
+      null
   if (runtime) {
     // ★ 图与封面走**同一条** urlOf（1024 档，`/api/assets` 现缩并落盘缓存）
     const runtimeUrl = (path: string): string => runtimeAssetUrl(path, READER_PAGE_WIDTH)

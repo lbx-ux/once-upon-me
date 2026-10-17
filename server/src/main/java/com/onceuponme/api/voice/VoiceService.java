@@ -78,7 +78,7 @@ public class VoiceService {
       row = new Voice();
       row.setUserId(userId);
       row.setVoiceId(id);
-      row.setName(trim(name));
+      row.setName(labelOf(id, name));
       row.setModel(trim(model));
       row.setCreatedAt(Times.now());
       row.setChosen(true);
@@ -177,5 +177,25 @@ public class VoiceService {
 
   private static String trim(String raw) {
     return raw == null ? "" : raw.trim();
+  }
+
+  /**
+   * 一条记录的名字。★ <b>永远不是空串</b>，这是一条给客户端看的形状契约。
+   *
+   * <p>前端的 {@code parseMyVoices} 见到空名字会<b>整份拒绝</b>（一个没有名字的音色
+   * 在界面上没法显示），而那次拒绝的样子是一句
+   * 「服务端回的音色列表不是我们认识的形状，刷新一次试试」。
+   * 2026-10-17 实测到的正是它：界面按「选它」时<b>只送 voiceId</b>
+   * （{@code VoiceProvider#setVoice}，它假定服务端已经记着名字），
+   * 而这个假定对<b>预置音色</b>不成立——豆豆 / 灵灵是代码里的常量，
+   * 第一次被选中时才会落一行，于是那一行生下来就没有名字、也没有模型。
+   *
+   * <p>★ 退回 id，而不是编一个名字（同 `/home` 那处"名字读不到就退回 childId"）：
+   * 那个 id 是厂商的机器名，它是<b>真</b>的，只是不好看。界面上它也不会露头——
+   * `catalog.ts` 把预置 id 那几行从"我录的"里排除掉了（它们是预置，不是录音）。
+   */
+  private static String labelOf(String id, String name) {
+    String label = trim(name);
+    return label.isEmpty() ? id : label;
   }
 }

@@ -33,6 +33,7 @@
  * 不插值就是一顿一顿（触控板连续，看不出这个问题，只有真拿滚轮滚才会暴露）。
  */
 
+import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import useScrollDriver, { enterExitSpan } from '@/lib/useScrollDriver'
 import BookSpine from './BookSpine'
@@ -541,10 +542,15 @@ export default function StorybookFlip() {
         {/* 最后一页升起的收尾。p 0.74 之后 —— 那一页是分支页，不是封底（封底翻不到） */}
         <div className="storybook__end" data-on={atEnd || undefined}>
           <p className="book__note">{BOOK_NOTE}</p>
-          {/* TODO: 创作流程做出来后换成指向 /create 的 Link */}
-          <button className="book-cta" type="button">
+          {/* ★ 2026-10-17 接线（原 TODO 是"创作流程做出来后换成指向 /create 的 Link"）。
+              落点选了 `/home` 而不是 `/create`，与首屏那颗「开始创作」同一处 —— 理由见
+              `components/hero/StartCreating.tsx` 文件头：`/home` 是工作台的「创作」那一屏，
+              一句话就能进去，比直接落在四步表单的第一格里轻；创作流本身仍在 `/create`。
+              ★ 这里是一颗**普通** `<Link>`，不带首屏那一颗的退场与跨页接力：接力量的是
+              环上那 12 张此刻在视口里的位置，而翻到最后一页时那个环早就不在画面里了。 */}
+          <Link className="book-cta" href="/home">
             {BOOK_CTA} →
-          </button>
+          </Link>
         </div>
 
         {/* ↓↓↓ 静止模式那一套。正常模式下三块都是 display: none，靠 CSS 切，不靠 JS ——

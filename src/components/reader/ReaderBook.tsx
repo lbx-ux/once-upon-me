@@ -39,11 +39,23 @@
  * 3. **缺口有缺口的样子**：没有图的那一页显示一张"这一页没做出来"的纸，
  *    不留裂图、不留空框（CLAUDE.md「不糊弄」）。它只出在**左半**（正文所在的那半），
  *    右半照实是一张白纸——那一页确实什么都没有。
+ *
+ * ---------------------------------------------------------------------------
+ * 朗读（2026-10-17 起由 `use-narration.ts` 提供，两条路）
+ *
+ * · **我自己翻**（默认）—— 点一下念当前这一页，念完就停，页由人翻。
+ * · **自动朗读** —— 按一次，从这一屏往后一页页自己念、念完自己翻；
+ *   人一翻页它就停下（"翻页就停"那条规矩没变，只是多了一种走法）。
+ *
+ * 两个答案来自侧栏 设置 · 阅读偏好（`lib/reading-prefs.ts`），
+ * 而这一屏**没有侧栏**（`(studio)` 路由组的 layout 文件头写了为什么），
+ * 所以底下那行小字要说清"在哪儿改"。
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { flipState } from '@/components/book/flip.ts'
 import { useReadingLog } from '@/lib/use-reading-log.ts'
+import { useTurnMode } from '@/lib/use-reading-prefs.ts'
 import {
   leafCountOf,
   openingOf,
@@ -52,6 +64,7 @@ import {
   showsText,
   type ReaderFace,
 } from './reader-model.ts'
+import { useNarration } from './use-narration.ts'
 import type { ReaderPage } from '@/lib/book-source.ts'
 
 /** 每帧朝目标插值的系数。比首页第二屏的 0.12 略快：这一屏是"点一下就翻" */
@@ -82,56 +95,38 @@ export default function ReaderBook({ bookId, title, coverUrl, pages, source }: R
   const [reduced, setReduced] = useState(false)
   const stageRef = useRef<HTMLDivElement>(null)
 
-  /* ── 朗读（工单 08）────────────────────────────────────────────────────── */
-
-  /** 正在朗读的页码（null = 没在放）。★ 朗读属于"你正在看的那一页"，翻页就停 */
-  const [speaking, setSpeaking] = useState<number | null>(null)
-  /** 加载失败的那一页。**要说出来**，不许静默没声（工单 08 §一 判据 ②） */
-  const [audioFailed, setAudioFailed] = useState<number | null>(null)
-  const audioRef = useRef<HTMLAudioElement>(null)
-
-  /**
-   * ★ 判据 ①「要么整本都能响」（工单 08 §一）：**只要有一页没有朗读，这个控件就不出现**。
-   *   理由与首页拆掉播放条同源——一个只对几分之一能响的按钮，证的是这一页想证的反面。
-   *   所以这里不"按页显示/隐藏"，是**整本都行才给控件**。
+  /* ── 朗读 ────────────────────────────────────────────────────────────────
+   * 那一套（`speaking` / `audioFailed` / 音频元素 / 自动朗读那条链）整块在
+   * `use-narration.ts` 里，与灵感书单那本样书**共用同一份**——理由写在那儿的文件头。
+   * 这一层只提供两样它算不出来的东西：当前是第几屏（落定的那个），以及怎么翻页。
    */
-  const fullyNarrated = useMemo(
-    () => pages.length > 0 && pages.every((page) => page.audioUrl !== null),
-    [pages],
-  )
 
-  const stopSpeaking = useCallback(() => {
-    const el = audioRef.current
-    if (el) {
-      el.pause()
-      el.currentTime = 0
-    }
-    setSpeaking(null)
-  }, [])
+  const { turnMode } = useTurnMode()
+  /**
+   * 补间**落定后**的那一屏：`0` = 封面，`leafCount` = 封底。
+   * ★ 取 `Math.round(q)` 而不是 `readout.page`：后者在封面与封底都给 `null`，
+   *   而自动朗读必须分得清这两端（一头是"从头念"，一头是"念完了"）。
+   */
+  const opening = Math.round(q)
+  /** 页翻到位了没有。★ 是个布尔，所以 60fps 的 `q` 不会把它抖成每帧都变 */
+  const settled = Math.abs(q - qTarget) < 0.02
 
-  const toggleSpeaking = useCallback(
-    (pageNo: number) => {
-      const el = audioRef.current
-      const page = pages.find((item) => item.pageNo === pageNo)
-      if (!el || !page?.audioUrl) return
-      if (speaking === pageNo) {
-        stopSpeaking()
-        return
-      }
-      // 换页必须重设 src：不重设就会从上一页的播放位置接着放（症状是"点了没声"）
-      el.src = page.audioUrl
-      setAudioFailed(null)
-      // ★ `play()` 返回 promise；被手势打断或文件读不到时它会 reject。
-      //   不接住的话控制台一条 unhandled rejection，而界面上什么都没发生——
-      //   正是判据 ② 要挡的那种"静默没声"
-      void el.play().catch(() => setAudioFailed(pageNo))
-      setSpeaking(pageNo)
-    },
-    [pages, speaking, stopSpeaking],
-  )
+  /** 第 k 屏的朗读（封面与封底不在内）。`useMemo`：不然每次渲染换一个新数组，
+   *  hook 里那条链的依赖会跟着换身份，白跑一遍 */
+  const narrationUrls = useMemo(() => pages.map((page) => page.audioUrl), [pages])
 
-  /** 离开这一屏时把声音停掉。不然翻到别的页面，书还在念 */
-  useEffect(() => () => audioRef.current?.pause(), [])
+  const narration = useNarration({
+    urls: narrationUrls,
+    opening,
+    settled,
+    // ★ 直接把 `setQTarget` 递进去：它的身份是稳定的，而这条链会拿它当依赖。
+    //   包一层匿名函数也能跑，但那个函数每次渲染都是新的，链就会每次渲染都重跑
+    goTo: setQTarget,
+    mode: turnMode,
+  })
+  // ★ `takeOver` 单独取出来：它自己是稳定的（`useCallback` 包着），而 `narration`
+  //   这个对象每次渲染都是新的——`turn` 依赖前者才不会每次渲染都换身份
+  const { takeOver } = narration
 
   /* ── 静止模式：读一次、订阅一次。reduced 下不跑补间，直接落在目标上 ───────── */
 
@@ -176,13 +171,19 @@ export default function ReaderBook({ bookId, title, coverUrl, pages, source }: R
 
   const turn = useCallback(
     (delta: number) => {
-      // 翻页就停：朗读是"这一页的"，翻走了还在念上一页是错的。
-      // （所以也**不做自动续读**——那要先解决"下一页没有音频怎么办"，
-      //   而那是判据 ① 的问题，不是这一步的。）
-      stopSpeaking()
+      // ★ 翻页就停，这一条从第一天就在，自动朗读也没有把它推翻——
+      //   只是现在有两种情形都落到它身上：
+      //   · 手动模式下点“朗读”念着这一页，翻走了（念的是上一页的字，是错的）
+      //   · 自动朗读这一趟正在念，人自己翻了一页 → **人接管，这一趟结束**
+      //     （`takeOver()` 里那一句注释有为什么不是"声音跟着新页继续念"）
+      //   ★ 自动朗读自己往下翻**不走这里**：它走 `use-narration.ts` 里的 `goTo`，
+      //     否则每念完一页都会把自己关掉。
+      // ★ 调的是解构出来那个 `takeOver`（身份稳定），不是 `narration.takeOver`：
+      //   后者挂在每次渲染都新建的对象上，会让这个 `useCallback` 白写
+      takeOver()
       setQTarget((current) => Math.min(leafCount, Math.max(0, current + delta)))
     },
-    [leafCount, stopSpeaking],
+    [leafCount, takeOver],
   )
 
   /** 焦点在容器里时，左右键与空格翻页。**不在 window 上接**（见文件头第 1 条） */
@@ -249,26 +250,44 @@ export default function ReaderBook({ bookId, title, coverUrl, pages, source }: R
 
   /* ── 朗读：当前页是哪一页，以及"没有朗读"这件事怎么被说出来 ─────────────── */
 
-  /** 当前看着的那一页。封面与封底**不是页**（`readout.page` 为 null），拿不到就是 null */
-  const currentPage = pages.find((page) => page.pageNo === readout.page) ?? null
-
   // 阅读记录（工单 05）：只算页面可见的时长，翻页才算"读过"。规则见 use-reading-log.ts
   useReadingLog(bookId, readout.page)
-  const canSpeak = currentPage !== null && currentPage.audioUrl !== null
   const narratedCount = pages.filter((page) => page.audioUrl !== null).length
+
+  /**
+   * 出错的那一屏换算成**页码**。
+   * ★ hook 报的是屏序号（第几屏），这里要的是这一页印的页号——两者只在页号
+   *   恰好连续时才相等，而"恰好"不是这一条的依据（共读版的页号会跳）。
+   */
+  const failedPageNo =
+    narration.audioFailed === null
+      ? null
+      : (pages[narration.audioFailed - 1]?.pageNo ?? narration.audioFailed)
 
   /**
    * 没有朗读控件时，**说清为什么**。放在这行小字里，因为那正是"这本书怎么了"
    * 该出现的地方（首页那条教训：宁可整节不做，也不要一个骗人的控件）。
    */
   const narrationNote =
-    audioFailed !== null
-      ? `第 ${audioFailed} 页的朗读没加载出来（音频读不到，这一页请自己念）`
+    failedPageNo !== null
+      ? `第 ${failedPageNo} 页的朗读没加载出来（音频读不到，这一页请自己念）`
       : narratedCount === 0
         ? '这本书没有朗读'
         : narratedCount < pages.length
           ? `这本书只有 ${narratedCount}/${pages.length} 页有朗读，所以没有给朗读控件——只对几页能响的按钮，证的是反面`
           : null
+
+  /**
+   * 自动朗读开着时多说一句"在哪儿改"。
+   * ★ 这一屏**没有侧栏**（`(studio)` 路由组之外），所以这句话不是多嘴：
+   *   不说的话，一个人只会觉得"这书怎么自己在翻"，而找不到关掉它的地方。
+   * ★ 出错那一条优先（`narrationNote === null` 是前提）：那时"自动朗读开着"
+   *   已经不成立了——上面那条链读到音频读不出来就把这一趟停掉了。
+   */
+  const autoNote =
+    narration.fullyNarrated && turnMode === 'auto' && narrationNote === null
+      ? '自动朗读开着（念完一页自己翻）。想自己翻，到工作台左下角的「设置」里选「我自己翻」。'
+      : null
 
   return (
     <section
@@ -349,23 +368,19 @@ export default function ReaderBook({ bookId, title, coverUrl, pages, source }: R
         {/* ★ 朗读按钮放在**底栏**，不是书页上：书页是 3D 旋转的叶，
             半翻状态下按钮会跟着转、点不准；而且它一旦落在 `.reader__stage` 里，
             空格键会**同时**触发它和舞台的翻页处理器（舞台的 onKeyDown 是容器级的）。
-            底栏在舞台之外，这两个问题都不存在。 */}
-        {fullyNarrated && (
+            底栏在舞台之外，这两个问题都不存在。
+            ★ 文案、禁用态与 `aria-label` 来自 `use-narration.ts`：自动/手动两条路
+            各有一套说法，而另一台阅读器（灵感书单那本样书）用的是**同一份** */}
+        {narration.fullyNarrated && (
           <button
             type="button"
             className="reader__audio"
-            onClick={() => currentPage && toggleSpeaking(currentPage.pageNo)}
-            disabled={!canSpeak}
-            aria-pressed={currentPage !== null && speaking === currentPage.pageNo}
-            aria-label={
-              canSpeak
-                ? speaking === currentPage?.pageNo
-                  ? '停止朗读这一页'
-                  : '朗读这一页'
-                : '封面与封底没有朗读'
-            }
+            onClick={narration.toggle}
+            disabled={narration.button.disabled}
+            aria-pressed={narration.button.pressed}
+            aria-label={narration.button.ariaLabel}
           >
-            {currentPage !== null && speaking === currentPage.pageNo ? '■ 停止' : '▶ 朗读'}
+            {narration.button.label}
           </button>
         )}
         <button
@@ -385,16 +400,11 @@ export default function ReaderBook({ bookId, title, coverUrl, pages, source }: R
 
       {/* 朗读音频。`preload="none"`：一本 20 页的书就是两三兆，别在打开阅读器时全拉下来 */}
       <audio
-        ref={audioRef}
+        ref={narration.audioRef}
         preload="none"
         aria-hidden="true"
-        onEnded={() => setSpeaking(null)}
-        onError={() => {
-          setSpeaking((pageNo) => {
-            if (pageNo !== null) setAudioFailed(pageNo)
-            return null
-          })
-        }}
+        onEnded={narration.onEnded}
+        onError={narration.onError}
       />
 
       {/* 书号留在页面上：演示与排障都要能一眼说出"这是哪一本" */}
@@ -402,6 +412,7 @@ export default function ReaderBook({ bookId, title, coverUrl, pages, source }: R
         {bookId} · {source === 'demo' ? '预生成演示书（不需要网络）' : '这一轮生成的'}
       </p>
       {narrationNote && <p className="reader__meta reader__meta--note">{narrationNote}</p>}
+      {autoNote && <p className="reader__meta reader__meta--note">{autoNote}</p>}
     </section>
   )
 }

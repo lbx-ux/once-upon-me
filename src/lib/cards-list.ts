@@ -12,6 +12,7 @@
 
 import { assetRoot } from './books-runtime.ts'
 import { assetUrlOf } from './asset-url.ts'
+import { withDemoCards } from './card-source.ts'
 import {
   cardDigest,
   checklistOf,
@@ -53,9 +54,15 @@ export type CardListItem = {
  *
  * 空列表是合法答案：一张卡都没有 = 那个目录还没建过，不是错误
  * （`summaries()` 在目录缺失时抛，这里吞掉——与 `/api/cards` 原来的处理一致）。
+ *
+ * ★ 2026-10-17：这一层**收的是根路径**（`userSliceRoot(...)`），而示例卡不在
+ *   任何人的那一片里，所以这个 store 要自己垫上那一层（`withDemoCards`）。
+ *   于是示例卡会出现在**每一个**人的卡表里——那是刻意的：它们是"先看看效果"的那两张，
+ *   不是谁的作品。同一条垫底的还有 `createUserStore`（路由那一侧）与
+ *   `childDetailOf`（详情那一侧），三处是同一个决定了（见 `card-source.ts` 文件头）。
  */
 export async function listCardItems(root: string = assetRoot()): Promise<CardListItem[]> {
-  const store = await createFsStore(root)
+  const store = await withDemoCards(await createFsStore(root))
   const cardStore = createCardStore(store)
 
   let summaries

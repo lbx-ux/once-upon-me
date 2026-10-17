@@ -208,13 +208,6 @@ export async function updateNickname(nickname: string): Promise<AuthResult> {
   return readUser(result.data.user)
 }
 
-/** 换一个默认头像（只收一个 id，不收文件：这一轮不做上传） */
-export async function pickAvatar(avatarId: string): Promise<AuthResult> {
-  const result = await call<{ user?: unknown }>('/api/auth/me/avatar', { avatar: avatarId })
-  if (!result.ok) return { ok: false, message: result.message }
-  return readUser(result.data.user)
-}
-
 /**
  * 改密码。★ 要现在的密码——只要拿着会话就能改的话，
  * 一个被借走的 cookie 就等于账号本身（判据在服务端）。

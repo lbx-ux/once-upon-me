@@ -1,6 +1,7 @@
 # 06 · 接线：开始创作 / 看一本成品（Request 7 的 bug）
 
-Status: done（2026-10-14：接线与收尾都做完并实测，见文末两条 Comments）
+Status: done（2026-10-14：接线与收尾都做完并实测，见文末两条 Comments。
+★ 2026-10-17 又改过一次落点，**§二第 2 条与 §四第 2 条已作废**，看文末最后一条 Comment）
 依赖：无——**这一单应该最先做**，它是用户报的那个"点不动"
 对应 Request 7：现在点击开始创作根本进入不到主页
 
@@ -111,3 +112,50 @@ Status: done（2026-10-14：接线与收尾都做完并实测，见文末两条 
 - ★ 一处措辞是这一轮改的：`src/app/page.tsx` 那条注释原来写"主页是'我做过什么'的地方"——
   仪表盘搬去 `/shelf` 之后这句话就不成立了，注释比代码更容易烂掉的地方就在这儿。
 - 闸门：`format:check` / `lint`（0 error 0 warning）/ `typecheck` 全绿，`pnpm test` 254 通过。
+
+**2026-10-17 · 用户口径变了三处（本单 §二第 2 条与 §四第 2 条就此作废）**
+
+用户看着首屏与第二屏的截图给的落点，原话：「首页点击开始创作和换成你的孩子，
+跳转到创作那页，点击看一本成品，跳转到灵感书单那一页」。三颗按钮现在的落点：
+
+| 按钮                   | 位置                               | 落点                            | 本轮动作                           |
+| ---------------------- | ---------------------------------- | ------------------------------- | ---------------------------------- |
+| `开始创作 →`           | 首屏 `.hero__cta`（StartCreating） | `/home`（工作台「创作」那一屏） | 无——已经是这个落点，本轮复测确认   |
+| `看一本成品`           | 首屏 `.hero__cta`                  | **`/booklist`（灵感书单）**     | 改：原指 `/reader/xiaoyu-r1-4fe0…` |
+| `把主角换成你的孩子 →` | 第二屏 StorybookFlip 收尾          | **`/home`**                     | 改：原来是一颗**死** `<button>`    |
+
+- ★ 第三行那条是一直欠着的：`StorybookFlip.tsx` 的 `{/* TODO: 创作流程做出来后换成
+指向 /create 的 Link */}` 从写下那天起就没兑现过（与 §一 里首屏那两条是同一类欠条）。
+  现在换成了 `<Link className="book-cta" href="/home">`，并给它补 `text-decoration: none`
+  （这个仓库没有全局 `a` 重置，每条链接样式自己写），其余 `border: 0` / `color:#fff`
+  对它正好也够用。
+- 演示书 `xiaoyu-r1-4fe055c5723b` **没删也没改**，只是首页那颗不再带路——它现在只剩
+  `/shelf` 空态那一个入口（`ShelfDashboard.tsx` 里那条注释同轮改了）。书单那 12 本
+  各自能整本翻，比只给一本更能回答"做出来长什么样"。
+
+实测（隔离 dev server `:3311` + `.next-session`，1440×900，本轮）：
+
+| 判据                                          | 结果                                                                                                    |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| 首屏两颗的 DOM                                | 都是 `A`，`href` 分别 `/home` 与 `/booklist`；`__reactProps$` 上 `onClick` 在                           |
+| `.book-cta` 的 DOM                            | `A`（不再是 `BUTTON`），`href="/home"`，文字仍「把主角换成你的孩子 →」                                  |
+| `.book-cta` 的样式                            | `color: rgb(255,255,255)` / `background: rgb(26,26,32)` / `text-decoration-line: none` / `height: 52px` |
+| `.storybook__end` 揭示前后的 `pointer-events` | `none` → `auto`（`.storybook__end[data-on]` 那条，未改）                                                |
+| 点「开始创作」                                | `pathname /home`、`title 创作 · 小主角`、`.cl__go` 在（`data-leaving` 也真的置上了）                    |
+| 点「看一本成品」                              | `pathname /booklist`、`title 灵感书单 · 小主角`、`.blw__card` **12** 张                                 |
+| 点「把主角换成你的孩子」                      | `pathname /home`、`title 创作 · 小主角`、`.cl__go` 在                                                   |
+| 控制台                                        | 只有 `/api/auth/me` 的 401（未登录，既有），无别的 error                                                |
+
+★ **两条没做到的，如实记**：
+
+1. 点下去用的都是 `element.click()`，**不是真鼠标命中**。原因是**预览面板当前不可见**
+   （`preview_show_pane` 报 "This session isn't open in any window"）：`innerWidth` 起手是 0，
+   `preview_click` 声称成功但 `preview_network` 里没有任何 `/booklist` 请求——
+   与 `06` 上一轮同一个环境事实。
+2. **第二屏那颗没能"翻到最后一页"再点**：面板不可见时 **rAF 是冻结的**，
+   滚动驱动不推进，`.storybook__end` 永远拿不到 `data-on`（pager 一直读「封面」）。
+   所以那一行的证据是"手动补 `data-on` 看 `pointer-events` 变 `auto`" + "`element.click()` 能进 `/home`"，
+   **不是**"滚到底、露出按钮、拿鼠标点它"。这一条留给面板可见时补。
+
+`pnpm lint` / `pnpm typecheck` 全绿；`pnpm format:check` 只红在 `scripts/make-default-avatar.mts`
+与 `scripts/sheet-only.mts` 两个**未跟踪**的文件上（不是本轮碰的），本轮改的四个文件都过。

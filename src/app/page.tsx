@@ -102,10 +102,15 @@ export default function HomePage() {
           {/* ★「开始创作」现在是一颗客户端组件（`components/hero/StartCreating.tsx`）：
               它除了指路，还负责**退场**与那一次跨页接力（环上那 12 张 → 主页的主题墙），
               理由与五条判断写在那个文件头上。渲染出来仍然是一颗真 `<Link href="/home">`。
-              「看一本成品」不用接力：阅读器里没有任何东西与这 12 张对应得上。 */}
+              「看一本成品」不用接力：书单那 12 张封面与首屏这个环没有任何几何对应。 */}
           <StartCreating />
-          {/* 指到 public/demo/books/ 里那本真的预生成演示书（ADR-0003：断网也能走完一本） */}
-          <Link className="btn btn--ghost" href="/reader/xiaoyu-r1-4fe055c5723b">
+          {/* ★ 2026-10-17 改指 `/booklist`（用户的口径：这一颗通向**灵感书单**那一页）。
+              原来指 `/reader/xiaoyu-r1-4fe055c5723b`——`public/demo/books/` 里那本预生成
+              演示书（ADR-0003），它还在、也还能读，只是不再由这一颗带路：
+              书单那 12 本本身就是"成品"的橱窗，进去哪一本都能整本翻，比只给一本更能说明
+              "做出来长什么样"。入口在 `(studio)` 里，未登录也照样打得开（那组的 layout
+              不设闸，只有侧栏底部那格会显示「请登录」）。 */}
+          <Link className="btn btn--ghost" href="/booklist">
             看一本成品
           </Link>
         </div>

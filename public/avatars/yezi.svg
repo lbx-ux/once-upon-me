@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="叶子">
-  <circle cx="32" cy="32" r="32" fill="#e8f0f6"/>
-  <path d="M48 14C30 14 16 22 16 36a14 14 0 0 0 14 14c14 0 18-16 18-36Z"
-        fill="#427294" stroke="#17171d" stroke-width="2.4" stroke-linejoin="round"/>
-  <path d="M44 18 22 46" stroke="#e8f0f6" stroke-width="2.4" stroke-linecap="round"/>
-  <g stroke="#e8f0f6" stroke-width="2" stroke-linecap="round">
-    <path d="M39 22 31 20"/><path d="M34 29 25 28"/><path d="M28 37 21 37"/>
-  </g>
-</svg>

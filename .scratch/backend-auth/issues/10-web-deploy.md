@@ -35,3 +35,12 @@
   换一台设备打开仍能看（含缩略图）。
 - `systemctl status xiaozhujue-web` / `xiaozhujue-api` 都是 active；
   服务器重启之后两个都自己回来。
+
+- 2026-10-17（工单 03 做完之后的补充）：**内部令牌必须与后端那一把逐字相同**，
+  否则 BFF 打过去是 403（服务器上实测过：不带 `X-Internal-Token` 打
+  `/api/auth/login` 回 403）。服务器上两处的取法：
+  `ssh root@123.56.148.105 "awk '/^  internal-token:/{print \$2}' /etc/xiaozhujue/api.yml"` ——
+  写 `web.env` 时**照抄**它，不要另生成一把。`/api/health` 是唯一豁免那条令牌的路。
+- 2026-10-17：短信在服务器上现在是**假发**（`api.yml` 里 `app.sms.enabled: false`，
+  码固定 123456）——真发要阿里云号码认证服务的 AccessKey 与签名/模板，只有站长有。
+  上线那天要把它改成真发（并确认每天 300 条那条硬顶还在生效）。

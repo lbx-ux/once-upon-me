@@ -135,7 +135,17 @@ export async function POST(
   // 租约按人记（`runKeyOf`）：画这一本的"在跑"只该挡住同一个账号的第二次点
   const runKey = runKeyOf(guard.session.userId, bookId)
   if (!tryStartRun(runKey)) {
-    return jsonError(409, 'book-busy', '这一本正在画，等它画完再点')
+    /* ★ 2026-10-17 改了文案：原来只说"等它画完再点"，而用户实测撞上的正是这一句
+       ——他点完画、退出、从书架点回来（那时候这一本还没有 `book.json`），
+       屏幕上是闸门 + 这句错话，**看不到画到哪儿了**。现在告诉他出口在哪：
+       刷新这一页（或从书架点它）会落到运行视图，那里有进度。
+       ★ 落点那一侧也一起改了（`GenerationRun` 的 `resume.story` 那一支）：服务器
+         在跑就直接进运行视图；而点「就按这个画」撞上这一条时也会当场切过去。 */
+    return jsonError(
+      409,
+      'book-busy',
+      '这一本正在画。要看画到哪儿了，刷新这一页（或从书架的「正在编辑」点它）——画完之前不能再点这里。',
+    )
   }
 
   let providers

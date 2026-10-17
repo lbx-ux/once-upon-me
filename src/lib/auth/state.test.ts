@@ -26,7 +26,6 @@ function user(overrides: Record<string, unknown> = {}): unknown {
     account: '13800138000',
     phone: '13800138000',
     nickname: '小满妈妈',
-    avatar: 'fox',
     role: 'USER',
     createdAt: '2026-10-16T22:11:02.645706+08:00',
     permissions: allOn,
@@ -84,7 +83,6 @@ describe('parseUser —— 接口回的东西也要逐字段验', () => {
     expect(parseUser('nope')).toBeNull()
     expect(parseUser(user({ userId: '' }))).toBeNull()
     expect(parseUser(user({ nickname: 7 }))).toBeNull()
-    expect(parseUser(user({ avatar: null }))).toBeNull()
     expect(parseUser(user({ createdAt: undefined }))).toBeNull()
   })
 

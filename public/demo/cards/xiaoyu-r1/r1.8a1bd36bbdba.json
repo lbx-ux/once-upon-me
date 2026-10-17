@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "cardId": "xiaoyu-r1",
+  "childId": "xiaoyu",
+  "revision": 1,
+  "anchors": [
+    {
+      "slot": "bone",
+      "value": "圆脸、颊部饱满、下颌线软"
+    },
+    {
+      "slot": "eyes",
+      "value": "深棕色圆眼、眼距略宽、睫毛短"
+    },
+    {
+      "slot": "hair",
+      "value": "黑发偏软，左上方永远翘着一撮"
+    },
+    {
+      "slot": "build",
+      "value": "头身比约 1:4，四肢圆润"
+    },
+    {
+      "slot": "skin",
+      "value": "暖黄偏深的肤色，膝盖有晒黑的印"
+    },
+    {
+      "slot": "wardrobe",
+      "value": "芥黄短袖 + 深蓝短裤 + 红雨鞋"
+    }
+  ],
+  "style": {
+    "key": "warm-handdrawn",
+    "promptFragment": "温暖手绘绘本插画：水彩铺色打底 + 细彩铅轮廓线收形，可见纸质纹理，高明度低饱和的粉彩色板，柔和的左上方统一光源，阴影无硬边",
+    "ratio": "1:1"
+  },
+  "reference": {
+    "path": "cards/xiaoyu-r1/ref.0cae537fa5f9.jpg",
+    "digest": "0cae537fa5f9",
+    "bytes": 356538,
+    "mime": "image/jpeg"
+  },
+  "provenance": {
+    "modelId": "Google Generative AI（手工出图）",
+    "promptVersion": "character-card@v1+bg-white",
+    "cardRevision": 1,
+    "generatedAt": 1792131617747
+  },
+  "createdAt": 1792131617747
+}

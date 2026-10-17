@@ -65,6 +65,34 @@ export function showsText(face: ReaderFace): boolean {
   return face.kind === 'art' && face.half === 'left' && face.page.body.length > 0
 }
 
+/**
+ * 自动朗读（设置 · 阅读偏好里的那一条）在**第 opening 个跨页**上该念哪一屏。
+ *
+ * 三个答案，两端各占一头：
+ * · `begin` —— 封面：这一屏**不是页**，没什么可念的，而"从头念"要从**第 1 屏**起。
+ *   ★ 它与 `readoutOf` 在封面给的 `page: null` **不是同一件事**：那边说的是
+ *     "这一屏没有页码"，这边要回答的是"接下来念哪儿"。跟着那个 null 走的话，
+ *     按一次「自动朗读」会**一句都不念**——按钮亮着、书在封面上一动不动。
+ * · `done` —— 封底：这一本念完了，这一趟到此为止。
+ * · `speak` —— 念这一屏（1-based）。
+ *
+ * ★ 那个差一是真会犯的：写成 `opening >= screenCount`，最后一页**会被念两遍**
+ *   （一遍算"第 N 屏"、一遍算"封底那张白纸"）——`readoutOf` 那条哨兵注释
+ *   （封底那个值恰好等于最后一页的页码）记的就是同一类错法。
+ *   `screenCount + 1` 才是封底，因为叶数 = 屏数 + 1（`leafCountOf`）。
+ *
+ * ★ 用的是**屏序号**不是页码：两个阅读器的展示口径不同（`/reader` 报"第 N 页"、
+ *   书单那本样书报"第 a–b 页"），而"念第几屏"是它们共有的那一件事。
+ *   换算成各自口径上的数字是组件的事。
+ */
+export type AutoCue = { kind: 'begin' } | { kind: 'done' } | { kind: 'speak'; screen: number }
+
+export function autoCueOf(opening: number, screenCount: number): AutoCue {
+  if (opening <= 0) return { kind: 'begin' }
+  if (opening >= screenCount + 1) return { kind: 'done' }
+  return { kind: 'speak', screen: opening }
+}
+
 /** 底部那行页码。`page: null` = 现在这一屏不是页（封面 / 封底） */
 export type Readout = { label: string; page: number | null }
 

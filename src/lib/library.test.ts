@@ -249,6 +249,38 @@ describe('listBooks', () => {
     })
   })
 
+  it('★ 已经在画的那一本要照实说画到第几页（用户实测报的 bug）', async () => {
+    // 场景：用户点完「就按这个画」、从运行视图点「退出」——这一本还没有 `book.json`，
+    // 而盘上已经躺着两张页图。原来这一行恒写"还没开始画"（`illustratedCount: 0`），
+    // 他的原话是"他告诉我正在生成中，我看不到画的什么"。
+    const store = await createMemoryStore()
+    await store.putJson({ path: 'books/s1/story.json', value: draft('s1', 10) })
+    for (const name of ['page-1-a1.png', 'page-2-a1.png']) {
+      await store.put({
+        path: `books/s1/${name}`,
+        bytes: new Uint8Array([1]),
+        mime: 'image/png',
+      })
+    }
+
+    const books = await listBooks(store, noCovers)
+    expect(books[0]?.status).toBe('story')
+    expect(books[0]?.illustratedCount).toBe(2)
+    // ★ 封面不算：那是装订那一步的产物，而这一本还没装订
+    await store.put({ path: 'books/s1/cover.png', bytes: new Uint8Array([1]), mime: 'image/png' })
+    expect((await listBooks(store, noCovers))[0]?.illustratedCount).toBe(2)
+    // ★ 别的书的页图不算在自己头上（前缀里带着书号那一段斜杠）
+    await store.putJson({ path: 'books/s1x/story.json', value: draft('s1x', 10) })
+    await store.put({
+      path: 'books/s1x/page-1-a1.png',
+      bytes: new Uint8Array([1]),
+      mime: 'image/png',
+    })
+    const again = await listBooks(store, noCovers)
+    expect(again.find((item) => item.bookId === 's1')?.illustratedCount).toBe(2)
+    expect(again.find((item) => item.bookId === 's1x')?.illustratedCount).toBe(1)
+  })
+
   it('★ 两样都有时**清单说了算**：故事草稿是这一本曾经的样子，不是它的现状', async () => {
     const store = await createMemoryStore()
     await store.putJson({ path: 'books/b1/story.json', value: draft('b1', 900) })

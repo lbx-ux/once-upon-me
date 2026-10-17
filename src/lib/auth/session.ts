@@ -156,7 +156,6 @@ export type MeView = {
     account: string
     phone: string | null
     nickname: string
-    avatar: string
     role: string
     createdAt: string
     permissions: Permissions

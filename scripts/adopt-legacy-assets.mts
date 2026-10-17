@@ -33,7 +33,24 @@ import { readEnv, arg } from './env.mts'
 /** 平铺时代的顶层条目。★ 顺序就是打印的顺序 */
 const LEGACY = ['books', 'cards', 'children', 'kids.json', 'thumbs'] as const
 
-const APPLY = arg('apply', '') === '1'
+/**
+ * `--apply` 认两种写法：光秃秃的 `--apply`，与 `--apply=1`。
+ *
+ * ★ 第一版只认后者，而**文档、工单、代码注释里写的都是前者**——
+ *   于是 `--apply` 会被静默当成"没给"，脚本打印一遍计划就退出，
+ *   而人看到的是一屏很像成功的输出（它列出了每一项要怎么搬）。
+ *   这个坑是 2026-10-17 真跑的时候踩到的：我照着自己写的用法敲了一遍，
+ *   然后去盘上看，什么都没搬。
+ *   ★ 修法不是"把文档改成 `=1`"：那种写法在命令行上不自然，
+ *   而不自然的用法迟早会被敲成自然的那一种。
+ */
+function applyWanted(): boolean {
+  if (process.argv.includes('--apply')) return true
+  const value = arg('apply', '')
+  return value === '1' || value === 'true' || value === 'yes'
+}
+
+const APPLY = applyWanted()
 const ROOT = resolve(process.env['ASSET_ROOT']?.trim() || arg('root', '.out/web'))
 const USER_ID = arg('userId', '')
 const ACCOUNT = arg('user', '')

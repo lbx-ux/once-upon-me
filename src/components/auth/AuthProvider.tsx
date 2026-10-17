@@ -27,12 +27,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 
-import {
-  fetchMe,
-  logout as logoutRequest,
-  pickAvatar as pickAvatarRequest,
-  updateNickname,
-} from '@/lib/auth/client.ts'
+import { fetchMe, logout as logoutRequest, updateNickname } from '@/lib/auth/client.ts'
 import { NO_PERMISSIONS, type AuthUser, type Permissions } from '@/lib/auth/state.ts'
 
 export type AuthContextValue = {
@@ -58,7 +53,6 @@ export type AuthContextValue = {
   /** 改昵称。失败时抛（界面那一格要说"没改成"） */
   rename: (nickname: string) => Promise<void>
   /** 换一个默认头像 */
-  pickAvatar: (avatarId: string) => Promise<void>
   /**
    * 重新问一次"我是谁"，**并把刷新后的那份事实回给调用方**。
    *
@@ -136,12 +130,6 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     setUser(result.user)
   }, [])
 
-  const pickAvatar = useCallback(async (avatarId: string) => {
-    const result = await pickAvatarRequest(avatarId)
-    if (!result.ok) throw new Error(result.message)
-    setUser(result.user)
-  }, [])
-
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
@@ -155,10 +143,9 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
       signIn,
       signOut,
       rename,
-      pickAvatar,
       refresh,
     }),
-    [user, configured, speechModel, ready, meError, signIn, signOut, rename, pickAvatar, refresh],
+    [user, configured, speechModel, ready, meError, signIn, signOut, rename, refresh],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

@@ -1,0 +1,13 @@
+diff --git a/dist/build/webpack/plugins/flight-manifest-plugin.js b/dist/build/webpack/plugins/flight-manifest-plugin.js
+index fbea603ccd2c03bb037f62e717978e409b4ab1ff..30895ff1782c8ed476443092dcc1179bb07ebf05 100644
+--- a/dist/build/webpack/plugins/flight-manifest-plugin.js
++++ b/dist/build/webpack/plugins/flight-manifest-plugin.js
+@@ -353,7 +353,7 @@ class ClientReferenceManifestPlugin {
+                                 if (((_connection_module = connection.module) == null ? void 0 : _connection_module.constructor.name) === 'ConcatenatedModule') {
+                                     const concatenatedMod = connection.module;
+                                     const concatenatedModId = compilation.chunkGraph.getModuleId(concatenatedMod);
+-                                    if (concatenatedModId) {
++                                    if (concatenatedModId !== null) {
+                                         recordModule(concatenatedModId, clientEntryMod);
+                                     }
+                                 }

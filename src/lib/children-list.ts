@@ -7,13 +7,15 @@
  * 归属不同的孩子——而那种错没有报错，只有"这张形象怎么不是他"。
  *
  * ★ 最重要的一条：**"有档案、没形象"是正常状态，不是错误。**
- *   示例孩子现在就是这样（档案随仓库发布，卡本体 2.7 MB/张还没发，见 children-source.ts）。
- *   家长新建的孩子在出图之前也是这样。所以 `card` 允许为 null，而界面必须
- *   如实显示它——拿一张示例图去顶，就是给不存在的数据源背书。
+ *   家长刚建的孩子在出图之前就是这样，而界面必须如实显示它——拿一张示例图去顶，
+ *   就是给不存在的数据源背书。
+ *   ★ 2026-10-17：示例孩子（小满 / 小宇）**不再属于这一种**了——他们的卡随仓库
+ *   发布了（`card-source.ts`）。这一条判据没变，变的是那两张卡的事实。
  */
 
 import { assetRoot } from './books-runtime.ts'
 import { assetUrlOf } from './asset-url.ts'
+import { withDemoCards } from './card-source.ts'
 import { listCardItems, type CardListItem } from './cards-list.ts'
 import { listChildren, type ChildSource, type ResolvedChild } from './children-source.ts'
 import { booksOnly, listBooks, noCovers } from './library.ts'
@@ -183,7 +185,7 @@ export type ChildPickerItem = {
   interestTags: readonly string[]
   source: ChildSource
   /**
-   * 这一轮会用的形象。`null` = 他还没有形象（示例孩子就是这样），
+   * 这一轮会用的形象。`null` = 他还没有形象（刚建档、还没出图的那个孩子），
    * 那时第 3 步要现出一张——**这不是错误，是这一屏正常的一个状态**。
    */
   card: {
@@ -249,7 +251,10 @@ export async function childDetailOf(
   const item = await childItemOf(childId, root)
   if (!item) return null
 
-  const store = await createFsStore(root)
+  // ★ 2026-10-17：`item.card` 可能是**示例卡**（`card-source.ts`），而它不在任何人的
+  //   那一片里。这一处自己建 store，所以也要垫上示例那一层——否则示例孩子的版本历史
+  //   会是空的：卡面上有形象，翻到"这一张卡走过哪些版本"却一条都没有。
+  const store = await withDemoCards(await createFsStore(root))
   const cardStore = createCardStore(store)
   const cards = item.card ? await cardStore.revisions(item.card.cardId) : []
   const currentRevision = item.card?.revision ?? null

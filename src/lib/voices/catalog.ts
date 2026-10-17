@@ -53,35 +53,48 @@ export function voiceCatalog(mine: MyVoice[], serverModelId: string): CatalogVoi
     usable: true,
   }))
 
-  const cloned: CatalogVoice[] = mine.map((voice) => {
-    /**
-     * 三种情形，先分清再判（见文件头最后一段）：
-     *   · 站里的模型还不知道（没登录 / 站里没配）→ **不判**，`usable: true`
-     *   · 录它时没记下模型                        → 判不了，拦住并如实说"没记下来"
-     *   · 两个都知道，且对不上                    → 拦住并说清是哪一个对不上
-     */
-    const unknownServer = serverModelId === ''
-    const noRecord = voice.modelId === ''
-    const matches = !unknownServer && !noRecord && voice.modelId === serverModelId
-    const usable = unknownServer || matches
-    return {
-      id: voice.voiceId,
-      name: voice.name,
-      tone: MINE_TONE,
-      source: 'mine',
-      modelId: voice.modelId,
-      createdAt: voice.createdAt,
-      usable,
-      ...(usable
-        ? {}
-        : {
-            why:
-              `录它时用的语音模型是 ${noRecord ? '（没记下来）' : voice.modelId}，` +
-              `与现在的 ${serverModelId} 不是同一个。` +
-              `厂商那边音色是绑模型的——选它会被拒（实测报 400），所以要重新录一条。`,
-          }),
-    }
-  })
+  /**
+   * ★ 2026-10-17（实测到的）：**服务端那几行里会有预置音色**——`choose` 的语义是
+   *   "选一个库里还没有的 id 会顺手把它记下来"（预置就是这样进来的：不这么做，
+   *   "当前音色"就没地方记）。所以按 id 去重，把它们从「我录的」里剔掉：
+   *   不剔的话，选了豆豆之后那一屏会长出**第二张豆豆**——一张带 `tone`（预置那张），
+   *   一张不带（记录那张），而用户只知道他选了一个豆豆。
+   *   ★ 判据是 **id 在不在预置表里**，不是"名字像不像"：预置是两个常量，
+   *   这个判断在编译期就是确定的；靠名字去猜的话，用户给自己的音色起名"豆豆"
+   *   就会被静默藏起来。
+   */
+  const presetIds = new Set(DEFAULT_VOICES.map((voice) => voice.id))
+  const cloned: CatalogVoice[] = mine
+    .filter((voice) => !presetIds.has(voice.voiceId))
+    .map((voice) => {
+      /**
+       * 三种情形，先分清再判（见文件头最后一段）：
+       *   · 站里的模型还不知道（没登录 / 站里没配）→ **不判**，`usable: true`
+       *   · 录它时没记下模型                        → 判不了，拦住并如实说"没记下来"
+       *   · 两个都知道，且对不上                    → 拦住并说清是哪一个对不上
+       */
+      const unknownServer = serverModelId === ''
+      const noRecord = voice.modelId === ''
+      const matches = !unknownServer && !noRecord && voice.modelId === serverModelId
+      const usable = unknownServer || matches
+      return {
+        id: voice.voiceId,
+        name: voice.name,
+        tone: MINE_TONE,
+        source: 'mine',
+        modelId: voice.modelId,
+        createdAt: voice.createdAt,
+        usable,
+        ...(usable
+          ? {}
+          : {
+              why:
+                `录它时用的语音模型是 ${noRecord ? '（没记下来）' : voice.modelId}，` +
+                `与现在的 ${serverModelId} 不是同一个。` +
+                `厂商那边音色是绑模型的——选它会被拒（实测报 400），所以要重新录一条。`,
+            }),
+      }
+    })
 
   return [...presets, ...cloned]
 }

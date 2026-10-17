@@ -5,7 +5,6 @@ import {
   fetchMe,
   loginWithPassword,
   logout,
-  pickAvatar,
   sendCode,
   setPassword,
   updateNickname,
@@ -47,7 +46,6 @@ const BACKEND_USER = {
   account: '13800138000',
   phone: '13800138000',
   nickname: '小满妈妈',
-  avatar: 'fox',
   role: 'USER',
   createdAt: '2026-10-16T22:11:02.645706+08:00',
   permissions: { text: true, image: true, vision: false, speech: false },
@@ -204,7 +202,7 @@ describe('fetchMe', () => {
   })
 })
 
-describe('updateNickname / pickAvatar / logout', () => {
+describe('updateNickname / logout', () => {
   it('改昵称：body 里只有昵称（人是谁由 cookie 说）', async () => {
     const calls = stubFetch({ body: { user: { ...BACKEND_USER, nickname: '小满' } } })
 
@@ -212,15 +210,6 @@ describe('updateNickname / pickAvatar / logout', () => {
 
     expect(calls[0]?.url).toBe('/api/auth/me')
     expect(bodyOf(calls[0]!)).toEqual({ nickname: '小满' })
-  })
-
-  it('换头像：只递一个 id（这一轮不做上传）', async () => {
-    const calls = stubFetch({ body: { user: { ...BACKEND_USER, avatar: 'bear' } } })
-
-    await pickAvatar('bear')
-
-    expect(calls[0]?.url).toBe('/api/auth/me/avatar')
-    expect(bodyOf(calls[0]!)).toEqual({ avatar: 'bear' })
   })
 
   it('改密码：body 里是"现在的密码 + 新密码"，同样没有账号（人是谁由 cookie 说）', async () => {

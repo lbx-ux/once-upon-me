@@ -1,0 +1,98 @@
+/**
+ * settings-dialog.css —— 侧栏「设置」那个弹窗的里子（`SettingsDialog.tsx`）
+ *
+ * ★ 与「帮助」那几段（`app-shell.css` 末尾的 `.help`）**刻意长得像、但不共用**：
+ *   两处都是"一条小标题 + 几句说明"，可那一边从头到尾是**读**的，这一边中间横着
+ *   两颗**能选的东西**——所以这里的骨架是"一行说明 + 一列选项"，
+ *   选项那一块要能一眼看出"这里可以动手"。
+ *   ★ 2026-10-17 用户圈掉了选项下面那两句注解，所以这一份里没有 `.prefs__caveat` 了
+ *     （为什么删、删掉之后哪一句没人说了，写在 `SettingsDialog.tsx` 的文件头）。
+ *
+ * ★ 配色一个新值都没有，全部取现成令牌：`--accent`（选中那一条的边与字）、
+ *   `--hairline`（选项的框）、`--surface-soft`（选项的底）、`--ink-muted`（注解）。
+ *   CLAUDE.md 第一条硬约束：设计令牌只在 `globals.css` 的 `:root` 定义一次。
+ */
+
+.prefs {
+  display: grid;
+  gap: 10px;
+  /* `.dlg__body` 自己没有上边距，标题正下方就是内容——这一条把它与标题分开 */
+  margin-top: 18px;
+}
+
+.prefs__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--ink);
+}
+
+.prefs__lead {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.8;
+  color: var(--ink-soft);
+}
+
+/* ── 那一列选项 ────────────────────────────────────────────────────────────
+ * ★ `fieldset` 自带的边框与内边距都要撤掉：它在这里只起"这一组是一个单选组"
+ *   的作用（读屏靠它念出组名），不是一个框。 */
+.prefs__opts {
+  display: grid;
+  gap: 8px;
+  margin: 6px 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.prefs__opt {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 13px;
+  border: 1px solid var(--hairline);
+  border-radius: 11px;
+  /* 压在白弹窗上的一层浅底：不是白上加白，也不是灰块——它是"这块可以选" */
+  background: var(--surface-soft);
+  cursor: pointer;
+}
+
+/* 选中的那一条。★ 用 `:has()` 从里往外看：原生 `input:checked` 的状态要作用到
+ *   整条上，而在这个结构里只有"往回看"才看得见它（`app-shell.css` 里
+ *   `.shell__link:has(...)` 是同一条用法）。
+ *   三样一起变——描边、名字的颜色、底——因为**只变一样**在小屏上不够明显，
+ *   而"我到底选了哪一条"是这一屏唯一需要一眼看清的事。 */
+.prefs__opt:has(input:checked) {
+  border-color: rgba(var(--accent-rgb), 0.55);
+  background: var(--surface);
+}
+
+.prefs__opt:has(input:checked) .prefs__opt-name {
+  color: var(--accent);
+}
+
+/* ★ 单选那颗不重新画：原生那颗在三个浏览器里都认得出来，而自己画一颗要连带管
+ *   焦点环、禁用态、高对比度。只把它对齐到第一行文字上（`margin-top` 那个数是
+ *   字号 13.5px 那一行的基线位置）。 */
+.prefs__opt input {
+  flex: 0 0 auto;
+  margin: 2px 0 0;
+  accent-color: var(--accent);
+}
+
+.prefs__opt-body {
+  display: grid;
+  gap: 3px;
+}
+
+.prefs__opt-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.prefs__opt-note {
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--ink-muted);
+}

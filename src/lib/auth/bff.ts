@@ -42,11 +42,18 @@ export async function jsonBody<T>(request: Request): Promise<T | null> {
 }
 
 /**
- * 会话相关的路由都必须走 node 运行时：验票用的是 `node:crypto`。
- * ★ 顺带 `force-dynamic`：这些响应依赖 cookie，被静态化/缓存住的话，
- * 一个人登录之后另一个人会拿到他的"我是谁"。
+ * ── 那两行段配置为什么**故意没有**共享常量 ─────────────────────────────────
+ *
+ * 这里原来导出过一个 `AUTH_ROUTE_CONFIG = { runtime: 'nodejs', dynamic: 'force-dynamic' }`，
+ * 22 个路由写成 `export const runtime = AUTH_ROUTE_CONFIG.runtime`。**那是个 bug**：
+ * Next 的静态分析读不了成员表达式，`pnpm build` 会以
+ * `Invalid segment configuration export detected` 整包失败——而三道闸门
+ * （eslint / tsc / 测试）**全都看不见它**，因为那是合法 TS。
+ *
+ * 所以每个路由文件自己写这两行字面量。值仍然是这两条，理由是：
+ *   · `runtime = 'nodejs'` —— 验票用的是 `node:crypto`；
+ *   · `dynamic = 'force-dynamic'` —— 这些响应依赖 cookie，被静态化/缓存住的话，
+ *     一个人登录之后另一个人会拿到他的"我是谁"。
+ *
+ * 判据在 `src/lib/route-config.test.ts`（它扫 `src/app` 下所有 route / page / layout）。
  */
-export const AUTH_ROUTE_CONFIG = {
-  runtime: 'nodejs',
-  dynamic: 'force-dynamic',
-} as const

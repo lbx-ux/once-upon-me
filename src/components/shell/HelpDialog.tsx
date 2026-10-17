@@ -26,6 +26,15 @@
  *   是**站长那边认不出人**——所以常规路径改成点一下，邮箱留着，但降级成
  *   "申请被拒之后想问一句为什么"那一种情况才用得上。
  *
+ * ★ **2026-10-17 第三次改：四段话都往下压了**。用户的原话是「这一块写的太多太复杂了，
+ *   简写一下」。削掉的都是**重复**，不是事实：
+ *   · 「站长看得见是谁提的 / 四项一起开通 / 不用重新登录」原来在答案段、表单下面那行
+ *     提示、以及"已经提过了"那一格里各说一遍 → 现在各说一遍的地方只留一处
+ *     （表单下面那行 `help__req-hintline` 整行撤掉，它说的和它上面那句一模一样）。
+ *   · 「换一台设备登录看到的也是同一批」「书架、角色墙、创作页上只有你自己做的那些」
+ *     是同一条性质的两个例子，留「按账号分开存」那一句就够。
+ *   没有一处**事实**被删：四项一起开通、不用重新登录、6 个月、备份回本地都还在。
+ *
  * ★ 复用 `Dialog` 那个壳（Esc、点遮罩关、焦点进来、`aria-modal`）：
  *   另写一个浮层就会多一套"怎么关"的习惯，而它们必须一模一样。
  *
@@ -59,16 +68,16 @@ export default function HelpDialog({ onClose }: { onClose: () => void }) {
         <section className="help__item">
           <h3 className="help__q">模型和密钥是谁配的？</h3>
           <p className="help__a">
-            由站方统一分配，不需要你填任何 key——界面上也没有填的地方。 你能不能用某一项能力（写故事
-            / 画插画 / 核对面孔 / 朗读），由站长按账号分配。
+            站方统一配好，你不用填任何 key——界面上也没有填的地方。 你能用哪几项能力（写故事 / 画插画
+            / 核对面孔 / 朗读），由站长按账号开通。
           </p>
         </section>
 
         <section className="help__item">
           <h3 className="help__q">说我「没有权限」怎么办？</h3>
           <p className="help__a">
-            就在下面写一句你要做什么，点「发出去」。站长在那一头看得见<b>是谁</b>提的。 四项能力是
-            <b>一起开通</b>的，不用挑；开通也<b>不用重新登录</b>， 下一次点「开始创作」就生效。
+            在下面写一句你要做什么，点「发出去」——站长那头看得见<b>是谁</b>提的。 四项能力
+            <b>一起开通</b>，开通后<b>不用重新登录</b>，下一次点「开始创作」就生效。
           </p>
           <RequestForm />
         </section>
@@ -76,17 +85,16 @@ export default function HelpDialog({ onClose }: { onClose: () => void }) {
         <section className="help__item">
           <h3 className="help__q">为什么看不到别人的书？</h3>
           <p className="help__a">
-            因为绘本、角色卡与孩子档案都是<b>按账号分开存的</b>：
-            书架、角色墙、创作页上只有你自己做的那些，换一台设备登录看到的也是同一批。
-            （首页那两个孩子是随仓库发布的<b>示例</b>，那一份谁都能看到。）
+            绘本、角色卡与孩子档案都<b>按账号分开存</b>，你只看得见自己做的那些。
+            （首页那两个孩子是随仓库发布的<b>示例</b>，谁都能看到。）
           </p>
         </section>
 
         <section className="help__item">
           <h3 className="help__q">我的东西存在哪？</h3>
           <p className="help__a">
-            服务器上的一台机器里（这一轮不做账号级的导出）。 本站的服务器只租到 6
-            个月，到期之前会把全部作品与账号数据备份回本地—— 这件事由站方做，不需要你操作。
+            服务器上（这一轮不做账号级的导出）。服务器只租到 6
+            个月，到期前站方会把全部作品与账号数据备份回本地，不需要你操作。
           </p>
         </section>
 
@@ -102,7 +110,7 @@ export default function HelpDialog({ onClose }: { onClose: () => void }) {
           <Link className="help__link" href="/booklist" onClick={onClose}>
             灵感书单
           </Link>{' '}
-          看看别人做出来的样子。
+          看看别人做的。
         </p>
       </div>
     </Dialog>
@@ -164,7 +172,7 @@ function RequestForm() {
         你已经提过一条了，站长那一头看得见。
         {/* ★ 说"这条还要等"而不是"很快就好"：这一头的处理时间不是这个界面能承诺的 */}
         <span className="help__waiting-sub">
-          开通是四项一起给的，处理完不用重新登录，下一次点「开始创作」就生效。
+          四项一起开通，处理完不用重新登录，下一次点「开始创作」就生效。
         </span>
       </p>
     )
@@ -197,7 +205,7 @@ function RequestForm() {
         type="text"
         value={note}
         maxLength={500}
-        placeholder="想用来做什么（可填可不填，写了更容易批）"
+        placeholder="想用来做什么（可不填）"
         onChange={(event) => setNote(event.target.value)}
       />
 
@@ -208,8 +216,6 @@ function RequestForm() {
       <button type="submit" className="help__req-go" disabled={busy}>
         {busy ? '在发…' : '发出去'}
       </button>
-
-      <p className="help__req-hintline">开通是四项一起给的，不用挑。</p>
 
       {result ? (
         <p className="help__req-bad" role="alert">

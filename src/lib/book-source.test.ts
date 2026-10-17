@@ -10,9 +10,16 @@
  * 共读版主干页共用同一份录音时，两个 pageNo 都要能拿到**同一个** URL。
  */
 
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
 import { describe, expect, it } from 'vitest'
 
-import { coverUrlOf, demoAssetPathFor, readerPages } from './book-source.ts'
+import { coverUrlOf, demoAssetPathFor, readerPages, resolveBook } from './book-source.ts'
+import { createMemoryStore } from './engine/providers/stores.ts'
+import { createFsStore } from './engine/index.ts'
+import { scopedStore } from './asset-scope.ts'
 import type { Book, Cover, Illustration, Narration, StoryNode } from './engine/index.ts'
 
 function node(pageNo: number, body: string[]): StoryNode {
@@ -181,5 +188,93 @@ describe('demoAssetPathFor · 演示图的 webp 兄弟文件', () => {
 
   it('空集合（那本从来没导出过小图）全部回原图，不抛', () => {
     expect(demoAssetPathFor('books/b1/page-1-a1.png', new Set())).toBe('books/b1/page-1-a1.png')
+  })
+})
+
+/**
+ * ★★ 2026-10-17：**从谁那一片读**（用户实测报的「书架里看得见、点进去说找不到」）
+ *
+ * 这一组必须落在**真磁盘**上，不能只用 `createMemoryStore`：要钉住的那一条恰恰是
+ * "**裸根上那份明明在、也不许读**"——而"裸根"是一个真实的目录概念
+ * （`assetRoot()` 下的 `books/<id>/`，迁移前的老地方），内存 store 里没有它。
+ *
+ * 场景就是用户报的那一件：书按人搬进了 `u/<userId>/`，而阅读器还在老地方找。
+ * 于是架上（读自己那一片）说有、点开（读裸根）说没有。三条判据把它夹死：
+ *
+ * | 给谁读        | 盘上有什么                      | 该得到 |
+ * | ------------- | ------------------------------- | ------ |
+ * | 主人那一片    | `u/7/books/b1/book.json`        | 这本书 |
+ * | 别人那一片    | 同一份字节，只是不在这片里      | null   |
+ * | 没有会话       | 裸根 `books/b1/book.json` 也在   | null   |
+ *
+ * 最后那一行是本组的重点：**没有那一片就不去别处找**。所以它在裸根上摆一份
+ * 一模一样的清单——"读到了"就是失败（归属成了一句空话）。
+ */
+describe('resolveBook · 只读请求者那一片', () => {
+  async function withTempRoot(run: (root: string) => Promise<void>): Promise<void> {
+    const root = await mkdtemp(join(tmpdir(), 'xzj-book-source-'))
+    const previous = process.env['ASSET_ROOT']
+    process.env['ASSET_ROOT'] = root
+    try {
+      await run(root)
+    } finally {
+      if (previous === undefined) delete process.env['ASSET_ROOT']
+      else process.env['ASSET_ROOT'] = previous
+      await rm(root, { recursive: true, force: true })
+    }
+  }
+
+  async function writeManifest(root: string, where: string, raw?: string): Promise<void> {
+    const dir = join(root, where)
+    await mkdir(dir, { recursive: true })
+    await writeFile(
+      join(dir, 'book.json'),
+      raw ??
+        JSON.stringify(book({ nodes: [node(1, ['第 1 页'])], illustrations: [illustration(1)] })),
+      'utf8',
+    )
+  }
+
+  it('给了那一片：读得到，图与封面都走 `/api/assets`（与资产路由同一条口径）', async () => {
+    const store = scopedStore(await createMemoryStore(), '7')
+    await store.putJson({
+      path: 'books/b1/book.json',
+      value: book({ nodes: [node(1, ['第 1 页'])], illustrations: [illustration(1)] }),
+    })
+
+    const resolved = await resolveBook('b1', store)
+    expect(resolved?.source).toBe('runtime')
+    expect(resolved?.book.bookId).toBe('b1')
+    expect(resolved?.pages[0]?.imageUrl).toBe('/api/assets/books/b1/page-1-a1.png?w=1024')
+  })
+
+  it('★ 盘上那份在主人那一片里 → 读得到；换一个人那一片 → 读不到', async () => {
+    await withTempRoot(async (root) => {
+      await writeManifest(root, join('u', '7', 'books', 'b1'))
+      const base = await createFsStore(root)
+
+      const mine = await resolveBook('b1', scopedStore(base, '7'))
+      expect(mine?.source).toBe('runtime')
+      expect(mine?.book.tree.title).toBe('T')
+
+      expect(await resolveBook('b1', scopedStore(base, '8'))).toBeNull()
+    })
+  })
+
+  it('★★ 没有那一片（没登录）→ null，**就算裸根上摆着一份也不读**', async () => {
+    await withTempRoot(async (root) => {
+      // 迁移前的老地方：格式一模一样，只是不该再有人从这里读
+      await writeManifest(root, join('books', 'b1'))
+      expect(await resolveBook('b1', null)).toBeNull()
+      // 同一个书号，主人那一片是空的 → 也是 null（不是"回退到裸根那份"）
+      expect(await resolveBook('b1', scopedStore(await createFsStore(root), '7'))).toBeNull()
+    })
+  })
+
+  it('清单读不回来（半截 JSON）当它不存在，不抛', async () => {
+    await withTempRoot(async (root) => {
+      await writeManifest(root, join('u', '7', 'books', 'b1'), '{"bookId": "b1"')
+      expect(await resolveBook('b1', scopedStore(await createFsStore(root), '7'))).toBeNull()
+    })
   })
 })

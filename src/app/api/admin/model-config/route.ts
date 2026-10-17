@@ -20,12 +20,12 @@
 
 import { NextResponse, type NextRequest } from 'next/server'
 
-import { AUTH_ROUTE_CONFIG } from '@/lib/auth/bff.ts'
 import { requireAdmin } from '@/lib/auth/session.ts'
 import { modelConfigView } from '@/lib/settings/model-config.ts'
 
-export const runtime = AUTH_ROUTE_CONFIG.runtime
-export const dynamic = AUTH_ROUTE_CONFIG.dynamic
+// ★ 段配置必须是**字面量**：成员表达式 Next 读不了，而它只在 `pnpm build` 那一刻才报（判据见 lib/route-config.test.ts）
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const gate = await requireAdmin(request)

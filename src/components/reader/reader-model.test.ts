@@ -9,7 +9,14 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { leafCountOf, openingOf, readerFaces, readoutOf, showsText } from './reader-model.ts'
+import {
+  autoCueOf,
+  leafCountOf,
+  openingOf,
+  readerFaces,
+  readoutOf,
+  showsText,
+} from './reader-model.ts'
 import type { ReaderPage } from '@/lib/book-source.ts'
 
 function page(pageNo: number, body: readonly string[] = ['一句。']): ReaderPage {
@@ -118,5 +125,39 @@ describe('页码：封面与封底**不是页**', () => {
   it('越界的 q 不抛，报最接近的那一端', () => {
     expect(readoutOf(-3, PAGES).label).toBe('封面')
     expect(readoutOf(99, PAGES).label).toBe('封底')
+  })
+})
+
+describe('自动朗读：第 opening 屏该念哪儿', () => {
+  const COUNT = PAGES.length
+
+  it('第 k 屏念第 k 屏', () => {
+    for (let k = 1; k <= COUNT; k++) {
+      expect(autoCueOf(k, COUNT)).toEqual({ kind: 'speak', screen: k })
+    }
+  })
+
+  it('★ 封面是 begin，不是"没有可念的"', () => {
+    // `readoutOf` 在封面给的是 `page: null`，但那句话在这里不够用：
+    // 跟着那个 null 走，按一次「自动朗读」就是一句也不念
+    expect(autoCueOf(0, COUNT)).toEqual({ kind: 'begin' })
+    expect(readoutOf(0, PAGES).page).toBeNull()
+  })
+
+  it('★ 封底是 done —— 边界是 `屏数 + 1`，不是 `屏数`', () => {
+    // 差一写法的症状：最后一屏被念两遍（一遍算"第 N 屏"、一遍算"封底"），
+    // 或者最后一屏永远轮不到 —— 那个哨兵值与 `readoutOf` 那条注释同源
+    expect(autoCueOf(leafCountOf(PAGES), COUNT)).toEqual({ kind: 'done' })
+    expect(autoCueOf(COUNT, COUNT)).toEqual({ kind: 'speak', screen: COUNT })
+  })
+
+  it('越界不抛：负数当封面、超出的当封底', () => {
+    expect(autoCueOf(-3, COUNT)).toEqual({ kind: 'begin' })
+    expect(autoCueOf(99, COUNT)).toEqual({ kind: 'done' })
+  })
+
+  it('空书（封面紧挨着封底）两个端点都认得出，不会去念第 1 屏', () => {
+    expect(autoCueOf(0, 0)).toEqual({ kind: 'begin' })
+    expect(autoCueOf(1, 0)).toEqual({ kind: 'done' })
   })
 })

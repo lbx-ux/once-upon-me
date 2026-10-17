@@ -91,31 +91,35 @@ import { useAuth } from '@/components/auth/AuthProvider.tsx'
 import ProfileBackdrop from '@/components/account/ProfileBackdrop.tsx'
 import StudioBackdrop from '@/components/shell/StudioBackdrop.tsx'
 import HelpDialog from '@/components/shell/HelpDialog.tsx'
-import { avatarSrc } from '@/lib/avatars.ts'
+import SettingsDialog from '@/components/shell/SettingsDialog.tsx'
+import { DEFAULT_AVATAR } from '@/lib/avatars.ts'
 import { maskPhone } from '@/lib/auth/state.ts'
 import { staggerFor } from '@/lib/useEnterTimeline.ts'
 
 const COLLAPSE_KEY = 'xiaozhujue.shell.collapsed'
 
-type NavItem = { href: string; label: string; icon: string }
+/**
+ * ★ `icon` 是**可选**的，只有「个人主页」那一格没有它（2026-10-17）。
+ *   原来那一格的图标是"人加一圈"（`AVATAR_ICON`），意思是"**有头像的那个位置**"——
+ *   一个空位的记号。现在那一格**永远**画着站点那唯一一张头像
+ *   （`lib/avatars.ts`，用户要求"只提供一个默认头像、不可以切换"），
+ *   于是那个空位记号成了一段**到不了**的代码：`NavContent` 里
+ *   `avatar ? <img> : <svg item.icon>` 的 else 分支，对「个人主页」这一格永远不会走。
+ *   留着它比删掉更坏——它会让人以为"这里某天还会是一颗人形图标"。
+ */
+type NavItem = { href: string; label: string; icon?: string }
 
 /**
- * ★ 侧栏底部那一格的两个图标（2026-10-16，用户要求底部那格从"空着"变成
+ * ★ 侧栏底部那一格**未登录**时的图标（2026-10-16，用户要求底部那格从"空着"变成
  *   「请登录」，登录之后变成「个人主页」）。
  *
  * ★ **未登录那只刻意不是人形**。人形已经是「角色卡」那一格的图标，
  *   同一条侧栏上摆两个"人"，必然有人读错——这个仓库为"两个小主角指两件事"
  *   付过一次学费（见文件头那段）。箭头进门框是另一个形状，收起侧栏只剩图标时也分得开。
- *
- * ★ **已登录那只是一个人加一圈**。它表达的是"**有头像的那个位置**"。
- *   ★ 2026-10-17 起它有了一个 `img` 分支（`NavContent` 的 `avatar` 那个 prop）：
- *     挑过头像的人这里显示的是那一个，**没挑过 / 认不出来**才是这个圈。
- *     （这一段原来写着"接后端拿到头像 URL 那天，这里要长出一个 img 分支"——
- *     那一天就是今天，两处一起改的：这个常量与 `NavContent`。）
+ *   ★ 2026-10-17：它是这一组里**唯一**剩下的一个了。已登录那一格原来那个
+ *     "人加一圈"的空位记号随"只提供一个默认头像"一起删掉（理由见 `NavItem`）。
  */
 const SIGN_IN_ICON = 'M15 4h3a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-3M10 8l4 4-4 4M14 12H3'
-const AVATAR_ICON =
-  'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm0 5.4a2.75 2.75 0 1 0 0 5.5 2.75 2.75 0 0 0 0-5.5ZM6.9 18.2a6.25 6.25 0 0 1 10.2 0'
 
 /** `icon` 是 SVG 的 path 数据（24×24 视口，描边用 currentColor） */
 const NAV: NavItem[] = [
@@ -204,14 +208,13 @@ function NavContent({ item, avatar }: { item: NavItem; avatar?: string | null })
     <>
       <span className="shell__glyph" data-pending={showPending ? 'true' : undefined}>
         {avatar ? (
-          /* ★ 是 `<img>` 不是 `next/image`：一张 64px 的本地 SVG，没有 LCP 意义，
-             而 next/image 对 SVG 默认还要显式放行（`dangerouslyAllowSVG`）。
+          /* ★ 是 `<img>` 不是 `next/image`：一张 22px 的本地位图，没有 LCP 意义，
              与 `shell__brand-mark` 那条同一个处理。
              ★ `alt=""`：**这一格的文字就在它旁边**（昵称/打码手机号），
-               再念一遍"云的图标"是噪音。挑过没有这件事由 `title` 说。 */
+               再念一遍"云的图标"是噪音。 */
           /* eslint-disable-next-line @next/next/no-img-element */
           <img className="shell__avatar" src={avatar} alt="" width={22} height={22} />
-        ) : (
+        ) : item.icon ? (
           <svg className="shell__icon" viewBox="0 0 24 24" aria-hidden="true">
             <path
               d={item.icon}
@@ -222,7 +225,7 @@ function NavContent({ item, avatar }: { item: NavItem; avatar?: string | null })
               strokeLinejoin="round"
             />
           </svg>
-        )}
+        ) : null}
         <span className="shell__spin" aria-hidden="true" />
       </span>
       <span className="shell__link-label">{item.label}</span>
@@ -236,6 +239,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false)
   /** 「帮助」那个弹窗开着没有。★ 与折叠不同，它不持久化：关了就是关了 */
   const [helpOpen, setHelpOpen] = useState(false)
+  /** 「设置」那个弹窗开着没有。同上，不持久化——里面那些偏好自己会落盘 */
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const { user } = useAuth()
   const sideRef = useRef<HTMLElement>(null)
 
@@ -313,14 +318,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const accountItem: NavItem = {
     href: '/account',
     label: user ? user.nickname.trim() || maskPhone(user.phone) : '',
-    icon: AVATAR_ICON,
+    // ★ 没有 `icon`：这一格永远画站点那唯一一张头像（见 `NavItem`）
   }
   /**
-   * ★ 挑过的头像。**认不出来就是 `null`**，那一路画的是上面那个空圈
-   *   （`lib/avatars.ts` 文件头：后端只存一个 id，前端不另存一份白名单，
-   *   认不出的一律退回"头像空着"——不是报错，也不是回落成某一个默认头像）。
+   * ★ 登录之后就是**站点那唯一一张头像**，与"这个人是谁"无关
+   *   （2026-10-17 用户要求"只提供一个默认头像、用户不可以切换"）。
+   *   `null` 只在**还没登录**时出现，而那时这一格画的是 `SIGN_IN_ICON`。
    */
-  const avatar = user ? avatarSrc(user.avatar) : null
+  const avatar = user ? DEFAULT_AVATAR : null
 
   /**
    * 侧栏那几格 = 常量那一排，管理员多一格「管理」。
@@ -411,6 +416,44 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </Link>
 
           {/*
+           * ★ 「设置」在「帮助」**上面**（2026-10-17 加）。这一列的次序是一句话：
+           *   先是谁在用（个人主页），再是这个人在哪儿调（设置），
+           *   然后是"还有问题去哪问"（帮助），最后是一个开关（收起侧栏）。
+           *   管理与帮助都不是"去做事"，与上面那五格不同类，所以它们留在底部。
+           *
+           * ★ 图标是**两根推子**（三条横线 + 三个错开的圆点），不引图标库：
+           *   这个仓库至今只有 gsap 一个前端依赖（README §二 那张清单是要守的），
+           *   而一个图形不值得为它加一个包。选推子而不是齿轮，是因为侧栏里
+           *   另外九个形状（笔 / 书签带 / 书架 / 人形 / 声波 / 钥匙 / 门框 / 头像 /
+           *   问号圈）里一个"平行线 + 点"都没有，收起侧栏只剩图标时也认得出来。
+           *
+           * ★ 它与「帮助」同一副骨架（`.shell__link`），因为它确实是
+           *   "点一下会打开一个东西"的那类动作，与最底下那个开关（`.shell__collapse`，
+           *   更紧一档、带一圈边）不是一类。 */}
+          <button
+            type="button"
+            className="shell__link"
+            onClick={() => setSettingsOpen(true)}
+            title="设置"
+          >
+            <svg className="shell__icon" viewBox="0 0 24 24" aria-hidden="true">
+              {/* 三条轨 */}
+              <path
+                d="M4 6.5h16M4 12h16M4 17.5h16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+              />
+              {/* 三个钮，一条一个位置，彼此错开（错开才读得出是"可调"） */}
+              <circle cx="9" cy="6.5" r="2.1" fill="currentColor" />
+              <circle cx="15.5" cy="12" r="2.1" fill="currentColor" />
+              <circle cx="7.5" cy="17.5" r="2.1" fill="currentColor" />
+            </svg>
+            <span className="shell__link-label">设置</span>
+          </button>
+
+          {/*
            * ★ 这一格的前身是一颗「模型与密钥」的按钮（点了开那个抽屉）。
            *   2026-10-16 用户要求取消用户自己填 api-key 的模块，抽屉整格拆掉了。
            *   2026-10-17 这里先变成过一行常驻的说明，当晚用户要求：「这句话不要明着
@@ -420,11 +463,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
            * ★ 换成钮不是把话藏起来：那颗钮上写着「帮助」，点开就是原来那几段
            *   （还更全）。常驻三行说明的代价是它会被读成背景噪音——
            *   真正需要它的人（撞上"没有权限"的那一个）反而先扫过去。
-           ★ 它用 `shell__link` 那套外形（与上面几格同一副骨架），
-           *   因为它确实是"点一下会打开一个东西"的那类动作，与「收起侧栏」不同。 */}
+           * ★ 它用 `shell__link` 那套外形（与上面几格同一副骨架），
+           *   因为它确实是"点一下会打开一个东西"的那类动作，与「收起侧栏」不同。
+           *   ★ 2026-10-17 顺手删掉了它原来那个 `shell__link--btn`：全仓库没有
+           *     任何一条 CSS 规则选中过那个类，是个死钩子。 */}
           <button
             type="button"
-            className="shell__link shell__link--btn"
+            className="shell__link"
             onClick={() => setHelpOpen(true)}
             title="帮助"
           >
@@ -484,9 +529,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       <div className="shell__main">{children}</div>
 
-      {/* ★ 弹窗挂在**壳上**（不是某一页里）：侧栏在哪一屏都在，所以那个「帮助」
-          也在哪一屏都点得开——挂进某一页的话，只有那一页能用 */}
+      {/* ★ 弹窗挂在**壳上**（不是某一页里）：侧栏在哪一屏都在，所以「帮助」与
+          「设置」也在哪一屏都点得开——挂进某一页的话，只有那一页能用 */}
       {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} />}
+      {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
     </div>
   )
 }
