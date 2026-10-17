@@ -112,6 +112,15 @@
 }
 
 .dlg__go {
+  /* ★ `inline-flex` 不是样式偏好，是**这一颗同时用在 `<button>` 与 `<a>` 上**：
+     `<a>` 默认是行内元素，`min-height` 与 `padding` 的上下两项在它身上**不生效**
+     ——症状是"这颗主按钮比旁边那颗扁一截"，而只有在它恰好是个链接时才看得见
+     （2026-10-17 的「请先登录」那颗就是链接：登录是一次真导航，
+     要能中键新标签页打开、要能进历史）。`align-items` 那两句同理：
+     行内元素的基线对齐会让两颗按钮的字不在同一条线上。 */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-height: 46px;
   padding: 0 24px;
   border: 0;
@@ -122,6 +131,8 @@
   font-size: 15px;
   font-weight: 600;
   cursor: pointer;
+  /* 链接形态下要把浏览器默认那条下划线去掉（按钮形态下这条是空操作） */
+  text-decoration: none;
 }
 
 .dlg__go:disabled {

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="云">
+  <circle cx="32" cy="32" r="32" fill="#e8f0f6"/>
+  <path d="M18 40a9 9 0 0 1 1.6-17.9A12 12 0 0 1 43 22.4 9.6 9.6 0 0 1 45 40Z"
+        fill="#f4f8f9" stroke="#427294" stroke-width="2.4" stroke-linejoin="round"/>
+  <path d="M24 46h15" stroke="#6b6a74" stroke-width="2.4" stroke-linecap="round"/>
+</svg>

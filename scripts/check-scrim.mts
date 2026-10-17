@@ -489,6 +489,52 @@ for (const face of CARD_FACES) {
   )
 }
 
+/**
+ * 个人主页那一屏的四个令牌（2026-10-17）。
+ *
+ * ★ 为什么它要进这支脚本：那一屏的强调色**不是全站那颗橙**，是用户指定另开的一组
+ *   （`--pf-accent` / `--pf-paper` / `--pf-hairline` / `--pf-accent-rgb`，
+ *   理由写在 `globals.css` 那一段里）。全站那支橙的四条对比度由上面两张表管着，
+ *   这一组**没有任何别的地方量**——而它里面真的落着 12px 的字
+ *   （「3 张角色卡」「可朗读」那两枚标签），掉到 4.5 以下就是真的读不了。
+ *
+ * ★ 两个门槛不一样，别把它们写成同一个：
+ *   · `--pf-accent` 压在 `--surface`（白卡）上 —— **过 4.5**。那是 12px 标签的字色，正文级。
+ *   · `--pf-accent` 压在 `--pf-paper`（头像那个圆底）上 —— 只过 **3:1**。
+ *     那里画的是**图形**不是字（那六个头像 SVG 的记号），非文字元素那条线是 3:1。
+ *     实测是 4.48:1，**差一点点没过 4.5**，而它本来也不必过。
+ *   · `--ink-muted` 压在 `--pf-paper` 上 —— 那个空圈的图形色，同上 3:1，实测 4.63。
+ */
+const PF_SURFACE = { r: 255, g: 255, b: 255 }
+const pfAccent = parseHex(globals, 'pf-accent')
+const pfPaper = parseHex(globals, 'pf-paper')
+const PF_CHECKS: [string, number, number][] = [
+  [
+    '--pf-accent / --surface（12px 标签的字色）',
+    contrast(luminance(PF_SURFACE), luminance(pfAccent)),
+    THRESHOLD,
+  ],
+  [
+    '--ink-muted / --pf-paper（头像那个空圈，图形）',
+    contrast(luminance(pfPaper), luminance(parseHex(globals, 'ink-muted'))),
+    3,
+  ],
+]
+console.log('')
+console.log('   个人主页那一屏（--pf-*，另一组令牌）：')
+for (const [label, v, limit] of PF_CHECKS) {
+  const ok = v >= limit
+  if (!ok) fail = true
+  console.log(`     ${fmt(v)}:1  门槛 ${limit}  ${ok ? '' : '✗ '}${label}`)
+}
+/* ★ `--pf-accent` 在头像圆底上**不**断言 4.5：那里是图形不是字。
+   但把它印出来——它是"这个蓝够不够看得见"的旁证，掉到 3 以下才该出事。 */
+const pfOnPaper = contrast(luminance(pfPaper), luminance(pfAccent))
+if (pfOnPaper < 3) fail = true
+console.log(
+  `     ${fmt(pfOnPaper)}:1  门槛 3（图形）  ${pfOnPaper >= 3 ? '' : '✗ '}--pf-accent / --pf-paper（头像记号）`,
+)
+
 let fail = false
 /** ★ 交界不许换色。天空带**最后一段**的冷暖度与它下面那块纯纸必须同号——
  *  异号就是"往上滚是天、往下滚又变橙"那个割裂感本身。

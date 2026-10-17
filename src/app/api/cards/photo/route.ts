@@ -21,6 +21,7 @@
  *   key 不对、平台限流 → 由 `userFailureOf` 分。
  */
 
+import type { NextRequest } from 'next/server'
 import { assetRoot } from '@/lib/books-runtime.ts'
 import { assetUrlOf } from '@/lib/asset-url.ts'
 import { createCardStore, createFsStore } from '@/lib/engine/index.ts'
@@ -28,14 +29,21 @@ import { imageProviderOf } from '@/lib/engine/providers/registry.ts'
 import { cardFromPhoto } from '@/lib/photo-card.ts'
 // ★ 表单解析在 `lib/photo-form.ts`，不在这个文件里导出：Next 给 Route Handler
 //   生成的类型只允许这里导出标准字段，多导一个函数 `pnpm typecheck` 就红
-import { envFromForm, parsePhotoForm } from '@/lib/photo-form.ts'
+import { parsePhotoForm } from '@/lib/photo-form.ts'
 import { MAX_PHOTO_BYTES, megaOf, photoProblems } from '@/lib/photo-rules.ts'
 import { userFailureOf } from '@/lib/provider-messages.ts'
+import { requireCapability } from '@/lib/auth/session.ts'
+import { serverEnv } from '@/lib/settings/server-env.ts'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-export async function POST(req: Request): Promise<Response> {
+export async function POST(req: NextRequest): Promise<Response> {
+  // ★ 用照片建卡要**图像**（出那张标准像）与**视觉**（读照片）两项。
+  //   比 `/api/cards` 多一项是**对的**：那条只看锚点出图，这一条真的把照片交给模型读过
+  const guard = await requireCapability(req, ['image', 'vision'])
+  if (!guard.ok) return guard.response
+
   // 早退：Content-Length 说了多大就先拦一次，省掉把 200 MB 读进内存再发现它太大。
   // 多留一成给 multipart 的边界与那几个文字字段；**真正生效的上限在 `photoProblems`**，
   // 因为这一行读的是一个可以撒谎的头
@@ -80,7 +88,7 @@ export async function POST(req: Request): Promise<Response> {
   //   这条路一步文本、一步视觉、一步语音都不需要，按组构造的工厂就该按组用
   let image
   try {
-    image = imageProviderOf(envFromForm(form))
+    image = imageProviderOf(serverEnv())
   } catch (err) {
     return failureResponse(err)
   }

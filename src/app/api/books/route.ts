@@ -30,6 +30,7 @@
  *   不是流：它们都发生在第一个字节之前，用一个能读的状态码比在流里说一句更诚实。
  */
 
+import type { NextRequest } from 'next/server'
 import {
   bookIdOf,
   createCardStore,
@@ -48,6 +49,8 @@ import { userFailureOf } from '@/lib/provider-messages.ts'
 import { coverUrlOf as coverUrlIn, runtimeAssetUrl } from '@/lib/book-source.ts'
 import { listBooks, noCovers, SHELF_COVER_WIDTH } from '@/lib/library.ts'
 import { applyOrder, loadOrder, pruneOrder, saveOrder } from '@/lib/shelf-order.ts'
+import { requireCapability } from '@/lib/auth/session.ts'
+import { serverEnv } from '@/lib/settings/server-env.ts'
 
 /** node 运行时：资产要落盘（providers/stores.ts 的 fs 实现） */
 export const runtime = 'nodejs'
@@ -112,7 +115,7 @@ export async function GET(): Promise<Response> {
  * 4. ★ **不做"最多 N 条"那种上限**：一个书架上有几本书由盘上那几本决定，
  *    这里再多一道闸门只会变成第二个真相（真要有几万本，先出问题的是 `listBooks`）。
  */
-export async function PUT(req: Request): Promise<Response> {
+export async function PUT(req: NextRequest): Promise<Response> {
   let raw: unknown
   try {
     raw = await req.json()
@@ -137,7 +140,13 @@ export async function PUT(req: Request): Promise<Response> {
   }
 }
 
-export async function POST(req: Request): Promise<Response> {
+export async function POST(req: NextRequest): Promise<Response> {
+  // ★ 闸门在**解析请求体之前**：这是三道闸里唯一真管用的那道（界面那两道只是体验）。
+  //   要的正好是"跑一本书最少要的两件事"——文本与图像（与 `canCreate` 同一条口径）。
+  //   判不了权限时它回 503 而不是放行，见 `session.ts` 文件头第 3 条。
+  const guard = await requireCapability(req, ['text', 'image'])
+  if (!guard.ok) return guard.response
+
   let raw: unknown
   try {
     raw = await req.json()
@@ -198,7 +207,9 @@ export async function POST(req: Request): Promise<Response> {
   let providers
   try {
     providers = await createProviders({
-      env: body.env ?? {},
+      // ★ 密钥只从服务端环境来（ADR-0009）。请求体里那个 `env` 字段整条退场了，
+      //   所以这里**没有**回退可写：`serverEnv()` 就是唯一来源
+      env: serverEnv(),
       mode: body.mode ?? 'live',
       assetRoot: root,
       store,

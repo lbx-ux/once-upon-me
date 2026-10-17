@@ -19,13 +19,14 @@
  *   拿**照片**比**插画**——与 ADR-0007 验过的那次（插画比插画）不是同一个任务，
  *   **没量过**。没有消费方的输入框就是假装，所以这一格继续空着，
  *   等工单 03 把"照片 → 卡"这条链连同比对一起量出来再开。
- * ★ 密钥走 per-request `Env`（ADR-0008），与 `/api/books` 同一个约定：
- *   请求体里那张表说了算，服务端的 `process.env` 不参与。
+ * ★ 密钥只从服务端环境来（ADR-0009）。这一条在 2026-10-17 之前写的是
+ *   "请求体里那张表说了算，服务端的 `process.env` 不参与"——正好反过来。"
  *
  * GET 那条兑现的是 ADR-0007 的**可复用**：上一版第 3 步只有"出一张形象"，
  * 于是每做一本书都要重新出一张脸——那正好把"可复用"做没了。
  */
 
+import type { NextRequest } from 'next/server'
 import {
   cardDigest,
   checklistOf,
@@ -50,6 +51,8 @@ import { EngineError } from '@/lib/engine/errors.ts'
 import { checkAnchors } from '@/lib/engine/character-card/card.ts'
 import { listCardItems } from '@/lib/cards-list.ts'
 import { userFailureOf } from '@/lib/provider-messages.ts'
+import { requireCapability } from '@/lib/auth/session.ts'
+import { serverEnv } from '@/lib/settings/server-env.ts'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -82,7 +85,12 @@ type Body = {
   ageBand: string
   childWord?: string
   anchors: CharacterAnchor[]
-  env: Record<string, string | undefined>
+  /*
+   * ★ 这里原来有 `env`（ADR-0008：用户在设置里填的密钥随请求上来）。
+   *   2026-10-17 之后整条退场（ADR-0009）：密钥由站长分配，只从服务端的
+   *   `process.env` 来（`lib/settings/server-env.ts`）。
+   *   与 `book-api.ts` 那一段逐字同一个理由——**删掉而不是留着不用**。
+   */
   /** 换一版：带上已有卡号，引擎会叠一个新 revision 而不是覆盖 */
   cardId?: string
 }
@@ -111,14 +119,6 @@ function parseBody(raw: unknown): { body?: Body; problems: string[] } {
   }
   if (anchors.length === 0) problems.push('一条外貌锚点都没有——没有锚点就没有一致性可言')
 
-  const envRaw = source['env']
-  const env: Record<string, string | undefined> = {}
-  if (envRaw && typeof envRaw === 'object' && !Array.isArray(envRaw)) {
-    for (const [key, value] of Object.entries(envRaw as Record<string, unknown>)) {
-      if (typeof value === 'string') env[key] = value
-    }
-  }
-
   if (problems.length > 0) return { problems }
   return {
     problems: [],
@@ -128,13 +128,17 @@ function parseBody(raw: unknown): { body?: Body; problems: string[] } {
       ageBand: str(source['ageBand']) || '4-6',
       childWord: str(source['childWord']) || '孩子',
       anchors,
-      env,
       ...(str(source['cardId']) === '' ? {} : { cardId: str(source['cardId']) }),
     },
   }
 }
 
-export async function POST(req: Request): Promise<Response> {
+export async function POST(req: NextRequest): Promise<Response> {
+  // ★ 出形象只要**图像**那一个能力（与下面那句"按组构造的工厂就该按组用"同一条理由）：
+  //   要成"文本 + 图像"的话，这条路会因为一件与画脸无关的事情把人生拦在外面
+  const guard = await requireCapability(req, ['image'])
+  if (!guard.ok) return guard.response
+
   let raw: unknown
   try {
     raw = await req.json()
@@ -177,10 +181,10 @@ export async function POST(req: Request): Promise<Response> {
   //   而家长拿到的是一句"模型与密钥没配全，这一轮跑不起来"。
   //   实测到的现场：只配了 IMAGE_* 去跑 `/api/cards`，回 502 +
   //   `LLM_API_KEY 未配置`——一件与出形象毫无关系的事。
-  //   按组构造的工厂就该按组用（同一个用法在 `/api/settings/probe` 里）。
+  //   按组构造的工厂就该按组用。
   let image
   try {
-    image = imageProviderOf(body.env)
+    image = imageProviderOf(serverEnv())
   } catch (err) {
     return failureResponse(err)
   }

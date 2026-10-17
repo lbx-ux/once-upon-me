@@ -23,6 +23,7 @@
  *   所以界面上是把新旧两版并排给家长看（人判），而不是贴一句"AI 会尽力理解"。
  */
 
+import type { NextRequest } from 'next/server'
 import {
   characterSheetPrompt,
   ageLabelOf,
@@ -36,6 +37,8 @@ import { createCardStore, createFsStore, promptFragmentOf } from '@/lib/engine/i
 import { imageProviderOf } from '@/lib/engine/providers/registry.ts'
 import { normalizeReference, referenceDataUrlOf } from '@/lib/engine/image/normalize.ts'
 import { userFailureOf } from '@/lib/provider-messages.ts'
+import { requireCapability } from '@/lib/auth/session.ts'
+import { serverEnv } from '@/lib/settings/server-env.ts'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -49,7 +52,6 @@ type Body = {
   name: string
   ageBand: string
   suggestion: string
-  env: Record<string, string | undefined>
 }
 
 function parseBody(raw: unknown): { body?: Body; problems: string[] } {
@@ -67,14 +69,6 @@ function parseBody(raw: unknown): { body?: Body; problems: string[] } {
   if (suggestion === '') problems.push('还没写想改哪里——空着点一次就是按原样重画一张，白花钱')
   if (suggestion.length > 200) problems.push('想改的地方写短一点（200 字以内）')
 
-  const envRaw = source['env']
-  const env: Record<string, string | undefined> = {}
-  if (envRaw && typeof envRaw === 'object' && !Array.isArray(envRaw)) {
-    for (const [key, value] of Object.entries(envRaw as Record<string, unknown>)) {
-      if (typeof value === 'string') env[key] = value
-    }
-  }
-
   if (problems.length > 0) return { problems }
   return {
     problems: [],
@@ -83,12 +77,15 @@ function parseBody(raw: unknown): { body?: Body; problems: string[] } {
       name: str(source['name']) || '孩子',
       ageBand: str(source['ageBand']) || '4-6',
       suggestion,
-      env,
     },
   }
 }
 
-export async function POST(req: Request): Promise<Response> {
+export async function POST(req: NextRequest): Promise<Response> {
+  // ★ 改一版卡也是一次图像生成，所以只要**图像**这一个能力——与 `/api/cards` 同一条口径
+  const guard = await requireCapability(req, ['image'])
+  if (!guard.ok) return guard.response
+
   let raw: unknown
   try {
     raw = await req.json()
@@ -134,7 +131,7 @@ export async function POST(req: Request): Promise<Response> {
 
   let image
   try {
-    image = imageProviderOf(body.env)
+    image = imageProviderOf(serverEnv())
   } catch (err) {
     const failure = userFailureOf(err)
     return Response.json(

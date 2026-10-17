@@ -7,7 +7,6 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { envFromBody } from '@/lib/settings/request-env.ts'
 import { parseCloneRequest, REQUEST_MIME } from './request.ts'
 
 const sample = (bytes: number): string => Buffer.alloc(bytes, 7).toString('base64')
@@ -21,18 +20,12 @@ const body = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
   ...over,
 })
 
-describe('envFromBody', () => {
-  it('剪空白、空串不写进表', () => {
-    const env = envFromBody({ env: { TTS_API_KEY: '  k  ', TTS_MODEL: '', TTS_BASE_URL: '   ' } })
-    expect(env).toEqual({ TTS_API_KEY: 'k' })
-  })
-
-  it('不是键值对 → null（数组也不行）', () => {
-    expect(envFromBody({ env: 'k=v' })).toBeNull()
-    expect(envFromBody({ env: ['k'] })).toBeNull()
-    expect(envFromBody({})).toBeNull()
-  })
-})
+/*
+ * ★ 这里原来有两条 `envFromBody` 的测试（"剪空白、空串不写进表"那两条纪律）。
+ *   2026-10-16 那个函数随 ADR-0008 一起退场了，**纪律一条没丢**——
+ *   它们跟着搬到 `lib/settings/server-env.ts` 的测试里去了。
+ *   留一句在这里，是因为下一个读这一段的人会问"那两条测试呢"。
+ */
 
 describe('parseCloneRequest', () => {
   it('齐了就过，并把名字与样本原样交出去', () => {

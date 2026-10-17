@@ -1,7 +1,7 @@
 /**
  * figures.ts —— 输入框上方那 12 个「站着的小主角」的**封闭表**
  *
- * 形状与 `lib/themes.ts` / `lib/settings/state.ts` 的 `DEFAULT_VOICES` 同一条：
+ * 形状与 `lib/themes.ts` / `lib/voices/state.ts` 的 `DEFAULT_VOICES` 同一条：
  * 一张写死的表 + 一个取路径的函数，别处不许自己拼 `/figures/`。
  *
  * ★ key 直接复用主题的 key，不另发明一套编号：这 12 个人本来就是

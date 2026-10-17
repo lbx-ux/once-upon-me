@@ -1,7 +1,7 @@
 /**
  * /api/optimize —— 把家长写的那一句"想讲什么"改得更具体
  *
- *   POST /api/optimize  { wish, childName?, themeLabel?, env }  →  { suggestion, … }
+ *   POST /api/optimize  { wish, childName?, themeLabel? }  →  { suggestion, … }
  *
  * ★ 它**只回建议，不改任何东西**。原句在客户端的 state 里，用不用由用户点。
  *   服务端不落盘、不建产物、不进任何 provenance——这不是一次生成，是一次改写建议。
@@ -11,15 +11,18 @@
  *   直接用 `imageProviderOf` 是同一条纪律——按组构造的工厂就该按组用。
  *   拿 `createProviders` 做这件事的话，一个"只想改句话"的动作会因为没填**图像**密钥整条跑不起来。
  *
- * ★ 密钥走 per-request `Env`（ADR-0008），与 `/api/books`、`/api/cards` 同一个约定：
- *   请求体里那张表说了算，服务端的 `process.env` 不参与。
+ * ★ 密钥只从服务端环境来（ADR-0009，`lib/settings/server-env.ts`）：
+ *   这一条 2026-10-17 之前写的是"请求体里那张表说了算"，正好反过来。
  *
  * ★ 失败一律说人话（`userFailureOf` 是唯一那处判据），**绝不在本地编一句兜底文本顶上**：
  *   那样用户会以为自己拿到的是 AI 优化过的句子，实际是一句写死的话——
  *   一个只对四分之一能响的控件，证的是这件事想证的反面。
  */
 
+import type { NextRequest } from 'next/server'
 import { textProviderOf } from '@/lib/engine/providers/registry.ts'
+import { requireCapability } from '@/lib/auth/session.ts'
+import { serverEnv } from '@/lib/settings/server-env.ts'
 import { userFailureOf } from '@/lib/provider-messages.ts'
 import {
   cleanSuggestion,
@@ -45,7 +48,6 @@ type Body = {
   wish: string
   childName?: string
   themeLabel?: string
-  env: Record<string, string | undefined>
 }
 
 function parseBody(raw: unknown): { body?: Body; problems: string[] } {
@@ -62,26 +64,21 @@ function parseBody(raw: unknown): { body?: Body; problems: string[] } {
   if (wish === '') problems.push('要优化的那句话是空的——先写一句想讲什么')
   if (problems.length > 0) return { problems }
 
-  const envRaw = source['env']
-  const env: Record<string, string | undefined> = {}
-  if (envRaw && typeof envRaw === 'object' && !Array.isArray(envRaw)) {
-    for (const [key, value] of Object.entries(envRaw as Record<string, unknown>)) {
-      if (typeof value === 'string') env[key] = value
-    }
-  }
-
   return {
     problems: [],
     body: {
       wish,
-      env,
       ...(str(source['childName']) === '' ? {} : { childName: str(source['childName']) }),
       ...(str(source['themeLabel']) === '' ? {} : { themeLabel: str(source['themeLabel']) }),
     },
   }
 }
 
-export async function POST(req: Request): Promise<Response> {
+export async function POST(req: NextRequest): Promise<Response> {
+  // ★ 这一条只花文本的钱（`textProviderOf`），所以只要**文本**那一个能力
+  const guard = await requireCapability(req, ['text'])
+  if (!guard.ok) return guard.response
+
   let raw: unknown
   try {
     raw = await req.json()
@@ -101,7 +98,7 @@ export async function POST(req: Request): Promise<Response> {
   // 而不是一句与本次动作无关的"模型与密钥没配全"
   let text
   try {
-    text = textProviderOf(body.env)
+    text = textProviderOf(serverEnv())
   } catch (err) {
     return failureResponse(err)
   }

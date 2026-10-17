@@ -1,6 +1,6 @@
-import NextLink from 'next/link'
 import type { CSSProperties } from 'react'
 
+import NewCharacterButton from '@/components/studio/NewCharacterButton.tsx'
 import WallDelete from '@/components/studio/WallDelete.tsx'
 import { assetUrlOf } from '@/lib/asset-url.ts'
 import type { ChildWallItem } from '@/lib/children-list.ts'
@@ -119,20 +119,15 @@ export default function CharacterWall({ items }: CharacterWallProps) {
               那是产品名，不是这一屏的名字。 */}
           <h1 className="cw__title">角色卡</h1>
         </div>
-        <NextLink className="cw__new" href="/character/new">
-          <span className="cw__new-plus" aria-hidden="true">
-            ＋
-          </span>
-          新建角色
-        </NextLink>
+        {/* ★ 这一颗现在是客户端组件（`NewCharacterButton`）：没登录时它要先弹一个
+            「请先登录」，而 `<Link>` 拦不住自己那一下导航。整面墙仍然是服务端组件。 */}
+        <NewCharacterButton />
       </header>
 
       {items.length === 0 ? (
         <div className="cw__empty">
           <p>还没有小主角。先说孩子是谁，再出一张形象——两样都在新建那一屏上。</p>
-          <NextLink className="cw__cta" href="/character/new">
-            去新建一个
-          </NextLink>
+          <NewCharacterButton className="cw__cta">去新建一个</NewCharacterButton>
         </div>
       ) : (
         <ul className="cw__wall">

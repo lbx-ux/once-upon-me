@@ -2,7 +2,7 @@
  * `/api/auth/me` —— 现在这个人是谁、能用什么；改昵称也走这里（BFF）
  *
  * ```
- *   GET   → { "user": {…}, "permissions": {…}, "configured": {…} }
+ *   GET   → { "user": {…}, "permissions": {…}, "configured": {…}, "speechModel": "…" }
  *   POST  { "nickname": "小满妈妈" }  → { "user": {…} }
  *   401   { "code": "not-signed-in", "message": "请先登录" }
  * ```
@@ -13,6 +13,13 @@
  *   · `configured`   —— **服务端自己配齐了什么**（`serverEnv()` 里有没有那个能力的密钥）
  * 一个能力真能用，是这两件事**同时**成立。合成一个布尔的那天起，
  * 界面上就再也说不出"你有权限，但站里还没配语音"这种真话。
+ *
+ * ★ `speechModel` 是**模型名**，不是密钥，所以它回给浏览器没有代价；而界面**非知道它不可**：
+ *   克隆音色绑死在创建它时的那个模型上（实测跨模型 400 `[cosinevoice]Engine error [411]`），
+ *   所以"我录的那条现在还能不能用"这条判据需要"现在的模型是哪一个"。
+ *   这一栏在 ADR-0008 那会儿是用户在设置里填的，现在只有服务端知道。
+ *   ★ 别顺手把 `LLM_MODEL` / `IMAGE_MODEL` 也加进来：那两条今天**没有读者**，
+ *     多回一个字段就是多一个以后要维护的承诺。
  *
  * ★ `configured` 在这里算、不在 Java 那边：密钥在 Next 这一侧（ADR-0009），
  * Java 根本不知道有没有配 TTS。
@@ -59,6 +66,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       // 语音要"模型 + key"两样（音色是用户在界面上挑的，缺了会在挑那一格说）
       speech: Boolean(env['TTS_MODEL'] && env['TTS_API_KEY']),
     },
+    /** ★ 见文件头：它是**模型名**不是密钥，而"我录的那条还能不能用"非要它不可 */
+    speechModel: env['TTS_MODEL'] ?? '',
   })
 }
 

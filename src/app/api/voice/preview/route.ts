@@ -1,7 +1,9 @@
 import { EngineError } from '@/lib/engine/index.ts'
+import type { NextRequest } from 'next/server'
 import { voiceProviderOf } from '@/lib/engine/providers/registry.ts'
 import { PREVIEW_LINE } from '@/lib/settings/preview-line.ts'
-import { envFromBody } from '@/lib/settings/request-env.ts'
+import { requireCapability } from '@/lib/auth/session.ts'
+import { serverEnv } from '@/lib/settings/server-env.ts'
 
 /**
  * POST /api/voice/preview —— 「听一句真的」
@@ -18,7 +20,8 @@ import { envFromBody } from '@/lib/settings/request-env.ts'
  * 三条约定：
  *   1. 文本**限长**（一次试听不该变成一整本书）；
  *   2. 音频**不落盘**——直接回字节。落盘就要管清理，而它是一次性的试听；
- *   3. 密钥只从请求体的 env 来（ADR-0008），服务端 `process.env` 不参与。
+ *   3. ★ 密钥只从**服务端**环境来（ADR-0009）。这一条 2026-10-17 之前写的是
+ *      "只从请求体的 env 来，服务端 `process.env` 不参与"——正好反过来。
  *
  * ★ 缺省那句与音色卡上印的那句是**同一个常量**（`lib/settings/preview-line.ts`）：
  *   卡片会把它一起送来，缺省这条是兜底——两处各写一份的话，卡片上印的和实际念的
@@ -31,16 +34,18 @@ export const dynamic = 'force-dynamic'
 /** 试听最多这么长。超了就截，而不是报错——用户只是想听个调子 */
 const MAX_PREVIEW_CHARS = 80
 
-export async function POST(req: Request): Promise<Response> {
+export async function POST(req: NextRequest): Promise<Response> {
+  // ★ 闸门在最前：这三条都只花语音的钱，所以只要**语音**那一个能力
+  //   （用户 2026-10-16 定的：权限只管"能不能用语音"，用哪个音色仍由用户选）
+  const guard = await requireCapability(req, ['speech'])
+  if (!guard.ok) return guard.response
+
   let source: Record<string, unknown>
   try {
     source = (await req.json()) as Record<string, unknown>
   } catch {
     return new Response('请求体不是 JSON', { status: 400 })
   }
-
-  const env = envFromBody(source)
-  if (!env) return new Response('env 要是键值对', { status: 400 })
 
   const voiceId = String(source['voiceId'] ?? '').trim()
   if (voiceId === '') return new Response('没有指定音色', { status: 400 })
@@ -52,7 +57,7 @@ export async function POST(req: Request): Promise<Response> {
   let bytes: Uint8Array
   let mime: string
   try {
-    const voice = voiceProviderOf(env)
+    const voice = voiceProviderOf(serverEnv())
     if (!voice) {
       throw new EngineError('provider-not-configured', '语音没配齐（要 TTS_API_KEY 与 TTS_MODEL）')
     }

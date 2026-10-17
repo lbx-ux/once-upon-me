@@ -30,19 +30,12 @@
   "include": [
     "**/*.ts",
     "**/*.tsx",
-    ".next-bl-check/types/**/*.ts",
-    ".next-build/types/**/*.ts",
-    ".next-cd20/types/**/*.ts",
-    ".next-diag/types/**/*.ts",
-    ".next-preview/types/**/*.ts",
-    ".next-run/types/**/*.ts",
     ".next-session/types/**/*.ts",
-    ".next-shelfprobe/types/**/*.ts",
-    ".next-shelfreal/types/**/*.ts",
-    ".next-w2/types/**/*.ts",
+    ".next-shelfbig/types/**/*.ts",
+    ".next-ui15/types/**/*.ts",
     ".next/types/**/*.ts",
     "next-env.d.ts",
-    ".next-cd24/types/**/*.ts"
+    ".next-uia/types/**/*.ts"
   ],
   "exclude": ["node_modules"]
 }

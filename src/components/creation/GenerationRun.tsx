@@ -47,7 +47,6 @@ import {
 } from '@/lib/creation/api.ts'
 import { rememberLastRun } from '@/lib/creation/last-run.ts'
 import { toBookBody, type RunForm } from '@/lib/creation/state.ts'
-import { useSettings } from '@/components/settings/SettingsProvider.tsx'
 import type { RunPageView } from '@/lib/run-pages.ts'
 
 import Desk from './Desk.tsx'
@@ -87,7 +86,6 @@ export type GenerationRunProps = {
 type Phase = 'running' | 'ready' | 'failed' | 'replaying'
 
 export default function GenerationRun({ plan, resume }: GenerationRunProps) {
-  const { env: settingsEnv } = useSettings()
   const [desk, setDesk] = useState<DeskState>(EMPTY_DESK)
   const [phase, setPhase] = useState<Phase>(resume ? 'replaying' : 'running')
   const [bookId, setBookId] = useState<string | null>(resume?.bookId ?? null)
@@ -169,7 +167,7 @@ export default function GenerationRun({ plan, resume }: GenerationRunProps) {
     }
 
     if (!plan) return
-    const body = toBookBody(plan.form, settingsEnv, {
+    const body = toBookBody(plan.form, {
       pages: plan.pages,
       ...(plan.voiceId ? { voiceId: plan.voiceId } : {}),
       // ★ 跑出来的是**草稿**：成品要等「确定生成」那一下（工单 03）
@@ -188,7 +186,7 @@ export default function GenerationRun({ plan, resume }: GenerationRunProps) {
       setFatal(err instanceof Error ? err.message : String(err))
       setPhase('failed')
     })
-  }, [plan, resume, settingsEnv, onFrame, loadRunPages])
+  }, [plan, resume, onFrame, loadRunPages])
 
   /* ── 单页重做 ────────────────────────────────────────────────────────── */
 
@@ -209,7 +207,6 @@ export default function GenerationRun({ plan, resume }: GenerationRunProps) {
           pageNo,
           {
             kind,
-            env: settingsEnv,
             ...(voiceId ? { voiceId } : {}),
             ...(extra.fixNote ? { fixNote: extra.fixNote } : {}),
             ...(extra.body ? { body: extra.body } : {}),
@@ -232,7 +229,7 @@ export default function GenerationRun({ plan, resume }: GenerationRunProps) {
         setBusy(null)
       }
     },
-    [bookId, busy, settingsEnv, voiceId, loadRunPages],
+    [bookId, busy, voiceId, loadRunPages],
   )
 
   /** 画桌上点「重画 / 重配」：**先开弹窗，不直接发请求**（工单 08）。

@@ -9,7 +9,7 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { anchorsFrom, envFromForm, parsePhotoForm } from './photo-form.ts'
+import { anchorsFrom, parsePhotoForm } from './photo-form.ts'
 
 function formOf(fields: Record<string, string>, file?: Blob): FormData {
   const form = new FormData()
@@ -60,13 +60,9 @@ describe('锚点那一段坏了也不让整条请求失败', () => {
   })
 })
 
-describe('env 那一格', () => {
-  it('坏 JSON / 不是对象 → 空表（等于"没配"，后面会给出配 key 的那句话）', () => {
-    expect(envFromForm(formOf({ env: '{oops' }))).toEqual({})
-    expect(envFromForm(formOf({ env: '[1,2]' }))).toEqual({})
-  })
-
-  it('非字符串的值丢掉，字符串照收', () => {
-    expect(envFromForm(formOf({ env: '{"IMAGE_MODEL":"m","n":3}' }))).toEqual({ IMAGE_MODEL: 'm' })
-  })
-})
+/*
+ * ★ 这里原来有一组 `envFromForm` 的测试（"解析不出来就是空表"那两条）。
+ *   2026-10-16 那个函数随 ADR-0008 一起退场了：这条路由上的照片是交给模型读的，
+ *   而密钥现在由站长分配、只从服务端的 `process.env` 来，所以这张 multipart 表单里
+ *   **没有 `env` 这个字段**了。留一句在这里，是因为下一个读这一段的人会问"那两条呢"。
+ */

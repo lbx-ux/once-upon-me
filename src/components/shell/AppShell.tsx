@@ -89,7 +89,8 @@ import gsap from 'gsap'
 
 import { useAuth } from '@/components/auth/AuthProvider.tsx'
 import StudioBackdrop from '@/components/shell/StudioBackdrop.tsx'
-import { useSettings } from '@/components/settings/SettingsProvider.tsx'
+import HelpDialog from '@/components/shell/HelpDialog.tsx'
+import { avatarSrc } from '@/lib/avatars.ts'
 import { maskPhone } from '@/lib/auth/state.ts'
 import { staggerFor } from '@/lib/useEnterTimeline.ts'
 
@@ -105,12 +106,11 @@ type NavItem = { href: string; label: string; icon: string }
  *   同一条侧栏上摆两个"人"，必然有人读错——这个仓库为"两个小主角指两件事"
  *   付过一次学费（见文件头那段）。箭头进门框是另一个形状，收起侧栏只剩图标时也分得开。
  *
- * ★ **已登录那只是一个人加一圈**。它表达的是"**有头像的那个位置**"——
- *   现在还没有真头像（`AuthUser` 里就没有这个字段，后端落地才会有），
- *   所以它此刻的含义正是"头像空着"，这也是这个项目要的那种兜底：
- *   语义上诚实，不是一个碎图标，也不是一块空白。
- *   ★ 接后端拿到头像 URL 那天，这里要长出一个 `img` 分支（`NavContent` 现在只认 path），
- *     那一次改动只会落在这两处：这个常量与 `NavContent`。
+ * ★ **已登录那只是一个人加一圈**。它表达的是"**有头像的那个位置**"。
+ *   ★ 2026-10-17 起它有了一个 `img` 分支（`NavContent` 的 `avatar` 那个 prop）：
+ *     挑过头像的人这里显示的是那一个，**没挑过 / 认不出来**才是这个圈。
+ *     （这一段原来写着"接后端拿到头像 URL 那天，这里要长出一个 img 分支"——
+ *     那一天就是今天，两处一起改的：这个常量与 `NavContent`。）
  */
 const SIGN_IN_ICON = 'M15 4h3a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-3M10 8l4 4-4 4M14 12H3'
 const AVATAR_ICON =
@@ -144,6 +144,24 @@ const NAV: NavItem[] = [
 ]
 
 /**
+ * 管理员才有的那一格（工单 09）。
+ *
+ * ★ 它**不放进 `NAV`**：那一份是常量，而这一格要按角色算。混进去的话，
+ *   `NAV.map` 那一段就得开始判断"这一项要不要显示"，而 `NAV` 也在别处被读
+ *   （进场动画的错峰 `staggerFor(NAV.length)` 就是一处）——
+ *   一个"有时多一项"的常量会让那些读者全部失去依据。
+ *
+ * ★ 图标是一枚**钥匙**：与「创作」那支笔、「角色卡」那个人形、「声音」那道波
+ *   都不是一个形状，收起侧栏只剩图标时也认得出——而这一格恰恰最需要被认出来，
+ *   因为其它六格人人都有，只有它只对一个人显示。
+ */
+const ADMIN_ITEM: NavItem = {
+  href: '/admin',
+  label: '管理',
+  icon: 'M14.5 6.5a4 4 0 1 0-3.3 6.2L4 20v-3h2v-2h2v-2l1.2-1.2A4 4 0 0 1 14.5 6.5Z',
+}
+
+/**
  * 慢到这个数才值得报信。
  *
  * ★ 为什么需要一个门槛，而不是"点了就报"：开了 `staleTimes` 之后（见 next.config.ts），
@@ -166,7 +184,7 @@ const PENDING_SHOW_AFTER_MS = 120
  * ★ `pending` 也**说给读屏**（`sr-only` 那一段）。理由与 `.cl__optimize` 那颗一样：
  * 状态变了要有话说，不能只靠一个只有眼睛看得见的转圈。
  */
-function NavContent({ item }: { item: NavItem }) {
+function NavContent({ item, avatar }: { item: NavItem; avatar?: string | null }) {
   const { pending } = useLinkStatus()
   // 亮着的转圈。★ 比 pending 晚 `PENDING_SHOW_AFTER_MS` 一拍，快导航因此**一格都不亮**
   const [showPending, setShowPending] = useState(false)
@@ -184,16 +202,26 @@ function NavContent({ item }: { item: NavItem }) {
   return (
     <>
       <span className="shell__glyph" data-pending={showPending ? 'true' : undefined}>
-        <svg className="shell__icon" viewBox="0 0 24 24" aria-hidden="true">
-          <path
-            d={item.icon}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
+        {avatar ? (
+          /* ★ 是 `<img>` 不是 `next/image`：一张 64px 的本地 SVG，没有 LCP 意义，
+             而 next/image 对 SVG 默认还要显式放行（`dangerouslyAllowSVG`）。
+             与 `shell__brand-mark` 那条同一个处理。
+             ★ `alt=""`：**这一格的文字就在它旁边**（昵称/打码手机号），
+               再念一遍"云的图标"是噪音。挑过没有这件事由 `title` 说。 */
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img className="shell__avatar" src={avatar} alt="" width={22} height={22} />
+        ) : (
+          <svg className="shell__icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d={item.icon}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        )}
         <span className="shell__spin" aria-hidden="true" />
       </span>
       <span className="shell__link-label">{item.label}</span>
@@ -205,7 +233,8 @@ function NavContent({ item }: { item: NavItem }) {
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const [collapsed, setCollapsed] = useState(false)
-  const { openSettings } = useSettings()
+  /** 「帮助」那个弹窗开着没有。★ 与折叠不同，它不持久化：关了就是关了 */
+  const [helpOpen, setHelpOpen] = useState(false)
   const { user } = useAuth()
   const sideRef = useRef<HTMLElement>(null)
 
@@ -285,6 +314,20 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     label: user ? user.nickname.trim() || maskPhone(user.phone) : '',
     icon: AVATAR_ICON,
   }
+  /**
+   * ★ 挑过的头像。**认不出来就是 `null`**，那一路画的是上面那个空圈
+   *   （`lib/avatars.ts` 文件头：后端只存一个 id，前端不另存一份白名单，
+   *   认不出的一律退回"头像空着"——不是报错，也不是回落成某一个默认头像）。
+   */
+  const avatar = user ? avatarSrc(user.avatar) : null
+
+  /**
+   * 侧栏那几格 = 常量那一排，管理员多一格「管理」。
+   * ★ 位置在**最后**：它不是"去做事"的第六件事，而是"你比一般人多看得到一屏"。
+   *   ★ `user` 还是 `null`（首屏那一次 `/api/auth/me` 没回来）时**不加**：
+   *     猜错方向的代价是侧栏在首屏抖一下，比晚半拍出现坏。
+   */
+  const navItems = user?.role === 'ADMIN' ? [...NAV, ADMIN_ITEM] : NAV
 
   return (
     <div className="shell" data-collapsed={collapsed}>
@@ -292,6 +335,18 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           所以侧栏与内容区自然压在它上面（层序与首页 `.scene-backdrop` 同一个处理） */}
       <StudioBackdrop />
       <nav className="shell__side" aria-label="工作台" ref={sideRef}>
+        {/* ★ 牌子是侧栏的第一行，直接挂在 `<nav>` 上，**没有包一层**。
+            ★ 2026-10-17 的来回，写在这里免得下一个人再走一遍：
+              用户先要「把收起侧栏放到侧边框的右上角，显示一个"<"的箭头就行」，
+              于是它被挪进了这一行（一个 `.shell__top` 把牌子与箭头并排装起来）；
+              同一天用户又改口——「算了吧，这个侧边栏的收缩还是改回一开始的那样吧，
+              放在左下角」。所以它回到了底部那一格（`.shell__foot`），
+              那一行也**整个撤掉**：留着它只会是一个空壳。
+            ★ 撤掉 `.shell__top` 还顺手修掉一个实测的宽度 bug：并排时那一行的
+              min-content 是 34(牌子图标) + 26(箭头) = 60px，而收起态只有
+              72 − 28(padding) = 44px 可用，flex 项收缩不到内容以下，
+              于是整条侧栏被顶到 **88px**（写着的是 72）。牌子一个人待着只有 34px，
+              72px 这条就自己成立了——不需要再为它写一条规则。 */}
         <Link className="shell__brand" href="/" aria-label="回首页">
           <span className="shell__brand-mark" aria-hidden="true">
             {/* 28px 的装饰性标记，`alt=""`。next/image 在这件事上没有收益
@@ -308,7 +363,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
         <p className="shell__group-label">工作台</p>
         <ul className="shell__nav">
-          {NAV.map((item) => {
+          {navItems.map((item) => {
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`)
             return (
               <li key={item.href}>
@@ -337,29 +392,61 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             href={user ? accountItem.href : signInItem.href}
             title={user ? '个人主页' : signInItem.label}
           >
-            <NavContent item={user ? accountItem : signInItem} />
+            <NavContent item={user ? accountItem : signInItem} avatar={avatar} />
           </Link>
 
-          {/* ★ 设置放在侧栏底部而不是右上角：有了常驻侧栏之后，"全局的、不常改的东西"
-              有一个明确的家。上一版把它挂在主页右上角，是因为那时没有侧栏 */}
+          {/*
+           * ★ 这一格的前身是一颗「模型与密钥」的按钮（点了开那个抽屉）。
+           *   2026-10-16 用户要求取消用户自己填 api-key 的模块，抽屉整格拆掉了。
+           *   2026-10-17 这里先变成过一行常驻的说明，当晚用户要求：「这句话不要明着
+           *   写出来，左下角弄一个"帮助"的模块，然后用户点击，就出现一个弹窗」——
+           *   所以现在是一颗**钮**，那几段说明搬进了 `HelpDialog`。
+           *
+           * ★ 换成钮不是把话藏起来：那颗钮上写着「帮助」，点开就是原来那几段
+           *   （还更全）。常驻三行说明的代价是它会被读成背景噪音——
+           *   真正需要它的人（撞上"没有权限"的那一个）反而先扫过去。
+           ★ 它用 `shell__link` 那套外形（与上面几格同一副骨架），
+           *   因为它确实是"点一下会打开一个东西"的那类动作，与「收起侧栏」不同。 */}
           <button
             type="button"
             className="shell__link shell__link--btn"
-            onClick={openSettings}
-            title="模型与密钥"
+            onClick={() => setHelpOpen(true)}
+            title="帮助"
           >
             <svg className="shell__icon" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="1.6" />
               <path
-                d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm7.4-3a7.4 7.4 0 0 0-.1-1.2l2-1.5-2-3.4-2.3 1a7.6 7.6 0 0 0-2-1.2L14.6 2h-4l-.4 2.5a7.6 7.6 0 0 0-2 1.2l-2.3-1-2 3.4 2 1.5a7.4 7.4 0 0 0 0 2.4l-2 1.5 2 3.4 2.3-1c.6.5 1.3.9 2 1.2l.4 2.5h4l.4-2.5c.7-.3 1.4-.7 2-1.2l2.3 1 2-3.4-2-1.5c.1-.4.1-.8.1-1.2Z"
+                d="M9.6 9.4a2.5 2.5 0 1 1 3.6 2.3c-.7.4-1.2.9-1.2 1.7v.4"
                 fill="none"
                 stroke="currentColor"
-                strokeWidth="1.5"
+                strokeWidth="1.6"
                 strokeLinecap="round"
-                strokeLinejoin="round"
               />
+              <circle cx="12" cy="17" r="1.1" fill="currentColor" />
             </svg>
-            <span className="shell__link-label">模型与密钥</span>
+            <span className="shell__link-label">帮助</span>
           </button>
+
+          {/*
+           * ★ 「收起侧栏」在这里，**底部那一格的最下面**。
+           *
+           * ★ 2026-10-17 走了一圈又回来了，那段来回值得留着：它原来就在这里；
+           *   用户那天要先把它挪到「侧边框的右上角，显示一个"<"的箭头就行」，
+           *   于是它变成了顶上一颗只有箭头的方钮（还配了一个悬停才出现的名字标签）；
+           *   同一天用户又改口：「算了吧，这个侧边栏的收缩还是改回一开始的那样吧，
+           *   放在左下角」。现在这一份就是**一开始那一份**：一整行、带箭头与文字。
+           *
+           * ★ 为什么带文字而不再是一个只有箭头的方钮：它现在与上面两格同一副骨架
+           *   （`.shell__link` 那个 `--shell-foot-*` 的尺寸与内边距），
+           *   而**同一列里的三格必须长得像一家人**。只有箭头的版本之所以成立，
+           *   是因为它当时孤零零待在顶部、身边只有牌子；搬回这一列之后，
+           *   一个比别人矮一截、又没有字的方钮会读成"这里放了个图标"。
+           *
+           * ★ 于是那颗悬停标签（`.shell__tip`）也一起撤了：它的存在理由是
+           *   "那颗图标上写不下字"，而现在字就在旁边——留着会变成第二个 tooltip。
+           * ★ `title` 留着，与一开始那份一样，而且它**不是**多余的一遍：
+           *   收起那个方向压成两个字（「展开」），"侧栏"两个字只有 `title` 里有。
+           */}
           <button
             type="button"
             className="shell__collapse"
@@ -368,8 +455,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             title={collapsed ? '展开侧栏' : '收起侧栏'}
           >
             <span className="shell__collapse-arrow" aria-hidden="true">
-              {/* 一个向左的尖角，折叠时 CSS 把它转 180°。
-                  ★ 原来这里是 `«` / `»` 两个文字字符——形状、字重、基线全跟着系统字体走 */}
+              {/* 一个向左的尖角，收起后 CSS 把它转 180°（指回右边 = "展开"）。
+                  ★ 原来这里是 `«` / `»` 两个文字字符——形状、字重、基线全跟着系统字体走，
+                    换一台机器就换一笔。`<` 是**几何图形**不是文字，所以它不写字面的 "<"。 */}
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
                 <path d="M14.5 5.5 8 12l6.5 6.5" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
@@ -380,6 +468,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       </nav>
 
       <div className="shell__main">{children}</div>
+
+      {/* ★ 弹窗挂在**壳上**（不是某一页里）：侧栏在哪一屏都在，所以那个「帮助」
+          也在哪一屏都点得开——挂进某一页的话，只有那一页能用 */}
+      {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} />}
     </div>
   )
 }

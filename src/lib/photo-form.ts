@@ -70,22 +70,5 @@ export function anchorsFrom(raw: string): CharacterAnchor[] {
   return out
 }
 
-/** env 也在 multipart 的一个字段里（ADR-0008：per-request 的密钥表）。读不出来就是没配 */
-export function envFromForm(form: FormData): Record<string, string | undefined> {
-  const raw = form.get('env')
-  if (typeof raw !== 'string' || raw === '') return {}
-  try {
-    const parsed = JSON.parse(raw) as unknown
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
-    const env: Record<string, string | undefined> = {}
-    for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
-      if (typeof value === 'string') env[key] = value
-    }
-    return env
-  } catch {
-    return {}
-  }
-}
-
 /** 年龄档的合法值（界面与路由都从这里取，不各自抄一遍字面量） */
 export const AGE_BAND_VALUES = AGE_BANDS

@@ -1,11 +1,11 @@
 /**
  * settings/server-env.ts —— ★ **密钥的唯一来源**（工单 05）
  *
- * 上一轮这一份是从请求体里来的（`request-env.ts` 的 `envFromBody`）：用户在
+ * 上一轮这一份是从请求体里来的（已删除的 `request-env.ts` 的 `envFromBody`）：用户在
  * 「模型与密钥」抽屉里填 key，每个请求把它带上来（ADR-0008）。
  * 这一轮反过来（ADR-0009）：**密钥由站长分配，只从服务端环境来**。
  *
- * ★ 这一层与 `toEnv()`（原来在 `settings/state.ts`）是同一件事的两个时代：
+ * ★ 这一层与 `toEnv()`（原来在已删除的 `settings/state.ts`）是同一件事的两个时代：
  * 那时它是"用户填的表 → env 表"，现在是"`process.env` → env 表"。
  * 规矩一条没变，**而且必须一条不变**，因为下游（`engine/providers/registry.ts`）
  * 认的就是那张表的形状：

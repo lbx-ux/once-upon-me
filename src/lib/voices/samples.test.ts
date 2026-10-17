@@ -23,7 +23,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 import { PREVIEW_LINE } from '@/lib/settings/preview-line.ts'
-import { DEFAULT_VOICES } from '@/lib/settings/state.ts'
+import { DEFAULT_VOICES } from '@/lib/voices/state.ts'
 import { VOICE_SAMPLES, sampleFor } from './samples.ts'
 
 const ROOT = process.cwd()

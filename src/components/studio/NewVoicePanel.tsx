@@ -34,7 +34,7 @@ import {
 } from '@/lib/audio/capture.ts'
 import { PREVIEW_LINE } from '@/lib/settings/preview-line.ts'
 import { newConsentRef, type MyVoice } from '@/lib/voices/store.ts'
-import { useSettings } from '@/components/settings/SettingsProvider.tsx'
+import { useVoice } from '@/components/voices/VoiceProvider.tsx'
 
 /** 厂商上限 60 秒。★ 到点自动停，但**不是**在理想的 20 秒处停——
  *  正说到一半被掐掉，比多录 10 秒难受得多 */
@@ -45,7 +45,7 @@ const TICK_MS = 100
 type Step = 'consent' | 'recording' | 'review' | 'creating' | 'done'
 
 export default function NewVoicePanel({ onClose }: { onClose: () => void }) {
-  const { env, rememberVoice } = useSettings()
+  const { rememberVoice } = useVoice()
   const [consented, setConsented] = useState(false)
   const [step, setStep] = useState<Step>('consent')
   const [elapsedMs, setElapsedMs] = useState(0)
@@ -193,7 +193,7 @@ export default function NewVoicePanel({ onClose }: { onClose: () => void }) {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          env,
+          // ★ 请求体里**没有 env** 了（2026-10-17）：密钥由站长分配，只从服务端环境来
           sampleBase64: toBase64(sample.bytes),
           mime: sample.mime,
           name,
@@ -227,7 +227,7 @@ export default function NewVoicePanel({ onClose }: { onClose: () => void }) {
       const probe = await fetch('/api/voice/preview', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ env, voiceId: voice.voiceId, text: PREVIEW_LINE }),
+        body: JSON.stringify({ voiceId: voice.voiceId, text: PREVIEW_LINE }),
       })
       setDeploy(probe.ok ? 'ready' : 'deploying')
     } catch {

@@ -1,6 +1,8 @@
 import { EngineError } from '@/lib/engine/index.ts'
+import type { NextRequest } from 'next/server'
 import { voiceProviderOf } from '@/lib/engine/providers/registry.ts'
-import { envFromBody } from '@/lib/settings/request-env.ts'
+import { requireCapability } from '@/lib/auth/session.ts'
+import { serverEnv } from '@/lib/settings/server-env.ts'
 import { parseCloneRequest } from '@/lib/voices/request.ts'
 
 /**
@@ -30,7 +32,12 @@ export const dynamic = 'force-dynamic'
 /** 供应商的错误体可能有几 KB，回一段就够定位；长了反而把关键行挤掉 */
 const MAX_ERROR_CHARS = 300
 
-export async function POST(req: Request): Promise<Response> {
+export async function POST(req: NextRequest): Promise<Response> {
+  // ★ 闸门在最前：这三条都只花语音的钱，所以只要**语音**那一个能力
+  //   （用户 2026-10-16 定的：权限只管"能不能用语音"，用哪个音色仍由用户选）
+  const guard = await requireCapability(req, ['speech'])
+  if (!guard.ok) return guard.response
+
   let source: Record<string, unknown>
   try {
     source = (await req.json()) as Record<string, unknown>
@@ -38,14 +45,11 @@ export async function POST(req: Request): Promise<Response> {
     return new Response('请求体不是 JSON', { status: 400 })
   }
 
-  const env = envFromBody(source)
-  if (!env) return new Response('env 要是键值对', { status: 400 })
-
   const parsed = parseCloneRequest(source)
   if (!parsed.ok) return new Response(parsed.message, { status: parsed.status })
 
-  const modelId = (env['TTS_MODEL'] ?? '').trim()
-  const voice = voiceProviderOf(env)
+  const modelId = (serverEnv()['TTS_MODEL'] ?? '').trim()
+  const voice = voiceProviderOf(serverEnv())
   if (!voice) {
     return new Response('语音没配齐（要 TTS_API_KEY 与 TTS_MODEL）', { status: 400 })
   }

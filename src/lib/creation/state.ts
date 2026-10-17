@@ -136,15 +136,16 @@ export function childProblems(child: ChildForm): string[] {
   return problems
 }
 
-/** 第 3 步的请求体。字段名与环境变量无关，映射发生在 `toEnv` 与这里 */
-export function toCardBody(state: CreationState, env: Record<string, string | undefined>) {
+/** 第 3 步的请求体。★ 2026-10-17 起**不再带 `env`**：密钥由站长分配，
+ *  只从服务端的 `process.env` 来（ADR-0009，见 `lib/settings/server-env.ts`）。
+ *  少一个形参不是省事——它是"用户不再碰密钥"这句话在类型上的形状。 */
+export function toCardBody(state: CreationState) {
   return {
     childId: state.child.childId,
     name: state.child.name.trim(),
     ageBand: state.child.ageBand,
     childWord: childWordOf(state.child.lookTags, state.child.gender),
     anchors: state.card.anchors,
-    env,
     // 换一版：把已有卡号带上，引擎会叠一个新 revision 而不是覆盖
     ...(state.card.cardId ? { cardId: state.card.cardId } : {}),
   }
@@ -173,7 +174,6 @@ type BookBody = {
   voiceId?: string
   status?: 'draft' | 'published'
   mode: 'live'
-  env: Record<string, string | undefined>
 }
 
 /** 一次生成的**运行参数**（弹窗与运行视图给的那几个数）。与表单分开是两个东西 */
@@ -212,11 +212,7 @@ export type RunForm = {
  * ★ 三个可选字段一律**有才传**（与 `wish` 同一条写法）：
  *   传一个空串进去，引擎那边"没填"与"填了个空的"就分不出来了。
  */
-export function toBookBody(
-  form: RunForm,
-  env: Record<string, string | undefined>,
-  options: RunOptions = {},
-): BookBody {
+export function toBookBody(form: RunForm, options: RunOptions = {}): BookBody {
   const wish = form.theme.wish.trim()
   return {
     child: {
@@ -249,7 +245,6 @@ export function toBookBody(
     ...(options.voiceId ? { voiceId: options.voiceId } : {}),
     ...(options.status ? { status: options.status } : {}),
     mode: 'live',
-    env,
   }
 }
 

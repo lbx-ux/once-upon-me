@@ -95,7 +95,19 @@ export type CodeVerdict =
 
 /** 这个人是谁 + 他的权限 + 服务端配齐了什么（三个不同的事实，见 BFF 那条路由的注释） */
 export type MeResult =
-  { ok: true; user: AuthUser; permissions: Permissions; configured: Permissions } | AuthFail
+  | {
+      ok: true
+      user: AuthUser
+      permissions: Permissions
+      configured: Permissions
+      /**
+       * 站里现在配的语音模型（`TTS_MODEL`）。★ 它是**模型名**不是密钥。
+       * 界面非知道它不可：克隆音色绑死在创建它时的模型上（实测跨模型 400），
+       * 所以"我录的那条还能不能用"这条判据要拿当前模型去比（见 `lib/voices/catalog.ts`）。
+       */
+      speechModel: string
+    }
+  | AuthFail
 
 /** 把 BFF 的响应读成 `AuthUser`。认不出来时说一句"服务端回的东西不认识" */
 function readUser(raw: unknown): AuthOk | AuthFail {
@@ -164,9 +176,12 @@ export async function loginWithPassword(account: string, password: string): Prom
  * "401 是没登录还是后端挂了"（后者会回 503）。
  */
 export async function fetchMe(): Promise<MeResult | { ok: true; signedOut: true }> {
-  const result = await get<{ user?: unknown; permissions?: unknown; configured?: unknown }>(
-    '/api/auth/me',
-  )
+  const result = await get<{
+    user?: unknown
+    permissions?: unknown
+    configured?: unknown
+    speechModel?: unknown
+  }>('/api/auth/me')
 
   if (!result.ok) {
     if (result.status === 401) return { ok: true, signedOut: true }
@@ -182,6 +197,7 @@ export async function fetchMe(): Promise<MeResult | { ok: true; signedOut: true 
     user: user.user,
     permissions: user.user.permissions,
     configured: (result.data.configured as Permissions | undefined) ?? fallback,
+    speechModel: typeof result.data.speechModel === 'string' ? result.data.speechModel : '',
   }
 }
 

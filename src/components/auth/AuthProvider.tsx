@@ -41,6 +41,12 @@ export type AuthContextValue = {
   permissions: Permissions
   /** 站里自己配齐了哪几个能力（密钥在不在）。★ 与 `permissions` 是两件事 */
   configured: Permissions
+  /**
+   * 站里现在配的语音模型名。★ 不是密钥（那是 `TTS_API_KEY`，它一辈子不出服务端）。
+   * 界面要它只为一条判据：克隆音色绑死在创建它时的模型上，跨模型会被厂商拒
+   * （实测 400），所以"我录的那条现在还能不能用"要拿当前模型去比。
+   */
+  speechModel: string
   /** 本机那份读完了吗。★ 未读完时不要拿它做"要不要显示"的判据 */
   ready: boolean
   /** 读登录态时出的错（后端连不上）。★ 与"没登录"是两件事，界面要分开说 */
@@ -53,8 +59,16 @@ export type AuthContextValue = {
   rename: (nickname: string) => Promise<void>
   /** 换一个默认头像 */
   pickAvatar: (avatarId: string) => Promise<void>
-  /** 重新问一次"我是谁"（管理页改完权限回来时有用） */
-  refresh: () => Promise<void>
+  /**
+   * 重新问一次"我是谁"，**并把刷新后的那份事实回给调用方**。
+   *
+   * ★ 返回值不是顺手加的：`refresh()` 之后组件里那个 `permissions` 变量
+   *   **还是旧的**（它是这一次渲染的闭包），而"按下的这一刻权限是什么"
+   *   恰恰是调用方要的东西。返回它，调用方就不必等下一次渲染再判一遍
+   *   ——那样写会变成"先放行、下一帧才发现该拦"。
+   *   返回 `null` = 这一次没读回来（后端连不上 / 没登录），调用方按"判不了"处理。
+   */
+  refresh: () => Promise<{ permissions: Permissions; configured: Permissions } | null>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -68,6 +82,7 @@ export function useAuth(): AuthContextValue {
 export default function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [configured, setConfigured] = useState<Permissions>(NO_PERMISSIONS)
+  const [speechModel, setSpeechModel] = useState('')
   const [ready, setReady] = useState(false)
   const [meError, setMeError] = useState<string | null>(null)
 
@@ -77,16 +92,19 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
       // ★ "读不出来"与"没登录"分开：前者要说"账号服务连不上"，
       //   后者只是"请登录"——把前者伪装成后者会让人一直去点登录
       setMeError(result.message)
-      return
+      return null
     }
     setMeError(null)
     if ('signedOut' in result) {
       setUser(null)
       setConfigured(NO_PERMISSIONS)
-      return
+      setSpeechModel('')
+      return null
     }
     setUser(result.user)
     setConfigured(result.configured)
+    setSpeechModel(result.speechModel)
+    return { permissions: result.permissions, configured: result.configured }
   }, [])
 
   useEffect(() => {
@@ -107,6 +125,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     await logoutRequest()
     setUser(null)
     setConfigured(NO_PERMISSIONS)
+    setSpeechModel('')
     setMeError(null)
   }, [])
 
@@ -130,6 +149,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
       //   两份会漂，而漂的那一刻的症状是"界面说能用、服务端说不行"
       permissions: user?.permissions ?? NO_PERMISSIONS,
       configured,
+      speechModel,
       ready,
       meError,
       signIn,
@@ -138,7 +158,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
       pickAvatar,
       refresh,
     }),
-    [user, configured, ready, meError, signIn, signOut, rename, pickAvatar, refresh],
+    [user, configured, speechModel, ready, meError, signIn, signOut, rename, pickAvatar, refresh],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

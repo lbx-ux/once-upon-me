@@ -8,7 +8,7 @@
  *     样本从不上传以外的任何地方（不进这里、不落盘、不进日志）。这个文件里
  *     一个字节的音频都没有，那是设计，不是漏了。
  *
- * ★ 容错抄 `settings/state.ts` 那一套：读不懂就当空、坏一条丢一条。理由也一样——
+ * ★ 容错抄 `voices/state.ts` 那一套：读不懂就当空、坏一条丢一条。理由也一样——
  *   一个坏掉的 localStorage 不该让整屏打不开，而"猜"一条回来的代价是显示一个
  *   根本用不了的音色。
  */
@@ -75,7 +75,7 @@ function write(voices: MyVoice[]): void {
     window.localStorage.setItem(MY_VOICES_KEY, JSON.stringify(voices))
   } catch {
     // 隐私模式或配额满：这一次创建的音色照样能用（它在内存里），只是下次打开就不在列表里了。
-    // ★ 不改成"那我存别处"——那是把失败变成违规（同 `settings/state.ts` 的 saveStoredSettings）
+    // ★ 不改成"那我存别处"——那是把失败变成违规（同 `voices/state.ts` 的 saveCurrentVoice）
   }
 }
 

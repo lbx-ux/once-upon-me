@@ -23,7 +23,11 @@ export type RerunKind = 'image' | 'audio'
 
 export type RerunBody = {
   kind: RerunKind
-  env: Record<string, string | undefined>
+  /**
+   * ★ 这里原来有 `env`（ADR-0008：密钥随请求上来）。2026-10-17 之后整条退场
+   * （ADR-0009）：密钥由站长分配，只从服务端的 `process.env` 来。
+   * 理由与 `book-api.ts` 那一段逐字相同——**删掉而不是留着不用**。
+   */
   voiceId?: string
   /** 重画：家长写的那句补充。**空串按"没写"处理**（`trim` 之后为空就不带） */
   fixNote?: string
@@ -40,21 +44,6 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null
-}
-
-function envOf(value: unknown, problems: string[]): Record<string, string | undefined> {
-  if (value === undefined) return {}
-  const record = asRecord(value)
-  if (!record) {
-    problems.push('env 要是键值对')
-    return {}
-  }
-  const out: Record<string, string | undefined> = {}
-  for (const [key, item] of Object.entries(record)) {
-    if (typeof item === 'string') out[key] = item
-    else if (item !== undefined && item !== null) problems.push(`env.${key} 要是字符串`)
-  }
-  return out
 }
 
 export function parseRerunBody(raw: unknown): ParseResult<RerunBody> {
@@ -99,7 +88,6 @@ export function parseRerunBody(raw: unknown): ParseResult<RerunBody> {
     ok: true,
     value: {
       kind: kind as RerunKind,
-      env: envOf(body['env'], problems),
       ...(voiceId ? { voiceId } : {}),
       // ★ 有才带：空串不是"一句空话"，是"没写"
       ...(fixNote ? { fixNote } : {}),

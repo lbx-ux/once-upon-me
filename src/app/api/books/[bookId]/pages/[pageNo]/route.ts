@@ -22,6 +22,7 @@
  *    而那本书的清单上写着它整本是第 1 版的。
  */
 
+import type { NextRequest } from 'next/server'
 import {
   childWordOf,
   createCardStore,
@@ -39,6 +40,8 @@ import { createFsEventLog } from '@/lib/event-log.ts'
 import { assetRoot, finishRun, tryStartRun } from '@/lib/books-runtime.ts'
 import { userFailureOf } from '@/lib/provider-messages.ts'
 import { parseRerunBody } from '@/lib/rerun-api.ts'
+import { requireCapability } from '@/lib/auth/session.ts'
+import { serverEnv } from '@/lib/settings/server-env.ts'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -55,7 +58,7 @@ function jsonError(status: number, code: string, message: string): Response {
 }
 
 export async function POST(
-  req: Request,
+  req: NextRequest,
   ctx: { params: Promise<{ bookId: string; pageNo: string }> },
 ): Promise<Response> {
   const { bookId, pageNo: pageNoRaw } = await ctx.params
@@ -64,6 +67,11 @@ export async function POST(
     return jsonError(400, 'invalid-request', `页码要是正整数，收到 ${pageNoRaw}`)
   }
 
+  // ★ 闸门按**这一次要重做的东西**要能力，不是按整本书要：重画一页只要图像，
+  //   重配一段朗读只要语音。要成"文本 + 图像"的话，一个只有图像权限的人
+  //   连"把这一页重画一遍"都做不了——而他做的确实是图像那一件事。
+  //   ★ 顺序是"先解析再判"：要哪一项能力由 `kind` 决定，而 `kind` 是解析出来的。
+  //     先判的话只能一律要图像，那对"重配朗读"就是拦错了人。
   let raw: unknown
   try {
     raw = await req.json()
@@ -75,7 +83,10 @@ export async function POST(
   //   校验写在路由里的话，只能靠手工发请求去测（`book-api.ts` 文件头那条）
   const parsed = parseRerunBody(raw)
   if (!parsed.ok) return jsonError(400, 'invalid-request', parsed.problems.join('；'))
-  const { kind, env, voiceId, fixNote, body: newBody } = parsed.value
+  const { kind, voiceId, fixNote, body: newBody } = parsed.value
+
+  const guard = await requireCapability(req, kind === 'audio' ? ['speech'] : ['image'])
+  if (!guard.ok) return guard.response
 
   const root = assetRoot()
   const store = await createFsStore(root)
@@ -121,7 +132,7 @@ export async function POST(
 
   let providers
   try {
-    providers = await createProviders({ env, mode: 'live', assetRoot: root, store })
+    providers = await createProviders({ env: serverEnv(), mode: 'live', assetRoot: root, store })
   } catch (err) {
     finishRun(bookId)
     const failure = userFailureOf(err)

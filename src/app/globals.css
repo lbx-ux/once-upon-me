@@ -1,6 +1,7 @@
 @import 'tailwindcss';
 @import '../components/account/profile-home.css';
 @import '../components/auth/login.css';
+@import '../components/auth/sign-in-gate.css';
 @import '../components/dialog/dialog.css';
 @import '../components/scene/scene-backdrop.css';
 @import '../components/hero/hero-orbit.css';
@@ -14,8 +15,8 @@
 @import '../components/creation/generation-run.css';
 @import '../components/creation/redraw-dialog.css';
 @import '../components/reader/reader-book.css';
-@import '../components/settings/settings-drawer.css';
 @import '../components/shelf/shelf.css';
+@import '../components/admin/admin.css';
 @import '../components/shell/app-shell.css';
 @import '../components/shell/studio-backdrop.css';
 @import '../components/studio/create-landing.css';
@@ -226,6 +227,43 @@
        `--surface` 只有 3.87:1，够"非文字元素"那条 3:1、**不够正文级 4.5:1**。
        所以那一屏的状态字一律用 `--ink` / `--ink-muted`，蓝只出现在边与圈上。 */
   --select-rgb: 47, 134, 207;
+
+  /* ── 个人主页那一屏（`/account`）的配色（用户 2026-10-17 指定）─────────────
+     ★ 用户的原话：「这个个人主页的效果应该是蓝色的，不要橙色的」。
+       他给了一张参考稿（`E:\match\profile`），那一份的 `--accent` 是 `#4a7fa7`。
+     ★ **为什么是"这一屏另开一组令牌"，不是把全站的 `--accent` 换成蓝**：
+       强调色在本站承担的是"让一个可点的东西跳出来"，而全站（首页、书架、创作流）
+       的那条橙是从 12 张封面的色相分布里量出来的（见上面 `--accent` 那段）。
+       换掉它不是改这一屏，是把整个产品的强调色重做一遍——用户要的只是这一屏。
+       做法与 `--beam` / `--select` 同一个：**按用途另开一组**，各自定义一次，
+       消费者只有 `components/account/profile-home.css`（以及头像那六个 SVG 里
+       写死的同色，`lib/avatars.ts` 文件头注明）。这也是 `:root` 那条硬约束的读法：
+       令牌**只在这里定义一次**，不是"全站只能有一个颜色"。
+     ★ **为什么取 #427294 而不是参考稿的 #4a7fa7**：这一个数是量的，不是挑的。
+       参考稿那一版按 WCAG 相对亮度算，在 `--surface`（白）上是 **4.28:1**，
+       而这一屏的蓝要做两件小事里的一件是**当字色**（「3 张角色卡」「可朗读」
+       那两枚 12px 的标签）——12px 是**正文级**，门槛 4.5:1，4.28 差一点没过。
+       同一支色相（205°）只压明度，得到本值 **5.16:1**，与全站 `--accent` 的
+       5.18:1 齐平。这两个数**不是手抄的**：`scripts/check-scrim.mts` 那支量具
+       里有一块「个人主页那一屏（--pf-*）」，它自己读 `globals.css` 再算一遍，
+       谁改了这一组令牌，那一块当场变；`--pf-accent` 压在 `--surface` 上
+       掉到 4.5 以下就红（`npx tsx scripts/check-scrim.mts`）。
+       混在参考稿的浅蓝卡面上，肉眼分不出这一档差别，但"12px 的标签能不能读"
+       是量得出来的，所以往深里取了这一档。 */
+  --pf-accent: #427294;
+  /* 与 `--pf-accent` 同色，供 `rgba()` 用。★ 与 `--accent-rgb` 同一条约定：两个一起改 */
+  --pf-accent-rgb: 66, 114, 148;
+  /* 这一屏的描边。★ 参考稿用的是 `rgba(72, 100, 120, 0.18)`——**蓝灰**、而且比
+     全站的 `--hairline`(28,28,36,0.1) 明显可见一档。这一屏的卡都是白的、
+     底也是准白，靠描边才分得出"一张纸"的边，所以它比别处重是对的。 */
+  --pf-hairline: rgba(72, 100, 120, 0.18);
+  /* 这一屏的"实物底"（头像那个圆、还没出封面的书的垫底）。
+     ★ 它顶掉的本来是 `--card-paper`（#f7efe3，**暖**相纸）——那枚令牌在别处是
+       "冷的是光，暖的是物件"那条法律的承担者，而这一屏按用户的要求整体转冷，
+       暖色在这里会变成唯一一个不在调子里的东西。
+     ★ `#e8f0f6` 与 `--ink-muted` 的对比度是 **4.63:1**（同一个算法），
+       原来的 `--card-paper` 是 4.67:1——同一个空圈图形换底之后仍然过线。 */
+  --pf-paper: #e8f0f6;
 
   color-scheme: light; /* 目前只有浅色一套，先锁掉系统深色的表单控件反色 */
 }

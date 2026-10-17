@@ -40,7 +40,7 @@
 import { PREVIEW_LINE } from '@/lib/settings/preview-line.ts'
 
 export type VoiceSample = {
-  /** 厂商的 voice_id。与 `settings/state.ts` 的 `DEFAULT_VOICES` 是同一批键 */
+  /** 厂商的 voice_id。与 `voices/state.ts` 的 `DEFAULT_VOICES` 是同一批键 */
   voiceId: string
   /** 页面里直接当 URL 用的路径（文件在 `public/voice-samples/`） */
   url: string

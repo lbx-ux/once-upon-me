@@ -26,7 +26,10 @@
 import { useState } from 'react'
 
 import { DEFAULT_PAGES, PAGE_CHOICES } from '@/lib/creation/state.ts'
-import { useSettings } from '@/components/settings/SettingsProvider.tsx'
+import { useVoice } from '@/components/voices/VoiceProvider.tsx'
+import { useAuth } from '@/components/auth/AuthProvider.tsx'
+import { NARRATION_BLOCK_MESSAGE } from '@/lib/voices/state.ts'
+import { canCreate } from '@/lib/auth/state.ts'
 // 模态的壳（遮罩 / Esc / 焦点 / 面板）在 `components/dialog/`：运行视图上那两个
 // 弹窗用的是同一份，三个模态的关闭规矩必须一模一样
 import Dialog from '@/components/dialog/Dialog.tsx'
@@ -52,7 +55,16 @@ export default function GenerationSetupDialog({
   onConfirm,
   busy = false,
 }: GenerationSetupDialogProps) {
-  const { settings, voices, canNarrate, openSettings } = useSettings()
+  const { current, voices, canNarrate, narrateBlock } = useVoice()
+  const { permissions, configured } = useAuth()
+  /**
+   * ★ 第二道闸（工单 07 第 1 条）。第一道在 `CreateLanding` 那颗「开始创作」上，
+   *   它拦的是"按下去的那一刻"。这一道拦的是**这中间**：弹窗已经开着的时候，
+   *   站长在管理页把某个人的图像关掉了——而那个人的弹窗还开着，
+   *   再按一次「开始创作」就是拿着一个过期的判断往下走。
+   *   两道都只是体验；真正管用的是 `/api/books` 那条 403。
+   */
+  const allowed = canCreate(permissions) && canCreate(configured)
   const [pages, setPages] = useState<number>(DEFAULT_PAGES)
   /**
    * 「要不要朗读」是**这一本**的属性（进请求体的 `voiceId`），不是设置项——
@@ -68,7 +80,7 @@ export default function GenerationSetupDialog({
   const [voiceChoice, setVoiceChoice] = useState<boolean | null>(null)
   const voiceOn = voiceChoice ?? canNarrate
 
-  const voiceName = voices.find((item) => item.id === settings.speech.voice)?.name ?? ''
+  const voiceName = voices.find((item) => item.id === current)?.name ?? ''
 
   return (
     <Dialog
@@ -82,7 +94,13 @@ export default function GenerationSetupDialog({
           <button
             type="button"
             className="dlg__go"
-            disabled={busy}
+            /* ★ 权限被收回时这颗钮是**死的**：让人按下去、再被告知"你不行"，
+               比一开始就按不动更糟——他已经在心里把这一本做出来了 */
+            disabled={busy || !allowed}
+            /* ★ 与 `CreateLanding` 那一句**逐字一样**（用户 2026-10-17：只写那一句、
+               不写缺什么）。两处各写一份文案的代价是它们会开始不一样，
+               所以这里连标点都不改。 */
+            title={allowed ? undefined : '当前用户没有权限，请联系管理员'}
             onClick={() =>
               onConfirm({
                 pages,
@@ -93,7 +111,7 @@ export default function GenerationSetupDialog({
                 //   key + 模型 + 音色三样都在（`settings/state.ts`）。所以这里不再
                 //   另判一次"音色是不是空的"——那种写法会造出一条**静默降级**的路：
                 //   开关开着、书里却没有声音，而屏幕上没有任何东西说过这件事
-                ...(voiceOn && canNarrate ? { voiceId: settings.speech.voice } : {}),
+                ...(voiceOn && canNarrate ? { voiceId: current } : {}),
               })
             }
           >
@@ -139,18 +157,13 @@ export default function GenerationSetupDialog({
             aria-checked={voiceOn && canNarrate}
             aria-label="要不要朗读"
             className="gsd__switch"
-            // ★ 缺语音能力时禁用（判断 3）。**但它不是死的另一颗按钮**：
-            //   点下去打开设置——所以用 `aria-disabled` 而不是 `disabled`，
-            //   真 `disabled` 的按钮收不到点击，那条路就断了
-            aria-disabled={!canNarrate}
+            /* ★ 缺语音能力时按不动（判断 3）。★ 2026-10-17 起它是**真 `disabled`**：
+               原来用的是 `aria-disabled` + "点下去打开设置"——而那个设置抽屉已经没有了
+               （密钥由站长分配，用户在界面上一个 key 都填不了）。留着一颗"按下去开某个
+               抽屉"的钮才是假的。理由改由下面那句 `dlg__hint` 完整说出来。 */
+            disabled={!canNarrate}
             data-off={!canNarrate ? 'true' : undefined}
-            onClick={() => {
-              if (!canNarrate) {
-                openSettings()
-                return
-              }
-              setVoiceChoice(!voiceOn)
-            }}
+            onClick={() => setVoiceChoice(!voiceOn)}
           >
             <span className="gsd__knob" aria-hidden="true" />
           </button>
@@ -161,12 +174,23 @@ export default function GenerationSetupDialog({
             要换音色就关掉这个窗口，在首页那颗声音上改——那里是**唯一**一处选音色的地方。
           </p>
         ) : (
+          /*
+           * ★ 这句话是判断 3 的兑现处，而 2026-10-17 起它**必须说清是哪一条**：
+           *   以前只有一种原因（"用户没填 key"），现在有三个，而它们对用户来说
+           *   是三个不同的下一步——找站长开、等站里配好、还是自己去挑一个音色。
+           *   `NARRATION_BLOCK_MESSAGE` 是这个映射唯一的一份（见 `voices/state.ts`）。
+           */
           <p className="dlg__hint dlg__hint--warn">
-            语音的模型或 Key 还没配齐，所以现在做不出朗读。
-            <button type="button" className="dlg__link" onClick={openSettings}>
-              点这里去配
-            </button>
-            {/* ★ 这句话是判断 3 的兑现处：说清"现在点不动"，并给出唯一能解决它的地方 */}
+            {narrateBlock === 'no-voice' ? (
+              <>
+                还没挑音色，所以这一本做不出朗读。
+                <a className="dlg__link" href="/voice">
+                  去挑一个
+                </a>
+              </>
+            ) : narrateBlock ? (
+              NARRATION_BLOCK_MESSAGE[narrateBlock]
+            ) : null}
           </p>
         )}
       </fieldset>

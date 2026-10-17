@@ -237,7 +237,11 @@ export function createBook(
  */
 export type RerunOptions = {
   kind: 'image' | 'audio'
-  env: Record<string, string | undefined>
+  /*
+   * ★ 这里原来有 `env`（ADR-0008：密钥随请求上来）。2026-10-17 整条退场（ADR-0009）：
+   *   密钥由站长分配，只从服务端的 `process.env` 来。所以这个请求体现在**一个字节的
+   *   密钥都不带**——网络面板上搜 "env" 搜不到任何东西，正是这一轮要的结果。
+   */
   voiceId?: string
   /** 重画：家长写的"这一次哪里不对"，会接在提示词后面（见 `prompts/image.ts`） */
   fixNote?: string
@@ -260,7 +264,6 @@ export function rerunPage(
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           kind: options.kind,
-          env: options.env,
           ...(options.voiceId ? { voiceId: options.voiceId } : {}),
           ...(options.fixNote ? { fixNote: options.fixNote } : {}),
           ...(options.body ? { body: options.body } : {}),

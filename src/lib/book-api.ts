@@ -61,10 +61,14 @@ export type CreateBookBody = {
    */
   mode?: 'live' | 'offline'
   /**
-   * per-request Env（ADR-0008）：用户在表单里填的模型与密钥。
-   * ★ 它**不在这个类型里落盘、不入日志**——见工单 03 §二。
+   * ★ 这里原来有 `env?: Record<string, string | undefined>`（ADR-0008：用户在表单里
+   * 填的模型与密钥随请求上来）。2026-10-17 之后它**整条退场**（ADR-0009）：
+   * 密钥由站长分配，只从服务端的 `process.env` 来（`lib/settings/server-env.ts`）。
+   *
+   * ★ 这个字段是**删掉**的，不是"留着不用"：一个还在契约里的 `env` 会让下一个人
+   * 以为"也许浏览器真的能指定密钥"，而那条路正是这一轮要关掉的东西。
+   * 顺带，请求体里少了它，网络面板上就再也搜不到密钥这两个字。
    */
-  env?: Record<string, string | undefined>
 }
 
 export type ParseResult<T> = { ok: true; value: T } | { ok: false; problems: string[] }
@@ -93,21 +97,6 @@ function strList(value: unknown, problems: string[], label: string): string[] {
   const items = value.map(str).filter((item) => item !== '')
   if (items.length > MAX_TAGS) problems.push(`${label}最多 ${MAX_TAGS} 个，收到 ${items.length} 个`)
   return items.slice(0, MAX_TAGS)
-}
-
-function envOf(value: unknown, problems: string[]): Record<string, string | undefined> | undefined {
-  if (value === undefined) return undefined
-  const record = asRecord(value)
-  if (!record) {
-    problems.push('env 要是键值对')
-    return undefined
-  }
-  const out: Record<string, string | undefined> = {}
-  for (const [key, item] of Object.entries(record)) {
-    if (typeof item === 'string') out[key] = item
-    else if (item !== undefined && item !== null) problems.push(`env.${key} 要是字符串`)
-  }
-  return out
 }
 
 export function parseCreateBody(raw: unknown): ParseResult<CreateBookBody> {
@@ -177,7 +166,6 @@ export function parseCreateBody(raw: unknown): ParseResult<CreateBookBody> {
   const status = BOOK_STATUSES.find((item) => item === statusRaw)
   if (statusRaw && !status) problems.push(`status 只能是 ${BOOK_STATUSES.join(' / ')} 之一`)
 
-  const env = envOf(body['env'], problems)
   const lookTags = strList(childRaw?.['lookTags'], problems, '外貌标签')
   const interestTags = strList(childRaw?.['interestTags'], problems, '爱好标签')
   /**
@@ -218,7 +206,6 @@ export function parseCreateBody(raw: unknown): ParseResult<CreateBookBody> {
       ...(voiceId ? { voiceId } : {}),
       ...(status !== undefined ? { status } : {}),
       ...(mode !== undefined ? { mode } : {}),
-      ...(env !== undefined ? { env } : {}),
     },
   }
 }

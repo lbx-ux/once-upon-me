@@ -10,20 +10,59 @@
  * ★ 页头压在天空带里（`(studio)/layout.tsx` 给了 `StudioBackdrop`），
  *   所以 `.pf__sub` 是 `--ink-on-sky`——十带表里 `--ink-muted` 压在天上前四段只有
  *   3.99–4.29:1，破了正文级 AA（表在 `studio-backdrop.css` 文件头）。
- *   ★ 那张纸**以下**的一切（`.pf__section`、两个数、`.pf__foot`）都在天空带以外，
+ *   ★ 那张纸**以下**的一切（`.pf__section`、右边那一栏、密码那几格）都在天空带以外，
  *     所以它们用的是普通的 `--ink-muted`——不要把这一条推广到整屏。
  *
- * ★ 头像那个圈是 `--card-paper`（**暖**相纸色），不是 `--surface`。
- *   这不是随手挑的：这个项目的中性色有一句法律——**冷的是光，暖的是物件**
- *   （globals.css 里 `--paper` 与 `--card-paper` 两条注释）。
- *   头像位是"一张要裱进相纸里的照片"，与角色墙上那块 mat 是同一个东西，
- *   所以它拿的是同一颗暖色。接上后端真有头像那天，这个圈会被一张 `<img>` 盖住，
- *   而它底下那层暖色正好就是照片的边——现在与将来是同一个东西。
+ * ★ **这一屏的强调色不是全站那颗橙，是另开的一组蓝**（用户 2026-10-17 的原话：
+ *   「这个个人主页的效果应该是蓝色的，不要橙色的」）。四个令牌定义在 `globals.css`
+ *   的 `:root` 里（`--pf-accent` / `--pf-accent-rgb` / `--pf-hairline` / `--pf-paper`），
+ *   与 `--beam` / `--select` 同一个做法：**按用途另开一组，各定义一次**。
+ *   CLAUDE.md 那条硬约束管的是"令牌只在一处定义"，不是"全站只能有一个颜色"——
+ *   所以这一屏改配色只动 `:root` 里那四行，这个文件里**一颗色值都没有**。
+ *
+ * ★ 因此头像那个圈用的是 `--pf-paper`（冷的一档），不是全站的 `--card-paper`（暖相纸）。
+ *   原因不是"暖的不好看"，是**这一屏整体转冷了**：一块暖相纸摆在一屏冷色里
+ *   会成为唯一一个不在调子里的东西。同一枚令牌在别处（角色墙那块 mat、书架柜身）
+ *   仍然是暖的，那条"冷的是光，暖的是物件"的法律没有被推翻，只是这一屏的
+ *   物件换了色温——是用户指定的。
+ *   ★ 接上后端真有头像那天，这个圈会被一张 `<img>` 盖住；那六个头像图自己的底色
+ *     也已经跟着换成同一个冷色（`lib/avatars.ts` 文件头），所以现在与将来是同一个东西。
  */
 
 .pf {
-  max-width: 820px;
+  /* ★ 2026-10-17：版心从 820 放到 1120。
+     起因是这一屏改成了**左右两栏**（左边个人信息、右边最近创作，用户给的参考稿）；
+     820 装两栏的话右边那一列只剩 420——一本绘本的标题加那枚状态标签在那个宽度里
+     要折行，而参考稿里它们是并排的两段。
+     ★ 它不是"越宽越好"：再宽下去（1400+）左边那张身份卡会显得空，
+       而这一屏的左栏本来就只有五个字段。 */
+  max-width: 1120px;
   margin: 0 auto;
+}
+
+/* ── 左右两栏（2026-10-17，按用户给的参考稿）──────────────────────────────
+ * ★ 2026-10-17 起，"分区"与"配色"两样都取自参考稿了：用户看过之后明确要
+ *   那一套蓝（见文件头）。剩下的区别只在令牌怎么落：参考稿的 `--accent` 是
+ *   `#4a7fa7`，这里用的是同色相压深一档的 `#427294`（4.5:1 那条线，算了数的，
+ *   理由写在 `globals.css` 那一段里）——所以**看着是同一套，位置对得上**。
+ *
+ * ★ `minmax(0, 1fr)` 里那个 0 不是装饰：右栏里书名有一条
+ *   `text-overflow: ellipsis`，而 grid 项默认 `min-width: auto`——
+ *   不写 0 的话，一条长书名会把整列撑宽，把左边那张卡片挤扁。
+ *
+ * ★ 窄到 900px 以下就**塌成一栏**（左在上、右在下）：两栏在这个宽度里
+ *   各自都不够宽，硬挤出来的结果是两边都读不顺。 */
+.pf__spread {
+  display: grid;
+  grid-template-columns: minmax(0, 380px) minmax(0, 1fr);
+  gap: 22px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .pf__spread {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .pf__head {
@@ -49,7 +88,7 @@
   display: grid;
   gap: 20px;
   padding: 22px 24px;
-  border: 1px solid var(--hairline);
+  border: 1px solid var(--pf-hairline);
   border-radius: 18px;
   background: var(--surface);
   box-shadow: var(--sheet-shadow);
@@ -88,12 +127,24 @@
   transform: translateY(-2px);
 }
 
-/* ── 身份那一行 ─────────────────────────────────────────────────────────── */
-
+/* ── 身份那一段 ───────────────────────────────────────────────────────────
+ * ★ 2026-10-17 从"一行 flex"改成**竖排**：参考稿里头像在上、名字在它下面，
+ *   而这一栏现在只有 380px 宽——横排的话 72px 的头像 + 名字 + 手机号
+ *   会把这一行挤成三截。竖排之后这四行有一个共同的左缘，读下来是一条线。 */
 .pf__identity {
-  display: flex;
-  align-items: center;
-  gap: 16px;
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+}
+
+/* 「个人主页」那三个字。★ 它是这一栏的**分类名**，不是标题的重复——
+   与侧栏那一格的 `shell__group-label`（"工作台"）同一个身份 */
+.pf__kicker {
+  margin: 12px 0 0;
+  color: var(--ink-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
 }
 
 .pf__avatar {
@@ -102,11 +153,11 @@
   flex: 0 0 64px;
   width: 64px;
   height: 64px;
-  border: 1px solid var(--hairline);
+  border: 1px solid var(--pf-hairline);
   border-radius: 999px;
   /* ★ 暖相纸：它是一张照片的位置（见文件头最后一段），而 `--ink-muted`
-     在这一档上是 4.67:1，量过的（globals.css 的 `--card-paper` 那条） */
-  background: var(--card-paper);
+     在这一档上是 4.63:1，量过的（globals.css 的 `--pf-paper` 那条） */
+  background: var(--pf-paper);
   color: var(--ink-muted);
 }
 
@@ -115,19 +166,84 @@
   height: 30px;
 }
 
+/* 挑过的头像本身。★ 与 `.pf__avatar`（那个空圈）**同一个 64px 的方框**：
+ *   挑与不挑之间只该换"画的是什么"，格子不能跟着跳。
+ * ★ 圆角 999px 把 SVG 自己那个圆底再切一次：认不出的 id 退回空圈、
+ *   以后换一批矢量形状，这一圈都得是圆的。 */
+img.pf__avatar {
+  object-fit: cover;
+  border-radius: 999px;
+}
+
+/* ── 「挑一个头像」那一排（工单 08）─────────────────────────────────────
+ * ★ 位置在 `pf__meta` 下面、昵称上面：它是**这一屏最上面那个头像的操作**，
+ *   与它挨着才读得出来这两处是同一件事（原来这里是一行"还没传过"的说明）。
+ * ★ 用 `flex-wrap`：窄屏时六个换行，而不是把那一排挤成六个更小的格子——
+ *   缩到 30px 以下就看不出画的是什么了，而"看得出是什么"正是这一排唯一的用处。 */
+.pf__avatars {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 18px 0 0;
+}
+
+.pf__avatar-pick {
+  display: grid;
+  place-items: center;
+  padding: 3px;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: none;
+  cursor: pointer;
+  /* ★ 只动边框与底色，不做 scale：这一排挨得紧，一个放大会挤到旁边那个 */
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.pf__avatar-pick:hover {
+  background: var(--surface-soft);
+}
+
+/* 当前那个。★ 用 `aria-checked` 而不是另挂一个 class：
+ *   状态只有一份（就是读屏读到的那个），视觉跟着它走，不可能漂。 */
+.pf__avatar-pick[aria-checked='true'] {
+  border-color: var(--pf-accent);
+}
+
+.pf__avatar-pick img {
+  display: block;
+  border-radius: 999px;
+}
+
+/* ★ 挑的这一刻给一个"正在存"的样子。不做 spinner：一次请求几十毫秒，
+ *   转圈会在它自己转起来之前就消失（同 AppShell 那条 `PENDING_SHOW_AFTER_MS` 的账）。 */
+.pf__avatar-pick[aria-busy='true'] {
+  opacity: 0.55;
+}
+
+/* 键盘走到哪一格。★ `:focus-visible` 而不是 `:focus`：鼠标点过之后留一圈边，
+ *   在这排只有 44px 的方格里看起来像"选中了两个"。 */
+.pf__avatar-pick:focus-visible {
+  outline: 2px solid var(--pf-accent);
+  outline-offset: 2px;
+}
+
 .pf__who {
   min-width: 0;
   flex: 1;
 }
 
-/* 名字可能很长（用户自己起的），所以它要能收——不收会把右边那颗按钮挤出纸外 */
+/* 名字可能很长（用户自己起的）。★ 竖排之后它挤不到别的控件了，
+   所以这里**不再用省略号**：让它换行，比切掉半个名字好 */
 .pf__name {
-  margin: 0;
-  font-size: 19px;
+  margin: 2px 0 0;
+  font-family: var(--font-serif);
+  font-size: 24px;
   font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
 }
 
 .pf__phone {
@@ -137,11 +253,49 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* ── 身份下面那两枚标签 ───────────────────────────────────────────────────
+ * ★ 两个数都是**真的**（几张卡、几本真的会念），见 ProfileHome 文件头。
+ *   参考稿里那两枚（"创作中""38 次朗读"）是编的，所以只抄了形状没抄内容。 */
+.pf__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.pf__tag {
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: rgba(var(--pf-accent-rgb), 0.1);
+  color: var(--pf-accent);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* 第二枚换一支色相：两条都是同一个橙的话，它们读起来像同一件事的两半，
+   而"几张卡"与"几本会念"是两个不相干的数 */
+.pf__tag--soft {
+  background: var(--surface-soft);
+  color: var(--ink-muted);
+}
+
+/* ★ 退出登录在两栏模式里**独占一行**（原来它挤在身份那一行右边）。
+   它是这一栏里唯一一个不可逆的动作，所以底色与字色都换成 danger 那一支。 */
+.pf__card .pf__ghost {
+  width: 100%;
+  border-color: rgba(164, 48, 12, 0.22);
+  color: var(--danger);
+}
+
+.pf__card .pf__ghost:hover {
+  border-color: var(--danger);
+}
+
 .pf__ghost {
   flex-shrink: 0;
   height: 36px;
   padding: 0 16px;
-  border: 1px solid var(--hairline);
+  border: 1px solid var(--pf-hairline);
   border-radius: 999px;
   background: none;
   color: var(--ink-muted);
@@ -155,7 +309,7 @@
 
 .pf__ghost:hover {
   color: var(--ink);
-  border-color: rgba(var(--accent-rgb), 0.4);
+  border-color: rgba(var(--pf-accent-rgb), 0.4);
 }
 
 /* ── 两个只读字段 ───────────────────────────────────────────────────────── */
@@ -165,7 +319,7 @@
   gap: 12px;
   margin: 0;
   padding-top: 18px;
-  border-top: 1px solid var(--hairline);
+  border-top: 1px solid var(--pf-hairline);
 }
 
 .pf__meta > div {
@@ -195,7 +349,7 @@
   align-items: center;
   gap: 12px;
   padding-top: 18px;
-  border-top: 1px solid var(--hairline);
+  border-top: 1px solid var(--pf-hairline);
 }
 
 .pf__rename-label {
@@ -218,7 +372,7 @@
 
 .pf__box:focus-within {
   border-color: transparent;
-  box-shadow: 0 0 0 2px var(--accent);
+  box-shadow: 0 0 0 2px var(--pf-accent);
 }
 
 .pf__input {
@@ -243,10 +397,10 @@
 .pf__save {
   height: 40px;
   padding: 0 18px;
-  border: 1px solid rgba(var(--accent-rgb), 0.28);
+  border: 1px solid rgba(var(--pf-accent-rgb), 0.28);
   border-radius: 999px;
-  background: rgba(var(--accent-rgb), 0.08);
-  color: var(--accent);
+  background: rgba(var(--pf-accent-rgb), 0.08);
+  color: var(--pf-accent);
   font: inherit;
   font-size: 13px;
   font-weight: 600;
@@ -255,13 +409,13 @@
 }
 
 .pf__save:hover:not(:disabled) {
-  background: rgba(var(--accent-rgb), 0.13);
+  background: rgba(var(--pf-accent-rgb), 0.13);
 }
 
 /* ★ 没改动时这颗是禁用的：一颗"点了什么都不发生"的保存按钮，
    读起来是"我点了但它坏了"（CLAUDE.md §不糊弄那条的邻居） */
 .pf__save:disabled {
-  border-color: var(--hairline);
+  border-color: var(--pf-hairline);
   background: transparent;
   color: var(--ink-muted);
   cursor: not-allowed;
@@ -273,26 +427,86 @@
   font-size: 12.5px;
 }
 
-/* ── 这台设备上做过的东西 ───────────────────────────────────────────────── */
+/* ── 右边那一栏：最近创作 ───────────────────────────────────────────────── */
 
-.pf__section {
-  margin: 34px 0 14px;
+.pf__work {
+  display: grid;
+  gap: 16px;
+  align-content: start;
+}
+
+.pf__work-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.pf__work-title {
+  margin: 0;
   font-family: var(--font-serif);
-  font-size: 18px;
+  font-size: 26px;
   font-weight: 600;
+  line-height: 1.25;
 }
 
-.pf__stats {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+.pf__work-sub {
+  margin: 6px 0 0;
+  color: var(--ink-muted);
+  font-size: 13px;
+  line-height: 1.7;
 }
 
-.pf__stat {
+/* 「新建绘本」。★ 与参考稿那一颗一样是**深底白字**：它是这一屏的主按钮，
+   而左边那一栏里全是浅色的次要控件 */
+.pf__new {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  height: 40px;
+  padding: 0 20px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 13.5px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.pf__new:hover {
+  transform: translateY(-1px);
+}
+
+/* 一本都没有。★ 用户 2026-10-17 给的原话，一个字都不改。
+   它**不是**卡片里的一句灰字：右边那一栏空着的时候，那句话是这一屏的
+   第二焦点，所以要占得住位置。 */
+.pf__empty {
+  margin: 0;
+  padding: 44px 24px;
+  border: 1px dashed var(--pf-hairline);
+  border-radius: 18px;
+  background: var(--surface);
+  color: var(--ink-muted);
+  font-size: 14px;
+  text-align: center;
+}
+
+.pf__recent {
   display: grid;
-  gap: 4px;
-  padding: 18px 20px;
-  border: 1px solid var(--hairline);
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pf__book {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 14px 10px 10px;
+  border: 1px solid var(--pf-hairline);
   border-radius: 18px;
   background: var(--surface);
   box-shadow: var(--sheet-shadow);
@@ -303,58 +517,184 @@
     box-shadow 0.2s ease;
 }
 
-.pf__stat:hover {
+.pf__book:hover {
   transform: translateY(-2px);
 }
 
-.pf__stat-num {
+.pf__cover {
+  display: block;
+  width: 74px;
+  height: 74px;
+  border-radius: 14px;
+  overflow: hidden;
+  /* ★ 还没出封面的书用这一屏的实物底（`--pf-paper`）垫着——与头像那个圈同一颗色，
+     都是"这里本该有张照片"。用 `--surface` 的话它与卡片自己同色，
+     那一格看起来会像"图还没加载完" */
+  background: var(--pf-paper);
+}
+
+.pf__cover img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* 没有封面。★ 什么都不画——**不是**拿第一页冒充（`BookSummary.coverUrl` 的原话）。
+   留一个空的 `<span>` 而不是整块不渲染：那一格的尺寸由 `.pf__cover` 定，
+   在不在都不影响这一行的骨架 */
+.pf__cover-blank {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.pf__book-body {
+  min-width: 0;
+}
+
+.pf__book-title {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-family: var(--font-serif);
-  font-size: 30px;
+  font-size: 16.5px;
   font-weight: 600;
-  line-height: 1.1;
-  /* 等宽数字：两个数并排时，`1 张` 与 `8 张` 的宽度差不该让这一行看着在动 */
-  font-variant-numeric: tabular-nums;
 }
 
-.pf__stat-label {
-  color: var(--ink-muted);
-  font-size: 13px;
-}
-
-.pf__foot {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  margin: 22px 0 0;
+.pf__book-meta {
+  display: block;
+  margin-top: 4px;
   color: var(--ink-muted);
   font-size: 12.5px;
-  line-height: 1.7;
 }
 
-.pf__again {
+/* 状态那一枚。★ 三种形态各有各的样子：草稿是实的灰（它还没做完）、
+   可朗读是强调色、还没有声音是一圈细边——扫一眼就知道哪一本现在能念 */
+.pf__book-tag {
   flex-shrink: 0;
-  color: var(--accent);
-  font-size: 12.5px;
+  padding: 6px 11px;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--ink-muted);
+  font-size: 12px;
   font-weight: 600;
+}
+
+.pf__book-tag[data-kind='narrated'] {
+  background: rgba(var(--pf-accent-rgb), 0.1);
+  color: var(--pf-accent);
+}
+
+.pf__book-tag[data-kind='silent'] {
+  background: none;
+  border: 1px solid var(--pf-hairline);
+  font-weight: 500;
+}
+
+/* ── 那两颗快捷入口 ─────────────────────────────────────────────────────── */
+
+.pf__quick {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.pf__quick-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--pf-hairline);
+  border-radius: 18px;
+  background: var(--surface);
+  color: inherit;
   text-decoration: none;
+  transition:
+    transform 0.2s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.2s ease;
 }
 
-.pf__again:hover {
-  text-decoration: underline;
+.pf__quick-item:hover {
+  transform: translateY(-2px);
 }
 
-.pf__primary:focus-visible,
+.pf__quick-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  background: rgba(var(--pf-accent-rgb), 0.08);
+  color: var(--pf-accent);
+}
+
+.pf__quick-icon svg {
+  width: 17px;
+  height: 17px;
+}
+
+.pf__quick-title {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.pf__quick-desc {
+  display: block;
+  margin-top: 2px;
+  color: var(--ink-muted);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+/* ── 密码那一段（横跨整宽，在两栏下面）─────────────────────────────────── */
+
+.pf__section {
+  margin: 34px 0 14px;
+  font-family: var(--font-serif);
+  font-size: 18px;
+  font-weight: 600;
+}
+
 .pf__ghost:focus-visible,
 .pf__save:focus-visible,
-.pf__again:focus-visible,
-.pf__stat:focus-visible {
-  outline: 2px solid var(--accent);
+.pf__new:focus-visible,
+.pf__book:focus-visible,
+.pf__quick-item:focus-visible,
+.pf__avatar-pick:focus-visible {
+  outline: 2px solid var(--pf-accent);
+  outline-offset: 2px;
+}
+
+/* ★ 上面那一组**打不过** `app-shell.css` 里的 `.shell :focus-visible`。
+ *   2026-10-17 实测（真 Chrome + 先发一次 Tab 进入键盘模态，再 `focus()`——
+ *   `:focus-visible` 不认程序化聚焦，直接 `input.focus()` 读到的是 `outline-style: none`，
+ *   那证明不了任何事）：这一屏的输入框聚焦起来，圈是 `solid 2px rgb(194,65,12)`
+ *   ——**全站那颗橙**，不是这里的蓝。
+ *
+ * ★ 为什么是 `section.pf` 而不是 `.pf`：`.pf :focus-visible` 只有 (0,2,0)
+ *   （一个类 + 一个伪类，后代组合器**不加**权重），与 `.shell :focus-visible`
+ *   平手，而 `app-shell.css` 在 `globals.css` 里 @import 得更晚，平手时它赢。
+ *   多一个**类型选择器**才是 (0,2,1)，稳稳压过那条，且与文件顺序无关。
+ *   ★ 所以那个 `section` 是**承重的**，不是随手写的：`ProfileHome.tsx` 的根节点
+ *     就是 `<section className="pf">`，把它改成 `<div>` 会让这条规则失效
+ *     （症状是焦点圈又变回橙的，而其余一切照常）。
+ * ★ 为什么不去改 `.shell` 那条、也不加 `!important`：那一条是"键盘走到哪里都要
+ *   看得见"的统一约定（它的注释里写着它是从四屏各写一份收敛来的），在别的屏上是对的。
+ *   这里要改的只是**这一屏的焦点圈是什么颜色**，所以多写一条更具体的选择器，
+ *   而不是把那条约定调松。 */
+section.pf :focus-visible {
+  outline: 2px solid var(--pf-accent);
   outline-offset: 2px;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .pf__primary,
-  .pf__stat {
+  .pf__new,
+  .pf__book,
+  .pf__quick-item {
     transition: none;
   }
 }
@@ -374,12 +714,9 @@
     gap: 2px;
   }
 
-  .pf__stats {
+  /* 那两颗快捷入口与书里的两栏在这个宽度里都放不下 */
+  .pf__quick {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .pf__identity {
-    flex-wrap: wrap;
   }
 }
 

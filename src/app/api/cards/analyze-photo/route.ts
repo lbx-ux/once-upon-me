@@ -20,16 +20,25 @@
  *   读成 data URL、送出去、出作用域。这条路上没有一处把它写进 store。
  */
 
+import type { NextRequest } from 'next/server'
 import { toDataUrl } from '@/lib/engine/providers/http.ts'
 import { visionProviderOf } from '@/lib/engine/providers/registry.ts'
-import { envFromForm, parsePhotoForm } from '@/lib/photo-form.ts'
+import { parsePhotoForm } from '@/lib/photo-form.ts'
+import { requireCapability } from '@/lib/auth/session.ts'
+import { serverEnv } from '@/lib/settings/server-env.ts'
 import { MAX_PHOTO_BYTES, megaOf } from '@/lib/photo-rules.ts'
 import { userFailureOf } from '@/lib/provider-messages.ts'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-export async function POST(req: Request): Promise<Response> {
+export async function POST(req: NextRequest): Promise<Response> {
+  // ★ 读照片是**视觉**能力，与出形象的图像不是同一项（`/api/cards` 要 image，这里要 vision）。
+  //   闸门放在最前面：没有权限时，那些字节**不该被读进来**
+  //   ——与下面"没有同意，那些字节不该被看"是同一条纪律的两个入口
+  const guard = await requireCapability(req, ['vision'])
+  if (!guard.ok) return guard.response
+
   // 早退：与 /api/cards/photo 同一条（一个可以撒谎的头，真正生效的上限在下面）
   const declared = Number(req.headers.get('content-length') ?? '')
   if (Number.isFinite(declared) && declared > MAX_PHOTO_BYTES * 1.1) {
@@ -78,7 +87,7 @@ export async function POST(req: Request): Promise<Response> {
     )
   }
 
-  const vision = visionProviderOf(envFromForm(form))
+  const vision = visionProviderOf(serverEnv())
   if (!vision) {
     // ★ 这一条要说清"没配"与"读不出来"的区别：前者要人去设置里配，后者再点一次
     return Response.json(

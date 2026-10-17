@@ -23,7 +23,6 @@ import {
 } from '@/lib/creation/state.ts'
 import { megaOf, photoFormProblems } from '@/lib/photo-rules.ts'
 import { AnchorFields, ChildFields } from '@/components/creation/fields.tsx'
-import { useSettings } from '@/components/settings/SettingsProvider.tsx'
 
 /**
  * NewChild —— 「新建一个小主角」（工单 03 第二刀的那一屏）
@@ -238,7 +237,6 @@ function useLocalShot(file: File | null): string | null {
 
 export default function NewChild() {
   const router = useRouter()
-  const { env } = useSettings()
 
   const [state, setState] = useState<CreationState>(() => {
     const start = initialState()
@@ -336,7 +334,7 @@ export default function NewChild() {
       form.set('photo', file)
       form.set('consent', 'true')
       form.set('anchors', JSON.stringify(anchors))
-      form.set('env', JSON.stringify(env))
+      // ★ 没有 env 这一格了（2026-10-17）：密钥由站长分配，只从服务端环境来
       const response = await fetch('/api/cards/analyze-photo', { method: 'POST', body: form })
       const payload = (await response.json()) as {
         anchors?: { slot: string; value: string }[]
@@ -475,7 +473,7 @@ export default function NewChild() {
     const response = await fetch('/api/cards', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(toCardBody(current, env)),
+      body: JSON.stringify(toCardBody(current)),
     })
     const payload = (await response.json()) as {
       cardId?: string
@@ -512,7 +510,6 @@ export default function NewChild() {
     //   第十刀之后写它的是**按「出他的第一张形象」这一下**——照片挂在表单上、
     //   用户按了发送，这就是那个显式动作（见头部第 2 条）
     form.set('consent', 'true')
-    form.set('env', JSON.stringify(env))
     // ★ 这一行是照片**唯一**一次离开这台设备。它进的是请求体，
     //   服务端读完就只在内存里（`lib/photo-card.ts` 文件头第 1 条）
     form.set('photo', photo)

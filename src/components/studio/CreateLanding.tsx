@@ -96,7 +96,7 @@
  *
  * ★ 两格都是**真控件**，一个假的都没有：小主角那一格列已经存在的卡，
  *   声音那一格列 `SettingsProvider` 那张表（预设 + 我录的，见 `lib/voices/catalog.ts`）。
- *   ★ 声音这一格不新造状态：它写的是 `settings.speech.voice`，与 `/voice` 那一屏
+ *   ★ 声音这一格不新造状态：它写的是 `VoiceProvider` 的 `current`，与 `/voice` 那一屏
  *     `VoicePicker.tsx` 是**同一个字段、同一个 `patch`**。所以在这里选完，
  *     点「开始创作」进去的那一次生成就已经是它了——不需要再往 URL 上挂一个 voice 参数
  *     （`/create` 那一边本来就从设置里读 `env`）。一个值只有一个家。
@@ -122,7 +122,10 @@ import { DEFAULT_FIGURE, figurePath } from '@/lib/figures.ts'
 import { forgetThemes, peekThemes, themeArrival } from '@/lib/theme-handoff.ts'
 import { THEMES, themeCardPath, type ThemeKey } from '@/lib/themes.ts'
 import { useEnterTimeline } from '@/lib/useEnterTimeline.ts'
-import { useSettings } from '@/components/settings/SettingsProvider.tsx'
+import { useVoice } from '@/components/voices/VoiceProvider.tsx'
+import { useAuth } from '@/components/auth/AuthProvider.tsx'
+import { useSignInGate } from '@/components/auth/SignInGate.tsx'
+import { canCreate } from '@/lib/auth/state.ts'
 import GenerationSetupDialog, { type SetupChoice } from './GenerationSetupDialog.tsx'
 
 export type ChildOption = {
@@ -138,7 +141,11 @@ export type ChildOption = {
 
 export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
   const router = useRouter()
-  const { settings, patch, env, voices, openSettings } = useSettings()
+  const { current: voiceId, setVoice, voices } = useVoice()
+  const { permissions, configured } = useAuth()
+  /* ★ 三处"要登录才能做"的入口各有一份，共用一个 hook（`SignInGate`）：
+     创作（这里）、生成人物（`NewCharacterButton`）、生成声音（`VoicePicker`）。 */
+  const gate = useSignInGate()
   const rootRef = useRef<HTMLElement>(null)
   const [wish, setWish] = useState('')
   /* 主题（以及由它推出来的「站着的是谁」）就住在这里。
@@ -214,9 +221,8 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
    *  优化那句话时它只作为上下文，优化器不许改它（改了就不是模板了） */
   const themeLabel = THEMES.find((item) => item.key === theme)?.label ?? ''
 
-  /* 音色：读的是设置里那**唯一**一份，写回也是 */
-  const voiceId = settings.speech.voice
-  /* ★ 表来自 `SettingsProvider`（预设 + 我录的），不再直接 map `DEFAULT_VOICES`：
+  /* 音色读的是 `VoiceProvider` 里那**唯一**一份，写回也是 */
+  /* ★ 表来自 `VoiceProvider`（预设 + 我录的），不再直接 map `DEFAULT_VOICES`：
      自己录的那条必须也能在这里选到，而那一步要经过"模型对不上就不许选"这条判据——
      判据只在 `voiceCatalog` 里有一份（见那个文件头） */
   const voice = voices.find((item) => item.id === voiceId) ?? null
@@ -224,9 +230,18 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
      警示按用户要求撤了，它们跟着删——留着会变成"两句没人读的判断"，
      下一个人会以为界面上还有一处地方在说这件事（现在没有，见 `.cl__bar` 那段注释） */
 
-  /* 优化用的是**文本**那一组。★ 与 `missingRequired`（"能不能出书"）分开判：
-     只配了图像的人照样能出书，但"把这句话改一改"动不了——两件事的边界不一样 */
-  const textMissing = !settings.text.apiKey.trim() || !settings.text.model.trim()
+  /* 优化用的是**文本**那一项。★ 与"能不能出书"（文本 + 图像）分开判：
+     只有图像权限的人照样能出书，但"把这句话改一改"动不了——两件事的边界不一样。
+     ★ 判据从"用户填没填 key"换成了两句**不在用户手上**的事实（2026-10-17，ADR-0009）：
+       `permissions.text` 是站长给的，`configured.text` 是站里配的。
+       而它们**要分开**：一句是"找我要权限"，一句是"站里还没配好，等一等"。 */
+  const textBlocked = !permissions.text || !configured.text
+  /* ★ 跑一本书要的两件事（与 `lib/auth/state.ts` 的 `canCreate` 同一个判据）。
+     这里只是**体验**：真正管用的是 `/api/books` 那道 403（见工单 07 第 1 条）。 */
+  /** 四项权限齐了没有。★ 与"站里配齐了没有"分开：这两件事的下一步不一样 */
+  const hasPermission = canCreate(permissions)
+  const allowed = hasPermission && canCreate(configured)
+  const [gateOpen, setGateOpen] = useState(false)
   /* ★ 建议**过期了没有**。用户提出建议之后又自己改了原句，那条建议就是照着旧句写的；
      照旧摆在下面而不说，等于让他拿一句对不上的话去替换。静态提示一句比偷偷清掉好：
      清掉的话他会以为"优化失败了" */
@@ -251,15 +266,61 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
     }
   }, [open])
 
-  const submit = (): void => {
+  const submit = async (): Promise<void> => {
     if (!ready) return
+    /*
+     * ★ **先问"登录了没有"**（用户 2026-10-17：没有登录就去创作，出现一个弹窗
+     *   显示"请登录"，点它就跳登录界面）。这一步与下面那道权限闸是两件事：
+     *   没登录要他去登录，登录了没权限要他去**找站长**——两句不同的话、
+     *   两个不同的下一步。合在一个弹窗里，用户就分不清该去哪。
+     * ★ 这一次 `ask()` 顺带把最新的权限带回来了，所以下面不必再问一次。
+     *
+     * ★ 2026-10-17：它从"权限闸之前"挪到了**最前面**，越过了下面那条"没有卡就先
+     *   去建卡"。原因是那条分支会 `router.push('/character/new')`——而
+     *   `/character/new` 那一屏**自己不拦登录**（它只是一个壳，出形象时才调接口）。
+     *   于是未登录的人点「开始创作」会被直接送进建卡表单，填完整整一张表
+     *   才在保存那一步吃到 401。这正是这一段后面那句"别让人白填一遍"要防的事，
+     *   而按原来的次序，偏偏它防不住。
+     *   ★ 次序上仍然是**登录 → 有没有卡 → 有没有权限**：前一步是后一步的前提，
+     *     而"去登录"这一屏对未登录的人来说才是真正能解决他那件事的那一屏。
+     */
+    const verdict = await gate.ask()
+    if (verdict.kind === 'signed-out') {
+      setOpen(null)
+      return
+    }
     /* ★ 没有卡就先去建卡。创作流从这一轮起**不再有第 1 步**（孩子在主页上就定了），
        所以带着一句没有卡的话进去，创作流那边没有任何一步能补上它。
-       这不是"拦住用户"，是把他送到真正能解决这件事的那一屏。 */
+       这不是"拦住用户"，是把他送到真正能解决这件事的那一屏。
+       （走到这里的人一定已经登录了——见上面那一段的次序） */
     if (!chosen) {
       router.push('/character/new')
       return
     }
+    /*
+     * ★ 权限闸（用户 2026-10-16 的原话：点开始创作时提示"当前用户没有权限，请联系管理员"）。
+     *   **就地**显示，不打开尺寸弹窗——让人先答完"要几页、要不要朗读"再被告知
+     *   "你根本做不了"，是一种白问。判据是**文本 + 图像**（跑一本书最少要的两件事）。
+     *
+     * ★ 这是三道闸里**最不管用**的那道（服务端那条 403 才是规则）：界面上的判断
+     *   既可以过期、也可以被绕过。它的价值只在于"别让人白填一遍"。
+     *   所以它在这里**如实说缺什么、怎么找人**，而不是做一个看着像拦住了的样子。
+     */
+
+    /*
+     * ★ 判权限用的是**刚才那一刻**问回来的那一份，不是渲染时那一份。
+     *   站长在管理页勾掉一个开关时，这个人这一屏上的 `permissions` 还是旧的
+     *   （`AuthProvider` 只在挂载时问一次）——而"点开始创作时提示没有权限"
+     *   说的正是**此刻**。
+     */
+    const live = canCreate(verdict.permissions) && canCreate(verdict.configured)
+    if (!live) {
+      setGateOpen(true)
+      setOpen(null)
+      return
+    }
+    // 有权限了：把上一次留下的提示收掉（不然它会一直挂在那里，像一句还没解决的问题）
+    setGateOpen(false)
     /* ★ 点「开始创作」不再直接跳走，先问"这一本要怎么做"（工单 04）。
        页数与"要不要朗读"都必须在**跑之前**定下来——跑起来再问等于让人等两次。
        确认之后才带着这两个数去 `/create`（运行视图）。 */
@@ -324,9 +385,11 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
    */
   const optimize = async (): Promise<void> => {
     if (!ready || thinkingRef.current) return
-    // 缺文本密钥时**不是报一句错就完**：缺的东西在哪里，就把哪里打开（同 `CreateFlow`）
-    if (textMissing) {
-      openSettings()
+    // ★ 文本这条路被卡住时**不报一句错就完**，而是把这句话**显示出来**（见 `gate` 那一段）。
+    //   2026-10-17 之前这里是 `openSettings()`——那个抽屉已经没有了，
+    //   "按下去打开某个抽屉"在界面上一个字都填不了的时候是假的
+    if (textBlocked) {
+      setGateOpen(true)
       return
     }
     thinkingRef.current = true
@@ -343,7 +406,6 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
           //   不传一个空串让模型自己编一个
           ...(chosen?.label ? { childName: chosen.label } : {}),
           ...(themeLabel ? { themeLabel } : {}),
-          env,
         }),
       })
       const data = (await response.json()) as {
@@ -525,7 +587,7 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
                     disabled={!item.usable}
                     title={item.why}
                     onClick={() => {
-                      patch('speech', { voice: item.id })
+                      setVoice(item.id)
                       setOpen(null)
                     }}
                   >
@@ -648,8 +710,8 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
               aria-label={thinking ? '正在想…' : '优化提示词'}
               aria-busy={thinking}
               title={
-                textMissing
-                  ? '优化提示词：要文本模型和 Key——点了先把设置打开'
+                textBlocked
+                  ? `优化提示词要用文字模型——${permissions.text ? '而站里今天还没配文本模型' : '而你的账号没有权限，请联系管理员'}`
                   : ready
                     ? '优化提示词：把这句话改得更具体（先给你看，不直接替换）'
                     : '优化提示词：先写一句话'
@@ -691,7 +753,7 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
             ref={goRef}
             type="button"
             className="cl__go"
-            onClick={submit}
+            onClick={() => void submit()}
             disabled={!ready}
             title={!ready ? '先写一句话' : chosen ? '开始创作' : '先去建一个小主角'}
           >
@@ -708,6 +770,27 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
             </svg>
           </button>
         </div>
+
+        {/* ── 「没有权限」这一条 ────────────────────────────────────────────
+            ★ 它就**贴在动作栏下面**（不在页面顶部、也不是一个 toast）：用户刚按下的
+              是这颗钮，回答就该出现在这颗钮的旁边。toast 飘在角上要人去接，
+              而这一条说的是"你刚才那件事没发生"。
+            ★ 只写**那一句**（用户 2026-10-17 的原话：「就显示"当前用户没有权限，
+              请联系管理员"，也不用写是什么没有权限」）。写"缺：图像"看着更周到，
+              实际是把站长的配置细节摊给了一个刚进门的人看，而他既改不了也不关心。
+              "怎么联系"改由侧栏那一格「帮助」说（那里有条目、有邮箱）。
+            ★ 唯一还分岔的一处是"你缺权限"与"站里没配好"：后者不是他的错，
+              说成"你没有权限"会让他去问一件根本不由他决定的事。
+            ★ 与服务端那句 `NO_PERMISSION_MESSAGE` **不是同一句**：那一句是接口回的
+              一句话（要能被 curl 到、要稳定），这一句是界面上的说明，可以更长。
+              两句都指向同一件事，改的时候一起看一眼。 */}
+        {gateOpen && !allowed ? (
+          <p className="cl__gate" role="alert">
+            {hasPermission
+              ? '站里今天还没配齐创作要的模型，这不是你的问题——等一等，或者联系管理员'
+              : '当前用户没有权限，请联系管理员'}
+          </p>
+        ) : null}
       </div>
 
       <h2 className="cl__wallhead">或者，挑一个主题</h2>
@@ -756,6 +839,10 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
 
       {/* 「这一本要怎么做」（工单 04）。★ 挂在最后、不在动作栏旁边：
           它是**整屏**的模态，与那两格下拉不是一类东西 */}
+      {/* ★ 「请先登录」那个弹窗（用户 2026-10-17）。它与尺寸弹窗互斥：
+          未登录时 `submit` 根本不会走到 `setSetupOpen(true)` */}
+      {gate.dialog}
+
       {setupOpen && (
         <GenerationSetupDialog wish={wish.trim()} onCancel={closeSetup} onConfirm={startRun} />
       )}

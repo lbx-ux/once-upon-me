@@ -10,9 +10,20 @@
  *   克隆音色建的时候绑死在当时的 TTS_MODEL 上（实测跨模型 400 `Engine error [411]`）。
  *   判据只有这一处产生，界面照它禁用 + 照 `why` 说话——**不许默默让用户点进去撞 400**。
  *   （预设音色**不判定**：我们没有"它支持哪些模型"的实测记录，不编一个。）
+ *
+ * ★ **2026-10-17：模型从"用户填的"换成"站里的"之后，多了一种状态——不知道。**
+ *   以前那个模型名来自本机持久层，随时读得到；现在它来自 `GET /api/auth/me`，
+ *   而那个人可能**没登录**（`/voice` 这一屏不要求登录就能打开），那时这个值是空串。
+ *   ★ 空串**不是**"模型不匹配"：我们根本不知道站里配的是哪个模型，凭什么说他录的
+ *   那条对不上？所以在那一档上 `usable` 是 `true`（**不拦**），`why` 也不写。
+ *   真正的原因（没登录 / 没权限 / 站里没配语音）由 `lib/voices/state.ts` 的
+ *   `speechBlockOf` 说，那一句才是真的——而它说的是"这三件事里的哪一件"，
+ *   比一句编出来的"模型对不上"有用得多。
+ *   ★ 这一条是"**没核到的就不写**"（CLAUDE.md §不糊弄）在那个判断上的兑现：
+ *   一个我们没核过的结论，宁可不给，也不能长得像给过了。
  */
 
-import { DEFAULT_VOICES, type VoiceOption } from '@/lib/settings/state.ts'
+import { DEFAULT_VOICES, type VoiceOption } from '@/lib/voices/state.ts'
 import type { MyVoice } from './store.ts'
 
 export type CatalogVoice = VoiceOption & {
@@ -36,7 +47,7 @@ export type CatalogVoice = VoiceOption & {
  */
 const MINE_TONE = ''
 
-export function voiceCatalog(mine: MyVoice[], currentModelId: string): CatalogVoice[] {
+export function voiceCatalog(mine: MyVoice[], serverModelId: string): CatalogVoice[] {
   const presets: CatalogVoice[] = DEFAULT_VOICES.map((voice) => ({
     ...voice,
     source: 'preset',
@@ -44,7 +55,16 @@ export function voiceCatalog(mine: MyVoice[], currentModelId: string): CatalogVo
   }))
 
   const cloned: CatalogVoice[] = mine.map((voice) => {
-    const matches = voice.modelId !== '' && voice.modelId === currentModelId
+    /**
+     * 三种情形，先分清再判（见文件头最后一段）：
+     *   · 站里的模型还不知道（没登录 / 站里没配）→ **不判**，`usable: true`
+     *   · 录它时没记下模型                        → 判不了，拦住并如实说"没记下来"
+     *   · 两个都知道，且对不上                    → 拦住并说清是哪一个对不上
+     */
+    const unknownServer = serverModelId === ''
+    const noRecord = voice.modelId === ''
+    const matches = !unknownServer && !noRecord && voice.modelId === serverModelId
+    const usable = unknownServer || matches
     return {
       id: voice.voiceId,
       name: voice.name,
@@ -52,13 +72,13 @@ export function voiceCatalog(mine: MyVoice[], currentModelId: string): CatalogVo
       source: 'mine',
       modelId: voice.modelId,
       createdAt: voice.createdAt,
-      usable: matches,
-      ...(matches
+      usable,
+      ...(usable
         ? {}
         : {
             why:
-              `录它时用的语音模型是 ${voice.modelId || '（没记下来）'}，` +
-              `与现在的 ${currentModelId || '（还没填）'} 不是同一个。` +
+              `录它时用的语音模型是 ${noRecord ? '（没记下来）' : voice.modelId}，` +
+              `与现在的 ${serverModelId} 不是同一个。` +
               `厂商那边音色是绑模型的——选它会被拒（实测报 400），所以要重新录一条。`,
           }),
     }

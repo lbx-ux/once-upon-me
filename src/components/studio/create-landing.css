@@ -690,6 +690,36 @@ button.cl__pill:hover {
   border-top: 1px solid var(--hairline);
 }
 
+/* ── 「没有权限」那一条（2026-10-17，工单 07）─────────────────────────────
+ * ★ 贴在 `.cl__bar` **下面**、还在卡里：用户刚按的是这一栏右边那颗「开始创作」，
+ *   回答就该出现在那颗钮的正下方。飘到页面顶部或变成一个 toast，都要人去接。
+ * ★ 配色只取现成的三枚令牌（`--surface-soft` 底 + `--danger` 字 + `--hairline` 边），
+ *   与 `.vc__error` 同一对（那张卡上实测过对比度）。★ 不新调一个"警示橙"：
+ *   那一枚会去和 `--accent` 打架，而 `--accent` 在这里管的是"要你看见"的东西。
+ * ★ 那个左边的 3px 竖条不是装饰：这一条和"这句话太长了"那种短反馈长得一样时，
+ *   人会把它当成又一次输入提示扫过去，而它要说的是"你按的那件事没发生"。
+ * ★ `line-height` 与字号照 `.vc__error`（13px / 1.8）——同一种"服务端说的话"同一种排。 */
+.cl__gate {
+  margin: 12px 0 0;
+  padding: 11px 14px 11px 13px;
+  border-left: 3px solid var(--danger);
+  border-radius: 0 10px 10px 0;
+  background: var(--surface-soft);
+  color: var(--danger);
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+/* 邮箱是可点的（`mailto:`）。★ 它**不跟链接的默认蓝**：这一条整块是一种颜色的话，
+ *   中间跳出来一个别的颜色会把"这是一句提醒"读成"这里有个别的控件"。
+ *   所以它只靠下划线区分，颜色跟着这一块走。 */
+.cl__gate a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  word-break: break-all;
+}
+
 /* 左半边那两颗工具。★ `min-width: 0` 让窄屏时它们先收缩，而不是先把主按钮挤下去 */
 .cl__tools {
   display: flex;

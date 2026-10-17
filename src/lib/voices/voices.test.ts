@@ -10,7 +10,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { DEFAULT_VOICES } from '@/lib/settings/state.ts'
+import { DEFAULT_VOICES } from '@/lib/voices/state.ts'
 import { voiceCatalog, findVoice } from './catalog.ts'
 import {
   addMyVoice,

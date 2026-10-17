@@ -53,8 +53,14 @@
   top: 0;
   align-self: flex-start;
   height: 100vh;
-  /* 矮窗口下侧栏自己可滚，底部两项不会被裁掉（`height` 是硬值，必须配这一条） */
-  overflow-y: auto;
+  /* ★ 这里原来是 `overflow-y: auto`（"矮窗口下侧栏自己可滚，底部两项不会被裁掉"）。
+     挪去了 `.shell__nav`，起因是「帮助」/「收起侧栏」那两颗在**鼠标停上去**时要
+     从右边冒一个标签出来——而 `overflow-y: auto` 会让 `overflow-x` 一起变成 `auto`
+     （CSS 的规矩：一轴不是 visible，另一轴就计算成 auto），于是那个标签
+     在冒出一半的地方被切掉。
+     ★ 顺带这还修好了另一件事：底部那两格（我是谁 / 帮助）现在是**钉住**的，
+       不会被一段长导航推下去。挤压改由中间那一列自己滚。 */
+  overflow: visible;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -131,6 +137,10 @@
 }
 
 .shell__nav {
+  /* 矮窗口时**这一列**滚（见 `.shell__side` 那条注释）。`min-height: 0` 是必须的：
+     flex 项默认 `min-height: auto`，不写它这一列撑到内容高，`overflow` 等于没写 */
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -204,6 +214,78 @@
 .shell__icon {
   width: 20px;
   height: 20px;
+}
+
+/* 挑过的头像。★ 与 `.shell__icon` **同一个 22px 的方框**，不是"图片自己多大就多大"：
+ *   换头像时那一格不能跳，收起侧栏只剩图标时位置也纹丝不动
+ *   （与上面 `.shell__glyph` 那句"转圈与图标共用同一个格子"同一条理由）。
+ * ★ `border-radius: 50%`：这几个 SVG 自己画了一个圆底，但**不靠它**——
+ *   认不出的 id 退回空圈、以后换了矢量形状，这一圈都得是圆的。 */
+.shell__avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: block;
+}
+
+/* ── 收起侧栏（底部那一格的最下面，2026-10-17 定回来的位置）────────────────
+ * ★ 它这一天的来回写在组件那一份注释里（顶部 → 底部）。这里留的是**底部那一版**：
+ *   一整行，箭头 + 文字，与上面两格同一个宽度、同一条左缘。
+ *
+ * ★ 尺寸比 `.shell__link`（11px 12px / 14px 字）**紧一档**（10px 12px / 13px 字），
+ *   而且带一圈 `--hairline` 的边——这是它一开始的样子，不是随手写的：
+ *   上面两格是"去哪儿"（个人主页 / 帮助），它是一个**开关**，
+ *   同一列里那点差别就是"这三格不全是同一类东西"的全部表达。
+ *   ★ 别顺手把它改成与 `.shell__link` 一模一样：那是把这条信息抹掉。
+ *   ★ 也别把它改回那个 32×32 的纯箭头方钮：那一版之所以成立，是因为它当时孤零零
+ *     待在顶部；搬回这一列之后，一个比别人矮一截、又没有字的方钮会读成"这里放了个图标"。 */
+.shell__collapse {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 11px;
+  background: none;
+  color: var(--ink-muted);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    color 0.16s ease,
+    border-color 0.16s ease;
+}
+
+.shell__collapse:hover {
+  color: var(--ink);
+  border-color: rgba(var(--accent-rgb), 0.4);
+}
+
+/* 折叠箭头是内联 SVG（组件里），这里只管尺寸与格子。
+   ★ `flex: 0 0 20px` 与 `.shell__glyph` 同一个数：收起之后文字藏掉，
+     这一格要正好落在上面几格图标所在的同一条竖线上，否则整列会歪半格。 */
+.shell__collapse-arrow {
+  display: grid;
+  place-items: center;
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+}
+
+.shell__collapse-arrow svg {
+  width: 16px;
+  height: 16px;
+  /* 收起之后转 180°（指回右边 = "展开"）。`transform-origin` 取中心即可：
+     这个图形左右基本对称，转完不会跑到格子外面 */
+  transition: transform 0.22s ease;
+}
+
+/* ★ 停掉动效时箭头仍然要**指对方向**：转还是转，只是不再有那 0.22s 的过渡 */
+@media (prefers-reduced-motion: reduce) {
+  .shell__collapse-arrow svg {
+    transition: none;
+  }
 }
 
 /* ── 「已经点下去了，那一屏还在路上」─────────────────────────────────────
@@ -305,7 +387,10 @@
   transition: transform 0.22s ease;
 }
 
-/* 折叠后这个尖角指向右（"展开"的方向跟着状态走） */
+/* 折叠后这个尖角指向右（"展开"的方向跟着状态走）。
+ * ★ 转的是**里面那个 `<svg>`**，不是外面那个 20px 的格子：格子是它对齐
+   上面几格图标的那一条竖线，把它转 180° 在视觉上没有区别，但会让人
+   以为"转的是容器"——而那正是下一个人改错的地方。 */
 .shell[data-collapsed='true'] .shell__collapse-arrow svg {
   transform: rotate(180deg);
 }
@@ -317,11 +402,21 @@
   display: none;
 }
 
+/* ★ 「收起侧栏」也在这一组里：收起之后它只剩那 20px 的箭头，
+   而它仍然在底部那一格里，得与上面几格的图标落在同一条竖线上。 */
 .shell[data-collapsed='true'] .shell__link,
 .shell[data-collapsed='true'] .shell__collapse {
   justify-content: center;
   padding-left: 0;
   padding-right: 0;
+}
+
+/* ★ 收起态下它外面那圈边与圆角一起撤掉：那是"一整行"的边界，
+   而现在它只剩一个 20px 的箭头，留一个空盒子会读成一块没画完的标签。 */
+.shell[data-collapsed='true'] .shell__collapse {
+  border-color: transparent;
+  padding-top: 10px;
+  padding-bottom: 10px;
 }
 
 /* ★ 品牌那一行的左右 padding 也要归零。
@@ -407,4 +502,58 @@
     padding-left: 0;
     padding-right: 0;
   }
+}
+
+/* ── 「帮助」那个弹窗（2026-10-17）────────────────────────────────────────
+ * ★ 版式照参考稿（`E:\match\profile` 那个独立预览稿）里模态的样子：
+ *   一条问题 + 一段回答，条目之间用一条 hairline 分开。
+ *   问题用重一档的字，回答是正文——读的人是在**找**，所以"问题那一行"
+ *   要能一眼扫过（scan），而不是读完整段才知道是不是自己要问的。 */
+.help {
+  display: grid;
+  gap: 18px;
+}
+
+.help__item {
+  display: grid;
+  gap: 6px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+/* 最后一条不画线：那一条会与弹窗底边挨在一起，看起来像多了一条分隔 */
+.help__item:last-of-type {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.help__q {
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 650;
+  color: var(--ink);
+}
+
+.help__a {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.85;
+  color: var(--ink-soft);
+}
+
+/* ★ 邮箱在这一段里是**可点的**，而它也是整段里唯一有颜色的东西——
+ *   一段话里只强调一处，"点这里"这件事才不会被另外几个重点淹掉。 */
+.help__mail,
+.help__link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  word-break: break-all;
+}
+
+.help__foot {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.8;
+  color: var(--ink-muted);
 }

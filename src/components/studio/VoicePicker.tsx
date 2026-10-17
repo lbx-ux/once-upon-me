@@ -45,12 +45,23 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import type { CatalogVoice } from '@/lib/voices/catalog.ts'
 import { sampleFor } from '@/lib/voices/samples.ts'
 import { PREVIEW_LINE } from '@/lib/settings/preview-line.ts'
-import { speechReady } from '@/lib/settings/state.ts'
-import { useSettings } from '@/components/settings/SettingsProvider.tsx'
+import { NARRATION_BLOCK_MESSAGE, type SpeechBlock } from '@/lib/voices/state.ts'
+import { useVoice } from '@/components/voices/VoiceProvider.tsx'
+import { useSignInGate } from '@/components/auth/SignInGate.tsx'
 import NewVoicePanel from './NewVoicePanel.tsx'
 
+/** 语音这条路卡住时，那颗钮上写什么。★ 与 `NARRATION_BLOCK_MESSAGE` 分开：
+ *  钮上只有几个字的位置，而理由要完整说出来的是下面 `needReason` 那一句 */
+const BLOCKED_LABEL: Record<SpeechBlock, string> = {
+  'no-permission': '没有语音权限',
+  'server-not-configured': '站里还没配好',
+}
+
 export default function VoicePicker() {
-  const { settings, patch, env, voices, forgetVoice, openSettings } = useSettings()
+  const { current, setVoice, voices, forgetVoice, speechBlock } = useVoice()
+  /* ★ 录一条声音是**这台机器上的一个账号**才会有的东西（厂商那边的音色挂在账号下），
+     所以没登录时先请他去登录——见 `SignInGate` */
+  const gate = useSignInGate()
   const audioRef = useRef<HTMLAudioElement>(null)
   /** 当前那个一次性对象地址。换一段、播完、卸载都要 revoke —— 见文件头 */
   const urlRef = useRef<string | null>(null)
@@ -68,7 +79,6 @@ export default function VoicePicker() {
   /** 删完之后的报数凭据（一件事做完要给的东西，不是一句"操作成功"） */
   const [receipt, setReceipt] = useState<string | null>(null)
   const [panelOpen, setPanelOpen] = useState(false)
-  const configured = speechReady(settings)
 
   /** 放掉那个一次性地址。★ 先摘 `src` 再 revoke：留着一个已吊销的地址在元素上，
    *  下一次 `play()` 会报一个看不出原因的错 */
@@ -138,7 +148,8 @@ export default function VoicePicker() {
       const response = await fetch('/api/voice/preview', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ env, voiceId, text: PREVIEW_LINE }),
+        // ★ 请求体里**没有 env** 了（2026-10-17）：密钥由站长分配，只从服务端环境来
+        body: JSON.stringify({ voiceId, text: PREVIEW_LINE }),
       })
       if (!response.ok) {
         throw new Error((await response.text()).slice(0, 120) || `HTTP ${response.status}`)
@@ -171,13 +182,13 @@ export default function VoicePicker() {
       const response = await fetch('/api/voice/delete', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ env, voiceId: voice.id }),
+        body: JSON.stringify({ voiceId: voice.id }),
       })
       if (!response.ok) {
         throw new Error((await response.text()).slice(0, 160) || `HTTP ${response.status}`)
       }
       const data = (await response.json()) as { released?: boolean }
-      const wasCurrent = settings.speech.voice === voice.id
+      const wasCurrent = current === voice.id
       forgetVoice(voice.id)
       setConfirming(null)
       setReceipt(
@@ -204,7 +215,15 @@ export default function VoicePicker() {
           <p className="vc__sub">选一个音色，之后做的每一本书都用它念。</p>
         </div>
         {/* ★ 与 `/character` 那一屏的「＋新建角色」同一处、同一个长相：这一屏的"造东西" */}
-        <button type="button" className="vc__new" onClick={() => setPanelOpen(true)}>
+        <button
+          type="button"
+          className="vc__new"
+          onClick={() => {
+            void gate.ask().then((verdict) => {
+              if (verdict.kind === 'signed-in') setPanelOpen(true)
+            })
+          }}
+        >
           <span className="vc__new-plus" aria-hidden="true">
             ＋
           </span>
@@ -223,7 +242,7 @@ export default function VoicePicker() {
 
       <ul className="vc__wall">
         {voices.map((voice, index) => {
-          const selected = settings.speech.voice === voice.id
+          const selected = current === voice.id
           const busy = playing === voice.id
           const openConfirm = confirming === voice.id
           /**
@@ -233,15 +252,15 @@ export default function VoicePicker() {
            */
           const sample = voice.source === 'preset' ? sampleFor(voice.id) : null
           /**
-           * ★ 没有样本、又没配 key：这颗钮**放不出这句话**（克隆的那条只能现场合成）。
-           *   但它**不是死的** —— 按下去开「模型与密钥」。一个看起来能点、点了什么都不发生的
-           *   钮就是用户说的"这个是假的"（2026-10-16 实测：旧版这颗钮 `disabled`，
-           *   而除了字浅一档，边、底、透明度与能点的那颗一模一样）。
+           * ★ 没有样本、语音这条路又被卡住：这颗钮**放不出这句话**（克隆的那条只能现场合成）。
+           *   ★ `speechBlock` 与"挑没挑音色"无关，这一点是刻意的：用自己录的那条试听
+           *     正是"在挑"这个动作的一部分，拿"你还没挑"去拦它就成了死循环
+           *     （见 `voices/state.ts` 里 `speechBlockOf` 那段）。
            * ★ 带上 `voice.usable`：音色根本用不了的时候，钮是**死的**（`disabled`），
-           *   说"先配密钥"会把病因指错——那一种是"模型对不上"，理由由卡上的 `.vc__why` 说。
+           *   说"没有权限"会把病因指错——那一种是"模型对不上"，理由由卡上的 `.vc__why` 说。
            */
-          const needsKey = voice.usable && !sample && !configured
-          const listenLabel = busy ? '正在听…' : needsKey ? '先配密钥' : '听一句真的'
+          const blocked = voice.usable && !sample ? speechBlock : null
+          const listenLabel = busy ? '正在听…' : blocked ? BLOCKED_LABEL[blocked] : '听一句真的'
           return (
             <li key={voice.id} className="vc__slot" style={{ '--vc-i': index } as CSSProperties}>
               <article className="vc__card" data-selected={selected} data-source={voice.source}>
@@ -255,7 +274,7 @@ export default function VoicePicker() {
                   <button
                     type="button"
                     className="vc__pick"
-                    onClick={() => patch('speech', { voice: voice.id })}
+                    onClick={() => setVoice(voice.id)}
                     aria-pressed={selected}
                     disabled={!voice.usable}
                   >
@@ -273,9 +292,17 @@ export default function VoicePicker() {
                       它是记账，不是判据（建它时的模型只在"对不上"时出现，那才是判据）。 */}
                   {voice.source === 'preset' ? <p className="vc__tone">{voice.tone}</p> : null}
 
+                  {/* ★ 两件事都说在这里，因为它们的**读者是同一个**：这个人现在为什么按不动
+                      （音色用不了 / 语音这条路被卡住）。★ `blocked` 那句必须**看得见**，
+                      不能只挂在 `title` 上：那颗钮是 `disabled` 的，而禁用的钮在多数浏览器里
+                      连 tooltip 都不弹——"按不动而不知道为什么"就是用户说的"这个是假的" */}
                   {!voice.usable && voice.why ? (
                     <p className="vc__why" role="status">
                       {voice.why}
+                    </p>
+                  ) : blocked ? (
+                    <p className="vc__why" role="status">
+                      {NARRATION_BLOCK_MESSAGE[blocked]}
                     </p>
                   ) : null}
                 </div>
@@ -327,33 +354,35 @@ export default function VoicePicker() {
                           type="button"
                           className="vc__listen"
                           data-playing={busy ? 'true' : 'false'}
-                          data-needs-key={needsKey ? 'true' : 'false'}
-                          onClick={() => (needsKey ? openSettings() : void preview(voice.id))}
-                          disabled={!voice.usable}
+                          data-blocked={blocked ? 'true' : 'false'}
+                          onClick={() => void preview(voice.id)}
+                          /* ★ 卡住的时候这颗钮是**死的**（`disabled`），不是"按下去开设置"：
+                             2026-10-17 起没有设置可开了——密钥由站长分配，用户在界面上
+                             一个 key 都填不了。留着一颗"按下去开某个抽屉"的钮才是假的。
+                             理由由 `title` 与下面那句 `needReason` 完整说出来。 */
+                          disabled={!voice.usable || blocked !== null}
                           aria-label={
                             busy
                               ? `正在听：${voice.name}`
-                              : needsKey
-                                ? `先配密钥：${voice.name} 的试听要现场合成（打开模型与密钥）`
+                              : blocked
+                                ? `${BLOCKED_LABEL[blocked]}，试听放不出来：${voice.name}`
                                 : `听一句真的：${voice.name}（就上面那一句）`
                           }
-                          /* ★ 2026-10-16 用户把页头那条警示（"语音还没配齐…"）划掉了。
-                       它说的那件事没有消失，只是**不再占一整行**：没配齐时这颗钮的**字**就写着
-                       "先配密钥"，按下去直接开抽屉——比一条横幅短，而且只有真受影响的那张卡说。
-                       ★ 别把它挪回成一整条横幅：用户划掉的正是"这一屏替用户把设置里的问题念一遍"。 */
                           title={
                             !voice.usable
                               ? '这个音色现在用不了，原因写在上面'
-                              : needsKey
-                                ? `「${voice.name}」是你自己录的音色，厂商那边才有它，所以试听要现场合成——先把 Key 与模型填上`
-                                : sample
-                                  ? '这一份是随仓库带的样本（预生成），不需要 key；按下去听的就是它'
-                                  : undefined
+                              : blocked === 'no-permission'
+                                ? `「${voice.name}」是你自己录的音色，厂商那边才有它，所以试听要现场合成——而语音这件事你没有权限（找站长开）`
+                                : blocked === 'server-not-configured'
+                                  ? `「${voice.name}」是你自己录的音色，厂商那边才有它，所以试听要现场合成——而站里今天没配语音，谁都放不出来`
+                                  : sample
+                                    ? '这一份是随仓库带的样本（预生成），不需要任何配置；按下去听的就是它'
+                                    : undefined
                           }
                         >
-                          {/* 只有**真会响**的时候才挂播放图标：钮上写着"先配密钥"却画一个喇叭，
+                          {/* 只有**真会响**的时候才挂播放图标：钮上写着"没有语音权限"却画一个喇叭，
                             正是"控制与它做的事对不上"那类错 */}
-                          {needsKey ? null : (
+                          {blocked ? null : (
                             <svg className="vc__listen-icon" viewBox="0 0 20 20" aria-hidden="true">
                               <path d="M3.5 7.5h2.8L10 4.2v11.6l-3.7-3.3H3.5z" />
                               <path
@@ -436,6 +465,7 @@ export default function VoicePicker() {
       />
 
       {panelOpen && <NewVoicePanel onClose={() => setPanelOpen(false)} />}
+      {gate.dialog}
     </section>
   )
 }

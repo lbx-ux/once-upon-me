@@ -11,7 +11,6 @@ import {
   type CharacterAnchor,
 } from '@/lib/engine/domain.ts'
 import type { ChildRecord } from '@/lib/engine/character-card/profile.ts'
-import { useSettings } from '@/components/settings/SettingsProvider.tsx'
 // 表单零件与「新建小主角」那一屏共用同一份（选项与必填项只能有一处，见 fields.tsx 文件头）
 import { AnchorFields, ChildFields } from '@/components/creation/fields.tsx'
 // ★ 删除的确认框与凭据是**两个调用方共用**的那一份（另一个是卡片墙的 `WallDelete`）
@@ -96,7 +95,6 @@ type Busy =
 export default function ChildDetail(props: ChildDetailProps) {
   const { profile, isDemo, demoId, revisions, anchors } = props
   const router = useRouter()
-  const { env } = useSettings()
 
   const current = revisions.find((item) => item.isCurrent) ?? null
   /**
@@ -172,22 +170,19 @@ export default function ChildDetail(props: ChildDetailProps) {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(
-          toCardBody(
-            {
-              child: {
-                childId: profile.childId,
-                name: profile.name,
-                nameReading: profile.nameReading,
-                ageBand: profile.ageBand,
-                ...(profile.gender ? { gender: profile.gender } : {}),
-                lookTags: [...profile.lookTags],
-                interestTags: [...profile.interestTags],
-              },
-              theme: { theme: '', wish: '' },
-              card: { anchors: firstAnchors },
+          toCardBody({
+            child: {
+              childId: profile.childId,
+              name: profile.name,
+              nameReading: profile.nameReading,
+              ageBand: profile.ageBand,
+              ...(profile.gender ? { gender: profile.gender } : {}),
+              lookTags: [...profile.lookTags],
+              interestTags: [...profile.interestTags],
             },
-            env,
-          ),
+            theme: { theme: '', wish: '' },
+            card: { anchors: firstAnchors },
+          }),
         ),
       })
       const payload = (await response.json()) as { message?: string; revision?: number }
@@ -218,7 +213,6 @@ export default function ChildDetail(props: ChildDetailProps) {
           name: profile.name,
           ageBand: profile.ageBand,
           suggestion,
-          env,
         }),
       })
       const payload = (await response.json()) as { message?: string; revision?: number }
