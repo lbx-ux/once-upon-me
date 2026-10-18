@@ -72,6 +72,16 @@ export type ChildDetailProps = {
    *   （`children-source.ts` 的 `isDemoChildId` 写着这条）。
    */
   demoId: boolean
+  /**
+   * 这个人现在能不能改东西（2026-10-18）。★ 由**服务端**的 `detailFor` 一处决定：
+   * 登录过 = true；访客（未登录，看的是示例卡）= false。
+   *
+   * ★ 为假时这一屏把**所有写动作**收起来（「再画一版」「从现在起用这一版」
+   *   「出一张形象」「改基础信息」），换成一句"登录之后可以用他做一本"。
+   *   这不是守卫（守卫在服务端：那些接口一律要登录），而是**不摆一颗点下去必然失败的按钮**
+   *   ——与 `demoId` 那一格同一个取舍。
+   */
+  canEdit: boolean
   revisions: CardRevisionView[]
   anchors: readonly { slot: AnchorSlot; value: string }[]
   /**
@@ -93,7 +103,7 @@ type Busy =
   | { kind: 'first' }
 
 export default function ChildDetail(props: ChildDetailProps) {
-  const { profile, isDemo, demoId, revisions, anchors } = props
+  const { profile, isDemo, demoId, canEdit, revisions, anchors } = props
   const router = useRouter()
 
   const current = revisions.find((item) => item.isCurrent) ?? null
@@ -365,7 +375,7 @@ export default function ChildDetail(props: ChildDetailProps) {
                   `shown.revision > 1`，于是"切回第 1 版"——最常发生的那一次——
                   根本没有按钮（v1 的 revision 就是 1）。是**在浏览器里点了一遍**才发现的：
                   第 1 版看着正常，只是没有那颗按钮，静态读代码很容易看过去 */}
-              {!shown.isCurrent ? (
+              {canEdit && !shown.isCurrent ? (
                 <button
                   type="button"
                   className="cd__btn cd__btn--ghost"
@@ -392,18 +402,22 @@ export default function ChildDetail(props: ChildDetailProps) {
                 <b>跨页不变</b>的东西；姿势、表情、场景属于每一页，不写在这里。
               </p>
               <div className="cd__first">
-                <AnchorFields anchors={firstAnchors} onChange={setFirstAnchors} />
-                <button
-                  type="button"
-                  className="cd__btn"
-                  disabled={busy.kind !== 'idle'}
-                  onClick={() => void createFirstCard()}
-                >
-                  {busy.kind === 'first' ? '正在画…' : '出一张形象'}
-                </button>
-                <p className="cd__empty-hint">
-                  一次出图十几秒。出了之后，这一屏才会长出「提建议再画一版」和版本历史。
-                </p>
+                {canEdit ? (
+                  <>
+                    <AnchorFields anchors={firstAnchors} onChange={setFirstAnchors} />
+                    <button
+                      type="button"
+                      className="cd__btn"
+                      disabled={busy.kind !== 'idle'}
+                      onClick={() => void createFirstCard()}
+                    >
+                      {busy.kind === 'first' ? '正在画…' : '出一张形象'}
+                    </button>
+                    <p className="cd__empty-hint">
+                      一次出图十几秒。出了之后，这一屏才会长出「提建议再画一版」和版本历史。
+                    </p>
+                  </>
+                ) : null}
               </div>
             </div>
           )}
@@ -443,6 +457,22 @@ export default function ChildDetail(props: ChildDetailProps) {
 
         {/* ── 右边：提建议 + 这张卡凭什么算同一个人 ──────────────────────── */}
         <div className="cd__right">
+          {/* ★ 访客（未登录）看到的是**只读的**示例卡：写动作全部收起（见 `canEdit`），
+              这里换成一句能走下去的话 + 一条去登录的路（`?next=` 带回本页，与侧栏那颗同一套）。
+              ★ 为什么不是"摆着按钮、点了说请先登录"：那四个动作点下去必然是 401，
+              而一颗点下去必然失败的按钮，正是"没有的东西直说没有"那条纪律的反面。 */}
+          {canEdit ? null : (
+            <div className="cd__card">
+              <h2 className="cd__h2">这是随仓库发布的示例角色</h2>
+              <p className="cd__hint">登录之后可以用他做一本，也能提建议再画一版。</p>
+              <a
+                className="cd__btn"
+                href={`/login?next=${encodeURIComponent(`/character/${profile.childId}`)}`}
+              >
+                去登录
+              </a>
+            </div>
+          )}
           {/* ★ `error` / `notice` 是**四个动作共用的那一条**（再画一版 / 切回旧版 /
                   改档案 / 删掉他），所以它俩挂在右栏**顶上**，不挂在某一格里。
                   原来它们写在「想改哪里」那张卡里面，而那张卡被 `current` 挡着——
@@ -455,7 +485,7 @@ export default function ChildDetail(props: ChildDetailProps) {
             </p>
           ) : null}
           {notice ? <p className="cd__notice">{notice}</p> : null}
-          {current ? (
+          {canEdit && current ? (
             <div className="cd__card">
               <h2 className="cd__h2">想改哪里？</h2>
               <p className="cd__hint">
@@ -496,7 +526,7 @@ export default function ChildDetail(props: ChildDetailProps) {
                   ★ 示例角色**不渲染这一格**：`PATCH` 复用的就是删除那一道 `refuse()`，
                     服务端会 403。界面上提前不给入口，比让人点完吃一句拒绝好；
                     而守卫仍然在服务端——这一格藏不藏都挡不住一个直接打接口的请求。 */}
-          {demoId ? null : (
+          {!canEdit || demoId ? null : (
             <div className="cd__card">
               <h2 className="cd__h2">改基础信息</h2>
               {draft ? (

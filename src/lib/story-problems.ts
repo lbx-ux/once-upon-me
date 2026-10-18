@@ -28,7 +28,7 @@
  */
 
 import { buildTree } from './engine/tree.ts'
-import { planDraftCodec } from './schemas/story.ts'
+import { CHOICE_CELLS, planDraftCodec } from './schemas/story.ts'
 import type { BookForm } from './engine/domain.ts'
 import type { ParseFailure } from './schemas/schema.ts'
 import type { NodeDraft, PlanDraft } from './schemas/story.ts'
@@ -134,11 +134,15 @@ function shapeProblemOf(failure: ParseFailure): StoryProblem {
   }
 }
 
-/** `body[1]` → `['body', '1']`；`choice.options[0].label` → `['choice', undefined]` */
+/** `body[1]` → `['body', '1']`；`labelA` → `['choice', undefined]` */
 function splitField(rest: string): [StoryField, string | undefined] {
   const line = LINE_PATH.exec(rest)
   if (line) return ['body', line[1]]
   const head = rest.split('.')[0] ?? ''
+  // ★ 选择点那九格（平铺在节点上，见 `schemas/story.ts` 那段 ★★）都归到界面上那一组框。
+  //   名字只有一份（`CHOICE_CELLS`），而且有一条用例拿 schema 逐个核对——
+  //   漏掉一格，家长就会在**别的格子**下面读到一句关于这一格的话。
+  if ((CHOICE_CELLS as readonly string[]).includes(head)) return ['choice', undefined]
   const known: StoryField[] = ['scene', 'body', 'imagePrompt', 'mood', 'choice']
   return [(known.find((field) => field === head) ?? 'nodes') as StoryField, undefined]
 }

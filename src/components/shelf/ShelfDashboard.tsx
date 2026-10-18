@@ -452,7 +452,17 @@ export default function ShelfDashboard({ books }: ShelfDashboardProps) {
           那是"一屏只有一样东西时不必再说一遍"的产物，现在页头有了别的东西，
           那条理由就不成立了） */}
       <header className="shelf__head">
-        <h1 className="shelf__title">书架</h1>
+        <div>
+          <h1 className="shelf__title">书架</h1>
+          {/* ★ 2026-10-18 加：用户说"每一个模块都有一个简短的介绍，给角色卡和书架补上"。
+              与 `/voice` 的 `.vc__sub`、`/booklist` 的 `.blw__sub`、`/character` 的
+              `.cw__sub` 同一个身份：一句说清这一屏是干什么的。
+              ★ 只写"做完的书"这一件——上面那栏「正在编辑」是**有时才在**的
+              （`drafts.length > 0 && !editing`），页头这句话不能指一个可能不存在的东西。
+              ★ 压在天空带上，所以用 `--ink-on-sky`（governing rule）。 */}
+          {/* prettier-ignore */}
+          <p className="shelf__sub">做好的书都摆在这里，点开就能读。</p>
+        </div>
         <button
           type="button"
           className="shelf__edit"
@@ -488,7 +498,12 @@ export default function ShelfDashboard({ books }: ShelfDashboardProps) {
             改它等于让所有老书重新分堆。改的只是**这一屏叫它什么**。 */}
       {drafts.length > 0 && !editing && (
         <section className="shelf__drafts" aria-labelledby="shelf-drafts-head">
-          <h2 className="shelf__sub" id="shelf-drafts-head">
+          {/* ★ 类名 2026-10-18 从 `.shelf__sub` 改成 `.shelf__drafts-title`：
+              `.shelf__sub` 这个名字全站指的是**页头那句说明**（`blw__sub` / `vc__sub` /
+              `pf__sub` 都是），而这一颗是这一栏的小标题，不是页头——页头这一轮真的要用
+              这个名字了。同一种处置在 `.shelf__title` → `.shelf__name` 那次写过：
+              两个意思共用一个名字，改页头时一定会改错那一个。 */}
+          <h2 className="shelf__drafts-title" id="shelf-drafts-head">
             正在编辑
           </h2>
           <p className="shelf__drafts-hint">

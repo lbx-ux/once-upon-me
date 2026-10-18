@@ -8,11 +8,12 @@
  *
  * ★ 从服务端读回来的东西**一律不信**（`parseOverview`）：Java 那边加了字段、
  *   改了字段名、或者中间某个代理插了一手，症状都不该是"管理页上某一格变成 undefined"。
- *   认不出来就整份拒绝——**半个权限表比没有更坏**，它会让"这个人能不能用"变成一个
+ *   认不出来就整份拒绝——**半份权限表比没有更坏**，它会让"这个人能不能用"变成一个
  *   看渲染顺序的答案（同 `auth/state.ts` 的 `parsePermissions` 那条注释）。
+ *
+ * ★ 2026-10-18：一个人那一行的 `permissions`（四个布尔）收成 `allowed`（一位），
+ *   与库里那一列、与 Java 的 `AdminUserRow` 同名。管理页上因此只有**一列**开关。
  */
-
-import { NO_PERMISSIONS, type Permissions } from '@/lib/auth/state.ts'
 
 /**
  * 一个号的状态。★ 与 Java 的 `User.STATUS_ACTIVE` / `STATUS_DISABLED` 逐字一致。
@@ -46,7 +47,13 @@ export type AdminUser = {
   status: AdminUserStatus
   createdAt: string
   lastLoginAt: string | null
-  permissions: Permissions
+  /**
+   * 有没有创作权。★ **一位**（2026-10-18）。
+   *
+   * ★ 它与 `status` 是两件事，别把它们读成同一个：这个人是**关着**的（他点开始创作会被拦），
+   *   那个是**登不进来**的（会话当场作废）。
+   */
+  allowed: boolean
 }
 
 export type AdminOverview = {
@@ -71,22 +78,6 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null
 }
 
-function parsePermissions(raw: unknown): Permissions | null {
-  const value = asRecord(raw)
-  if (!value) return null
-  const keys = ['text', 'image', 'vision', 'speech'] as const
-  // ★ 四个都要是布尔：缺一个就整份不认（理由见文件头）
-  for (const key of keys) {
-    if (typeof value[key] !== 'boolean') return null
-  }
-  return {
-    text: value['text'] as boolean,
-    image: value['image'] as boolean,
-    vision: value['vision'] as boolean,
-    speech: value['speech'] as boolean,
-  }
-}
-
 function parseUser(raw: unknown): AdminUser | null {
   const value = asRecord(raw)
   if (!value) return null
@@ -95,8 +86,10 @@ function parseUser(raw: unknown): AdminUser | null {
   const userId = str('userId')
   const account = str('account')
   if (userId === '' || account === '') return null
-  const permissions = parsePermissions(value['permissions'])
-  if (!permissions) return null
+  // ★ 这一位必须是布尔，缺了就整份不认（理由见文件头）。不把它当 `false`：
+  //   那会让"服务端少回了一个字段"看起来像"这个人被关了权限"，
+  //   而站长会据此去点那个开关——点完才发现本来就是关着的。
+  if (typeof value['allowed'] !== 'boolean') return null
   const phone = typeof value['phone'] === 'string' && value['phone'] !== '' ? value['phone'] : null
   const lastLoginAt =
     typeof value['lastLoginAt'] === 'string' && value['lastLoginAt'] !== ''
@@ -116,7 +109,7 @@ function parseUser(raw: unknown): AdminUser | null {
     status: str('status') === 'DISABLED' ? 'DISABLED' : 'ACTIVE',
     createdAt: str('createdAt'),
     lastLoginAt,
-    permissions,
+    allowed: value['allowed'] as boolean,
   }
 }
 
@@ -185,13 +178,14 @@ export function usageTextOf(usage: AdminUsage | undefined): string {
   return `${usage.books} 本 · ${usage.cards} 张卡 · ${usage.children} 个孩子`
 }
 
-/** 四个开关在界面上的名字。★ 与 `Capability` 同一组，四处（这里 / session.ts / Java / 权限表）逐字一致 */
-export const CAPABILITY_LABELS: { key: keyof Permissions; label: string; hint: string }[] = [
-  { key: 'text', label: '文字', hint: '写故事' },
-  { key: 'image', label: '图像', hint: '画插画' },
-  { key: 'vision', label: '视觉', hint: '核对面孔' },
-  { key: 'speech', label: '语音', hint: '朗读' },
-]
+/**
+ * 那一列在界面上的名字。
+ *
+ * ★ 2026-10-18 之前这里是四个（文字/图像/视觉/语音），一个人一格。
+ *   权限收成一位之后只剩这一列，而它问的问题也变了：不再是"他能用哪几项"，
+ *   而是"站长有没有把他的权限收回去"。
+ */
+export const ACCESS_COLUMN = { label: '权限', hint: '能否创作' } as const
 
 /**
  * 一次改动的结果 → 那一行**换掉**。
@@ -209,5 +203,3 @@ export function parseUserRow(raw: unknown): AdminUser | null {
 export function isAdmin(role: string | undefined | null): boolean {
   return role === 'ADMIN'
 }
-
-export { NO_PERMISSIONS }

@@ -395,13 +395,8 @@
   color: var(--danger);
 }
 
-/* ── 权限申请队列（2026-10-17）─────────────────────────────────────────
- * ★ 一条申请是一张**纸**，不是表格里的一行：它字数多（说明那句、要哪几项）、
- *   还要放两个按钮，塞进表格格子会挤成一条。待处理的那几条竖着排，一屏能看三四条。
- * ★ 待处理与已处理的**不共用样式**：前者是"要你动手的"，后者是"记录"。
- *   长得一样的话，站长会以为自己还有事没做。 */
 /* ── 折叠头（「模型配置」那一块，2026-10-17）─────────────────────────────
- * ★ 那一块有四张卡，把下面那两样（申请队列、用户表）推到了几屏之外，
+ * ★ 那一块有四张卡，把下面那张用户表推到了几屏之外，
  *   而站长每天要动的正是它们。用户原话：「这两个做一个下拉框的样式」——
  *   后来他自己收回到"就模型那折就行"（见 `Fold.tsx` 文件头那段）。
  * ★ 收起的判据是 `hidden`（孩子**不卸载**，仍然挂着）：`Fold.tsx` 判断 3 记着
@@ -415,9 +410,10 @@
   color: var(--ink);
 }
 
-/* 整个标题行是一颗按钮，所以它得把原来 `.adm__queue-title` 那套排布接下来
- * （flex + baseline + 10px 间距），否则标题、计数胶囊、"改完立刻生效"那句
- * 会挤成一团。 */
+/* 整个标题行是一颗按钮，所以它得自己把那套排布接下来（flex + baseline +
+ * 10px 间距），否则标题、计数胶囊、"改完立刻生效"那句会挤成一团。
+ * ★ 这段话原来指着 `.adm__queue-title`（权限申请那一列的表头）；那一列 2026-10-18
+ *   拆掉之后，被指着的那条规则已经不在了，所以这里改成把话说全。 */
 .adm__fold-btn {
   display: flex;
   flex-wrap: wrap;
@@ -480,209 +476,6 @@
   .adm__fold-caret {
     transition: none;
   }
-}
-
-.adm__queue {
-  margin: 0 0 26px;
-}
-
-.adm__queue-title {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 10px;
-  margin: 0 0 12px;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--ink);
-}
-
-.adm__queue-count {
-  padding: 2px 9px;
-  border: 1px solid var(--accent);
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 400;
-  color: var(--accent);
-  /* ★ 一行，不许折：它是个胶囊，折成两行就成了一个看不懂的圆角方块，
-   *   而这件事在**两位数**的时候才会发生（「12 条待处理」比「2 条待处理」宽）
-   *   ——也就是等到真有人申请了一堆才会撞上，那时没人会想到是这里。
-   *   `.adm__queue-title` 那一行本来就是 `flex-wrap: wrap`，折在这里没有任何意义。 */
-  white-space: nowrap;
-}
-
-/* ★ 没有待处理时那个小标签变灰（`data-zero`）：一个橙色的「没有待处理的」
- *   看起来仍然像"有事"，而这一行的用处就是一眼看出**有没有事**。 */
-.adm__queue-count[data-zero='true'] {
-  border-color: var(--hairline);
-  color: var(--ink-muted);
-}
-
-.adm__queue-bad {
-  margin: 0 0 12px;
-  padding: 11px 14px;
-  border-left: 3px solid var(--danger);
-  border-radius: 0 10px 10px 0;
-  background: var(--surface-soft);
-  font-size: 13px;
-  line-height: 1.8;
-  color: var(--danger);
-}
-
-.adm__queue-hint {
-  margin-left: 6px;
-  color: var(--ink-muted);
-}
-
-.adm__queue-empty {
-  margin: 0;
-  padding: 14px 16px;
-  border: 1px dashed var(--hairline);
-  border-radius: 12px;
-  font-size: 13px;
-  line-height: 1.8;
-  color: var(--ink-muted);
-}
-
-.adm__req {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px 20px;
-  margin-bottom: 10px;
-  padding: 13px 16px;
-  border: 1px solid var(--accent);
-  border-radius: 12px;
-  background: var(--surface);
-}
-
-.adm__req-who {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  min-width: 240px;
-}
-
-.adm__req-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--ink);
-}
-
-.adm__req-account {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12px;
-  color: var(--ink-muted);
-}
-
-.adm__req-time {
-  font-size: 12px;
-  color: var(--ink-muted);
-}
-
-.adm__req-wants {
-  display: flex;
-  gap: 18px;
-  margin: 0;
-}
-
-.adm__req-wants dt {
-  font-size: 11px;
-  color: var(--ink-muted);
-}
-
-.adm__req-wants dd {
-  margin: 3px 0 0;
-  font-size: 13px;
-  color: var(--ink);
-}
-
-/* ★ 「这次要的」用强调色：站长在那儿做决定，而「他已有的」只是背景信息 */
-.adm__req-asks {
-  color: var(--accent);
-}
-
-.adm__req-note {
-  flex-basis: 100%;
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.8;
-  color: var(--ink-muted);
-}
-
-.adm__req-actions {
-  display: flex;
-  gap: 8px;
-  margin-left: auto;
-}
-
-.adm__req-go,
-.adm__req-no {
-  padding: 6px 15px;
-  border-radius: 8px;
-  font: inherit;
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.adm__req-go {
-  border: 1px solid var(--accent);
-  background: var(--accent);
-  color: var(--surface);
-}
-
-.adm__req-no {
-  border: 1px solid var(--hairline);
-  background: var(--surface-soft);
-  color: var(--ink-muted);
-}
-
-.adm__req-go:disabled,
-.adm__req-no:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-.adm__req-go:focus-visible,
-.adm__req-no:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-/* ★ 处理过的折在下面（见 `RequestQueue` 文件头第 1 条）：它们是记录，
- *   不是待办；而**一条都不能删**——被拒的那条是"我上次已经拒过他"的唯一证据。 */
-.adm__req-done {
-  margin-top: 12px;
-  font-size: 13px;
-  color: var(--ink-muted);
-}
-
-.adm__req-done > summary {
-  padding: 5px 2px;
-  cursor: pointer;
-}
-
-.adm__req-donelist {
-  margin: 6px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.adm__req-donelist li {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 14px;
-  padding: 7px 2px;
-  border-top: 1px solid var(--hairline);
-}
-
-.adm__req-donestatus {
-  font-size: 12px;
-}
-
-.adm__req-donelist li[data-status='REJECTED'] .adm__req-donestatus {
-  color: var(--danger);
 }
 
 /* ── 账号那一列（停用 / 改密码 / 删除，2026-10-17）────────────────────

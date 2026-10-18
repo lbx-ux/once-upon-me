@@ -111,6 +111,9 @@
  *   上一版刻意不放头像，理由是"原图 2,772,224 字节，不该为一个 20px 的圆点拉两兆多"——
  *   那个判断没错，错的是当时没有缩略图这条路。现在有了（`lib/thumbs.ts`），判断跟着改。
  *   名字读不到时退回 childId（机器名），不编一个好听的说。
+ *   ★ 例外只有一处：**示例卡**的头像是 768 那一张（23 / 26 KB），因为访客那一支
+ *     拿的是 `public/` 下的静态文件，而静态文件看不懂 `?w=`（见 `listDemoCardPicker`）。
+ *     界面这一层不为此分岔——它照旧只认 `faceUrl` 这个字段。
  */
 
 import Link from 'next/link'
@@ -142,7 +145,7 @@ export type ChildOption = {
 export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
   const router = useRouter()
   const { current: voiceId, setVoice, voices, voiceError } = useVoice()
-  const { permissions, configured } = useAuth()
+  const { allowed: mayCreate, configured } = useAuth()
   /* ★ 三处"要登录才能做"的入口各有一份，共用一个 hook（`SignInGate`）：
      创作（这里）、生成人物（`NewCharacterButton`）、生成声音（`VoicePicker`）。 */
   const gate = useSignInGate()
@@ -230,17 +233,17 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
      警示按用户要求撤了，它们跟着删——留着会变成"两句没人读的判断"，
      下一个人会以为界面上还有一处地方在说这件事（现在没有，见 `.cl__bar` 那段注释） */
 
-  /* 优化用的是**文本**那一项。★ 与"能不能出书"（文本 + 图像）分开判：
-     只有图像权限的人照样能出书，但"把这句话改一改"动不了——两件事的边界不一样。
-     ★ 判据从"用户填没填 key"换成了两句**不在用户手上**的事实（2026-10-17，ADR-0009）：
-       `permissions.text` 是站长给的，`configured.text` 是站里配的。
-       而它们**要分开**：一句是"找我要权限"，一句是"站里还没配好，等一等"。 */
-  const textBlocked = !permissions.text || !configured.text
-  /* ★ 跑一本书要的两件事（与 `lib/auth/state.ts` 的 `canCreate` 同一个判据）。
-     这里只是**体验**：真正管用的是 `/api/books` 那道 403（见工单 07 第 1 条）。 */
-  /** 四项权限齐了没有。★ 与"站里配齐了没有"分开：这两件事的下一步不一样 */
-  const hasPermission = canCreate(permissions)
-  const allowed = hasPermission && canCreate(configured)
+  /* 优化用的是**文本**那一项。★ 与"能不能出书"分开判：站里只配了图像时，
+     照样能出书，但"把这句话改一改"动不了——两件事的边界不一样。
+     ★ 判据是两句**不在用户手上**的事实（2026-10-17 ADR-0009 + 2026-10-18 收成一位）：
+       `mayCreate` 是"站长有没有把这个人关掉"，`configured.text` 是"站里配没配文本模型"。
+       而它们**要分开**：一句是"找站长要权限"，一句是"站里还没配好，等一等"。 */
+  const textBlocked = !mayCreate || !configured.text
+  /* ★ 跑一本书要的两件事。这里只是**体验**：真正管用的是 `/api/books` 那道 403
+     （见工单 07 第 1 条）。
+     ★ 两句分开写是要紧的：`mayCreate` 是"这个人行不行"，`canCreate(configured)`
+     是"站里能不能画能写"——它们各自的下一步不一样（找站长 vs 等一等）。 */
+  const allowed = mayCreate && canCreate(configured)
   const [gateOpen, setGateOpen] = useState(false)
   /* ★ 建议**过期了没有**。用户提出建议之后又自己改了原句，那条建议就是照着旧句写的；
      照旧摆在下面而不说，等于让他拿一句对不上的话去替换。静态提示一句比偷偷清掉好：
@@ -309,11 +312,11 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
 
     /*
      * ★ 判权限用的是**刚才那一刻**问回来的那一份，不是渲染时那一份。
-     *   站长在管理页勾掉一个开关时，这个人这一屏上的 `permissions` 还是旧的
+     *   站长在管理页把某个人的权限收回去时，这个人这一屏上的 `allowed` 还是旧的
      *   （`AuthProvider` 只在挂载时问一次）——而"点开始创作时提示没有权限"
      *   说的正是**此刻**。
      */
-    const live = canCreate(verdict.permissions) && canCreate(verdict.configured)
+    const live = verdict.allowed && canCreate(verdict.configured)
     if (!live) {
       setGateOpen(true)
       setOpen(null)
@@ -531,7 +534,12 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
           ) : (
             /* ★ 原来是"进去第一步就是定他"——那句在第 1 步撤掉之后就不成立了，
                所以这里直接把人送过去，而不是先送进创作流再让他自己找。
-               建的还是同一张卡（`/character/new` 用的是创作流第 1 步那份 `ChildFields`）。 */
+               建的还是同一张卡（`/character/new` 用的是创作流第 1 步那份 `ChildFields`）。
+               ★ 2026-10-18：这一支**几乎走不到了**——访客现在也拿到两张示例卡
+               （`listDemoCardPicker`，见 `home/page.tsx`），而登录的人那一支
+               本来就有 `withDemoCards` 垫底。留着它是因为"一张卡都没有"仍然是一种
+               合法状态（比如 `public/demo/cards/` 没跟着发布），那时药丸必须
+               如实说"还没有"，而**不是**渲染一颗点开是空表的下拉。 */
             <Link className="cl__pill cl__pill--new" href="/character/new">
               <span className="cl__pill-plus" aria-hidden="true">
                 +
@@ -714,7 +722,7 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
               aria-busy={thinking}
               title={
                 textBlocked
-                  ? `优化提示词要用文字模型——${permissions.text ? '而站里今天还没配文本模型' : '而你的账号没有权限，请联系管理员'}`
+                  ? `优化提示词要用文字模型——${mayCreate ? '而站里今天还没配文本模型' : '而你的账号没有权限，请联系管理员'}`
                   : ready
                     ? '优化提示词：把这句话改得更具体（先给你看，不直接替换）'
                     : '优化提示词：先写一句话'
@@ -781,7 +789,8 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
             ★ 只写**那一句**（用户 2026-10-17 的原话：「就显示"当前用户没有权限，
               请联系管理员"，也不用写是什么没有权限」）。写"缺：图像"看着更周到，
               实际是把站长的配置细节摊给了一个刚进门的人看，而他既改不了也不关心。
-              "怎么联系"改由侧栏那一格「帮助」说（那里有条目、有邮箱）。
+              ★ 2026-10-18：「帮助」那一格连同它的邮箱整条拆掉了，所以这一句是这句话
+              唯一的出口——"联系管理员"要靠读者自己知道去哪儿找站长（README 上有）。
             ★ 唯一还分岔的一处是"你缺权限"与"站里没配好"：后者不是他的错，
               说成"你没有权限"会让他去问一件根本不由他决定的事。
             ★ 与服务端那句 `NO_PERMISSION_MESSAGE` **不是同一句**：那一句是接口回的
@@ -789,7 +798,7 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
               两句都指向同一件事，改的时候一起看一眼。 */}
         {gateOpen && !allowed ? (
           <p className="cl__gate" role="alert">
-            {hasPermission
+            {mayCreate
               ? '站里今天还没配齐创作要的模型，这不是你的问题——等一等，或者联系管理员'
               : '当前用户没有权限，请联系管理员'}
           </p>

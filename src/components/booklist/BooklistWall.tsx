@@ -53,7 +53,7 @@ export default function BooklistWall({ entries }: BooklistWallProps) {
             现在这一句短、prettier 不会折它；留着 `prettier-ignore` 是为了下一次
             有人把它改长时，这道闸还在。 */}
         {/* prettier-ignore */}
-        <p className="blw__sub">先翻翻这 12 本<b>样书</b>，再去为孩子做一本专属的</p>
+        <p className="blw__sub">先翻翻这 12 本<b>样书</b>，再去为孩子做一本专属的。</p>
       </header>
 
       <ul className="blw__grid">

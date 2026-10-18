@@ -90,7 +90,6 @@ import gsap from 'gsap'
 import { useAuth } from '@/components/auth/AuthProvider.tsx'
 import ProfileBackdrop from '@/components/account/ProfileBackdrop.tsx'
 import StudioBackdrop from '@/components/shell/StudioBackdrop.tsx'
-import HelpDialog from '@/components/shell/HelpDialog.tsx'
 import SettingsDialog from '@/components/shell/SettingsDialog.tsx'
 import { DEFAULT_AVATAR } from '@/lib/avatars.ts'
 import { maskPhone } from '@/lib/auth/state.ts'
@@ -237,8 +236,6 @@ function NavContent({ item, avatar }: { item: NavItem; avatar?: string | null })
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const [collapsed, setCollapsed] = useState(false)
-  /** 「帮助」那个弹窗开着没有。★ 与折叠不同，它不持久化：关了就是关了 */
-  const [helpOpen, setHelpOpen] = useState(false)
   /** 「设置」那个弹窗开着没有。同上，不持久化——里面那些偏好自己会落盘 */
   const [settingsOpen, setSettingsOpen] = useState(false)
   const { user } = useAuth()
@@ -454,38 +451,21 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </button>
 
           {/*
-           * ★ 这一格的前身是一颗「模型与密钥」的按钮（点了开那个抽屉）。
-           *   2026-10-16 用户要求取消用户自己填 api-key 的模块，抽屉整格拆掉了。
-           *   2026-10-17 这里先变成过一行常驻的说明，当晚用户要求：「这句话不要明着
-           *   写出来，左下角弄一个"帮助"的模块，然后用户点击，就出现一个弹窗」——
-           *   所以现在是一颗**钮**，那几段说明搬进了 `HelpDialog`。
+           * ★ 这里原来是一格「帮助」（点开一个弹窗：密钥谁配的 / 没有权限怎么办
+           *   → **就在那里提申请** / 为什么看不到别人的书 / 数据存在哪）。
+           *   2026-10-18 用户要求整条拆掉，理由是那个模块的主要用途（申请权限）
+           *   没有了：权限改成**注册即全开**，没有人需要申请。
            *
-           * ★ 换成钮不是把话藏起来：那颗钮上写着「帮助」，点开就是原来那几段
-           *   （还更全）。常驻三行说明的代价是它会被读成背景噪音——
-           *   真正需要它的人（撞上"没有权限"的那一个）反而先扫过去。
-           * ★ 它用 `shell__link` 那套外形（与上面几格同一副骨架），
-           *   因为它确实是"点一下会打开一个东西"的那类动作，与「收起侧栏」不同。
-           *   ★ 2026-10-17 顺手删掉了它原来那个 `shell__link--btn`：全仓库没有
-           *     任何一条 CSS 规则选中过那个类，是个死钩子。 */}
-          <button
-            type="button"
-            className="shell__link"
-            onClick={() => setHelpOpen(true)}
-            title="帮助"
-          >
-            <svg className="shell__icon" viewBox="0 0 24 24" aria-hidden="true">
-              <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="1.6" />
-              <path
-                d="M9.6 9.4a2.5 2.5 0 1 1 3.6 2.3c-.7.4-1.2.9-1.2 1.7v.4"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                strokeLinecap="round"
-              />
-              <circle cx="12" cy="17" r="1.1" fill="currentColor" />
-            </svg>
-            <span className="shell__link-label">帮助</span>
-          </button>
+           * ★ 为什么是**删掉**而不是"留着一个只剩三条说明的弹窗"：
+           *   那三条里两条是"说明这个站的规则"（按账号分开存、数据在服务器上），
+           *   而它们从来不是用户会主动去点开找的东西——常驻的三行说明被读成背景噪音，
+           *   收进一个要点一下的地方更没人点。用户要的就是这一格不在。
+           *
+           * ★ 留下的次序仍然是那句话：先是谁在用（个人主页），再是这个人在哪儿调
+           *   （设置），最后是一个开关（收起侧栏）。「帮助」走了之后，
+           *   侧栏底部不再有"还有问题去哪问"那一格。
+           *   ★ 那条路上的邮箱（`CONTACT_EMAIL`）没有跟着消失：它仍然是
+           *     「声音」那一屏与朗读那几句话里"找谁"的答案。 */}
 
           {/*
            * ★ 「收起侧栏」在这里，**底部那一格的最下面**。
@@ -529,9 +509,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       <div className="shell__main">{children}</div>
 
-      {/* ★ 弹窗挂在**壳上**（不是某一页里）：侧栏在哪一屏都在，所以「帮助」与
-          「设置」也在哪一屏都点得开——挂进某一页的话，只有那一页能用 */}
-      {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} />}
+      {/* ★ 弹窗挂在**壳上**（不是某一页里）：侧栏在哪一屏都在，所以「设置」
+          也在哪一屏都点得开——挂进某一页的话，只有那一页能用 */}
       {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
     </div>
   )

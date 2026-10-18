@@ -25,6 +25,8 @@
  * 挂个 `?w=` 上去会静悄悄回原图，那是个骗人的优化），所以这里**导出时就预生成**一份小的，
  * 由 `book-source.ts` 在磁盘上有 `.webp` 时优先用它。★ 原图仍然留在目录里：
  * 它是清单指的那份记录，缩略图只是给人看的那一层。
+ * ★ 2026-10-18：这一段的实现搬进了 `webp-siblings.mts`，与示例卡
+ *   （`export-demo-cards.mts`，768 档、`.jpg`）共用同一份——两边只差扩展名与档位两个参数。
  *
  * 只想补缩略图、不重拷整本书（比如图已经在了、只是第一次没有 webp）：
  *
@@ -33,44 +35,18 @@
  * ```
  */
 
-import { copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
-
-import sharp from 'sharp'
 
 import { assetPathInDemo, DEMO_DIR } from '../src/lib/book-source.ts'
 import { READER_PAGE_WIDTH, THUMB_QUALITY } from '../src/lib/thumbs.ts'
 import { arg, readEnv } from './env.mts'
+import { writeWebpSiblings } from './webp-siblings.mts'
 
 type BookJson = {
   bookId: string
   illustrations: { asset: { path: string } }[]
   errors: { pageNo: number }[]
-}
-
-/**
- * 给目录里每张 `.png` 生成一个 1024 档的 `.webp` 兄弟文件。
- * 返回省下的字节数——打印出来是为了"这一屏快了多少"有个数，不是一句"优化过了"。
- */
-async function writeWebpSiblings(
-  dir: string,
-): Promise<{ made: number; pngBytes: number; webpBytes: number }> {
-  let made = 0
-  let pngBytes = 0
-  let webpBytes = 0
-  for (const name of await readdir(dir)) {
-    if (!/\.png$/i.test(name)) continue
-    const source = join(dir, name)
-    pngBytes += (await stat(source)).size
-    const out = await sharp(source)
-      .resize({ width: READER_PAGE_WIDTH, withoutEnlargement: true })
-      .webp({ quality: THUMB_QUALITY })
-      .toBuffer()
-    webpBytes += out.length
-    await writeFile(join(dir, name.replace(/\.png$/i, '.webp')), out)
-    made += 1
-  }
-  return { made, pngBytes, webpBytes }
 }
 
 const kb = (bytes: number): string => `${(bytes / 1024).toFixed(0)} KB`
@@ -119,11 +95,11 @@ async function main(): Promise<void> {
     process.exitCode = missing.length === 0 ? 0 : 1
   }
 
-  const thumbs = await writeWebpSiblings(to)
+  const thumbs = await writeWebpSiblings(to, { width: READER_PAGE_WIDTH })
   process.stdout.write(
     (thumbsOnly ? `补缩略图 ${bookId}\n` : '') +
       `  缩略图 ${thumbs.made} 张（${READER_PAGE_WIDTH}px webp q${THUMB_QUALITY}）：` +
-      `原图合计 ${kb(thumbs.pngBytes)} → 小的合计 ${kb(thumbs.webpBytes)}\n` +
+      `原图合计 ${kb(thumbs.sourceBytes)} → 小的合计 ${kb(thumbs.webpBytes)}\n` +
       `  阅读器：/reader/${bookId}\n`,
   )
 }

@@ -48,7 +48,7 @@ const BACKEND_USER = {
   nickname: '小满妈妈',
   role: 'USER',
   createdAt: '2026-10-16T22:11:02.645706+08:00',
-  permissions: { text: true, image: true, vision: false, speech: false },
+  allowed: true,
 }
 
 function bodyOf(call: { init: RequestInit }): Record<string, unknown> {
@@ -174,18 +174,34 @@ describe('loginWithPassword', () => {
 })
 
 describe('fetchMe', () => {
-  it('登录着：user + permissions + configured 三样都给上层', async () => {
+  it('登录着：user + allowed + configured 三样都给上层', async () => {
     stubFetch({
       body: {
         user: BACKEND_USER,
-        permissions: BACKEND_USER.permissions,
+        allowed: BACKEND_USER.allowed,
         configured: { text: true, image: true, vision: false, speech: true },
       },
     })
 
     const result = await fetchMe()
 
+    expect(result.ok && !('signedOut' in result) && result.allowed).toBe(true)
     expect(result.ok && !('signedOut' in result) && result.configured.speech).toBe(true)
+  })
+
+  it('★ configured 认不出来时按"站里什么都没配"算，而不是拿一坨读不懂的东西当"配好了"', async () => {
+    stubFetch({
+      body: { user: BACKEND_USER, allowed: true, configured: { text: true, image: 'yes' } },
+    })
+
+    const result = await fetchMe()
+
+    expect(result.ok && !('signedOut' in result) && result.configured).toEqual({
+      text: false,
+      image: false,
+      vision: false,
+      speech: false,
+    })
   })
 
   it('★ 401 是"没登录"（正常结果），503 才是"账号服务连不上"（错误）', async () => {

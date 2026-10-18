@@ -56,15 +56,15 @@ export default function GenerationSetupDialog({
   busy = false,
 }: GenerationSetupDialogProps) {
   const { current, voices, canNarrate, narrateBlock } = useVoice()
-  const { permissions, configured } = useAuth()
+  const { allowed: mayCreate, configured } = useAuth()
   /**
    * ★ 第二道闸（工单 07 第 1 条）。第一道在 `CreateLanding` 那颗「开始创作」上，
    *   它拦的是"按下去的那一刻"。这一道拦的是**这中间**：弹窗已经开着的时候，
-   *   站长在管理页把某个人的图像关掉了——而那个人的弹窗还开着，
+   *   站长在管理页把那个人的权限收回了——而他的弹窗还开着，
    *   再按一次「开始创作」就是拿着一个过期的判断往下走。
    *   两道都只是体验；真正管用的是 `/api/books` 那条 403。
    */
-  const allowed = canCreate(permissions) && canCreate(configured)
+  const allowed = mayCreate && canCreate(configured)
   const [pages, setPages] = useState<number>(DEFAULT_PAGES)
   /**
    * 「要不要朗读」是**这一本**的属性（进请求体的 `voiceId`），不是设置项——

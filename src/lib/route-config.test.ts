@@ -34,7 +34,9 @@ const SEGMENT_CONFIGS = [
  * 会话型 BFF 的判据：**它自己问那道闸**，而不是一份目录名单。
  *
  * ★ 2026-10-17 改过一次，原因是名单漏了。原来这里写死四个目录
- *   （`api/auth` / `api/admin` / `api/voices` / `api/permission-requests`），
+ *   （`api/auth` / `api/admin` / `api/voices` / `api/permission-requests`；
+ *   ★ 最后那个 2026-10-18 随权限申请一起拆了，而这正说明了名单的坏处——
+ *   它会过期，而扫标记不会），
  *   而当天实测：**11 个目录、35 条路由**都在读 cookie（`api/books`、`api/cards`、
  *   `api/children`、`api/voice`、`api/optimize`、`api/assets` … 全都不在名单里）。
  *   现状当时是干净的（43 条路由一个不漏），但那份干净**靠的是巧合**：

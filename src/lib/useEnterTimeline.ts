@@ -190,10 +190,22 @@ export function useEnterTimeline(
             take?.at ?? step.at,
           )
         }
-        tl.from(
+        /* ★ 这一条必须是 `to(0)`，**不能**写成 `from(len)`（2026-10-18 修的）。
+           上面那句 `gsap.set` 已经把当前的 `strokeDashoffset` 写成了 `len`，
+           而 `from()` 的意思是"从这个值动到**当前值**"——当前值正好也是 `len`，
+           于是这一条动了个寂寞：两笔装饰被 `stroke-dasharray = len` 整条 dash 掉之后
+           再也没画回来，屏幕上什么都不剩。用户报的原话是
+           "「今天想讲一个什么样的故事？」这几个字四周的图标怎么没有了"。
+           ★ 量到的现场（1280×900，`/home`）：四条 path 的
+             `stroke-dashoffset` 分别等于各自的 `stroke-dasharray`（66/29/86/29px），
+             即"整条描边都在空隙里"；把 offset 手动改成 0，两笔立刻出现。
+           ★ 起手仍然是"没画出来"（`gsap.set` 那一步留着），终点是 0 —— 这与本文件
+             开头那条"默认态就是画完的样子"不冲突：`prefers-reduced-motion` 与禁 JS
+             时这一段根本不会跑，用户看到的就是画完的两笔。 */
+        tl.to(
           strokes,
           {
-            strokeDashoffset: (i: number, el: SVGPathElement) => el.getTotalLength(),
+            strokeDashoffset: 0,
             duration: 0.7,
             ease: 'power1.inOut',
           },

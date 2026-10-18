@@ -1,10 +1,13 @@
 -- ============================================================================
--- 小主角的账号与配置表 —— 六张，一张不多
+-- 小主角的账号与配置表 —— 五张，一张不多
 --
 -- ★ 这句原来是"三张，一张不多"（2026-10-15 写第一版时确实是三张）。
---   到现在这六张是：users / user_permissions / voices /
---   permission_requests / sms_send_log / sms_codes ——
---   每加一张都有它当时非加不可的理由，而那些理由各自写在那一张上面。
+--   ★ 2026-10-18：`permission_requests`（权限申请）随"权限收成一位、注册即全开"
+--   一起退场，所以从六张回到五张：users / user_permissions / voices /
+--   sms_send_log / sms_codes —— 每加一张都有它当时非加不可的理由，
+--   而那些理由各自写在那一张上面。
+--   ★ 它**只在新建的库上不再出现**：已经建过的库里那张表还在（`SchemaUpgrades`
+--   刻意不做 DROP，见它的文件头），只是没有任何代码再读写它。
 --   ★ 把总数写在这里是因为它会过期：这一行 2026-10-17 就过期过一次
 --   （加了 voices 之后没人改它）。改表的时候顺手改这一行。
 --
@@ -19,7 +22,13 @@
 --       **整个后端起不来**——`spring.sql.init` 挂在那句上，进程直接退。
 --       所以：**次级索引一律写成建表语句里的 `KEY 名字 (列)`**，两个库都认
 --       （`KEY` 那种写法 2026-10-17 在 H2 的 MySQL 兼容档与 MySQL 8.0.46 上各测过一次，
---       见 `permission_requests` 那条与工单 03 的记录）。
+--       见工单 03 的记录）。
+--       ★ 2026-10-18：这条纪律留着，而这份文件里此刻**一条 `KEY` 都没有**——
+--       唯一那条（`permission_requests` 的排序索引）随那张表一起退场了。
+--       下次要加索引照这个写法写，别写 `CREATE INDEX`。
+--       现在唯一"写在建表语句里的索引"是那两条唯一约束
+--       （`uk_users_account` / `uk_voices_user_voice`），
+--       `SchemaSqlPortabilityTest` 拿它们当"索引这件事我们确实做了"的锚点。
 --       ★ 而"给**已经建过**的表补索引"没有 `IF NOT EXISTS` 可用：
 --       那种情况按 `config/SchemaUpgrades` 的做法来（先问库，再 ALTER）。
 -- ★ 时间戳一律由 Java 写（没有 `DEFAULT CURRENT_TIMESTAMP`）：两边时钟语义不同，
@@ -65,16 +74,36 @@ CREATE TABLE IF NOT EXISTS users (
   CONSTRAINT uk_users_account UNIQUE (account)
 );
 
--- 四个能力开关，一人一行。★ 单独一张表而不是往 users 上加四列：
---   这是"授权"这件事，它的写入方只有管理页一个，改的是它、审计的也是它；
---   混进 users 之后，"改昵称"与"发权限"共用一条 UPDATE，日志里再也分不开
+-- 「这个人有没有创作权」——**一位**，一人一行（2026-10-18 由四列收成一列）。
+--
+-- ★ 收成一位之后为什么**仍然是单独一张表**（而不是往 `users` 上加一列）：
+--   这两张表的**写入方不同**。这张表只有管理页会改，改的是"授权"这件事；
+--   而 `users` 那边是这个人自己在改昵称、服务端在记最后登录时间。
+--   混在一起之后，"谁把这个人的权限关了"与"谁改了昵称"共用一条 UPDATE，
+--   日志里再也分不开。
+--
+-- ★ 2026-10-18 用户定的口径：**登录之后就能用各种模型，不用站长分配**；
+--   站长那边留一个开关用来"把某个人的权限收回来"。所以存的是**一位**，
+--   而不是"哪几项能力"——四项同真同假，分开存就是四个必然一起动的列。
+--
+-- ★ `DEFAULT 1` 是这一轮最要紧的一个字面量：**默认给上**。
+--   它对**新写进来的行**成立（建号时也显式写 1，见 `UserPermission#allowedFor`），
+--   而对**已经建过的库**它就是"老账号自动给上"那一句的落地——
+--   `SchemaUpgrades` 补这一列时走的正是这个默认值。
+--
+-- ★ 一个理论上的疑问，先答在这里：这张表里**没有行**的人算什么？
+--   算"**有**权限"。缺行只可能是"这个号是手写进 users 的"，
+--   而既然默认是给上，"没被收回过"与"没有那一行"是同一件事。
+--   判据只有一处：`AuthService#allowedOf`。
+--
+-- ★ 老库上原来那四列 `can_text / can_image / can_vision / can_speech` **还在**，
+--   而没有任何代码读它们——`SchemaUpgrades` 刻意不做 DROP（理由在它的文件头：
+--   "启动时按代码重排你的库"是一个会吃掉数据的动作）。
+--   新库按下面这一份建，所以只有老库上会看到那四列。
 CREATE TABLE IF NOT EXISTS user_permissions (
   user_id    BIGINT   NOT NULL,
-  -- 文本（写故事）/ 图像（画插画）/ 视觉（核对形象）/ 语音（朗读）
-  can_text   TINYINT  NOT NULL DEFAULT 0,
-  can_image  TINYINT  NOT NULL DEFAULT 0,
-  can_vision TINYINT  NOT NULL DEFAULT 0,
-  can_speech TINYINT  NOT NULL DEFAULT 0,
+  -- 1 = 能用（默认），0 = 站长把这个人的权限收回了
+  allowed    TINYINT  NOT NULL DEFAULT 1,
   updated_at DATETIME NOT NULL,
   PRIMARY KEY (user_id)
 );
@@ -112,45 +141,17 @@ CREATE TABLE IF NOT EXISTS sms_codes (
   PRIMARY KEY (phone)
 );
 
--- ── 权限申请（2026-10-17）─────────────────────────────────────────────────
--- 用户 2026-10-17 的原话：「现在是用户要发邮件，可以修改一下，帮助这有一个发送请求，
--- 点击发送请求之后，就可以先管理者申请权限了，然后管理端就接收到申请，
--- 这也比发邮件好一点，管理端也可以清楚的看到是谁发送的请求」。
+-- ── 权限申请（2026-10-17 加，2026-10-18 **退场**）────────────────────────────
+-- 这里原来有一张 `permission_requests`（用户提申请 → 站长在管理页批或拒）。
+-- 2026-10-18 它整条拆掉了：权限改成**注册即全开**，于是没有人需要申请，
+-- 而"帮助"里那个唯一的入口也随模块一起删了。
 --
--- ★ 四个 `wants_*` 列**照抄 `user_permissions` 的四个名字**（不是另起一套简写）：
---   申请的是"哪几个能力"，而批准的动作就是把这四列原样搬进 `user_permissions`。
---   名字一样，那次搬运才是一行直白的赋值；换个名字就得有一张映射表，
---   而那张表迟早会有一格写错——错法是"点了通过、结果开的是另一个能力"。
---
--- ★ `status` 三态（PENDING / APPROVED / REJECTED），**不是"有就是没处理"**：
---   拒掉的那一条必须留着。它是"这个人申请过、被拒了"的唯一记录，
---   而"看不见已处理的申请"会让申请人反复提交同一件事、让站长反复拒同一件事。
---
--- ★ `note` 就是原来那封邮件里写的东西（"你要用的是哪一项、用来做什么"）。
---   ★ 它**可空**：四个勾选已经说清了"要哪几项"，说明是加分项不是门槛——
---     拿它当必填只会逼人写一句"想做绘本"。
-CREATE TABLE IF NOT EXISTS permission_requests (
-  id           BIGINT      NOT NULL AUTO_INCREMENT,
-  user_id      BIGINT      NOT NULL,
-  wants_text   TINYINT     NOT NULL DEFAULT 0,
-  wants_image  TINYINT     NOT NULL DEFAULT 0,
-  wants_vision TINYINT     NOT NULL DEFAULT 0,
-  wants_speech TINYINT     NOT NULL DEFAULT 0,
-  note         VARCHAR(500) DEFAULT NULL,
-  -- PENDING / APPROVED / REJECTED
-  status       VARCHAR(16) NOT NULL DEFAULT 'PENDING',
-  created_at   DATETIME    NOT NULL,
-  -- 谁批的、什么时候。★ 只有管理员能动，所以这两列就是一张"谁开的这个口子"的账
-  decided_at   DATETIME    DEFAULT NULL,
-  decided_by   BIGINT      DEFAULT NULL,
-  PRIMARY KEY (id),
-  KEY idx_permission_requests_status (status, created_at)
-);
-
--- ★ 列表按"待处理在前、新的在前"取，这条索引就是给那个排序用的
---   （写在建表语句里，不是一句 CREATE INDEX —— 理由见文件头那一条）。
---   没有它，管理页每次打开都要全表排序一遍——现在只有五个人看不出差别，
---   而这张表是**只增不减**的（已拒的也留着），所以它一定会长大。
+-- ★ 为什么建表语句是**删掉**而不是留着：留着的话，新库上会凭空长出一张
+--   永远没有代码读写的表，而下一个人会以为它还在生效。
+-- ★ 而**已经建过的库里那张表还在**，里面那些已批/已拒的记录也还在——
+--   `SchemaUpgrades` 刻意不做 DROP（那个类上的原话："启动时按代码重排你的库"
+--   是一个会吃掉数据的动作，不该顺手拥有）。这是一笔有意的取舍：
+--   表在、数据在、没有读者。真要清，那是一次单独的手工操作，不是启动时的副作用。
 
 -- ── 音色（2026-10-17，工单 16）─────────────────────────────────────────────
 -- 用户 2026-10-17 定的口径：「音色一并挂到账号上」。它原来住在浏览器

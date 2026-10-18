@@ -80,10 +80,7 @@ export async function listChildren(root: string = assetRoot()): Promise<Resolved
   const store = createProfileStore(await createFsStore(root))
   // 目录还没建过时 `list()` 是空表（store 那一层吞掉了），所以这里不用 try
   const runtime = (await store.list()).map((profile) => ({ profile, source: 'runtime' as const }))
-  const demo = (await readProfilesIn(demoDir())).map((profile) => ({
-    profile,
-    source: 'demo' as const,
-  }))
+  const demo = await listDemoChildren()
 
   // 同 childId 时运行期那条赢：本机常常既有一份示例、又有一份家长自己建的（改过名字）
   const byId = new Map<string, ResolvedChild>()
@@ -96,6 +93,25 @@ export async function listChildren(root: string = assetRoot()): Promise<Resolved
     if (a.source === 'demo') return a.profile.childId.localeCompare(b.profile.childId)
     return b.profile.createdAt - a.profile.createdAt
   })
+}
+
+/**
+ * **只有示例**的那一份（来源一律是 `demo`），按 childId 排序。
+ *
+ * ★ 2026-10-18 抽出来，因为访客那一屏要的正是"来源是示例"这一条，而它**不能**
+ *   靠 `listChildren(<示例根>)` 得到：那个函数里"运行期那一份"读的是 `<根>/children/`，
+ *   而示例根底下正好就是同一批档案，于是同一份档案会以 `source: 'runtime'` 出现
+ *   （同 id 时运行期赢）。翻面的后果不是好看不好看：卡片上"示例"两个字、
+ *   以及"示例角色不给删"那颗按钮的判据，全都由这个字段决定。
+ *
+ * ★ 所以"读示例那一份"只有这一处实现，`listChildren` 也用它。
+ */
+export async function listDemoChildren(): Promise<ResolvedChild[]> {
+  const demo = (await readProfilesIn(demoDir())).map((profile) => ({
+    profile,
+    source: 'demo' as const,
+  }))
+  return demo.sort((a, b) => a.profile.childId.localeCompare(b.profile.childId))
 }
 
 /** 一个孩子。childId 不合法时回 null（**不抛**）：它来自 URL 那一段，那是用户输入 */

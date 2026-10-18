@@ -3,15 +3,15 @@ import { describe, expect, it } from 'vitest'
 import {
   canCreate,
   maskPhone,
-  missingForCreate,
   NO_PERMISSIONS,
+  parsePermissions,
   parseUser,
   safeNext,
   type Permissions,
 } from './state.ts'
 
 /**
- * `state.ts` 剩下三个纯函数 + 两个权限推导。
+ * `state.ts` 剩下三个纯函数 + 两处形状检查（`canCreate` / `parsePermissions`）。
  * ★ 上一版这里还有"用户 round-trip / 在册号码表 / 底账"三组用例——它们测的是
  * 浏览器替后端记的那些账。后端落地之后那些账没了，用例跟着走：
  * "登出再登入昵称还在"这条性质现在由**服务端**保证，
@@ -28,7 +28,7 @@ function user(overrides: Record<string, unknown> = {}): unknown {
     nickname: '小满妈妈',
     role: 'USER',
     createdAt: '2026-10-16T22:11:02.645706+08:00',
-    permissions: allOn,
+    allowed: true,
     ...overrides,
   }
 }
@@ -75,7 +75,7 @@ describe('parseUser —— 接口回的东西也要逐字段验', () => {
   it('形状齐全才认', () => {
     const parsed = parseUser(user())
     expect(parsed?.userId).toBe('7')
-    expect(parsed?.permissions.text).toBe(true)
+    expect(parsed?.allowed).toBe(true)
   })
 
   it('缺字段 / 类型不对 / 不是对象，全是 null', () => {
@@ -101,14 +101,29 @@ describe('parseUser —— 接口回的东西也要逐字段验', () => {
     expect(parseUser(user({ nickname: '' }))?.nickname).toBe('')
   })
 
-  it('★ 权限表缺一项就整份不认：半个权限表比没有更坏', () => {
-    expect(parseUser(user({ permissions: { text: true, image: true, vision: true } }))).toBeNull()
-    expect(parseUser(user({ permissions: { ...allOn, speech: 'yes' } }))).toBeNull()
-    expect(parseUser(user({ permissions: NO_PERMISSIONS }))?.permissions.speech).toBe(false)
+  it('★ 「有没有创作权」那一位必须是布尔：缺了就整份不认', () => {
+    // ★ 不能把"少回了一个字段"当成 `false`——那会显示成"你没有权限，请联系管理员"，
+    //   一句要人去找站长的假话。认不出来的症状该是那句"登录态不是我们认识的形状"
+    expect(parseUser(user({ allowed: undefined }))).toBeNull()
+    expect(parseUser(user({ allowed: 'yes' }))).toBeNull()
+    expect(parseUser(user({ allowed: false }))?.allowed).toBe(false)
   })
 })
 
-describe('能不能开始创作', () => {
+describe('parsePermissions —— 站里配了哪几项（形状检查）', () => {
+  it('四项齐全才认，缺一项就当整份认不出来', () => {
+    expect(parsePermissions(allOn)).toEqual(allOn)
+    expect(parsePermissions({ text: true, image: true, vision: true })).toBeNull()
+    expect(parsePermissions({ ...allOn, speech: 'yes' })).toBeNull()
+    expect(parsePermissions(null)).toBeNull()
+  })
+
+  it('四项全关是一份**合法**的读数（站里今天什么都没配），不是认不出来', () => {
+    expect(parsePermissions(NO_PERMISSIONS)).toEqual(NO_PERMISSIONS)
+  })
+})
+
+describe('站里配齐了能不能做一本书', () => {
   it('要文本 + 图像两样（这一本最低要这两件事）', () => {
     expect(canCreate(allOn)).toBe(true)
     expect(canCreate({ ...allOn, image: false })).toBe(false)
@@ -116,11 +131,5 @@ describe('能不能开始创作', () => {
     expect(canCreate(NO_PERMISSIONS)).toBe(false)
     // 视觉与语音是"更好"，不是"能不能开始"
     expect(canCreate({ ...allOn, vision: false, speech: false })).toBe(true)
-  })
-
-  it('缺哪几个要说得出名字——管理员看到提示时要能一眼答上勾哪个', () => {
-    expect(missingForCreate(NO_PERMISSIONS)).toEqual(['文字', '图像'])
-    expect(missingForCreate({ ...allOn, image: false })).toEqual(['图像'])
-    expect(missingForCreate(allOn)).toEqual([])
   })
 })

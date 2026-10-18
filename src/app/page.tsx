@@ -7,6 +7,7 @@ import HeroTypewriter, { type TypewriterLine } from '@/components/hero/HeroTypew
 import HighlightsReel from '@/components/highlights/HighlightsReel'
 import SceneBackdrop from '@/components/scene/SceneBackdrop'
 import StartCreating from '@/components/hero/StartCreating'
+import { readDemoBookAudio } from '@/lib/demo-book-audio'
 import { THEMES, artPath } from '@/lib/themes'
 
 /**
@@ -26,6 +27,11 @@ import { THEMES, artPath } from '@/lib/themes'
  *
  * 主张句与副句已合并成一行轮流打字（HeroTypewriter），省出一整行竖向空间。
  * min-width 兜底见 globals.css 的 .home-hero。
+ *
+ * ★ 2026-10-18：这一页从**纯静态**变成要读一次盘 —— 第二屏那本书的朗读在不在，
+ *   只有服务端知道（`lib/demo-book-audio.ts` 问 `public/book/`，判据与书单那 12 本
+ *   同一条）。读盘不是动态 API，构建期问一次就够，这一页仍然是静态产物。
+ *   它决定的只有一件事：**朗读控件出不出现**（5 段全在才出，判据 ①）。
  */
 
 /**
@@ -62,7 +68,11 @@ const HERO_LINES: TypewriterLine[] = [
   },
 ]
 
-export default function HomePage() {
+export default async function HomePage() {
+  /* 第二屏那本书的朗读在不在盘上。★ 它是**服务端**的事（要 readdir），
+     所以在这一层问完再递下去；翻页组件那头收到的是算好的 URL 列表。 */
+  const bookAudio = await readDemoBookAudio()
+
   return (
     <>
       {/* --------------------------------------------------------------------
@@ -123,9 +133,13 @@ export default function HomePage() {
           「每一页都是同一个他」。论点不靠文字说，靠翻给人看：
           同一本《小宇的云》四个跨页，中途停下来让孩子选一次往哪朵云去。
 
+          朗读（`bookAudio`）2026-10-18 接上：5 段都在盘上时，这一节左下角那颗
+          "▶ 朗读"才真的响得起来 —— 取舍见 README §五，逐字稿见
+          docs/demo-narration-script.md。
+
           区间、叠入量与叶模型见 components/book/storybook-flip.css 顶部。
           -------------------------------------------------------------------- */}
-      <StorybookFlip />
+      <StorybookFlip audio={bookAudio} />
 
       {/* --------------------------------------------------------------------
           第三屏：项目亮点。

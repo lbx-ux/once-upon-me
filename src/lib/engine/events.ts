@@ -21,6 +21,9 @@
  *   前三个是每条事件都有的坐标，放进头部就不会出现"某个变体忘了带页号"。
  */
 
+import { NARRATION_PART_LABELS } from './domain.ts'
+import type { NarrationPart } from './domain.ts'
+
 /** 流水线阶段。人话文案由 UI 决定，这里只给语义名 */
 export const STAGES = [
   'planning',
@@ -80,7 +83,18 @@ export type EngineEventPayload = (
       verdict: 'pass' | 'flag' | 'block' | 'unavailable'
       reason?: string
     }
-  | { kind: 'narration'; voiceId: string; assetPath: string; reused: boolean }
+  | {
+      kind: 'narration'
+      voiceId: string
+      assetPath: string
+      reused: boolean
+      /**
+       * 这一份是这一页的哪一段（缺省 = 正文）。见 `domain.ts` 的 `Narration.part`。
+       * ★ 一页最多四段（正文 / 引导提问 / 选项 A / 选项 B），所以过程面板得说得出是哪一段——
+       *   四条"第 6 页配好音了"并排出现在屏幕上，等于什么都没说。
+       */
+      part?: NarrationPart
+    }
   | { kind: 'book-ready'; bookId: string; path: string; stats: Record<string, number> }
   | { kind: 'error'; code: string; message: string; fatal: boolean }
 ) & { stage?: Stage; pageNo?: number; attempt?: number }
@@ -167,8 +181,14 @@ export function describeEvent(event: EngineEvent): string {
       return `${page}不太像，正在重画（第 ${event.attempt ?? '?'} / ${event.maxAttempts} 次）：${event.reason}`
     case 'review':
       return `${page}${event.check === 'safety' ? '内容检查' : '前后连贯检查'}：${event.verdict}`
-    case 'narration':
-      return `${page}配好音了${event.reused ? '（复用已有录音）' : ''}`
+    case 'narration': {
+      // ★ 一页最多四段，所以"第 6 页配好音了"要带上**是哪一段**——
+      //   四条一模一样的句子并排出现在过程面板里，等于什么都没说。
+      //   正文那一档不带后缀：那是绝大多数情况，加一个"的正文"只是噪音。
+      const what =
+        event.part && event.part !== 'body' ? `的${NARRATION_PART_LABELS[event.part]}` : ''
+      return `${page}${what}配好音了${event.reused ? '（复用已有录音）' : ''}`
+    }
     case 'book-ready':
       return `书做好了：${event.bookId}`
     case 'error':

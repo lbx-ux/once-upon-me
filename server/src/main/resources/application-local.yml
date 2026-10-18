@@ -7,9 +7,20 @@
 #
 # ★ 它与生产那份的唯一差别就是这一段 datasource。SQL 走的是同一份
 #   `db/schema.sql`（那个文件里为什么只写两种库都认的语法，见它的文件头）。
+#
+# ★★ 2026-10-17 实测撞的一次，值得写在最显眼的地方：这一行缺省是**相对路径**，
+#   于是"用哪个库"由**进程的工作目录**决定。那天后端从**仓库根**起动了一次，
+#   H2 就在根上新建了一个**空库**（`.local-db/` 与 `server/.local-db/` 从此并存），
+#   而它里面**没有管理员账号**（`AccountSeeder` 只在"库里没有"时建号，
+#   本地 `.env.local` 里也没有 `APP_ADMIN_ACCOUNT/PASSWORD`）。
+#   症状是"口令昨天还好使，今天登不进去"——报的还是「这个号码还没设过密码」，
+#   与"库换了一个"差着十万八千里，所以那次查了很久。
+#   ⇒ 现在路径可以由 `APP_H2_PATH` 钉死，而 `server/run-local.cmd` 会把它设成
+#     **绝对路径**（按脚本自己所在目录算）。走那个入口起动，无论从哪里招手，
+#     落在的永远是同一个文件。
 spring:
   datasource:
-    url: jdbc:h2:file:./.local-db/xiaozhujue;MODE=MySQL;DATABASE_TO_LOWER=TRUE;AUTO_SERVER=TRUE
+    url: jdbc:h2:file:${APP_H2_PATH:./.local-db/xiaozhujue};MODE=MySQL;DATABASE_TO_LOWER=TRUE;AUTO_SERVER=TRUE
     driver-class-name: org.h2.Driver
     username: sa
     password: ""

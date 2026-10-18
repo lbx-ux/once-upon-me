@@ -1,7 +1,7 @@
 /**
  * voices/client.ts —— 「我的音色」那四条请求（**只在浏览器里跑**）
  *
- * ★ 与 `lib/admin/client.ts`、`lib/requests/client.ts` 同一条纪律：打的是**同源的 BFF**
+ * ★ 与 `lib/admin/client.ts`、`lib/auth/client.ts` 同一条纪律：打的是**同源的 BFF**
  *   （`/api/voices/*`），不是 Java 那个地址。理由写在 `auth/client.ts` 里那段
  *   （后端地址不进浏览器、票在 httpOnly cookie 里、跨源就没有 cookie）。
  *

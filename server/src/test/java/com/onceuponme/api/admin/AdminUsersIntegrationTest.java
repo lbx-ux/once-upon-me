@@ -27,7 +27,7 @@ import com.onceuponme.api.auth.DemoAccount;
  * 管理页的四个动作：建号 / 停号 / 删号 / 重置别人的密码（2026-10-17 用户要的）。
  *
  * <p>★ 这一组里**最要紧的一条**是「停号对一张已经发出去的票当场生效」。
- * 它才是"停用"这件事本身——其余三条（登不进来、复号能进、权限默认不开）
+ * 它才是"停用"这件事本身——其余几条（登不进来、复号能进、新号默认就有创作权）
  * 都是它的推论或者边角。判据选它是因为**只有真做才会不同**：
  * 一个只在登录时判一次的实现，前面那几条全绿，而这一条必红。
  *
@@ -48,8 +48,8 @@ class AdminUsersIntegrationTest {
   @Autowired private ObjectMapper json;
 
   @Test
-  @DisplayName("建号：默认四个能力一个都不开（「按能力授权」的下限就是「什么都不给」）")
-  void createUserGrantsNothingByDefault() throws Exception {
+  @DisplayName("建号：默认就有创作权（2026-10-18 的口径：注册即全开，站长只留收回那一下）")
+  void createUserIsAllowedByDefault() throws Exception {
     String admin = adminToken();
     mvc.perform(
             post("/api/admin/users")
@@ -60,10 +60,7 @@ class AdminUsersIntegrationTest {
         .andExpect(jsonPath("$.account").value("13900001001"))
         .andExpect(jsonPath("$.role").value("USER"))
         .andExpect(jsonPath("$.status").value("ACTIVE"))
-        .andExpect(jsonPath("$.permissions.text").value(false))
-        .andExpect(jsonPath("$.permissions.image").value(false))
-        .andExpect(jsonPath("$.permissions.vision").value(false))
-        .andExpect(jsonPath("$.permissions.speech").value(false));
+        .andExpect(jsonPath("$.allowed").value(true));
 
     // 建出来的号真的能登录（会建一条登不进的记录是纯粹的假成功）
     login("13900001001", "xin-zhanghao-1");
@@ -105,7 +102,7 @@ class AdminUsersIntegrationTest {
   void disablingKillsLiveSessionsImmediately() throws Exception {
     String admin = adminToken();
     String phone = "13900002001";
-    signUpAndGrant(admin, phone, "tinghao-123");
+    signUp(phone, "tinghao-123");
     String userToken = login(phone, "tinghao-123");
 
     // 停之前这张票是好使的——不先证这一下，下面的红就分不清是"停号生效了"还是"票本来就不行"
@@ -142,7 +139,7 @@ class AdminUsersIntegrationTest {
   void reEnablingLetsThemBackInWithoutResurrectingOldTickets() throws Exception {
     String admin = adminToken();
     String phone = "13900002002";
-    signUpAndGrant(admin, phone, "fuhao-1234");
+    signUp(phone, "fuhao-1234");
     String oldToken = login(phone, "fuhao-1234");
     long userId = userIdOf(admin, phone);
 
@@ -163,7 +160,7 @@ class AdminUsersIntegrationTest {
   void adminResetPasswordRevokesEverythingOld() throws Exception {
     String admin = adminToken();
     String phone = "13900003001";
-    signUpAndGrant(admin, phone, "jiu-mima-123");
+    signUp(phone, "jiu-mima-123");
     String userToken = login(phone, "jiu-mima-123");
     long userId = userIdOf(admin, phone);
 
@@ -227,7 +224,7 @@ class AdminUsersIntegrationTest {
   void deletionMakesOldTicketsExplainThemselves() throws Exception {
     String admin = adminToken();
     String phone = "13900004001";
-    signUpAndGrant(admin, phone, "shanhao-123");
+    signUp(phone, "shanhao-123");
     String userToken = login(phone, "shanhao-123");
     long userId = userIdOf(admin, phone);
 
@@ -276,67 +273,6 @@ class AdminUsersIntegrationTest {
   }
 
   /**
-   * ★ 删掉一个**提过申请**的号，申请列表必须还读得出来。
-   *
-   * <p>这一条是 2026-10-17 端到端验的时候真撞出来的：`permission_requests` 那几行
-   * 不跟着账号走，账号一没，那一行的 `account` 就成了空串。而空串在
-   * `parseRequestRow` 里是"这一行读不出来"——前端整份拒绝渲染，
-   * 于是站长看到的是「读不到申请列表」，而它其实好好的，只是混进了两个孤儿。
-   *
-   * <p>★ 判据选的是**别人那几条还在不在**，不是"这个人的没了"：
-   * "没了"在两种实现下都成立（整份拒绝渲染时列表也是空的），
-   * 只有"**列表本身还回得来、而且别人那条还在**"才能把
-   * "跟着账号一起删"与"留成孤儿"分开。
-   */
-  @Test
-  @DisplayName("★ 删掉一个提过申请的号之后，申请列表仍然读得出来——不能留一个看不出是谁的孤儿")
-  void deletingAnApplicantDoesNotBreakTheRequestList() throws Exception {
-    String admin = adminToken();
-
-    String victim = "13900006001";
-    signUp(victim, "beishan-1234");
-    String victimToken = login(victim, "beishan-1234");
-    mvc.perform(
-            post("/api/permission-requests")
-                .header("Authorization", "Bearer " + victimToken)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(send(Map.of("text", true, "image", false, "vision", false, "speech", false))))
-        .andExpect(status().isOk());
-
-    // 另一个人也提一条：他是"别人那几条还在不在"里的那个"别人"
-    String bystander = "13900006002";
-    signUp(bystander, "pangguan-123");
-    String bystanderToken = login(bystander, "pangguan-123");
-    mvc.perform(
-            post("/api/permission-requests")
-                .header("Authorization", "Bearer " + bystanderToken)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(send(Map.of("text", false, "image", true, "vision", false, "speech", false))))
-        .andExpect(status().isOk());
-
-    mvc.perform(
-            delete("/api/admin/users/" + userIdOf(admin, victim))
-                .header("Authorization", "Bearer " + admin))
-        .andExpect(status().isNoContent());
-
-    MvcResult listed =
-        mvc.perform(get("/api/admin/requests").header("Authorization", "Bearer " + admin))
-            .andExpect(status().isOk())
-            .andReturn();
-    var rows = json.readTree(listed.getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8));
-
-    // ★ 一条空账号都不许有：有了就是孤儿，而孤儿会让整列读不出来
-    for (var row : rows) {
-      org.junit.jupiter.api.Assertions.assertNotEquals(
-          "", row.get("account").asText(), "出现了看不出是谁的申请：这一行会让整列读不出来");
-    }
-    boolean bystanderKept =
-        rows.findValuesAsText("account").contains(bystander);
-    org.junit.jupiter.api.Assertions.assertTrue(
-        bystanderKept, "删掉一个人，不该把别人已经提过的申请也弄没");
-  }
-
-  /**
    * ★ `/check` 是给 BFF 里那些「只在 Next 一侧存在」的管理资源用的闸
    * （现在是模型配置：它写的是磁盘上那份文件，Java 碰不到）。
    *
@@ -376,18 +312,6 @@ class AdminUsersIntegrationTest {
                 .header("Authorization", "Bearer " + admin)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(send(Map.of("status", status))))
-        .andExpect(status().isOk());
-  }
-
-  /** 建一个号并把四个能力全开——这样"能不能用"那类断言不会被权限挡住，只测停号本身 */
-  private void signUpAndGrant(String admin, String phone, String password) throws Exception {
-    signUp(phone, password);
-    long userId = userIdOf(admin, phone);
-    mvc.perform(
-            patch("/api/admin/users/" + userId + "/permissions")
-                .header("Authorization", "Bearer " + admin)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(send(Map.of("text", true, "image", true, "vision", true, "speech", true))))
         .andExpect(status().isOk());
   }
 

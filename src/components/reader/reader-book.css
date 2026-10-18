@@ -17,13 +17,71 @@
  * ========================================================================== */
 
 .reader {
+  position: relative;
   padding: 24px 0 48px;
+  /* 舞台宽**只在这里写一次**：它现在有两个消费者 —— `.reader__stage` 的宽，
+     与下面 `__ambient` 那条遮罩的锚（舞台高 = 宽 × 2/3）。
+     ★ 与 `booklist-reader.css` 上那一对同名变量是**同一组数**，两处必须一起改：
+       两台阅读器的"一本翻开的书"看起来得是同一个大小。 */
+  --reader-stage-w: min(1120px, 96vw, 108vh);
+  --reader-stage-h: calc(var(--reader-stage-w) * 2 / 3);
+}
+
+/* ============================================================================
+ * §桌面 —— 点阵与暖光（2026-10-18 加）
+ *
+ * 与 `booklist-reader.css` 的 §桌面 是**同一张桌子**，只少了"被当前页染色"那一层：
+ * 这一屏装的是用户自己创作的书，没有离线取样出来的色表（那层的色是从盘上
+ * 108 张图里用 `scripts/sample-tints.py` 取的生成物），所以这一屏**不做染色**——
+ * 宁可少一层，也不要现算一个色：现算要么拖慢翻页，要么读的是跨域画布的空白。
+ *
+ * ★ 那两处注释（三层为什么只活在留白里、遮罩为什么锚在舞台高度上而不是百分比）
+ *   写在 `booklist-reader.css` 的同类规则上，这里不重抄 —— 那边的推导对这两条
+ *   逐字成立（两屏的版面结构是同一个：书 + 底栏 + 进度 + 一行说明）。
+ *   这里只有两个数不同：`.reader` 的上内边距是 24px（那边 20px），
+ *   于是遮罩里那个 calc 也跟着不同。**改任何一边的上下留白都要重推那一对停点。**
+ * ========================================================================== */
+
+.reader__ambient {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(circle, var(--dot) 0.75px, transparent 0.95px);
+  background-position: 2px 2px;
+  background-size: var(--dot-size) var(--dot-size);
+  opacity: 0.5;
+  mask-image: linear-gradient(
+    to bottom,
+    #000 0,
+    #000 calc(24px + var(--reader-stage-h) * 0.9),
+    transparent calc(24px + var(--reader-stage-h) + 12px)
+  );
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    #000 0,
+    #000 calc(24px + var(--reader-stage-h) * 0.9),
+    transparent calc(24px + var(--reader-stage-h) + 12px)
+  );
+}
+
+/* 落在桌上那团光。与 `.storybook__light` / `.blr__light` 同一组数 —— 一个字的差别都不该有 */
+.reader__light {
+  position: absolute;
+  inset: -16% -20%;
+  pointer-events: none;
+  background:
+    radial-gradient(52% 44% at 50% 47%, rgba(255, 251, 243, 0.9) 0%, rgba(255, 251, 243, 0) 62%),
+    radial-gradient(
+      66% 56% at 50% 50%,
+      rgba(var(--accent-rgb), 0.055) 0%,
+      rgba(var(--accent-rgb), 0) 70%
+    );
 }
 
 .reader__stage {
   /* 舞台就是一整本书翻开的样子：宽 = 2 × 页宽 */
   position: relative;
-  width: min(1120px, 96vw, 108vh);
+  width: var(--reader-stage-w);
   aspect-ratio: 3 / 2;
   margin: 0 auto;
   outline: none;
@@ -239,6 +297,9 @@
 /* ── 页码与进度 ─────────────────────────────────────────────────────────── */
 
 .reader__bar {
+  /* 同 `booklist-reader.css`：这一条是给 §桌面那层点阵让位的 ——
+     绝对定位的装饰层永远画在静态内容之上，不加这条这三行字会被点阵盖住。 */
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -317,6 +378,9 @@
 }
 
 .reader__progress {
+  /* 同 `booklist-reader.css`：这一条是给 §桌面那层点阵让位的 ——
+     绝对定位的装饰层永远画在静态内容之上，不加这条这三行字会被点阵盖住。 */
+  position: relative;
   width: min(320px, 60vw);
   height: 2px;
   margin: 14px auto 0;
@@ -332,10 +396,124 @@
 }
 
 .reader__meta {
+  /* 同 `booklist-reader.css`：这一条是给 §桌面那层点阵让位的 ——
+     绝对定位的装饰层永远画在静态内容之上，不加这条这三行字会被点阵盖住。 */
+  position: relative;
   margin: 16px 0 0;
   text-align: center;
   font-size: 12px;
   color: var(--ink-muted);
+}
+
+/* ── 选择点：借首页那族的皮，位置与底色由这一屏自己定（2026-10-18） ───────────
+ *
+ * `.book-choice*` 那一族（纸片按钮、56px 的图标位、1.2° 的歪、左上那枚选中勾、
+ * emoji 兜底）整族定义在 `storybook-flip.css` §6，这一屏**刻意复用类名**：
+ * 同一个东西在两屏上必须是同一张纸、同一支笔，否则"选择点"在孩子的记忆里有两个样子。
+ * （`.book-listen` 那条注释记的是反面：借类名会把两处改版绑在一起 —— 那里借的是
+ * "形状像"，这里借的是**真的同一个控件**，所以绑在一起正是目的。）
+ *
+ * 这一节只写两处**这一屏才有**的差别，外加首页那两条静止模式规则的撤销： */
+
+/* 1. 定位基准。选择点要浮在书上，而它不能进 `.reader__stage`（滑动手势与键盘翻页的
+      容器）也不能进 `.reader__book`（3D 旋转的叶）——见 ReaderBook.tsx 里那一层
+      的注释。所以这一层 div 存在的唯一理由就是给它一个"书有多高"的定位盒子，
+      它自己没有事件、没有别的作用。 */
+.reader__stagewrap {
+  position: relative;
+}
+
+/* 2. 浮在**书的下沿之内**，不是页面底部。
+      ★ 首页那块占的是"书下面的空档"（页面底），这一屏书下面紧挨着底栏，没有空档可占，
+        所以它落在图的下沿上——`bottom` 的基准也因此从视口变成了书（定位盒就是舞台）。
+      ★ 抬到 **12%**（书的高的百分比，不是视口单位）：正文叠在**左半的下角**，
+        按首页那套 `clamp(16px, 5.5vh, 68px)` 落位时，卡片左下角会切到正文最后一行的行头
+        ——2026-10-18 用 Range 逐行量出来是 **25×7px**（不是猜的：见
+        `scripts/chk-shared-reader.mjs` 那条"控件一行正文都没压住"）。
+        用书高的百分比抬，是因为正文那块的高度也跟着书走：换个窗口大小时两边一起缩，
+        才不会被重新压上。
+      ★ 这一条有个**前提**：正文是短的（出图那条构图约束与提示词都是按"一两句"给的）。
+        正文写到三四行时这条判据会红，那时要动的是构图约束或卡片位置，
+        **不是**把判据放宽——把一条量得出来的重叠改成"可以接受"是糊弄。 */
+.reader .book-choice {
+  bottom: clamp(20px, 12%, 96px);
+  padding: 10px 22px 12px;
+  border-radius: 22px;
+  background: radial-gradient(
+    120% 100% at 50% 45%,
+    rgba(255, 253, 247, 0.93) 0%,
+    rgba(255, 253, 247, 0.74) 58%,
+    rgba(255, 253, 247, 0) 100%
+  );
+}
+
+/* 3. 这一屏自己新加的两件东西（首页那本演示书没有语音，所以那边没有它们）：
+      · `__speak` —— 三段合成的「念一遍」。做成**药丸**，与底栏那颗朗读钮
+        （`.reader__audio`）同一支笔：这一屏上的按钮都是同一个家族的。
+        刻意不复用 `.book-choice__btn`（那个的歪与勾是选项专用的）。
+      · `__note` —— "这一页的选项没有朗读，念给孩子听吧"。它取代了那颗按钮出现，
+        是**替代品**不是附注，所以它跟着按钮那一行走（`gap` 由 `.book-choice` 给）。 */
+.book-choice__speak {
+  padding: 8px 16px;
+  border: 1px solid var(--dot);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.book-choice__speak:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.book-choice__note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+/* 4. ★★ 静止模式：把首页那一套"回到文档流"整块**推翻**回来。
+      首页在 `prefers-reduced-motion` 下把选择点放回文档流是对的（那一屏本来就是一条
+      从头读到尾的长页）。这一屏是一条**定高**的舞台：回到文档流会把书往上顶、把底栏
+      往下推——翻到选择点那一屏整页跳一下，而"静止模式"要的是一个**静止的终态**，
+      不是另一套排版。
+      ★ 特异性必须抬到 `.reader .book-choice[data-on]`：首页那两条里 `[data-on]` 那条是
+        (0,2,0)，只写 `.reader .book-choice` 的话 `display` 会打平、靠文件先后取胜——
+        那不是一条能站住的依据（文件顺序改一次就静悄悄地变了）。
+      ★ transform 必须写回来：首页那条 `transform: none` 会把居中用的
+        `translate(-50%, …)` 一起抹掉，症状是"静止模式下这块偏右半屏"，而它只在
+        开了那个系统设置的人屏幕上出现。 */
+@media (prefers-reduced-motion: reduce) {
+  .reader .book-choice,
+  .reader .book-choice[data-on] {
+    position: absolute;
+    display: flex;
+    margin-top: 0;
+    transform: translate(-50%, 10px);
+    transition: none;
+  }
+  .reader .book-choice[data-on] {
+    transform: translate(-50%, 0);
+  }
+}
+
+/* 竖屏手机：书的宽度只剩 92vw，两片纸并排会顶出屏幕。
+   这一档让它们竖着排（`flex-wrap`），整块跟着窄下来 —— 位置仍然在书的下沿之内。 */
+@media (max-width: 640px) {
+  .reader .book-choice {
+    max-width: 94vw;
+    padding: 8px 12px 10px;
+  }
+
+  .reader .book-choice__row {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
 }
 
 /* ── 静止模式：不播补间，直接落在目标页 ─────────────────────────────────── */
@@ -355,8 +533,13 @@
 /* 竖屏手机：舞台照旧是 3:2 —— 它现在就是**一张页图**的形状（一页 = 一个跨页），
    所以这一档只调排版，不动页模型。 */
 @media (max-width: 640px) {
+  /* ★ 改的是**变量**，不是 `.reader__stage` 的 width ——舞台宽现在有两个消费者
+     （它自己，与 `__ambient` 那条遮罩的锚），只改 width 会让遮罩按旧数算。 */
+  .reader {
+    --reader-stage-w: 92vw;
+  }
+
   .reader__stage {
-    width: 92vw;
     aspect-ratio: 3 / 2;
   }
 

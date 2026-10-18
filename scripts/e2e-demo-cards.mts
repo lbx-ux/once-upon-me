@@ -9,7 +9,7 @@
  * ★ 前提：那台 Next 的 BFF 与它在用的后端都得活着（登录要过它）。
  *   ★ 只打本机：会建**两个一次性账号**（短信是开发模式，验证码固定 123456）。
  *
- * 三组判据，每组都要**只有真做了才会不一样**：
+ * 四组判据，每组都要**只有真做了才会不一样**：
  *
  * ① **看得见**：一个全新账号打开 `/api/children` 与 `/api/cards`，
  *    两张示例卡（小满 / 小宇）在里面——不只是卡墙，"选小主角"的选择器也在。
@@ -23,6 +23,14 @@
  * ③ **拿不到**：往 B 的那一片里放一张**只在 B 那一片**的卡（走 `cardStore.create`
  *    真写一版），然后 A 打同一个路径 → 404，B 打 → 200。这一对在"过滤式实现"
  *    与"结构性归属"下都绿不了前一半——归属没做，A 也能 200。
+ *
+ * ④ ★ **访客（没有登录的人）看得见示例、也只看得见示例**（2026-10-18 加的那一组）：
+ *    匿名 `/character` 里画着示例卡，地址是 `/demo/cards/…` 那一族**静态**文件
+ *    （所以顺带钉住"走的是静态那条路"——运行期的地址对匿名是 401）。
+ *    匿名点得开 `/character/xiaoman`；而打**别人的**孩子 id（`kid-private-probe`，
+ *    它真的存在）→ 404。"换地址不松鉴权"由①那条"匿名 /api/assets → 401"守在原地。
+ *    ★ 同一天补的第二处：匿名 `/home` 那颗「小主角」药丸里也是**这两个孩子**
+ *    （改之前那里写着「还没有小主角 · 先去建一个」，与角色墙互相打脸）。
  *
  * ★ 顺带念一句已知的代价：`?w=240` 那一张缩略图会缓存进**请求者**那一片
  *   （`u/<id>/thumbs/...`）。它是派生物，脚本把它数出来——不是失败，是"说了会有"。
@@ -226,7 +234,72 @@ async function main(): Promise<void> {
   const anon = await get('', `/api/assets/${privatePath}`)
   check('匿名 → 401', anon.status === 401, `HTTP ${anon.status}`)
 
-  // ── ④ 界面上真的画出来了 ────────────────────────────────────────────────
+  // ── ⑤ 访客（没有登录的人）：看得见示例、也只看得见示例 ──────────────────
+  //
+  // ★ 2026-10-18 加的这一组。用户："对于没有登录的人，那两个默认角色卡也是可以看见的。"
+  //   判据取**渲染出来的 img 地址 + 那个地址真的出图**，与上面登录那一组同一个手法：
+  //   "页面 200"分不出"两张有图的卡"与"两张空相纸"。
+  // ★ 地址必须是 `/demo/cards/…` 那一族（public/ 下的静态文件）：
+  //   运行期的地址对匿名是 401，所以这一条同时钉住了"走的是静态那条路"。
+  //   ★ 上面那条"匿名 /api/assets → 401"一个字都没动：换的是地址，不是鉴权。
+  const anonWall = await get('', '/character')
+  const anonWallText = anonWall.ok ? await anonWall.text() : ''
+  const anonSrc = anonWallText.match(/\/demo\/cards\/[a-z]+-r1\/ref\.[0-9a-f]+\.webp/)
+  const anonDrawn = anonSrc ? await get('', anonSrc[0]) : null
+  check(
+    '匿名 /character 里画着示例卡，地址走 /demo/cards/ 静态那一族',
+    anonWall.status === 200 && Boolean(anonSrc),
+    `HTTP ${anonWall.status} · ${anonSrc?.[0] ?? '页面里没找到 /demo/cards/ 的 img'}`,
+  )
+  check(
+    '匿名请求那张图 → 200 且是 webp（预生成的兄弟文件，不是 327 KB 的原图）',
+    anonDrawn?.status === 200 && (anonDrawn.headers.get('content-type') ?? '').includes('webp'),
+    `HTTP ${anonDrawn?.status} · ${anonDrawn?.headers.get('content-type') ?? ''}`,
+  )
+
+  const anonDetail = await get('', '/character/xiaoman')
+  const anonDetailText = anonDetail.ok ? await anonDetail.text() : ''
+  const anonDetailSrc = anonDetailText.match(/\/demo\/cards\/xiaoman-r1\/ref\.[0-9a-f]+\.webp/)
+  const anonDetailArt = anonDetailSrc ? await get('', anonDetailSrc[0]) : null
+  check(
+    '匿名点得开示例孩子的形象页，而且那一页的图也出得来',
+    anonDetail.status === 200 && Boolean(anonDetailSrc) && anonDetailArt?.status === 200,
+    `HTTP ${anonDetail.status} · ${anonDetailSrc?.[0] ?? '页面里没找到示例卡的 img'} → ${anonDetailArt?.status}`,
+  )
+  // ★ 判据选 `kid-private-probe`（B 刚建的那个孩子，**它真的存在**）：
+  //   换一个不存在的 id 时 404 是废话，只有"存在但不属于访客"才说明归属是结构性的
+  const anonStranger = await get('', '/character/kid-private-probe')
+  check(
+    '★ 匿名打别人的孩子 id → 404（它存在，只是不在访客那一支的根底下）',
+    anonStranger.status === 404,
+    `HTTP ${anonStranger.status}`,
+  )
+
+  // ★ 匿名 `/home`：这颗药丸是 2026-10-18 补的第二处。改之前它写着
+  //   「还没有小主角 · 先去建一个」，而同一个访客在 `/character` 上明明看得见小满 / 小宇
+  //   ——两屏对**同一件事实**给了两种说法。判据取三样一起，因为它们各自能单独坏掉：
+  //   名字（药丸上写的是名字，键拿错就显示卡号）、静态地址（落回 /api/assets 就是 401）、
+  //   以及**那句假话必须消失**（它是这次改动的反面，只有真改到才会不见）。
+  const anonHome = await get('', '/home')
+  const anonHomeText = anonHome.ok ? await anonHome.text() : ''
+  const anonHomeSrc = anonHomeText.match(/\/demo\/cards\/[a-z]+-r1\/ref\.[0-9a-f]+\.webp/)
+  const anonHomeArt = anonHomeSrc ? await get('', anonHomeSrc[0]) : null
+  check(
+    '★ 匿名 /home 那颗「小主角」药丸里是示例那两个孩子（有名字、也有图）',
+    anonHome.status === 200 &&
+      anonHomeText.includes('小满') &&
+      Boolean(anonHomeSrc) &&
+      anonHomeArt?.status === 200,
+    `HTTP ${anonHome.status} · 名字${anonHomeText.includes('小满') ? '在' : '不在'} · ` +
+      `${anonHomeSrc?.[0] ?? '页面里没找到 /demo/cards/ 的 img'} → ${anonHomeArt?.status}`,
+  )
+  check(
+    '匿名 /home 上不再写「还没有小主角」（那句话现在与角色墙互相打脸）',
+    anonHome.status === 200 && !anonHomeText.includes('还没有小主角'),
+    `HTTP ${anonHome.status}`,
+  )
+
+  // ── ⑥ 界面上真的画出来了 ────────────────────────────────────────────────
   // ★ 判据取**渲染出来的 HTML 里那个 img 地址**，再去请求它。
   //   只看"页面 200"是看不出问题的（一个 `<img>` 指向 404 的页也 200）；
   //   只看 `listChildItems` 那就还停在单元测试那一层。
@@ -247,7 +320,7 @@ async function main(): Promise<void> {
     )
   }
 
-  // ── ⑤ 垫底层是只读的：示例卡不该被抄进谁的那一片 ─────────────────────────
+  // ── ⑦ 垫底层是只读的：示例卡不该被抄进谁的那一片 ─────────────────────────
   const bCards = await sizeUnder(`u/${bUserId}/cards`)
   check(
     '示例卡没有落进 B 的那一片（B 的 cards/ 里只有刚造的那张探针卡）',
@@ -265,7 +338,7 @@ async function main(): Promise<void> {
       .join('\n'),
   )
 
-  // ── ⑤ 已知的代价，念一句（不是失败）──────────────────────────────────────
+  // ── 念一句已知的代价（不是失败）──────────────────────────────────────────
   const thumbs = await sizeUnder(`u/${bUserId}/thumbs`)
   console.log(
     `\n  注：示例卡的缩略图缓存进了 B 那一片（u/${bUserId}/thumbs，${thumbs} 个文件）。` +

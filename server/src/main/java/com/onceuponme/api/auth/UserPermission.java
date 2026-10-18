@@ -7,10 +7,24 @@ import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 
 /**
- * 一个人的四个能力开关（一人一行）。★ 单独一张表、单独一个实体，
- * 因为它与 {@link User} 的**写入方不同**：这张表只有管理页会改，
- * 而昵称、头像、最后登录时间是"这个人自己"在改。混在一起的话，
- * "谁把权限关了"与"谁改了昵称"会在同一条 UPDATE 里失去分别。
+ * 「这个人有没有创作权」——<b>一位</b>（一人一行）。
+ *
+ * <p>★ 2026-10-18 由"四个能力开关"收成一位，理由就是产品那一句：
+ * <b>登录之后就能用各种模型，不用站长分配</b>。原先那四列（{@code can_text} /
+ * {@code can_image} / {@code can_vision} / {@code can_speech}）在同一天退场——
+ * 四项同真同假之后，四个必然一起动的列只会长成"看起来能分开配"的样子。
+ *
+ * <p>★ <b>默认是"给上"</b>（{@link #allowedFor}）。这不是把决定替站长做了：
+ * 这一轮的决定本来就是"注册即全开"，站长手里留的是**收回**那一个动作
+ * （{@link #of} 带上 {@code false}）。
+ *
+ * <p>★ 它仍然单独一张表、单独一个实体（而不是往 {@link User} 上加一列）：
+ * 两张表的<b>写入方不同</b>——这张只有管理页会改，改的是"授权"这件事；
+ * 而 {@code users} 那边是这个人自己在改昵称、服务端在记最后登录时间。
+ * 混在一起之后，"谁把权限关了"与"谁改了昵称"会在同一条 UPDATE 里失去分别。
+ *
+ * <p>★ 老库上那四列还在（{@code SchemaUpgrades} 刻意不 DROP），而这个类不再映射它们：
+ * 一个字段都不留，读的时候才不会有人顺手拿起其中一列当判据。
  */
 @TableName("user_permissions")
 public class UserPermission {
@@ -18,43 +32,22 @@ public class UserPermission {
   @TableId(type = IdType.INPUT)
   private Long userId;
 
-  private boolean canText;
-  private boolean canImage;
-  private boolean canVision;
-  private boolean canSpeech;
+  /** 1 = 能用（默认），0 = 站长把这个人的权限收回了 */
+  private boolean allowed;
+
   private LocalDateTime updatedAt;
 
-  /**
-   * 新用户的默认权限：**四个全关**。
-   *
-   * <p>★ 这不是"偷懒的默认值"，是这一轮要演示的那条路：
-   * 新注册进来的人点「开始创作」会看到「当前用户没有权限，请联系管理员」，
-   * 管理员在 `/admin` 上勾一下，同一个人不用重新登录就能开始生成。
-   * 默认开一半（比如写故事能用）会让这条路只在"图像"上才走得到，
-   * 而那句话的判据本来就不止一个能力。
-   */
-  public static UserPermission noneFor(long userId, LocalDateTime now) {
+  /** 默认的那一份：**给上**。注册、建号、已存在的库里补列，走的都是它那个 {@code true} */
+  public static UserPermission allowedFor(long userId, LocalDateTime now) {
+    return of(userId, true, now);
+  }
+
+  public static UserPermission of(long userId, boolean allowed, LocalDateTime now) {
     UserPermission permission = new UserPermission();
     permission.setUserId(userId);
-    permission.setCanText(false);
-    permission.setCanImage(false);
-    permission.setCanVision(false);
-    permission.setCanSpeech(false);
+    permission.setAllowed(allowed);
     permission.setUpdatedAt(now);
     return permission;
-  }
-
-  public static UserPermission allFor(long userId, LocalDateTime now) {
-    UserPermission permission = noneFor(userId, now);
-    permission.setCanText(true);
-    permission.setCanImage(true);
-    permission.setCanVision(true);
-    permission.setCanSpeech(true);
-    return permission;
-  }
-
-  public Permissions toPermissions() {
-    return new Permissions(canText, canImage, canVision, canSpeech);
   }
 
   public Long getUserId() {
@@ -65,36 +58,12 @@ public class UserPermission {
     this.userId = userId;
   }
 
-  public boolean isCanText() {
-    return canText;
+  public boolean isAllowed() {
+    return allowed;
   }
 
-  public void setCanText(boolean canText) {
-    this.canText = canText;
-  }
-
-  public boolean isCanImage() {
-    return canImage;
-  }
-
-  public void setCanImage(boolean canImage) {
-    this.canImage = canImage;
-  }
-
-  public boolean isCanVision() {
-    return canVision;
-  }
-
-  public void setCanVision(boolean canVision) {
-    this.canVision = canVision;
-  }
-
-  public boolean isCanSpeech() {
-    return canSpeech;
-  }
-
-  public void setCanSpeech(boolean canSpeech) {
-    this.canSpeech = canSpeech;
+  public void setAllowed(boolean allowed) {
+    this.allowed = allowed;
   }
 
   public LocalDateTime getUpdatedAt() {

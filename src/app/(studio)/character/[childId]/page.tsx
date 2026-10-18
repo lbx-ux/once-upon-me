@@ -4,7 +4,11 @@ import ChildDetail from '@/components/studio/ChildDetail.tsx'
 import { userSliceRoot } from '@/lib/asset-scope.ts'
 import { currentUserId } from '@/lib/auth/session.ts'
 import { assetRoot } from '@/lib/books-runtime.ts'
-import { childDetailOf } from '@/lib/children-list.ts'
+import {
+  childDetailOf,
+  demoChildDetailOf,
+  type ChildDetail as ChildDetailData,
+} from '@/lib/children-list.ts'
 import { isDemoChildId } from '@/lib/children-source.ts'
 
 /**
@@ -22,26 +26,49 @@ import { isDemoChildId } from '@/lib/children-source.ts'
 
 export const dynamic = 'force-dynamic'
 
+/**
+ * 这一屏的取数：**谁能看谁**，只此一处。
+ *
+ * - 登录 → 只在**自己那一片**里找。别人的 childId 读不到 → 404（不是"读出来再判是不是他的"）。
+ * - 访客（未登录）→ 只有**随仓库发布的示例**能看，走 `demoChildDetailOf`：
+ *   它只读 `public/demo/`（`demoAssetRoot()`），所以"别人的孩子"这条路在访客那一支里
+ *   **根本不存在**——不是被过滤掉，是那个根底下没有这个人。
+ *
+ * ★ 2026-10-18：访客那一支是这一轮加的（用户："没有登录的人，那两个默认角色卡也是可以看见的"）。
+ *   `canEdit` 由**这里**决定，界面照它把写动作收起来——判据在服务端，与 `demoId` 那条一样。
+ */
+async function detailFor(
+  childId: string,
+): Promise<{ detail: ChildDetailData; canEdit: boolean } | null> {
+  const userId = await currentUserId()
+  if (userId) {
+    const detail = await childDetailOf(childId, userSliceRoot(assetRoot(), userId))
+    return detail ? { detail, canEdit: true } : null
+  }
+  // 访客：只有示例 id 放行（判据是"这个 id 在示例里存在"，见 `children-source.ts`）
+  if (!(await isDemoChildId(childId))) return null
+  const detail = await demoChildDetailOf(childId)
+  return detail ? { detail, canEdit: false } : null
+}
+
 export async function generateMetadata({ params }: { params: Promise<{ childId: string }> }) {
   const { childId } = await params
-  const userId = await currentUserId()
-  const detail = userId ? await childDetailOf(childId, userSliceRoot(assetRoot(), userId)) : null
-  return { title: detail ? `${detail.item.profile.name} · 小主角` : '角色卡 · 小主角' }
+  const found = await detailFor(childId)
+  return { title: found ? `${found.detail.item.profile.name} · 小主角` : '角色卡 · 小主角' }
 }
 
 export default async function ChildPage({ params }: { params: Promise<{ childId: string }> }) {
   const { childId } = await params
-  // ★ 2026-10-17（工单 16）：未登录、或者这个孩子不在**自己**那一片里 → 404。
-  //   别人的 childId 打进来也走这一条（不是"读出来再判是不是他的"）
-  const userId = await currentUserId()
-  const detail = userId ? await childDetailOf(childId, userSliceRoot(assetRoot(), userId)) : null
-  if (!detail) notFound()
+  const found = await detailFor(childId)
+  if (!found) notFound()
 
+  const { detail, canEdit } = found
   return (
     <ChildDetail
       profile={detail.item.profile}
       isDemo={detail.item.source === 'demo'}
       demoId={await isDemoChildId(childId)}
+      canEdit={canEdit}
       revisions={detail.revisions}
       anchors={detail.item.card?.anchors ?? []}
     />

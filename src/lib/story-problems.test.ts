@@ -16,6 +16,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { describeProblem, storyProblemText, storyProblemsOf, whereOf } from './story-problems.ts'
+import { CHOICE_CELLS, planJsonSchema } from './schemas/story.ts'
 import type { NodeDraft, PlanDraft } from './schemas/story.ts'
 
 function node(parts: Partial<NodeDraft> = {}): NodeDraft {
@@ -104,22 +105,22 @@ describe('storyProblemsOf', () => {
   })
 
   it('★ 形态是判据的一部分：独读版里出现选择点，schema 查不出来，树查得出来', () => {
-    const withChoice = story({
-      nodes: [node({ choice: { prompt: '你选哪个？', options: [] } as never }), node(), node()],
-    })
-    // 形状那一关先拦（options 至少 2 个）
-    expect(storyProblemsOf('solo', withChoice).length).toBeGreaterThan(0)
-    // 而一条**形状全对**的共读版故事，在独读版下要被树挡住
+    // 写了提问却没写选项 = 选择点写了一半（形状那关先拦）
+    const halfChoice = story({ nodes: [node({ ask: '你选哪个？' }), node(), node()] })
+    expect(storyProblemsOf('solo', halfChoice).length).toBeGreaterThan(0)
+    // 而一条**写全了**的共读版故事，在独读版下要被树挡住
     const shared = story({
       nodes: [
         node({
-          choice: {
-            prompt: '你选哪边？',
-            options: [
-              { iconKey: 'a', emoji: '🐟', label: '钻进水里', spoken: '钻进水里' },
-              { iconKey: 'b', emoji: '🚀', label: '飞上天', spoken: '飞上天' },
-            ],
-          },
+          ask: '你选哪边？',
+          labelA: '钻进水里',
+          spokenA: '钻进水里',
+          iconA: 'fish',
+          emojiA: '🐟',
+          labelB: '飞上天',
+          spokenB: '飞上天',
+          iconB: 'rocket',
+          emojiB: '🚀',
         }),
         node({ from: 1, via: 'a' }),
         node({ from: 1, via: 'b' }),
@@ -128,6 +129,26 @@ describe('storyProblemsOf', () => {
     expect(storyProblemsOf('shared', shared)).toEqual([])
     const asSolo = storyProblemsOf('solo', shared)
     expect(asSolo.some((one) => one.message.includes('独读版'))).toBe(true)
+  })
+
+  it('★ 选择点那九格的名字与 schema 是同一份（漂了就会把问题报在别的格子上）', () => {
+    // 这条用例的存在理由：`splitField` 靠名字把失败路径翻回界面上的框，
+    // 而名字对不上时的症状不是"报错"——是**在错的格子里读到一句关于别处的话**。
+    // 只写在注释里的约定会漂，所以在这里拿 schema 逐个核对。
+    const schema = planJsonSchema() as {
+      properties: { nodes: { items: { properties: Record<string, unknown> } } }
+    }
+    const keys = Object.keys(schema.properties.nodes.items.properties)
+    for (const cell of CHOICE_CELLS) expect(keys).toContain(cell)
+  })
+
+  it('选择点的失败位置落在"选择点"那一格上，不是"页数"', () => {
+    // labelA 太短（1 个字，下限 2）：这条路径必须翻译成"第 1 页的选择点"
+    const problems = storyProblemsOf(
+      'shared',
+      story({ nodes: [node({ labelA: '左' }), node(), node()] }),
+    )
+    expect(problems.some((one) => one.field === 'choice')).toBe(true)
   })
 
   it('同一个格子上只留一条问题（两句话说不下，而且说的是同一件事）', () => {

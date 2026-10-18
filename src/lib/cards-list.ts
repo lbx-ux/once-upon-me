@@ -33,6 +33,16 @@ export type CardListItem = {
   referenceUrl: string
   /** 资产根里的相对路径。给 `assetUrlOf(path, 768)` 用——缩略档由消费者决定，不在这里猜 */
   referencePath: string
+  /**
+   * **显示用的那一张**（768 档，卡片墙与形象页都用它）。
+   *
+   * ★ 它和 `referencePath` 不是一件事，分开正是这里唯一要动脑的地方：
+   *   运行期的卡在资产根里（不在 `public/`），只能经 `/api/assets` 出来；
+   *   而**示例卡**随仓库发布，是 `public/demo/cards/…` 下的静态文件——
+   *   走那条路的好处是**访客（未登录）也拿得到**（`/api/assets` 对匿名一律 401）。
+   *   取哪一条由调用方注入的 `CardUrlFor` 决定，见 `listCardItems`。
+   */
+  faceUrl: string
   promptFragment: string
   /** ★ 两个数组都是 `readonly`：它们是引擎算出来的派生值（`checklistOf` / `card.anchors`），
    *  这一层不该有改它们的权力——要改就回到引擎里改那条规则 */
@@ -50,6 +60,16 @@ export type CardListItem = {
 }
 
 /**
+ * 「这一张卡的图从哪儿取」——**运行期与示例两条路唯一的差别**，收在一个函数类型里。
+ *
+ * ★ 默认那一份就是今天的行为（`/api/assets` 那条只读出口，768 档），所以
+ *   **登录用户的取数一个字节都不变**；只有"访客看的示例卡"那一支传另一份
+ *   （`card-source.ts` 的 `demoCardUrlOf`，走 `public/` 下的静态地址）。
+ * ★ 可以是 async：示例卡那一支要读一次目录才知道有没有预生成的 `.webp` 兄弟文件。
+ */
+export type CardUrlFor = (referencePath: string, width: number) => string | Promise<string>
+
+/**
  * 列出每个 cardId 的**最新一版**。
  *
  * 空列表是合法答案：一张卡都没有 = 那个目录还没建过，不是错误
@@ -60,8 +80,13 @@ export type CardListItem = {
  *   于是示例卡会出现在**每一个**人的卡表里——那是刻意的：它们是"先看看效果"的那两张，
  *   不是谁的作品。同一条垫底的还有 `createUserStore`（路由那一侧）与
  *   `childDetailOf`（详情那一侧），三处是同一个决定了（见 `card-source.ts` 文件头）。
+ * ★ 2026-10-18：`urlFor` 是给**访客**那一路加的口子（见 `CardUrlFor`）。
+ *   不传就是原来的行为。
  */
-export async function listCardItems(root: string = assetRoot()): Promise<CardListItem[]> {
+export async function listCardItems(
+  root: string = assetRoot(),
+  urlFor: CardUrlFor = assetUrlOf,
+): Promise<CardListItem[]> {
   const store = await withDemoCards(await createFsStore(root))
   const cardStore = createCardStore(store)
 
@@ -83,6 +108,9 @@ export async function listCardItems(root: string = assetRoot()): Promise<CardLis
       digest: cardDigest(card),
       referenceUrl: assetUrlOf(card.reference.path),
       referencePath: card.reference.path,
+      // 显示那一档写在**这一处**：卡片墙（372 CSS px × 2 倍屏）与形象页（相纸不到 400 px）
+      // 要的是同一个数，而档位那张封闭表的权威在 `thumbs.ts`
+      faceUrl: await urlFor(card.reference.path, 768),
       // 同一份锚点的两种用法：画的时候按 A 画、查的时候按 B 查（ADR-0007）
       promptFragment: promptFragmentOf(card),
       checklist: checklistOf(card),

@@ -132,4 +132,51 @@ class SchemaUpgradesTest {
 
     assertThatCode(() -> new SchemaUpgrades(dataSource).run(null)).doesNotThrowAnyException();
   }
+
+  /**
+   * 「有没有创作权」那一列（2026-10-18，四项开关收成一位）。
+   *
+   * <p>★ 这条判据挑的是**这一轮产品口径里最要紧的那个字面量**：
+   * 老库补出来的值必须是 **1（有）**。老账号当初是"四个全关"，只因为那时候
+   * 要站长一个个手工开；而这一轮定的是"注册即全开、站长只留收回那一下"，
+   * 所以补列时的 `DEFAULT 1` 就是"**老账号自动给上**"这句话本身。
+   *
+   * <p>★ 它同时钉住三件事：列补上了、原来那行还在、**那一行的值是 1**。
+   * 只验"列在不在"的话，一个 `ADD COLUMN allowed TINYINT NOT NULL`（没有默认值）
+   * 或者补完顺手 `UPDATE ... SET allowed = 0` 的实现都能蒙过去——
+   * 而它们的症状是"升级完所有人突然都没权限了"，看起来像权限系统坏了。
+   */
+  @Test
+  @DisplayName("★ 老库补 allowed：老账号**自动给上**（值是 1），不是「补成没有」")
+  void addingAllowedGrantsExistingAccounts() throws Exception {
+    JdbcDataSource dataSource = legacyDatabase();
+    try (Connection connection = dataSource.getConnection();
+        Statement statement = connection.createStatement()) {
+      // 一份"收成一位之前"的 user_permissions：四个 can_* 列，而且那个人四项全关
+      statement.execute(
+          "CREATE TABLE IF NOT EXISTS user_permissions ("
+              + "user_id BIGINT NOT NULL,"
+              + "can_text TINYINT NOT NULL DEFAULT 0,"
+              + "can_image TINYINT NOT NULL DEFAULT 0,"
+              + "can_vision TINYINT NOT NULL DEFAULT 0,"
+              + "can_speech TINYINT NOT NULL DEFAULT 0,"
+              + "updated_at DATETIME NOT NULL,"
+              + "PRIMARY KEY (user_id))");
+      statement.execute("DELETE FROM user_permissions");
+      statement.execute(
+          "INSERT INTO user_permissions (user_id, updated_at) VALUES (7, CURRENT_TIMESTAMP)");
+    }
+
+    new SchemaUpgrades(dataSource).run(null);
+
+    try (Connection connection = dataSource.getConnection();
+        Statement statement = connection.createStatement();
+        ResultSet rows = statement.executeQuery("SELECT allowed FROM user_permissions WHERE user_id = 7")) {
+      assertThat(rows.next()).as("补列不该动到原有的行").isTrue();
+      assertThat(rows.getBoolean("allowed")).as("老账号自动给上").isTrue();
+    }
+
+    // ★ 每次启动都会跑它，所以第二遍必须是干净的 no-op
+    assertThatCode(() -> new SchemaUpgrades(dataSource).run(null)).doesNotThrowAnyException();
+  }
 }

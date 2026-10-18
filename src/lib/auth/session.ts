@@ -44,7 +44,13 @@ const TICKET_MAX_AGE_SECONDS = 5 * 60
 
 export type Capability = 'text' | 'image' | 'vision' | 'speech'
 
-/** 四个能力开关。形状与 Java 的 `Permissions`、与界面上的判断逐字段一样 */
+/**
+ * 四项能力。★ 它现在**只有一个读者**：`configured`（站里配没配那一项密钥）。
+ *
+ * ★ 2026-10-18：它原来还表示"站长给了这个人哪几项"，而那一半收成了一位
+ * （{@code AuthUser.allowed}）——见 README §五与 ADR-0010。所以这个类型**不是**在说
+ * "这个人有什么"，别再拿它装人。
+ */
 export type Permissions = Record<Capability, boolean>
 
 export type Session = {
@@ -53,10 +59,8 @@ export type Session = {
   role: string
 }
 
-/** 服务端配齐了哪几个能力（来自 `serverEnv()`，与"你有没有权限"是两件事） */
+/** 服务端配齐了哪几个能力（来自 `serverEnv()`，与"这个人有没有权限"是两件事） */
 export type Configured = Permissions
-
-const NONE: Permissions = { text: false, image: false, vision: false, speech: false }
 
 /* ── 验票 ────────────────────────────────────────────────────────────────── */
 
@@ -158,9 +162,10 @@ export type MeView = {
     nickname: string
     role: string
     createdAt: string
-    permissions: Permissions
+    /** 有没有创作权。★ **一位**（2026-10-18 由四项收成一位，见 ADR-0010） */
+    allowed: boolean
   }
-  permissions: Permissions
+  allowed: boolean
 }
 
 export async function fetchMe(
@@ -172,7 +177,10 @@ export async function fetchMe(
   if (!result.ok) return result
   return {
     ok: true,
-    me: { user: result.data, permissions: result.data.permissions ?? NONE },
+    // ★ 顶部那一位与 `user.allowed` 是同一个值的两种读法（与上一版 `permissions` 一样）：
+    //   票的契约是"`sub` 就是 userId"，而"有没有权限"是后端现算的，所以缺了就按**没有**算——
+    //   这一处的不一致只可能是后端少回了一个字段，那时把人放进去才是更坏的那一半
+    me: { user: result.data, allowed: result.data.allowed === true },
   }
 }
 
@@ -207,7 +215,8 @@ export async function currentUserId(): Promise<string | null> {
 /* ── 那道闸 ──────────────────────────────────────────────────────────────── */
 
 export type Guard =
-  { ok: true; session: Session; permissions: Permissions } | { ok: false; response: NextResponse }
+  /** `allowed` = 这个人此刻有没有创作权（一位）。★ 要花大钱的路由可以再判它一次 */
+  { ok: true; session: Session; allowed: boolean } | { ok: false; response: NextResponse }
 
 /** 统一的一句人话。★ 界面与文档里引用的都是这一句，改文案只有这一处 */
 export const NO_PERMISSION_MESSAGE = '当前用户没有权限，请联系管理员'
@@ -221,12 +230,20 @@ function fail(
 }
 
 /**
- * 要花钱的接口前面那道闸：**登录了吗、有这个能力吗**。
+ * 要花钱的接口前面那道闸：**登录了吗、有没有创作权**。
  *
  * ★ 用返回值而不是抛异常：这三个失败各自要回不同的状态码与不同的那句话，
  * 而 route handler 里 `if (!guard.ok) return guard.response` 是最不容易写错的形式。
  *
- * @param caps 需要的能力。空数组 = 只要登录（比如"读自己的东西"）
+ * ★ **`caps` 是"这条路由要什么能力"，不是"这个人有没有这一项"**
+ *   （2026-10-18，权限收成一位之后）。政策是"有权限 = 四项都能用"，
+ *   所以这里实际判的是**一位**（`allowed`），`caps` 只是把这条路由的需求写下来。
+ *   ★ 为什么不让三十个调用点改成 `requireAllowed(req)`：那会把"这条路要图像"
+ *     这件事从代码里抹掉——而它是下一次调整政策时唯一还留着的信息
+ *     （回到按能力授权时，改的是**这一处**，不是三十处）。
+ *   ★ 空数组 = 只要登录（比如"读自己的东西"）。
+ *
+ * @param caps 需要的能力。★ 见上：它是需求，不是判据
  */
 export async function requireCapability(request: NextRequest, caps: Capability[]): Promise<Guard> {
   if (!secret()) {
@@ -246,13 +263,12 @@ export async function requireCapability(request: NextRequest, caps: Capability[]
     return fail(503, 'permission-unavailable', `暂时判不了权限（${me.message}），请稍后再试`)
   }
 
-  const missing = caps.filter((cap) => !me.me.permissions[cap])
-  if (missing.length > 0) {
+  if (caps.length > 0 && !me.me.user.allowed) {
     // ★ 这一句是产品要求的那一句（用户 2026-10-16），一个字都不改
     return fail(403, 'no-permission', NO_PERMISSION_MESSAGE)
   }
 
-  return { ok: true, session, permissions: me.me.permissions }
+  return { ok: true, session, allowed: me.me.user.allowed }
 }
 
 /* ── 管理员那道闸（2026-10-17）────────────────────────────────────────────── */

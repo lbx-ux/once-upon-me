@@ -193,7 +193,7 @@ class VoiceIntegrationTest {
         .andExpect(jsonPath("$.code").value("invalid-request"));
   }
 
-  /* ── 小工具（与 `PermissionRequestIntegrationTest` 同一套）────────────────── */
+  /* ── 小工具（注册 / 登录那几件与 `AuthFlowIntegrationTest` 同一套）──────────── */
 
   private void choose(String token, String voiceId, String name) throws Exception {
     Map<String, Object> body = new HashMap<>();
@@ -219,7 +219,7 @@ class VoiceIntegrationTest {
   /**
    * 注册一个号。
    *
-   * <p>★ 与 `PermissionRequestIntegrationTest` 逐字同一套（`/api/auth/sms/send` →
+   * <p>★ 三步与 `AuthFlowIntegrationTest#signUp` 逐字同一套（`/api/auth/sms/send` →
    * `/api/auth/sms/verify` → `/api/auth/password`）。那三步之间的票在**响应体**里
    * （`{"token": …}`），不走 cookie——这是 Java 那一侧的协议，BFF 才把它翻成 cookie。
    * 我第一版按 BFF 那套写过一次 cookie，结果整组测试的失败长得像"注册没成功"。
@@ -260,7 +260,18 @@ class VoiceIntegrationTest {
     return json.readTree(result.getResponse().getContentAsString(StandardCharsets.UTF_8));
   }
 
-  /** 请求体：**字节**，而且是 UTF-8 的。理由见 `PermissionRequestIntegrationTest#send` */
+  /**
+   * 请求体：**字节**，而且是 UTF-8 的。
+   *
+   * <p>★ 不能用 `writeValueAsString` + `.content(String)`：那条路上 MockMvc 会按
+   * **请求自己的字符编码**把字符串转成字节，而这个编码缺省是 ISO-8859-1——
+   * 于是 `"温柔的女声"` 出去就变成一串 `?`（2026-10-17 实测：期望中文、
+   * 实际 `????????`）。那是**量具**的问题，不是应用的：浏览器 `fetch` 发的本来
+   * 就是 UTF-8 字节，这里用 `writeValueAsBytes` 才是在发同一样东西。
+   * ★ 这段理由原来写在 `PermissionRequestIntegrationTest#send` 上（那是全仓第一处
+   * 撞上它的），2026-10-18 那个类随权限申请一起删掉，于是搬到这里——它是现在
+   * **唯一**还用这个写法的测试，理由跟着读者走。
+   */
   private byte[] send(Map<String, ?> body) throws Exception {
     return json.writeValueAsBytes(body);
   }

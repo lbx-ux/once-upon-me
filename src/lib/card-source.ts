@@ -47,8 +47,10 @@
  *   一个路径都不用翻译——`assetPathInDemo` 那种摘前缀在这一层不存在。
  */
 
+import { readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 
+import { assetUrlOf, encodeAssetPath } from './asset-url.ts'
 import { createFsStore } from './engine/index.ts'
 import type { AssetStore, PutEntry } from './engine/providers/types.ts'
 
@@ -69,6 +71,84 @@ export function demoCardDir(cardId: string): string {
   return join(process.cwd(), 'public', DEMO_ROOT, 'cards', cardId)
 }
 
+const fileNameOf = (path: string): string => path.split('/').pop() ?? path
+
+/**
+ * 这个示例卡目录里有哪些 `.webp` 兄弟文件（**文件名**，不是整条路径）。
+ *
+ * ★ 读不到目录 = 空集合（示例卡不在仓库里、或者还没导出过缩略图），
+ *   调用方据此照旧用原图——这是"没有的东西直说没有"那条的同一件事：
+ *   不假装有一个小图，而不是给一个指向 404 的地址。
+ */
+export async function demoCardSiblingNames(cardId: string): Promise<ReadonlySet<string>> {
+  try {
+    const names = await readdir(demoCardDir(cardId))
+    return new Set(names.filter((name) => name.toLowerCase().endsWith('.webp')))
+  } catch {
+    return new Set()
+  }
+}
+
+/**
+ * 示例卡的图在**浏览器里的静态地址**；`null` = 这条路径不在 `public/demo/` 那一族的卡里
+ * （调用方照旧走 `/api/assets`）。
+ *
+ * ★ 为什么示例卡能走静态地址、运行期的卡不能：示例卡随仓库发布，是 `public/` 下的文件，
+ *   Next 直接把它发出去；运行期的卡在资产根（`.out/web/u/<id>/cards/…`），**不在 `public/` 里**，
+ *   必须经 `/api/assets`——而那条出口对匿名一律 401。
+ *   于是"访客也能看见示例卡"这件事落在**换地址**上，不是松鉴权：
+ *   `/api/assets` 那句 401 是"别人的东西拿不到"的守门人（README §五）。
+ *
+ * ★ 换 `.webp` 兄弟文件那一手与 `book-source.ts` 的 `demoAssetPathFor` 同形，
+ *   差别只有一处、写在这里免得下次有人以为漏了：**卡是 `.jpg`**（书是 `.png`），
+ *   所以两种扩展名都认。★ 为什么不能挂 `?w=`：静态文件看不懂查询串
+ *   （`asset-url.ts` 与 `book-source.ts` 各写过一次原因）。
+ *
+ * ★ 判据是**扩展名换过之后那个名字在不在兄弟文件集合里**，不是"磁盘上有没有这张卡"——
+ *   集合由 `demoCardSiblingNames` 读盘得到，所以"有没有小图"这件事只有一处答案。
+ */
+export function demoCardPathInPublic(
+  assetPath: string,
+  webpSiblings: ReadonlySet<string>,
+): string | null {
+  if (!isCardPath(assetPath)) return null
+  const swapped = assetPath.replace(/\.(?:jpe?g|png)$/i, '.webp')
+  const chosen =
+    swapped !== assetPath && webpSiblings.has(fileNameOf(swapped)) ? swapped : assetPath
+  const rest = chosen.slice(CARDS_MOUNT.length)
+  if (rest === '') return null
+  // 逻辑路径 `cards/<卡号>/x` 在演示那边**逐字相同**（垫底层的根取在 `demo/`），
+  // 所以这里只换前缀，不做任何翻译——与导出脚本整目录复制是同一条性质
+  return `/${DEMO_CARDS_DIR}/${encodeAssetPath(rest)}`
+}
+
+/**
+ * 访客那一支的取图地址（`cards-list.ts` 的 `CardUrlFor`）：**示例卡走静态地址**。
+ *
+ * ★ 取不到静态地址就回落到 `/api/assets`——这一支**没有自己的失败模式**：
+ *   最坏的情况是退回今天的行为（登录的人看得到、访客看不到图），
+ *   而不是给一个指向 404 的地址（那正是"图碎在未登录页面上"）。
+ * ★ 每次读一次那个卡目录（访客那一屏就 ≤2 张，一次 `readdir`），
+ *   换来的是"有没有小图"这件事只有 `demoCardSiblingNames` 一处答案。
+ * ★ 卡号从路径第二段取：`cards/<卡号>/…` 是这一层的布局契约（见文件头最后一段）。
+ */
+export async function demoCardUrlOf(referencePath: string, width: number): Promise<string> {
+  const cardId = referencePath.split('/')[1] ?? ''
+  const siblings = cardId === '' ? new Set<string>() : await demoCardSiblingNames(cardId)
+  return demoCardPathInPublic(referencePath, siblings) ?? assetUrlOf(referencePath, width)
+}
+
+/**
+ * 示例资产那个根在磁盘上的位置（`public/demo`）。
+ *
+ * ★ 给"**只读示例那一片**"的取数入口用（访客那一屏与那一页）：那些入口要的是一个
+ *   能当资产根传下去的路径，而它必须**只**指向仓库里这一份——绝不能是 `.out/web`
+ *   （那底下是别人的作品）。
+ */
+export function demoAssetRoot(): string {
+  return join(process.cwd(), 'public', DEMO_ROOT)
+}
+
 /**
  * 垫底层本身：`public/demo/` 这一个**只读的资产根**。
  *
@@ -77,7 +157,7 @@ export function demoCardDir(cardId: string): string {
  *   导出脚本整目录复制即可（见文件头最后一段）。
  */
 async function demoShelf(): Promise<AssetStore> {
-  return createFsStore(join(process.cwd(), 'public', DEMO_ROOT))
+  return createFsStore(demoAssetRoot())
 }
 
 /** 这一条路径属不属于"卡"那一族 */

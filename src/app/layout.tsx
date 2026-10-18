@@ -18,7 +18,7 @@ export default function RootLayout({
       <body>
         {/* ★ 「谁在用」挂在 layout 上，不在各页面里：侧栏底部那一格在工作台里，
             个人主页在另一屏，两处读的必须是同一份。 */}
-        {/* ★ 音色套在它里面，而且**必须在里面**：`canNarrate` 要读 `permissions` 与
+        {/* ★ 音色套在它里面，而且**必须在里面**：`canNarrate` 要读 `allowed` 与
             `configured`（那两样是 `AuthProvider` 给的）。套反了不是报错，
             是音色那一格永远说"没有权限"——一个安静的、只在真登录之后才看得见的错。
             （原来这里是 `SettingsProvider`：它装着"模型与密钥"，而那一格 2026-10-16

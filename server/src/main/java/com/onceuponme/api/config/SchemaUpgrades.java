@@ -56,7 +56,13 @@ public class SchemaUpgrades implements ApplicationRunner {
           // 账号状态：ACTIVE / DISABLED。管理页的"停号"。见 AuthService#requireUser
           // ★ `NOT NULL DEFAULT 'ACTIVE'`：已经在库里的那些人一律是正常状态——
           //   补一列的意义正是"原来就有的都照旧"，而不是把他们一起停掉
-          new AddedColumn("users", "status", "VARCHAR(16) NOT NULL DEFAULT 'ACTIVE'"));
+          new AddedColumn("users", "status", "VARCHAR(16) NOT NULL DEFAULT 'ACTIVE'"),
+          // 「这个人有没有创作权」（2026-10-18，由四列收成一列）。
+          // ★ `NOT NULL DEFAULT 1` 与上面那条 `DEFAULT 'ACTIVE'` 是同一条道理，
+          //   而且这一条的字面意思就是产品那一句：**老账号自动给上**——
+          //   他们当初是"四个全关"，只因为那时候要站长手工开。
+          //   补出来的不是"没有权限"，而是"从今天起的默认权限"。
+          new AddedColumn("user_permissions", "allowed", "TINYINT NOT NULL DEFAULT 1"));
 
   /**
    * 幂等的<b>数据修复</b>：把历史上写坏的值修回契约允许的那一种。
@@ -93,6 +99,15 @@ public class SchemaUpgrades implements ApplicationRunner {
     try (Connection connection = dataSource.getConnection()) {
       for (AddedColumn column : ADDED_COLUMNS) {
         if (exists(connection, column)) {
+          continue;
+        }
+        // ★ 表不在就**跳过**，而不是让它抛（与下面 `DATA_FIXES` 那条同一个形状）。
+        //   表都不存在时，"它缺一列"没有对象：`schema.sql` 建出来的那张表本来就带着
+        //   这一列，所以走到这个分支只可能是"这个库比那张表还老"。
+        //   ★ 这一条不是假想的：`SchemaUpgradesTest` 里那份"老库"只有 users 一张表，
+        //   2026-10-18 加 `user_permissions.allowed` 时它真的会炸在
+        //   `Table "user_permissions" not found` 上。
+        if (!tableExists(connection, column.table())) {
           continue;
         }
         try (Statement statement = connection.createStatement()) {

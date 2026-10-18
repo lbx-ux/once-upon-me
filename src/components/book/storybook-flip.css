@@ -119,7 +119,11 @@
  *
  * 三朵主色是从这一面的图里取的：`scripts/sample-tints.py` → `spreadTints.ts`
  * （生成物，换了图要重跑，命令写在那个文件头上）。顺序是**彩度从高到低**，
- * 所以这里可以固定读法：前两朵做有色的那两团，最后一朵（最白的那朵）做外圈底色。
+ * 所以这里可以固定读法：前两朵做有色的那两团，最后一朵做外圈底色。
+ * ★ "最后一朵是最白的那朵"是 2026-10-18 撤掉的半句 —— 它**不是**脚本的保证，
+ *   只是这一本书 6 张的取样结果。灵感书单那 108 张里有 30 张的第三朵是中调色，
+ *   所以那台阅读器（`booklist-reader.css` 的 §桌面）按"彩度最低的那一朵"写，
+ *   α 也是照实际数据调的。这里之所以还成立，是运气，不是推论。
  *
  * 五面各铺一张，靠 opacity 交叉淡入 —— 不用 color-mix、不用 Houdini 注册属性，
  * 老一点的浏览器也只是没有这层色，不会渲染出错。
@@ -607,6 +611,90 @@
 }
 
 /* ----------------------------------------------------------------------------
+ * 6.5 这一页的朗读（2026-10-18）
+ *
+ * 位置只可能落在**左下角**：底下正中那条基线（`clamp(16px, 5.5vh, 68px)`）被
+ * 选择点与收尾 CTA 占着，右下角是 BackToTop。也不会撞到书 —— 书的宽被 90vh
+ * 那一档夹着，下沿永远在中线上方（1440×900 下书底在 720px，这一块贴着视口底），
+ * 所以这一块落在一个**四周都空**的角上。
+ *
+ * ★ 与 `.book-choice` 同一套开关：`data-on` + `visibility`。关着的时候不能只写
+ *   `opacity: 0` —— 透明的东西辅助技术照样念、照样 Tab 得到，封面那一屏会念出
+ *   一颗"朗读"钮（那条账在 §6 抬头写过一次，两处在说同一件事）。
+ * -------------------------------------------------------------------------- */
+.storybook__listen {
+  position: absolute;
+  left: clamp(20px, 3.2vw, 52px);
+  bottom: clamp(16px, 5.5vh, 68px);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  /* 失败那一句会换行，别让它横着长到书底下去 */
+  max-width: 20em;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 0.3s ease,
+    visibility 0s linear 0.3s;
+}
+.storybook__listen[data-on] {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition: opacity 0.3s ease;
+}
+
+/* 与 `.book-choice__btn` 同一张纸、同一支笔：这一节里的控件都该读成"桌上的一张
+   纸片"，不是"网页控件浮在绘本上"。刻意**不复用**那个类名 —— 它的 1.2° 歪与
+   左上角那枚选中勾是选项专用的，借过来会把两处改版绑在一起。 */
+.book-listen {
+  display: inline-flex;
+  align-items: center;
+  height: 40px;
+  padding: 0 20px;
+  border: 1.5px solid rgba(23, 23, 29, 0.13);
+  border-radius: 999px;
+  background: #fbf7ef;
+  color: var(--ink-muted);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  box-shadow:
+    0 2px 6px rgba(19, 19, 28, 0.08),
+    0 10px 22px rgba(19, 19, 28, 0.07);
+  transition:
+    transform 0.2s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.2s ease,
+    color 0.2s ease;
+}
+.book-listen:hover {
+  transform: translateY(-2px);
+  border-color: rgba(23, 23, 29, 0.26);
+  color: var(--ink);
+}
+.book-listen:active {
+  transform: translateY(0);
+}
+/* 正在念的这一页。颜色是**答案**不是装饰：只靠 1.5px 描边，在浅纸底上读不出
+   "它现在响着"（与选项按下态那条同一种判断）。
+   --accent 对这张纸 4.9:1 上下，14px/500 过 AA —— 与 --ink-muted 那一档同源。 */
+.book-listen[aria-pressed='true'] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+/* 判据 ② 那一句（音频读不出来）。说在按钮下面，不占画面中间的位。 */
+.book-listen__note {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+/* ----------------------------------------------------------------------------
  * 7. 静止模式（prefers-reduced-motion）
  *
  * **两套 DOM 都渲染，靠这里的 display 切** —— 首帧就是对的，
@@ -748,5 +836,26 @@
      但 hover 抬起的过渡要停 —— 那才是动。 */
   .book-choice__btn {
     transition: none;
+  }
+
+  /* 朗读控件在静止模式里**回到文档流**（翻页按钮下面一排），与上面选择点同一条
+     理由：动效模式里浮到角上只是为了不挡住书。
+     ★ 位置改、开关不改（还是 data-on）—— 两种模式下必须说同一件事。
+     ★ 同样写成两条：`.storybook__listen[data-on]` 的特异性比单类名高，
+       只写 `.storybook__listen` 的话基准规则里的 `left/top` 与 `position: absolute`
+       会赢下来，整块被钉到左上角去。 */
+  .storybook__listen,
+  .storybook__listen[data-on] {
+    position: static;
+    transition: none;
+  }
+  .storybook__listen {
+    display: none;
+    align-items: center;
+    max-width: none;
+    margin: clamp(14px, 2.2vh, 22px) auto 0;
+  }
+  .storybook__listen[data-on] {
+    display: flex;
   }
 }

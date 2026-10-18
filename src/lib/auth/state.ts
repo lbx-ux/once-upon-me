@@ -19,7 +19,14 @@
  * 那一条待办（"等后端落地，这件事会自然消失"）到今天就消了。
  */
 
-/** 四个能力开关。形状与 Java 的 `Permissions`、与 BFF 的 `permissions` 逐字段一样 */
+/**
+ * 四项能力。★ 它现在**只有一个用途**：`configured`（站里配没配那一项密钥）。
+ *
+ * ★ 2026-10-18：它原来还表示"站长给了这个人哪几项"，而那一半收成了一位
+ * （`AuthUser.allowed`）——四项同真同假，所以那四个布尔只是同一句话说了四遍。
+ * 收掉的是"这个人"，不是"站里"：密钥那一侧仍然四项各自独立
+ * （配了文本没配语音是常事，而"站里没配好"与"你没有权限"必须分开说）。
+ */
 export type Permissions = {
   text: boolean
   image: boolean
@@ -50,7 +57,14 @@ export type AuthUser = {
   role: string
   /** 首次登录时间，带时区的 ISO 8601（服务端补的 `+08:00`） */
   createdAt: string
-  permissions: Permissions
+  /**
+   * **这个人此刻能不能创作**。★ 一位。
+   *
+   * ★ 2026-10-18 之前这里是四个布尔（站长按账号发能力）。现在注册即全开，
+   *   站长手里留的是"把某个人的权限收回来"——所以它只剩一位，
+   *   而它**每次都由后端现给**（`GET /api/auth/me`），不是票里的快照。
+   */
+  allowed: boolean
 }
 
 /**
@@ -80,30 +94,31 @@ export function safeNext(value: string | undefined | null): string | null {
   return value
 }
 
-/** 这个人能不能开始做一本书：**文本 + 图像**。★ 这两条是那件事的最小集合 */
-export function canCreate(permissions: Permissions): boolean {
-  return permissions.text && permissions.image
+/**
+ * 站里配齐了做一本书要的那两项吗：**文本 + 图像**。★ 这两个是那件事的最小集合。
+ *
+ * ★ 2026-10-18：它的入参现在**只可能是 `configured`**（"站里那份"）——
+ *   "这个人有没有权限"已经是单独的一位（`AuthUser.allowed`），不再从四项里推。
+ *   一处调用点的形状是 `allowed && canCreate(configured)`：
+ *   前半句是"他可以创作吗"，后半句是"站里能画能写吗"，两句各自能说清是哪一半不行。
+ */
+export function canCreate(configured: Permissions): boolean {
+  return configured.text && configured.image
 }
 
 /**
- * 缺哪几个能力（给那句"没有权限"的提示用）。
+ * 读一份四项能力的形状（现在只有 `configured` 走它）。
  *
- * ★ 有它才能说出**缺什么**，而不是笼统地"你没有权限"——管理员看到这句话时
- * 需要知道该勾哪一个，而"联系管理员"的前提是他能一眼答上"勾哪个"。
+ * ★ 导出它是因为它有一个**真的读者**：`lib/auth/client.ts` 拿它验 `configured`。
+ *   那四个布尔虽然来自我们自己的 BFF，但那仍然是一次网络读取——"读回来的一律不信"
+ *   是这一层唯一的纪律（同文件头那条）。
+ * ★ 四个都要是布尔：缺一个就当整份认不出来——半个能力表比没有更坏，
+ *   它会让"站里到底配没配"变成一个看调用顺序的答案。
  */
-export function missingForCreate(permissions: Permissions): string[] {
-  const missing: string[] = []
-  if (!permissions.text) missing.push('文字')
-  if (!permissions.image) missing.push('图像')
-  return missing
-}
-
-function parsePermissions(raw: unknown): Permissions | null {
+export function parsePermissions(raw: unknown): Permissions | null {
   if (!raw || typeof raw !== 'object') return null
   const value = raw as Record<string, unknown>
   const keys = ['text', 'image', 'vision', 'speech'] as const
-  // ★ 四个都要是布尔：缺一个就当整份认不出来——半个权限表比没有更坏，
-  //   它会让"能不能生成"变成一个看调用顺序的答案
   for (const key of keys) {
     if (typeof value[key] !== 'boolean') return null
   }
@@ -120,6 +135,10 @@ function parsePermissions(raw: unknown): Permissions | null {
  *
  * ★ `account` 要过一遍形状：没有它，界面上那句"打码手机号"会拿一个垃圾字符串去展示，
  * 而 `maskPhone()` 会把它原样吐出来——看着像坏了，其实只是存进去时就没验。
+ *
+ * ★ `allowed` **必须是布尔**，缺了就整份不认（2026-10-18 加的那一位）。
+ *   不把它当成 `false`：那会让"服务端少回了一个字段"显示成"你没有权限，请联系管理员"
+ *   ——一句要人去找站长的假话。认不出来的症状应该是那句"登录态不是我们认识的形状"。
  */
 export function parseUser(raw: unknown): AuthUser | null {
   if (!raw || typeof raw !== 'object') return null
@@ -131,7 +150,7 @@ export function parseUser(raw: unknown): AuthUser | null {
   const role = value['role']
   const createdAt = value['createdAt']
   const phone = value['phone']
-  const permissions = parsePermissions(value['permissions'])
+  const allowed = value['allowed']
 
   if (typeof userId !== 'string' || userId === '') return null
   if (typeof account !== 'string' || !/^\d{6,11}$/.test(account)) return null
@@ -141,7 +160,7 @@ export function parseUser(raw: unknown): AuthUser | null {
   if (typeof createdAt !== 'string') return null
   // ★ 手机号可空，但**给了就必须是个号**：一个 `"abc"` 会让打码那一格吐出原样
   if (phone !== null && (typeof phone !== 'string' || !/^\d{11}$/.test(phone))) return null
-  if (!permissions) return null
+  if (typeof allowed !== 'boolean') return null
 
   return {
     userId,
@@ -150,6 +169,6 @@ export function parseUser(raw: unknown): AuthUser | null {
     nickname,
     role,
     createdAt,
-    permissions,
+    allowed,
   }
 }

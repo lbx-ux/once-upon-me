@@ -16,7 +16,14 @@ import { join } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
-import { coverUrlOf, demoAssetPathFor, readerPages, resolveBook } from './book-source.ts'
+import {
+  coverUrlOf,
+  demoAssetPathFor,
+  readerPages,
+  readerStory,
+  resolveBook,
+} from './book-source.ts'
+import { storyPath } from '@/components/reader/reader-model.ts'
 import { createMemoryStore } from './engine/providers/stores.ts'
 import { createFsStore } from './engine/index.ts'
 import { scopedStore } from './asset-scope.ts'
@@ -33,6 +40,25 @@ function node(pageNo: number, body: string[]): StoryNode {
     next: [],
     pathFromRoot: [`n${pageNo}`],
   }
+}
+
+/** 带岔路的节点：`next` 两个、`choice` 两个选项（顺序 = `via` a/b，tree.ts 保证） */
+function choiceNode(pageNo: number, next: [string, string]): StoryNode {
+  return {
+    ...node(pageNo, ['前面有两条路。']),
+    next,
+    choice: {
+      prompt: '走哪一条？',
+      options: [
+        { iconKey: 'dino', emoji: '🦕', label: '恐龙的背', spoken: '走恐龙那边' },
+        { iconKey: '还不在词表里', emoji: '🛶', label: '小船的肚子', spoken: '走小船那边' },
+      ],
+    },
+  }
+}
+
+function link(pageNo: number, next: string): StoryNode {
+  return { ...node(pageNo, [`第 ${pageNo} 页。`]), next: [next] }
 }
 
 function illustration(pageNo: number): Illustration {
@@ -64,13 +90,15 @@ function book(parts: {
   illustrations?: Illustration[]
   narrations?: Narration[]
   errors?: { pageNo: number; message: string }[]
+  form?: 'solo' | 'shared'
 }): Book {
+  const form = parts.form ?? 'solo'
   return {
     bookId: 'b1',
     cardId: 'c1',
     cardRevision: 1,
-    form: 'solo',
-    tree: { form: 'solo', title: 'T', rootId: 'n1', nodes: parts.nodes },
+    form,
+    tree: { form, title: 'T', rootId: 'n1', nodes: parts.nodes },
     illustrations: parts.illustrations ?? [],
     errors: parts.errors ?? [],
     narrations: parts.narrations ?? [],
@@ -134,6 +162,123 @@ describe('readerPages · 图与朗读互不影响', () => {
       (path) => `/demo/books/b1/${path.split('/').pop()}`,
     )
     expect(pages[0]?.audioUrl).toBe('/demo/books/b1/page-1-a1.mp3')
+  })
+})
+
+/**
+ * ★★ 共读版：**平铺表不是任何一条阅读路径**（2026-10-18）
+ *
+ * 钉的是"阅读器不许拿 `readerPages()` 渲染共读版"。那条路按页号排，于是两条支被读成
+ * 相邻的两页：孩子选了一次，看到的却是两条路**连着**读下来——树的形状在屏幕上完全
+ * 看不出来，**而三道闸门一条都不响**（类型对、lint 过、几何自检也过）。
+ * 今天盘上还没有共读版的书，所以它不是活的 bug，只是一颗埋着的雷。
+ *
+ * 机械的那半边由**类型**兜着：`ReaderBookProps` 里只有 `story`，没有 `pages`，
+ * 组件根本拿不到那张平铺表。所以这一组测的是另一半——那张表**真的**不等于任何一条路，
+ * 以及 `readerStory` 交出来的树长得对不对。
+ */
+describe('readerStory · 平铺表 ≠ 阅读路径', () => {
+  /**
+   * 1 → 2 → 3（选择点）→ a 支 4 收尾 / b 支 5 → 6 收尾。
+   * ★ 两支的页号**交错**（a 支是 4、b 支是 5 与 6）：平铺顺序 `1,2,3,4,5,6` 谁都不长这样，
+   *   走 b 支的人永远见不到第 4 页。
+   */
+  const shared = book({
+    form: 'shared',
+    nodes: [
+      link(1, 'n2'),
+      link(2, 'n3'),
+      choiceNode(3, ['n4', 'n5']),
+      node(4, ['恐龙那边。']),
+      link(5, 'n6'),
+      node(6, ['小船那边。']),
+    ],
+    illustrations: [1, 2, 3, 4, 5, 6].map(illustration),
+    narrations: [1, 2, 3, 4, 5, 6].map((pageNo) => narration(pageNo)),
+  })
+
+  it('平铺表是**全表**（含走不到的那一支），按页号排', () => {
+    expect(readerPages(shared, urlOf).map((page) => page.pageNo)).toEqual([1, 2, 3, 4, 5, 6])
+  })
+
+  it('★ 走 b 支那一条路里**没有第 4 页**，而平铺表里有它', () => {
+    const story = readerStory(shared, urlOf)
+    expect(story.form).toBe('shared')
+    const b = storyPath(story, 'b').map((node) => node.pageNo)
+    expect(b).toEqual([1, 2, 3, 5, 6])
+    expect(b).not.toContain(4)
+    expect(readerPages(shared, urlOf).map((page) => page.pageNo)).toContain(4)
+  })
+
+  it('没选过就停在选择点上（那一屏才浮得出两颗按钮）', () => {
+    const story = readerStory(shared, urlOf)
+    const path = storyPath(story, null)
+    expect(path.map((node) => node.pageNo)).toEqual([1, 2, 3])
+    expect(path[2]?.choice?.prompt).toBe('走哪一条？')
+  })
+
+  it('★ 两种形态用的是**同一个 builder**：同一页的图与音在两处逐字相同', () => {
+    // 一个真相、两个投影。分开算的症状是"内页缩了、封面没缩"那一类没人会去查的差异
+    const pages = readerPages(shared, urlOf)
+    const story = readerStory(shared, urlOf)
+    for (const page of pages) {
+      const view = story.nodes.find((item) => item.pageNo === page.pageNo)
+      expect(view?.imageUrl).toBe(page.imageUrl)
+      expect(view?.audioUrl).toBe(page.audioUrl)
+      expect(view?.missing).toBe(page.missing)
+    }
+  })
+
+  it('选择点那三段音各归各的（按 `part` 取，不是"一页一条"）', () => {
+    const withParts = book({
+      form: 'shared',
+      nodes: [link(1, 'n2'), choiceNode(2, ['n3', 'n4']), node(3, []), node(4, [])],
+      illustrations: [1, 2, 3, 4].map(illustration),
+      narrations: [
+        narration(2, 'books/b1/page-2-a1.mp3'),
+        {
+          ...narration(2),
+          part: 'prompt',
+          asset: { ...narration(2).asset, path: 'books/b1/ask.mp3' },
+        },
+        {
+          ...narration(2),
+          part: 'option-a',
+          asset: { ...narration(2).asset, path: 'books/b1/opt-a.mp3' },
+        },
+        {
+          ...narration(2),
+          part: 'option-b',
+          asset: { ...narration(2).asset, path: 'books/b1/opt-b.mp3' },
+        },
+      ],
+    })
+    const view = readerStory(withParts, urlOf).nodes.find((item) => item.pageNo === 2)
+    expect(view?.audioUrl).toBe('/api/assets/books/b1/page-2-a1.mp3')
+    expect(view?.choice?.promptAudioUrl).toBe('/api/assets/books/b1/ask.mp3')
+    expect(view?.choice?.options[0]?.audioUrl).toBe('/api/assets/books/b1/opt-a.mp3')
+    expect(view?.choice?.options[1]?.audioUrl).toBe('/api/assets/books/b1/opt-b.mp3')
+  })
+
+  it('★ 图标：盘上有图给地址，词表之外的 key 给 null（露 emoji 那一档，不回 404 地址）', () => {
+    const view = readerStory(shared, urlOf).nodes.find((item) => item.pageNo === 3)
+    expect(view?.choice?.options[0]?.iconUrl).toBe('/book/choice-dino.webp')
+    expect(view?.choice?.options[1]?.iconUrl).toBeNull()
+    expect(view?.choice?.options[1]?.emoji).toBe('🛶')
+  })
+
+  it('缺图那一页在两条路上都是 missing（`Book.errors` 那条路不受分支影响）', () => {
+    const broken = book({
+      form: 'shared',
+      nodes: [link(1, 'n2'), choiceNode(2, ['n3', 'n4']), node(3, []), node(4, [])],
+      illustrations: [illustration(1), illustration(2), illustration(3)],
+      errors: [{ pageNo: 3, message: '出图失败' }],
+    })
+    const story = readerStory(broken, urlOf)
+    const a = storyPath(story, 'a').map((node) => node.pageNo)
+    expect(a).toEqual([1, 2, 3])
+    expect(story.nodes.find((item) => item.pageNo === 3)?.missing).toBe(true)
+    expect(story.nodes.find((item) => item.pageNo === 3)?.imageUrl).toBeNull()
   })
 })
 

@@ -11,13 +11,23 @@ import { describe, expect, it } from 'vitest'
 
 import {
   autoCueOf,
+  choiceScreenOf,
   leafCountOf,
+  maxLeafOf,
   openingOf,
+  pathPages,
   readerFaces,
   readoutOf,
   showsText,
+  storyPath,
 } from './reader-model.ts'
-import type { ReaderPage } from '@/lib/book-source.ts'
+import type {
+  ReaderPage,
+  ResolvedStory,
+  StoryChoiceView,
+  StoryOptionView,
+  StoryView,
+} from '@/lib/book-source.ts'
 
 function page(pageNo: number, body: readonly string[] = ['一句。']): ReaderPage {
   return {
@@ -159,5 +169,159 @@ describe('自动朗读：第 opening 屏该念哪儿', () => {
   it('空书（封面紧挨着封底）两个端点都认得出，不会去念第 1 屏', () => {
     expect(autoCueOf(0, 0)).toEqual({ kind: 'begin' })
     expect(autoCueOf(1, 0)).toEqual({ kind: 'done' })
+  })
+})
+
+/* ═════════════════════ 共读版：阅读顺序是**那条路**，不是页号 ═════════════════════ */
+
+function option(label: string): StoryOptionView {
+  return { label, spoken: label, emoji: '✨', iconUrl: null, audioUrl: `a/${label}.mp3` }
+}
+
+const CHOICE: StoryChoiceView = {
+  prompt: '走哪边？',
+  promptAudioUrl: 'a/ask.mp3',
+  options: [option('走左边'), option('走右边')],
+}
+
+function view(
+  pageNo: number,
+  next: string[] = [],
+  choice: StoryChoiceView | null = null,
+): StoryView {
+  return {
+    nodeId: `n${pageNo}`,
+    pageNo,
+    body: [`第 ${pageNo} 页的正文。`],
+    imageUrl: `books/b1/page-${pageNo}-a1.png`,
+    audioUrl: `books/b1/page-${pageNo}-a1.mp3`,
+    missing: false,
+    next,
+    choice,
+  }
+}
+
+/**
+ * 一棵带岔路的树：1 → 2 → 3（选择点）→ a 支 4 收尾 / b 支 5 → 6 收尾。
+ *
+ * ★ 两支的页号**交错**是刻意的：平铺顺序长这样 `1,2,3,4,5,6`，而**任何一条真实的
+ *   阅读路径都不长这样**（走 b 支的人永远见不到第 4 页）。这不是难看的构造——
+ *   它就是"预生成"的形状：钱在生成那一刻花完了，走不到的那一支也在书里。
+ * ★ 页数差 1（a 支 4 页、b 支 5 页）取在 `tree.ts` 允许的边界上。
+ */
+const SHARED: ResolvedStory = {
+  form: 'shared',
+  rootId: 'n1',
+  nodes: [
+    view(1, ['n2']),
+    view(2, ['n3']),
+    view(3, ['n4', 'n5'], CHOICE),
+    view(4),
+    view(5, ['n6']),
+    view(6),
+  ],
+}
+
+describe('故事路径：没选之前停在选择点上', () => {
+  it('没选过 → 路走到选择点为止（"到目前为止他能读到的那些页"）', () => {
+    expect(storyPath(SHARED, null).map((node) => node.pageNo)).toEqual([1, 2, 3])
+  })
+
+  it('选了哪一支就走哪一支，到叶为止', () => {
+    expect(storyPath(SHARED, 'a').map((node) => node.pageNo)).toEqual([1, 2, 3, 4])
+    expect(storyPath(SHARED, 'b').map((node) => node.pageNo)).toEqual([1, 2, 3, 5, 6])
+  })
+
+  it('★ 平铺顺序**不等于任何一条路** —— 这就是"不许拿全表当阅读顺序"', () => {
+    const flat = SHARED.nodes.map((node) => node.pageNo)
+    expect(flat).toEqual([1, 2, 3, 4, 5, 6])
+    for (const pick of [null, 'a', 'b'] as const) {
+      expect(storyPath(SHARED, pick).map((node) => node.pageNo)).not.toEqual(flat)
+    }
+    // 症状具体长这样：走 b 支的孩子，屏幕上一页都不会出现第 4 页（a 支那一页）
+    expect(storyPath(SHARED, 'b').map((node) => node.pageNo)).not.toContain(4)
+  })
+
+  it('★ 走不到的支**一页都不算进来**——图与音所属的页表就是这么短下来的', () => {
+    // 阅读器只按这条路挂图/取音（`narrationUrls` 也是它算的），所以"a 支的图与音频
+    // 一次都没被请求"这条验收在模型这一层就是这个断言；浏览器那一半看 network 面板
+    const pages = pathPages(storyPath(SHARED, 'b'))
+    expect(pages.map((page) => page.pageNo)).toEqual([1, 2, 3, 5, 6])
+  })
+
+  it('一个人的书（独读版）就是一条链：任何 pick 都等于全表', () => {
+    const solo: ResolvedStory = {
+      form: 'solo',
+      rootId: 'n1',
+      nodes: [view(1, ['n2']), view(2, ['n3']), view(3)],
+    }
+    const flat = solo.nodes.map((node) => node.pageNo)
+    for (const pick of [null, 'a', 'b'] as const) {
+      expect(storyPath(solo, pick).map((node) => node.pageNo)).toEqual(flat)
+    }
+  })
+
+  it('盘上的 JSON 被手改出环也不会把服务端渲染挂死', () => {
+    const broken: ResolvedStory = {
+      form: 'solo',
+      rootId: 'n1',
+      nodes: [view(1, ['n2']), view(2, ['n1'])],
+    }
+    expect(storyPath(broken, null).map((node) => node.pageNo)).toEqual([1, 2])
+  })
+
+  it('根不在表里 / 空表 → 空路，不抛（封面紧挨着封底）', () => {
+    expect(storyPath({ form: 'solo', rootId: 'nope', nodes: [view(1)] }, null)).toEqual([])
+    expect(readerFaces(pathPages([])).map((face) => face.kind)).toEqual(['cover', 'back'])
+  })
+})
+
+describe('页码：给人看的那个数是**这条路上的序号**，不是资产编号', () => {
+  const pages = pathPages(storyPath(SHARED, 'b'))
+
+  it('★ 路径第 4 页的资产编号是 5 —— 两个数必须分开', () => {
+    // 报资产编号的症状：走 b 支的孩子读到第 4 页，底栏说"第 5 页"，家长以为漏读了一页
+    expect(readoutOf(4, pages)).toEqual({ label: '第 4 页', page: 5 })
+  })
+
+  it('两端仍然是封面与封底（路变短了，端点跟着走）', () => {
+    expect(readoutOf(0, pages)).toEqual({ label: '封面', page: null })
+    expect(readoutOf(leafCountOf(pages), pages)).toEqual({ label: '封底', page: null })
+  })
+
+  it('阅读记录记的仍然是资产编号（`page` 那一栏）', () => {
+    expect(readoutOf(5, pages).page).toBe(6)
+  })
+})
+
+describe('选择点那一屏', () => {
+  it('浮在选择点那一屏上，别处是 null', () => {
+    const path = storyPath(SHARED, null)
+    expect(choiceScreenOf(path, 3)).toBe(CHOICE)
+    expect(choiceScreenOf(path, 1)).toBeNull()
+    expect(choiceScreenOf(path, 0)).toBeNull()
+  })
+
+  it('★ 选过之后**回翻**，那一屏仍然是选择点（按下态才有地方还原、才改得动）', () => {
+    expect(choiceScreenOf(storyPath(SHARED, 'a'), 3)).toBe(CHOICE)
+    expect(choiceScreenOf(storyPath(SHARED, 'b'), 3)).toBe(CHOICE)
+  })
+
+  it('路比一到那儿就短了（选完 b 支之后再问第 4 屏）→ null，不抛', () => {
+    expect(choiceScreenOf(storyPath(SHARED, null), 4)).toBeNull()
+  })
+})
+
+describe('没选之前 `›` 的上界：封底那一片叶不给', () => {
+  const blockedAtChoice = pathPages(storyPath(SHARED, null))
+
+  it('★ 挡住的是"越过选择点"，少给的正好是**封底那一片叶**', () => {
+    expect(maxLeafOf(blockedAtChoice, true)).toBe(leafCountOf(blockedAtChoice) - 1)
+    expect(leafCountOf(blockedAtChoice)).toBe(4) // 3 页 + 封面 → 4 片叶
+  })
+
+  it('不挡的时候拿满（独读版与选过的共读版都不改量程）', () => {
+    const solo = pathPages(storyPath(SHARED, 'a'))
+    expect(maxLeafOf(solo, false)).toBe(leafCountOf(solo))
   })
 })

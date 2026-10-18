@@ -14,16 +14,17 @@
  *
  * ★ `speechReady(settings)` 的判据**必须换掉**，这是这一轮最重要的一处语义变化。
  *   它的老判据是"用户填齐了 key + 模型 + 音色"——三个都在用户手上。
- *   现在这三样里有两样**不在用户手上**了：密钥是站长的、能不能用是站长给的权限。
+ *   现在这三样里有两样**不在用户手上**了：密钥是站长的、能不能用是站长放的权限。
  *   于是新判据是三条**分别来自三个地方**的事实：
  *
  *     · 站里配齐了语音吗   ← `GET /api/auth/me` 的 `configured`（服务端环境变量）
- *     · 这个人有语音权限吗 ← 同一个响应的 `permissions`（站长在管理页勾的）
+ *     · 这个人有创作权吗   ← 同一个响应的 `allowed`（一位；2026-10-18 之前是四个开关里的
+ *                             `speech`，现在四项同真同假，见 ADR-0010）
  *     · 挑了一个音色吗     ← **账号上**（`GET /api/voices` 的 `current`；2026-10-17 之前在本机）
  *
  *   ★ 三条要**分开说**，不能合成一个布尔。合成之后字面上只有两种可能
  *   （"能用"/"不能用"），而用户看到"不能用"时下一步该做什么，恰恰取决于缺的是哪一条：
- *   找站长开权限、等站里配好、还是自己挑一个——这三句话没有一句能由另一句代替。
+ *   找站长要权限、等站里配好、还是自己挑一个——这三句话没有一句能由另一句代替。
  *   所以导出的是 `narrationBlockOf()`，回一个**说出是哪一条**的值。
  */
 
@@ -190,7 +191,7 @@ export function speechBlockOf(given: {
 export function narrationBlockOf(given: {
   /** 站里配齐了语音吗（`GET /api/auth/me` 的 `configured.speech`） */
   serverHasSpeech: boolean
-  /** 这个人有语音权限吗（同一个响应的 `permissions.speech`） */
+  /** 这个人有没有创作权（同一个响应的 `allowed`，一位） */
   allowed: boolean
   /** 挑了一个音色吗（本机那一格，非空即真） */
   voiceId: string
@@ -211,7 +212,7 @@ export function narrationBlockOf(given: {
 export const CONTACT_EMAIL = '2953997419@qq.com'
 
 export const NARRATION_BLOCK_MESSAGE: Record<NarrationBlock, string> = {
-  'no-permission': `你的账号还没有语音权限，朗读用不了。要开请联系 ${CONTACT_EMAIL}`,
+  'no-permission': `你的账号没有创作权限（站长可以收回这一项），朗读用不了。要开请联系 ${CONTACT_EMAIL}`,
   'server-not-configured': `站里还没有配好语音，朗读暂时用不了——这不是你能改的，等一等；等不到就说一声 ${CONTACT_EMAIL}`,
   'no-voice': '还没挑音色——去「声音」那一屏挑一个，之后每本书都用它念',
 }

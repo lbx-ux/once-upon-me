@@ -35,8 +35,8 @@ import { useAuth } from '@/components/auth/AuthProvider.tsx'
 import { safeNext, type Permissions } from '@/lib/auth/state.ts'
 
 export type SignInVerdict =
-  /** 已登录。★ 带回刚问到的权限与"站里配齐了什么"，调用方不必再问一次 */
-  | { kind: 'signed-in'; permissions: Permissions; configured: Permissions }
+  /** 已登录。★ 带回刚问到的"能不能创作"与"站里配齐了什么"，调用方不必再问一次 */
+  | { kind: 'signed-in'; allowed: boolean; configured: Permissions }
   /** 没登录（弹窗已经开了） */
   | { kind: 'signed-out' }
 
@@ -79,7 +79,7 @@ export function useSignInGate(): { ask: () => Promise<SignInVerdict>; dialog: Re
     >
       <p className="sg__text">
         创作、做角色卡、录声音都需要一个账号——登录之后才能把东西存下来，
-        也才知道哪些能力对你的账号开了。
+        也才有地方放下你做过的那些书。
       </p>
       <p className="sg__hint">用手机号收一次验证码，或者直接用密码登录。</p>
     </Dialog>

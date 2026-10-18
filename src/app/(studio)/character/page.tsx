@@ -2,7 +2,7 @@ import CharacterWall from '@/components/studio/CharacterWall.tsx'
 import { currentUserId } from '@/lib/auth/session.ts'
 import { assetRoot } from '@/lib/books-runtime.ts'
 import { userSliceRoot } from '@/lib/asset-scope.ts'
-import { listWallItems } from '@/lib/children-list.ts'
+import { listDemoWallItems, listWallItems } from '@/lib/children-list.ts'
 
 /**
  * /character —— 小主角（工作台的第三格）
@@ -27,17 +27,16 @@ export const dynamic = 'force-dynamic'
 export const metadata = { title: '角色卡 · 小主角' }
 
 export default async function CharacterPage() {
-  // ★ 2026-10-17（工单 16）：只列**自己**的孩子（别人的孩子在他那一片里不存在）。
-  //   未登录 = 空墙（同 shelf 那段口径）。
-  //   ★ 那句原来的理由写错了，2026-10-17 顺带改掉：它写的是"示例孩子也读不到了——
-  //   他活在演示账号那一片里"。**示例孩子不在任何人的那一片里**，他们的档案与卡
-  //   分别在 `public/demo/children/` 与 `public/demo/cards/`（见 `card-source.ts`），
-  //   `listChildren` / `listCardItems` 对谁都读得到。这里看不到他们，是因为**这一行
-  //   提前返回了空墙**——一个取数上的分岔，不是"示例内容有主人"。
-  //   ★ 于是有一个后果要记着：示例卡的图走 `/api/assets`（要登录），而访客看到的是
-  //   空墙——两者一致，所以不会出现"碎图"。要让访客也看见，得换成静态地址（README §五）。
+  // ★ 2026-10-17（工单 16）：登录之后只列**自己**的孩子（别人的孩子在他那一片里不存在）。
+  //
+  // ★ 2026-10-18：**未登录不再是空墙**——访客看的是随仓库发布的示例（小满 / 小宇），
+  //   走 `listDemoWallItems()`：只读 `public/demo/` 那一片，卡的图走**静态地址**
+  //   （`public/demo/cards/…`，Next 直接发，不需要鉴权——`/api/assets` 对匿名仍然 401）。
+  //   ★ 那条界线一个字没动：**别人的孩子仍然要登录才看得到**，因为访客那一支的根
+  //   由 `demoAssetRoot()` 钉死在 `public/demo/`，它根本不认识 `.out/web`。
+  //   ★ 这段改动的来由与代价记在 README §五（原来是"访客看到空墙"那一条）。
   const userId = await currentUserId()
-  if (!userId) return <CharacterWall items={[]} />
+  if (!userId) return <CharacterWall items={await listDemoWallItems()} />
 
   return <CharacterWall items={await listWallItems(userSliceRoot(assetRoot(), userId))} />
 }

@@ -9,6 +9,10 @@
  *
  * ★ 半页不切文件：同一张 3:2 跨页图挂两次，靠 background-position 各取一半。
  *   所以这里一个跨页只有一个 image，左半右半是渲染时算出来的（见 buildLeaves）。
+ *
+ * ★ 朗读**不在这里**，它没有第二张表：第 k 个跨页的图叫什么，它的朗读就叫什么
+ *   （`spread-k.webp` ↔ `spread-k.m4a`，同目录同序号）—— 由 `lib/demo-book-audio.ts`
+ *   问盘得出。逐字的稿子与时长预算在 `docs/demo-narration-script.md`。
  */
 
 export const BOOK_TITLE = '小宇的云'
@@ -115,7 +119,12 @@ function spreadFour(branch: BranchKey): Spread {
   return BRANCHES[branch]
 }
 
-function allSpreads(branch: BranchKey): readonly Spread[] {
+/**
+ * 这一支读到的四个跨页（下标 0 = 第 1 个跨页）。
+ * ★ 导出是给 `lib/demo-book-audio.ts` 用的：它要按**图的名字**去盘上找同名音频，
+ *   所以得有地方问"这一支有哪几张图"——而不是在那边再写一份跨页清单。
+ */
+export function allSpreads(branch: BranchKey): readonly Spread[] {
   return [...SPREADS, spreadFour(branch)]
 }
 

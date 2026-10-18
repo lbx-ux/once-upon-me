@@ -139,6 +139,93 @@ describe('narrateAll · 一页坏了不拖垮整本', () => {
   })
 })
 
+describe('选择点那三段（2026-10-18）', () => {
+  /** 带选择点的一页：正文之外还有提问与两个选项 */
+  function choiceNode(pageNo: number): StoryNode {
+    return {
+      ...node(pageNo, ['前面有两条路。']),
+      choice: {
+        prompt: '你想走哪一条？为什么呢？',
+        options: [
+          { iconKey: 'tree', emoji: '🌲', label: '穿森林', spoken: '我们要飞过树林。' },
+          { iconKey: 'ship', emoji: '⛵', label: '过大海', spoken: '我们要跨过海面。' },
+        ],
+      },
+    }
+  }
+
+  it('★ 选择点那一页要合成四段：正文 / 提问 / 选项 A / 选项 B', async () => {
+    const { voice, texts } = fakeVoice()
+    const { result } = await run([node(1, ['天亮了。']), choiceNode(2)], voice)
+    expect(texts).toEqual([
+      '天亮了。',
+      '前面有两条路。',
+      '你想走哪一条？为什么呢？',
+      '我们要飞过树林。',
+      '我们要跨过海面。',
+    ])
+    const parts = result.narrations.map((item) => `${item.pageNo}:${item.part}`)
+    expect(parts).toContain('2:body')
+    expect(parts).toContain('2:prompt')
+    expect(parts).toContain('2:option-a')
+    expect(parts).toContain('2:option-b')
+  })
+
+  it('★ 落盘名各带各的后缀，而**正文那一档与加共读版之前逐字节相同**', async () => {
+    const { voice } = fakeVoice()
+    const { result } = await run([choiceNode(3)], voice)
+    const pathOf = (part: string): string | undefined =>
+      result.narrations.find((item) => (item.part ?? 'body') === part)?.asset.path
+    expect(pathOf('body')).toBe('books/book-1/page-3-a1.mp3')
+    expect(pathOf('prompt')).toBe('books/book-1/page-3-prompt-a1.mp3')
+    expect(pathOf('option-a')).toBe('books/book-1/page-3-opt-a-a1.mp3')
+    expect(pathOf('option-b')).toBe('books/book-1/page-3-opt-b-a1.mp3')
+  })
+
+  it('两个选项写成同一句话时共用一份录音（去重键仍是 voiceId+文本）', async () => {
+    const { voice, texts } = fakeVoice()
+    const same = {
+      ...choiceNode(1),
+      choice: {
+        prompt: '你想走哪一条？',
+        options: [
+          { iconKey: 'tree', emoji: '🌲', label: '左边', spoken: '就走这条吧。' },
+          { iconKey: 'ship', emoji: '⛵', label: '右边', spoken: '就走这条吧。' },
+        ],
+      },
+    } as StoryNode
+    const { result } = await run([same], voice)
+    expect(texts.filter((text) => text === '就走这条吧。')).toHaveLength(1)
+    const a = result.narrations.find((item) => item.part === 'option-a')
+    const b = result.narrations.find((item) => item.part === 'option-b')
+    expect(b?.asset.path).toBe(a?.asset.path)
+    // ★ 但两条记录的 part 各是各的：复用同一份字节，不等于它们变成同一段
+    expect(a?.part).toBe('option-a')
+    expect(b?.part).toBe('option-b')
+  })
+
+  it('★ 配不上音时那句话点名**是哪一段**（一页四段，只说"这一页"等于没说）', async () => {
+    const { voice } = fakeVoice('我们要跨过海面。')
+    const { result, events } = await run([choiceNode(1)], voice)
+    expect(result.errors).toHaveLength(1)
+    expect(result.errors[0]?.message).toContain('选项 B')
+    expect(result.errors[0]?.message).toContain('上游 500')
+    const said = events
+      .filter((one) => one.kind === 'error')
+      .map((one) => one.message)
+      .join('')
+    expect(said).toContain('选项 B')
+  })
+
+  it('一个片段都没有的页照旧跳过，不留空文件', async () => {
+    const { voice, texts } = fakeVoice()
+    const { result } = await run([node(1, [])], voice)
+    expect(texts).toEqual([])
+    expect(result.narrations).toEqual([])
+    expect(result.errors).toEqual([])
+  })
+})
+
 describe('narrationTextOf · 正文怎么拼', () => {
   it("join('')，不加空格（实测 2.5 秒那个数是按这个拼法量的）", () => {
     expect(narrationTextOf(node(1, ['哗啦啦，大雨落下来。', '地上变成亮晶晶的河。']))).toBe(

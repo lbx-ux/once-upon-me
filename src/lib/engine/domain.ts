@@ -371,6 +371,72 @@ export type ChoiceOption = {
   spoken: string
 }
 
+/**
+ * **盘上有图的那几个图标 key**（2026-10-18，共读版）。
+ *
+ * ★ 它是**美术清单，不是枚举校验**——这个区别是钱决定的，不是风格：
+ *   `planStory` 的重试是**整篇重写**（`plan.ts` 的循环重发同一个 prompt），
+ *   所以让一个装饰性字段（图标名）不合枚举去触发整本故事重新生成，
+ *   是拿这条流水线上最贵的动作换最便宜的东西。
+ *   而 `schemas/schema.ts` 的 `withDefault` 恰好本来就是宽容的
+ *   （`result.ok ? result : ok(fallback)`），于是今天的形状天然就是
+ *   **"对得上就用图、对不上露 emoji"**——与首页那两枚云图、第三屏那 5 张插画
+ *   **同一个机制**（兜底是退路，不是死代码）。
+ *
+ * ★ 词表只写一处，两个消费者都从这里取：提示词把它列给模型看（`story-plan.ts`
+ *   的 `{icons}`），界面把它当"哪个 key 有图"的判据（`lib/choice-icons.ts`）。
+ *   各写一份的症状是"模型挑了一个界面不认得的 key"，而两边都觉得自己是对的。
+ *
+ * ★ 前两个（`dino` / `ship`）**已经有图**：它们是首页第二屏那本演示书的两枚
+ *   （`public/book/choice-dino.webp` / `choice-ship.webp`）。所以这份清单
+ *   落地第一天就有两张不是兜底，其余按 `docs/choice-icon-prompts.md` 出。
+ *
+ * ★ 挑词表的三条口径（都是判据，不是审美）：
+ *   1. **每枚都要能当任一侧的选项**——不要"上/下""左/右"这类方向词。
+ *      一条岔路是"恐龙背 vs 船肚子"，不是"左边 vs 右边"。
+ *   2. **一枚一个物件**：不画场景、不画人物。它在按钮里只有 96–120px。
+ *   3. **与绘本同一支笔**（水彩 + 彩铅收形）。emoji 是扁平 clip-art，
+ *      与水彩是两套画法——这正是"不许只放 emoji"的判据（README §五 那句话的第二次应用）。
+ *
+ * ★ 排在前面的是"孩子最常想去的那些地方与东西"：车船飞行器、动物、天体、家与路。
+ *   加一枚就是多一张图要出，**不要为了凑整齐往里塞同义词**（`ship` 与 `boat` 是一件事）。
+ */
+export const CHOICE_ICONS = [
+  'dino', // 已有图（首页演示书）
+  'ship', // 已有图（首页演示书）
+  'rocket',
+  'bird',
+  'cat',
+  'fish',
+  'moon',
+  'star',
+  'tree',
+  'house',
+  'cloud',
+  'door',
+  'bridge',
+  'lamp',
+  'flower',
+  'car',
+  'kite',
+  'balloon',
+  'cake',
+  'drum',
+] as const
+export type ChoiceIcon = (typeof CHOICE_ICONS)[number]
+
+/**
+ * 这个 key 盘上有没有图。**只有这一个判据**——界面据此决定是出图还是露 emoji。
+ *
+ * ★ 收 `string` 而不是 `ChoiceIcon`：值是模型写的，它可以是词表之外的任何东西
+ *   （`'dinosaur-back'`、`'恐龙背'`）。收窄成 `ChoiceIcon` 会把"模型没照词表挑"
+ *   这件事从一个**正常情况**变成一个**类型错误**，于是调用方要写断言，
+ *   而断言在那里唯一的作用就是把一个可能的错值说成不可能。
+ */
+export function hasChoiceIcon(key: string): key is ChoiceIcon {
+  return (CHOICE_ICONS as readonly string[]).includes(key)
+}
+
 export type StoryTree = {
   form: BookForm
   title: string
@@ -407,10 +473,43 @@ export type Illustration = {
   needsHumanReview: boolean
 }
 
+/**
+ * 一页里可以有几段音频。**顺序就是落盘顺序，也是界面上的念读顺序**。
+ *
+ * ★ 只有 `body` 是每一页都有的；另外三段是**共读版选择点那一页**多出来的
+ *   （产品定义：选项走「大图标 + 语音朗读」双通道——`spoken` 就是那个"耳朵"通道）。
+ * ★ `prompt` 是**给家长念的引导提问**，`option-a` / `option-b` 才对应两颗按钮。
+ *   它也要有声音，是因为孩子不识字：家长不在的那几秒，选项至少得能自己说出来。
+ */
+export const NARRATION_PARTS = ['body', 'prompt', 'option-a', 'option-b'] as const
+export type NarrationPart = (typeof NARRATION_PARTS)[number]
+
+/**
+ * 片段的中文名。**报错与过程面板都要这一份**：一页现在最多四段，
+ * 只说"这一页没配上音"，家长不知道缺的是哪一句（正文没配上他自己能念；
+ * 选项没配上，孩子就选不了）。
+ */
+export const NARRATION_PART_LABELS: Record<NarrationPart, string> = {
+  body: '正文',
+  prompt: '引导提问',
+  'option-a': '选项 A',
+  'option-b': '选项 B',
+}
+
 export type Narration = {
   pageNo: number
+  /**
+   * 这一份录音是这一页里的哪一段。
+   *
+   * ★ **缺省 = `body`**（正文）。盘上已有的书、以及随仓库提交的演示书都没有这个字段，
+   *   而"缺省是正文"让它们一本都不受影响——与 `Book.status` 那条"缺省 = 成品"
+   *   同一类**迁移决定**，改它之前先想清楚那些书怎么办。
+   * ★ 写成可选而不是必填，理由同上：填一个 `'body'` 进旧书要重写清单，
+   *   而清单是资产（ADR-0003），不该为了一个新字段批量重写。
+   */
+  part?: NarrationPart
   voiceId: string
-  /** 正文哈希：`(voiceId, textHash)` 是去重键，树里共享的主干页因此只合成一次 */
+  /** 正文哈希：`(voiceId, textHash)` 是去重键，同一段文字因此只合成一次 */
   textHash: string
   asset: AssetRef
   durationMs?: number

@@ -1,7 +1,6 @@
 package com.onceuponme.api.admin;
 
 import org.springframework.http.ResponseEntity;
-import java.util.List;
 
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -13,7 +12,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.onceuponme.api.admin.dto.AdminOverview;
-import com.onceuponme.api.admin.dto.AdminRequestRow;
 import com.onceuponme.api.admin.dto.AdminUserRow;
 import com.onceuponme.api.admin.dto.PermissionPatch;
 import com.onceuponme.api.auth.AuthService;
@@ -36,17 +34,11 @@ import jakarta.servlet.http.HttpServletRequest;
 public class AdminController {
 
   private final AdminService admin;
-  private final PermissionRequestService requestService;
   private final CurrentSession current;
   private final AuthService auth;
 
-  public AdminController(
-      AdminService admin,
-      PermissionRequestService requestService,
-      CurrentSession current,
-      AuthService auth) {
+  public AdminController(AdminService admin, CurrentSession current, AuthService auth) {
     this.admin = admin;
-    this.requestService = requestService;
     this.current = current;
     this.auth = auth;
   }
@@ -78,11 +70,17 @@ public class AdminController {
 
   public record CheckBody(boolean admin) {}
 
+  /**
+   * 开 / 关一个人的创作权限。
+   *
+   * <p>★ 路径仍然是 `…/permissions`（它改的就是"这个人的权限"），而身体只有一位
+   * （{@code {"allowed": false}}）——2026-10-18 由四个布尔收成一位，见 `PermissionPatch`。
+   */
   @PatchMapping("/users/{userId}/permissions")
   public AdminUserRow updatePermissions(
       @PathVariable long userId, @RequestBody PermissionPatch body, HttpServletRequest request) {
     requireAdminFresh(request);
-    return admin.updatePermissions(userId, body.toPermissions());
+    return admin.setAllowed(userId, body.allowed());
   }
 
   /* ── 建号 / 停号 / 删号 / 重置别人的密码（2026-10-17，用户要的）─────────────
@@ -91,7 +89,7 @@ public class AdminController {
    *   而"管理员"这件事必须按**此刻**判——一张改密码之前签发的票不该还能改别人的口令。
    */
 
-  /** 建号。四个能力一律不开（见 `AdminService#createUser`） */
+  /** 建号。★ 新号**默认有创作权**（见 `AdminService#createUser`） */
   @PostMapping("/users")
   public AdminUserRow createUser(@RequestBody CreateUserBody body, HttpServletRequest request) {
     requireAdminFresh(request);
@@ -134,36 +132,6 @@ public class AdminController {
     requireAdminFresh(request);
     return admin.resetPassword(userId, body.password());
   }
-
-  /* ── 权限申请（2026-10-17）────────────────────────────────────────────────
-   *
-   * ★ 它与 `/users` **分开成两个端点**，而不是并进 `AdminOverview` 里一起返回：
-   *   批完一条要刷新的是"这一列申请"，不是"整张用户表"。并在一起的话，
-   *   每批一条就把整张表重新拉一遍（顺便把别人正在改的 checkbox 覆盖掉）。
-   */
-
-  /** 全部申请，待处理在前 */
-  @GetMapping("/requests")
-  public List<AdminRequestRow> requests(HttpServletRequest request) {
-    requireAdminFresh(request);
-    return requestService.list();
-  }
-
-  /**
-   * 批 / 拒一条。
-   *
-   * ★ 批准 = **把那几个能力并到他现有的权限上**（不是覆盖），理由写在
-   *   `PermissionRequestService#decide` 上：一个已有文本权限、这次只申请图像的人，
-   *   覆盖式批准会把他已有的那一项关掉。
-   */
-  @PatchMapping("/requests/{requestId}")
-  public AdminRequestRow decideRequest(
-      @PathVariable long requestId, @RequestBody DecideBody body, HttpServletRequest request) {
-    JwtService.Session session = requireAdminFresh(request);
-    return requestService.decide(requestId, body.approve(), session.userId());
-  }
-
-  public record DecideBody(boolean approve) {}
 
   /** 建号的请求体。两个字段都是明文进来的口令，**不进日志** */
   public record CreateUserBody(String account, String password) {}

@@ -151,7 +151,7 @@ const readRow = () =>
   const card = section?.querySelector('.shelf__draft')
   return {
     有这一栏: !!section,
-    标题: section?.querySelector('.shelf__sub')?.textContent?.trim() ?? '',
+    标题: section?.querySelector('.shelf__drafts-title')?.textContent?.trim() ?? '',
     说明: section?.querySelector('.shelf__drafts-hint')?.textContent?.trim() ?? '',
     // ★ 判据要**按本**看，不能只问"这一栏在不在"：栏里可能还有别的书（真书），
     //   于是"刷新之后它离开了这一栏"会被一个不相干的邻居答成"还在"——第一版就是这么误报的

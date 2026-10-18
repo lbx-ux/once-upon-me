@@ -31,7 +31,13 @@
  */
 
 import { readResult, unreachable, type Result } from './response.ts'
-import { parseUser, type AuthUser, type Permissions } from './state.ts'
+import {
+  NO_PERMISSIONS,
+  parsePermissions,
+  parseUser,
+  type AuthUser,
+  type Permissions,
+} from './state.ts'
 
 /**
  * 打一次 BFF（**同源、相对路径**）。
@@ -93,12 +99,13 @@ export type CodeResult = { ok: true; devMode: boolean; hint: string | null } | A
 export type CodeVerdict =
   { ok: true; kind: 'signed-in'; user: AuthUser } | { ok: true; kind: 'needs-password' } | AuthFail
 
-/** 这个人是谁 + 他的权限 + 服务端配齐了什么（三个不同的事实，见 BFF 那条路由的注释） */
+/** 这个人是谁 + 他能不能创作 + 服务端配齐了什么（三个不同的事实，见 BFF 那条路由的注释） */
 export type MeResult =
   | {
       ok: true
       user: AuthUser
-      permissions: Permissions
+      /** 这个人此刻有没有创作权。★ 一位，与 `user.allowed` 是同一个值 */
+      allowed: boolean
       configured: Permissions
       /**
        * 站里现在配的语音模型（`TTS_MODEL`）。★ 它是**模型名**不是密钥。
@@ -178,7 +185,6 @@ export async function loginWithPassword(account: string, password: string): Prom
 export async function fetchMe(): Promise<MeResult | { ok: true; signedOut: true }> {
   const result = await get<{
     user?: unknown
-    permissions?: unknown
     configured?: unknown
     speechModel?: unknown
   }>('/api/auth/me')
@@ -191,12 +197,17 @@ export async function fetchMe(): Promise<MeResult | { ok: true; signedOut: true 
   const user = readUser(result.data.user)
   if (!user.ok) return user
 
-  const fallback = user.user.permissions
   return {
     ok: true,
     user: user.user,
-    permissions: user.user.permissions,
-    configured: (result.data.configured as Permissions | undefined) ?? fallback,
+    // ★ 一位，直接从那个人的形状上读——不另存一份（两份会漂，而漂的那一刻的症状
+    //   是"界面说能用、服务端说不行"）
+    allowed: user.user.allowed,
+    // ★ `configured` 走一次形状检查（`parsePermissions`）：它虽然来自我们自己的 BFF，
+    //   但那仍然是一次网络读取。认不出来时按**站里什么都没配**算——
+    //   与那道闸"判不了就不放行"同一条：宁可显示"站里还没配好"（一句可以让站长去查的话），
+    //   也不要拿一份读不懂的东西去当"配好了"
+    configured: parsePermissions(result.data.configured) ?? NO_PERMISSIONS,
     speechModel: typeof result.data.speechModel === 'string' ? result.data.speechModel : '',
   }
 }

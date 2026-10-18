@@ -145,17 +145,30 @@ def url_key(path: str) -> str:
 
 HEADER = """/* 由 scripts/sample-tints.py 生成 —— 不要手改，改了图就重跑脚本。
  *
- * 每一面跨页的三个主色，给"背景被当前页染一层色"用（见 storybook-flip.css §1.6）。
- * 键是站点 URL，值是三朵主色，**按彩度从高到低**排（最白的那朵在最后）：
- * CSS 那侧固定读法 = 前两朵做有色的两团、最后一朵做外圈底色。
+ * {what}
+ * 键是站点 URL，值是三朵主色，**按彩度（最大通道 − 最小通道）从高到低**排。
+ * CSS 那侧的固定读法是：前两朵做有色的两团、最后一朵做**外圈底色**。
+ * ★ 原来这句写的是「最白的那朵在最后」——2026-10-18 量出来它是**取样结果、不是保证**：
+ *   灵感书单那 108 张里有 **30 张**的第三朵是一支中调色（castle 的封面就是
+ *   `#a9805a` 那种褐）。所以这一朵要读作「彩度最低的那一朵」，
+ *   **不要**读作「最白的那个」——照后者写 CSS，那 30 张的外圈就是一块比预期重的色。
+ *   想保证外圈一定浅，得给这一朵再混一次底（`color-mix`）；那是另一件事，没有做。
+ *   （首页那 6 张正好条条都落在"最白"，所以这个说法一直没人发现是句过誉。）
  * 取色口径与阈值降级规则写在脚本的 docstring 里，重跑一次就能复现下面每一个数：
  *
- *     python -I scripts/sample-tints.py public/book/cover.webp public/book/spread-*.webp \\
- *         --out src/components/book/spreadTints.ts
+ *     {cmd}
  */
 
-export const SPREAD_TINTS: Record<string, readonly [string, string, string]> = {"""
+export const {export_name}: Record<string, readonly [string, string, string]> = {{"""
 
+DEFAULT_WHAT = (
+    '每一面跨页的三个主色，给"背景被当前页染一层色"用（见 storybook-flip.css §1.6）。'
+)
+
+# ★ 排序**只能动这里一处**（`pick_three` 末尾那个 sorted 的两个键），而且动之前先看账：
+#   2026-10-18 试过把键从"彩度"换成"明度"（想让"最白的那朵在最后"变成真保证），
+#   结果首页那 6 条里**有 4 条会换位** —— 那层的 .18 是照现值调出来的，等于重做一次首屏。
+#   所以改了抬头那句说法，没改排序。真要换，得连着把那 6 条的观感重新过一遍。
 EXT = ('.webp', '.png', '.jpg', '.jpeg')
 
 
@@ -164,10 +177,31 @@ def fchr(value: str) -> str:
     return f"'{value}'"
 
 
+def comment_safe(text: str) -> str:
+    r"""把一段文字放进块注释里而不把它**提前闭合**。
+
+    ★ 2026-10-18 踩的：第二张色表的抬头要写重跑命令，而那批图在
+      `public/booklist/*/cover.webp` 这种**带 `*/` 的通配符**下面 ——
+      于是 `*/` 在那里把注释关掉了，生成的 .ts 从第 8 行起全是语法错误。
+      抓它的是 `pnpm format:check`（Prettier 报 `SyntaxError: ';' expected`），
+      不是 tsc —— tsc 那一步在闸门里排在 prettier 后面。
+      修法是块注释里那套老规矩：写成 `*\/`。**注释里没有转义处理**，
+      人读到的就是 `*\/`，但它是这一行的通行写法，比"把星号藏起来"诚实。
+    """
+    return text.replace('*/', '*\\/')
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(add_help=False)
     ap.add_argument('images', nargs='*')
     ap.add_argument('--out')
+    # ★ 这两个是 2026-10-18 加的，起因是**第二张色表**（灵感书单那 12 本）。
+    #   抬头原来是写死的（"见 storybook-flip.css"、`SPREAD_TINTS`、那条 /book/ 的命令），
+    #   输出到别处就会在文件里留下一条**指错地方**的重跑命令 ——
+    #   而"不要手改、照这条命令重跑"正是这个文件存在的全部意义（脚本 docstring 第 ★ 段）。
+    #   默认值就是原来那三个，所以首页那份重跑一次是逐字节相同的。
+    ap.add_argument('--export', default='SPREAD_TINTS')
+    ap.add_argument('--what', default=DEFAULT_WHAT)
     ap.add_argument('--help', action='store_true')
     args = ap.parse_args()
 
@@ -197,15 +231,25 @@ def main() -> int:
     if not args.out:
         return 0
 
-    width = max(len(k) for k, _ in entries) + 2
     # ★ 键**必须带引号**：`/book/spread-1.webp` 不是合法的 JS 标识符，
     #   裸着写出去整个模块是语法错误。第一版就是这么写的，tsc 之前没跑到这个新文件，
     #   是浏览器的 500 页把它抓出来的（与"GSAP 插件 import 只有浏览器能抓"同一类）。
-    rows = [
-        f"  {fchr(key):{width}}: [{', '.join(fchr(h) for h in hexes)}],"
-        for key, hexes in entries
-    ]
-    body = '\n'.join([HEADER, *rows, '}', ''])
+    # ★ 冒号后**只留一个空格，不做列对齐**（这里是 2026-10-18 改的，原来是按最长键补白）。
+    #   理由是那个文件头写着"重跑一次就能复现"：对齐的排版**过不了 `pnpm format:check`**
+    #   ——Prettier 会把补出来的空格全删掉，于是"生成的那份"与"仓库里那份"永远差一次格式化，
+    #   而闸门红在一件与内容无关的事上。仓库里那份 spreadTints.ts 正是这么来的：
+    #   内容与重跑结果逐字相同，只有排版被 Prettier 收过一遍（2026-10-18 实测比对）。
+    #   现在脚本直接写出 Prettier 的形状，重跑一次闸门就是绿的。
+    rows = [f"  {fchr(key)}: [{', '.join(fchr(h) for h in hexes)}]," for key, hexes in entries]
+
+    # 抬头里那条重跑命令**按这次真实的参数拼**，不是抄一句写死的话 ——
+    # 抄的那句迟早与实际调用分家（同 README §五 那条"两处手写的数会各自漂移"）。
+    header = HEADER.format(
+        what=comment_safe(args.what),
+        export_name=args.export,
+        cmd=comment_safe(f"python -I scripts/sample-tints.py {' '.join(args.images)} --out {args.out}"),
+    )
+    body = '\n'.join([header, *rows, '}', ''])
     Path(args.out).write_text(body, encoding='utf-8', newline='\n')
     print(f'\n写入 {args.out}（{len(entries)} 条）')
     return 0

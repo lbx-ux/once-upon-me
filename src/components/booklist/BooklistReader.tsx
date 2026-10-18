@@ -39,6 +39,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { CSSProperties } from 'react'
 
 import { flipState } from '@/components/book/flip.ts'
 import { useNarration } from '@/components/reader/use-narration.ts'
@@ -46,6 +47,7 @@ import { useTurnMode } from '@/lib/use-reading-prefs.ts'
 import { THEMES } from '@/lib/themes.ts'
 
 import { SPREADS_PER_BOOK, PAPER_PAGES_PER_BOOK, type BooklistBook } from './booklist.ts'
+import { BOOKLIST_TINTS } from './booklistTints.ts'
 
 /** 每帧朝目标插值的系数。与 `/reader` 那台同一个数：这一屏也是"点一下就翻" */
 const SMOOTHING = 0.16
@@ -232,6 +234,27 @@ export default function BooklistReader({ book, coverUrl, art, audio }: BooklistR
 
   const narratedCount = audio.filter((url) => url !== null).length
 
+  /* ── 桌面那层色（`booklist-reader.css` §桌面）─────────────────────────────
+   *
+   * 色表是**离线取样**出来的生成物（`scripts/sample-tints.py` → `booklistTints.ts`），
+   * **按图自己的站点 URL 查**：键与 `art` / `coverUrl` 里那些字符串是同一个来源
+   * （`booklist.ts` 的 `artPath` / `coverPath`，无查询串、无哈希），所以不用另写映射 ——
+   * 与首页那本 `SPREAD_TINTS` 的读法完全一致。
+   *
+   * ★ 查不到就是 `undefined` → 那一面**不染色**，而不是染一个猜出来的颜色。
+   *   于是"这一页的画还没到位"与"这一页还没取过色"走的是同一条路，
+   *   不是新增的降级分支（与缺图露一张纸那条兜底同向）。
+   *
+   * 长度是 `SPREADS_PER_BOOK + 1`：下标 0 是封面、1..8 是那 8 个跨页。
+   * **封底不在表里** —— 合上的书不往桌上投影，那一下是淡出（见 CSS 那一段）。
+   */
+  const tintOfOpening = useMemo(
+    () => [coverUrl, ...art].map((url) => (url ? BOOKLIST_TINTS[url] : undefined)),
+    [coverUrl, art],
+  )
+  /** 落在哪一个开合上。`-1` = 没有（封底那一屏），于是 9 张全灭 → 染色淡干净 */
+  const tintOn = opening <= SPREADS_PER_BOOK ? opening : -1
+
   /** 没有朗读控件时**说清为什么**（与 `/reader` 那条同一个写法，宁可不给也不骗人） */
   const narrationNote =
     narration.audioFailed !== null
@@ -260,6 +283,13 @@ export default function BooklistReader({ book, coverUrl, art, audio }: BooklistR
       data-motion={reduced ? 'reduced' : 'full'}
       aria-label={`《${book.title}》· 样书阅读器`}
     >
+      {/* §桌面那一层点阵（`booklist-reader.css`）。挂在整个 `.blr` 上 ——
+          所以它**够不到**上面那行「← 回灵感书单」（那在 `.reader-page` 里），
+          那行字因此天然坐在干净的 `--bg` 上，不用为它单独挖洞。
+          竖直方向靠一条锚在舞台高度上的遮罩收在书附近，止于文案行之前。
+          纯装饰，对辅助技术整块隐藏。 */}
+      <div className="blr__ambient" aria-hidden="true" />
+
       <div
         className="blr__stage"
         ref={stageRef}
@@ -271,6 +301,24 @@ export default function BooklistReader({ book, coverUrl, art, audio }: BooklistR
         onTouchEnd={onTouchEnd}
         data-testid="booklist-stage"
       >
+        {/* ★ 这两层**必须在 `.blr__book` 之前**：书是定位元素、又带 transform，
+            两者层序由 DOM 序决定，写在后面就成了"光盖在书上"。
+            ★ 也是负 inset 让它们比书大一圈的原因 —— 正好贴边就成了给书画描边。
+            两层都只活在书四周那一圈留白里，那一圈里没有字（见 CSS §桌面 的推导）。 */}
+        <div className="blr__light" aria-hidden="true" />
+        <div className="blr__tint" aria-hidden="true">
+          {tintOfOpening.map((t, k) =>
+            t ? (
+              <i
+                key={k}
+                className="blr__tint-face"
+                data-on={tintOn === k || undefined}
+                style={{ '--t1': t[0], '--t2': t[1], '--t3': t[2] } as CSSProperties}
+              />
+            ) : null,
+          )}
+        </div>
+
         {/* 舞台宽 = 2 × 页宽（3:4 的一页），合起来正好 3:2 —— 一张跨页图铺满两页 */}
         <div className="blr__book" style={{ ['--book-x' as string]: bookX }}>
           {Array.from({ length: leafCount }, (_, leaf) => {

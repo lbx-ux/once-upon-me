@@ -62,9 +62,12 @@ class SchemaSqlPortabilityTest {
   void noCreateIndexIfNotExists() throws IOException {
     String sql = statementsOf();
 
-    // ★ 先钉住"索引这件事我们确实做了"——否则把索引整条删掉也能让这条测试变绿，
-    //   而那会让 permission_requests 的列表每次都全表排序
-    assertThat(sql).contains("KEY idx_permission_requests_status");
+    // ★ 先钉住"索引这件事我们确实做了"——否则把索引整条删掉也能让这条测试变绿。
+    //   ★ 2026-10-18：锚点从 `permission_requests` 那条排序索引换成了这两条唯一约束
+    //   （那张表随"权限收成一位"退场了，这份文件里此刻一条 `KEY` 都没有）。
+    //   换锚点而不是删掉这条断言：删掉之后"把索引写没了"就不再有人拦。
+    assertThat(sql).contains("CONSTRAINT uk_users_account UNIQUE");
+    assertThat(sql).contains("CONSTRAINT uk_voices_user_voice UNIQUE");
     assertThat(sql).as("次级索引一律写成建表语句里的 KEY 名字 (列)").doesNotContain("CREATE INDEX");
   }
 

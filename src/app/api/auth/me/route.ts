@@ -2,17 +2,20 @@
  * `/api/auth/me` —— 现在这个人是谁、能用什么；改昵称也走这里（BFF）
  *
  * ```
- *   GET   → { "user": {…}, "permissions": {…}, "configured": {…}, "speechModel": "…" }
+ *   GET   → { "user": {…}, "allowed": true, "configured": {…}, "speechModel": "…" }
  *   POST  { "nickname": "小满妈妈" }  → { "user": {…} }
  *   401   { "code": "not-signed-in", "message": "请先登录" }
  * ```
  *
  * ★ `GET` 回三样东西，而这三样**是三个不同的事实**，界面上要分开用：
- *   · `user`         —— 这个人是谁（昵称、头像、首次登录时间）
- *   · `permissions`  —— **站长给了他什么**（四个开关）
- *   · `configured`   —— **服务端自己配齐了什么**（`serverEnv()` 里有没有那个能力的密钥）
- * 一个能力真能用，是这两件事**同时**成立。合成一个布尔的那天起，
- * 界面上就再也说不出"你有权限，但站里还没配语音"这种真话。
+ *   · `user`       —— 这个人是谁（昵称、头像、首次登录时间、有没有创作权）
+ *   · `allowed`    —— **这个人此刻能不能创作**（一位；2026-10-18 由四项收成一位）
+ *   · `configured` —— **服务端自己配齐了什么**（`serverEnv()` 里有没有那个能力的密钥）
+ * 一个能力真能用，是"他有创作权"与"站里配了那一项"**同时**成立。合成一个布尔的那天起，
+ * 界面上就再也说不出"你能用，但站里还没配语音"这种真话。
+ *
+ * ★ 所以 `configured` 仍然**四项各自独立**：它是站里的事实（密钥），不是给某个人的授权。
+ *   收掉的只有"这个人有没有"那一半。
  *
  * ★ `speechModel` 是**模型名**，不是密钥，所以它回给浏览器没有代价；而界面**非知道它不可**：
  *   克隆音色绑死在创建它时的那个模型上（实测跨模型 400 `[cosinevoice]Engine error [411]`），
@@ -33,12 +36,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 
 import { backendFetch } from '@/lib/auth/backend.ts'
 import { badJson, failureResponse, jsonBody } from '@/lib/auth/bff.ts'
-import {
-  requireCapability,
-  sessionOf,
-  sessionTokenOf,
-  type Permissions,
-} from '@/lib/auth/session.ts'
+import { requireCapability, sessionOf, sessionTokenOf } from '@/lib/auth/session.ts'
 import { serverEnv } from '@/lib/settings/server-env.ts'
 
 // ★ 段配置必须是**字面量**：成员表达式 Next 读不了，而它只在 `pnpm build` 那一刻才报（判据见 lib/route-config.test.ts）
@@ -50,7 +48,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ code: 'not-signed-in', message: '请先登录' }, { status: 401 })
   }
 
-  const result = await backendFetch<{ userId: string; permissions: Permissions }>('/api/auth/me', {
+  const result = await backendFetch<{ userId: string; allowed: boolean }>('/api/auth/me', {
     method: 'GET',
     token: sessionTokenOf(request) ?? '',
   })
@@ -59,7 +57,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const env = serverEnv()
   return NextResponse.json({
     user: result.data,
-    permissions: result.data.permissions,
+    // ★ `=== true` 而不是原样带出去：后端少回这一位时（形状变了、中间某个代理插了一手），
+    //   界面拿到 `undefined` 会一路走成"有权限"——而这正是最不该猜错的那一位
+    allowed: result.data.allowed === true,
     configured: {
       text: Boolean(env['LLM_MODEL'] && env['LLM_API_KEY']),
       image: Boolean(env['IMAGE_MODEL'] && env['IMAGE_API_KEY']),

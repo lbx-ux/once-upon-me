@@ -29,20 +29,31 @@ import {
 const CHOICE_VIA = ['a', 'b'] as const
 export type ChoiceVia = (typeof CHOICE_VIA)[number]
 
-/** 一个选项：图标语义名 + emoji 兜底 + 给人看的短标签 + 给耳朵听的口语句 */
-const optionCodec = object<{ [k: string]: unknown }>({
-  iconKey: withDefault(string({ max: 24 }), 'generic'),
-  emoji: withDefault(string({ max: 4 }), '✨'),
-  label: string({ min: 2, max: 12 }),
-  spoken: string({ min: 2, max: 40 }),
-})
-
-export const choiceCodec = object<{ [k: string]: unknown }>({
-  prompt: string({ min: 4, max: 60 }),
-  options: array(optionCodec, { min: 2, max: 2 }),
-})
-
-/** 一页 = 一个节点 */
+/**
+ * ★★ 选择点**平铺在节点上**，不写成 `choice: { prompt, options: [{…},{…}] }`（2026-10-18）。
+ *
+ * 这不是审美，是把一个实测出来的失败率改掉。旧的嵌套写法下，共读版规划的
+ * **单次尝试通过率只有 2/12 = 17%**，而 8 次失败里有 7 次的症状是同一个：
+ *
+ *     nodes[4].choice.options：数量不足（0 < 2）
+ *
+ * ——模型把 `choice` 开着、`prompt` 写好了，**`options` 交回一个空数组**。
+ * 而这个 schema 里唯一的"对象数组"就是 `options`（`body` 是字符串数组，从来没出过错）。
+ * 这正对上本文件文件头那句早就写着的话：「模型写嵌套结构的失败率明显高」。
+ *
+ * 所以线格式拍平、**领域类型一个字段都不动**：`engine/tree.ts` 的 `toChoice()`
+ * 把下面这九个平铺格子组装成 `StoryChoice`。这条路本来就是这个模块的既定招式
+ * （扁平表 + `from` 引用 → 树在**解析之后**由 `tree.ts` 校验并组装），
+ * 只是 `choice` 一个地方当初没照着走。
+ *
+ * 命名与对应关系（`tree.ts` 会按这个把两支排好）：
+ * - `ask`      → `choice.prompt`（给家长念的引导提问）
+ * - `*A` 那四个 → `options[0]`，也就是 `via: "a"` 那一支
+ * - `*B` 那四个 → `options[1]`，也就是 `via: "b"` 那一支
+ * ★ `iconKey` / `emoji` 仍然宽容（`withDefault`），`label` / `spoken` 必须有值——
+ *   前者是装饰，后者是孩子在按钮上看见与听见的东西。
+ * ★ 九个格子**只在选择点那一页写**，其余页一个都不写（写了就是形态错误，`tree.ts` 会报）。
+ */
 export const nodeDraftCodec: Codec<Record<string, unknown>> = object<{ [k: string]: unknown }>({
   scene: string({ min: 4, max: 200 }),
   body: stringList({ min: 1, max: 4, itemMax: 120 }),
@@ -58,8 +69,17 @@ export const nodeDraftCodec: Codec<Record<string, unknown>> = object<{ [k: strin
   from: optional(number({ integer: true, min: 1, max: 40 })),
   /** 从父节点的选择点走的是哪条边 */
   via: optional(enumOf(CHOICE_VIA)),
-  /** 这一页是不是选择点 */
-  choice: optional(choiceCodec),
+
+  /* ── 选择点：给家长念的那句 + 两侧各四个格子 ─────────────────────────── */
+  ask: optional(string({ min: 4, max: 60 })),
+  labelA: optional(string({ min: 2, max: 12 })),
+  spokenA: optional(string({ min: 2, max: 40 })),
+  iconA: withDefault(string({ max: 24 }), 'generic'),
+  emojiA: withDefault(string({ max: 4 }), '✨'),
+  labelB: optional(string({ min: 2, max: 12 })),
+  spokenB: optional(string({ min: 2, max: 40 })),
+  iconB: withDefault(string({ max: 24 }), 'generic'),
+  emojiB: withDefault(string({ max: 4 }), '✨'),
 })
 
 export const planDraftCodec: Codec<Record<string, unknown>> = object<{ [k: string]: unknown }>({
@@ -70,6 +90,49 @@ export const planDraftCodec: Codec<Record<string, unknown>> = object<{ [k: strin
 /** 给模型的 json_schema 档用（registry 里 LLM_JSON_MODE=schema 时才真的发出去） */
 export function planJsonSchema(): Record<string, unknown> {
   return planDraftCodec.describe()
+}
+
+/**
+ * 选择点那一页多出来的九个格子。**其余页一个都不写**（写了就是形态错误）。
+ *
+ * ★ 它平铺在这里而不是嵌在 `choice.options` 里，理由在 `nodeDraftCodec` 上方那段 ★★。
+ * ★ 九个格子都写成可选，是因为"这一页是不是选择点"这件事**由有没有写明**决定，
+ *   而"写了几个"是语义问题（缺哪个、够不够两个），归 `engine/tree.ts` 判——
+ *   那条界线与本模块文件头那条（Schema 管形状、tree.ts 管语义）是同一条。
+ */
+/**
+ * 选择点那九格的名字，**按线格式里的字段名**。
+ *
+ * ★ 它是给**读路径的那一侧**用的：`story-problems.ts` 拿它把 `nodes[4].labelA`
+ *   这类失败路径翻回界面上那一组框（不认得的路径会被报成"整篇"的问题，
+ *   于是家长会在"页数"那一格下面读到一句关于选项的话）。
+ * ★ 与 `nodeDraftCodec` 的键**必须同名**，而那件事**只有能自动红的判据才算数**——
+ *   所以 `story-problems.test.ts` 里有一条拿 `planJsonSchema()` 逐个核对的用例。
+ *   只写在注释里的约定，一定会有人违反它（这份仓库为这一条付过学费）。
+ */
+export const CHOICE_CELLS = [
+  'ask',
+  'labelA',
+  'spokenA',
+  'iconA',
+  'emojiA',
+  'labelB',
+  'spokenB',
+  'iconB',
+  'emojiB',
+] as const
+
+export type ChoiceDraft = {
+  /** 给家长念的引导提问 */
+  ask?: string
+  labelA?: string
+  spokenA?: string
+  iconA?: string
+  emojiA?: string
+  labelB?: string
+  spokenB?: string
+  iconB?: string
+  emojiB?: string
 }
 
 /**
@@ -85,11 +148,7 @@ export type NodeDraft = {
   /** 父节点在表里的 1 起序号；undefined = 接在前一页后面 */
   from?: number
   via?: string
-  choice?: {
-    prompt: string
-    options: { iconKey: string; emoji: string; label: string; spoken: string }[]
-  }
-}
+} & ChoiceDraft
 
 export type PlanDraft = { title: string; nodes: NodeDraft[] }
 
@@ -114,7 +173,9 @@ export function asPlanDraft(value: Record<string, unknown>): PlanDraft {
 
 function asNodeDraft(value: unknown): NodeDraft {
   const record = (value ?? {}) as Record<string, unknown>
-  const choice = record['choice'] as Record<string, unknown> | undefined
+  /** 没有就是没有——不把缺失补成空串，否则"没写"与"写了个空的"就分不出来了 */
+  const text = (key: keyof ChoiceDraft): string | undefined =>
+    record[key] === undefined ? undefined : String(record[key])
   return {
     scene: String(record['scene'] ?? ''),
     body: (record['body'] as string[] | undefined) ?? [],
@@ -122,17 +183,14 @@ function asNodeDraft(value: unknown): NodeDraft {
     mood: String(record['mood'] ?? 'calm'),
     from: typeof record['from'] === 'number' ? record['from'] : undefined,
     via: record['via'] === undefined ? undefined : String(record['via']),
-    choice: choice
-      ? {
-          prompt: String(choice['prompt'] ?? ''),
-          options:
-            (choice['options'] as Record<string, unknown>[] | undefined)?.map((option) => ({
-              iconKey: String(option['iconKey'] ?? 'generic'),
-              emoji: String(option['emoji'] ?? '✨'),
-              label: String(option['label'] ?? ''),
-              spoken: String(option['spoken'] ?? ''),
-            })) ?? [],
-        }
-      : undefined,
+    ask: text('ask'),
+    labelA: text('labelA'),
+    spokenA: text('spokenA'),
+    iconA: text('iconA'),
+    emojiA: text('emojiA'),
+    labelB: text('labelB'),
+    spokenB: text('spokenB'),
+    iconB: text('iconB'),
+    emojiB: text('emojiB'),
   }
 }

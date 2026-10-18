@@ -15,6 +15,8 @@
  *       .storybook__book/.book     5 片叶，绕书脊 rotateY
  *       .book-spine                右侧刻度
  *       .storybook__end            最后一页才升起的 CTA
+ *       .storybook__listen         这一页的朗读（★ 5 段全在盘上才出现）
+ *       <audio>                    朗读那一段的播放器，`preload="none"`
  *       .storybook__static ↗       静止模式（reduced-motion）那一套，两块 DOM 都渲染，
  *       .storybook__live  ↗        靠 CSS 的 display 切 —— 这样首帧就是对的
  *       .storybook__pager ↗
@@ -31,11 +33,39 @@
  *
  * 角度一律用插值后的 qDisplay，不用 qTarget：鼠标滚轮是离散格，
  * 不插值就是一顿一顿（触控板连续，看不出这个问题，只有真拿滚轮滚才会暴露）。
+ *
+ * ---------------------------------------------------------------------------
+ * 朗读（2026-10-18 接上）
+ *
+ * 这一节的承诺句里有"用你的声音朗读"，而画面证不了声音，所以这一条只能靠一个
+ * 真的会响的控件来证。它是**做过又拆过、现在按满配重新做回来**的那一个：
+ * 拆的理由是"全篇只录得到第 1 页，一个只对四分之一的控件证的是反面"
+ * （README §五），所以回来的前提是**5 段全在盘上**——闸门在
+ * `lib/demo-book-audio.ts` 的 `complete`，它在**两支分支都齐**时才算数。
+ *
+ * 三条口径，每条都是为了不变成"看起来能响"：
+ *
+ * 1. **只做手动，不做"自动朗读"。** 两个阅读器那套自动朗读是"念完一页自己翻过去"，
+ *    而这一节的"翻页"是**滚动位置**——替人滚页面是另一件事（那是在替他读网页），
+ *    不是替他翻书。所以这里把 `mode` 钉成 `'manual'`：按下念**当前这一页**，
+ *    念完就停。★ 正因为如此，`settled`（自动那一趟用来等页翻到位的信号）
+ *    在这一节永远没人读，传 `true` 只是把这个空位说明白。
+ * 2. **翻页就停：朗读是「这一页的」。** 滚到下一页 = 人接管（`takeOver`），
+ *    与两个阅读器里那句一样的规矩。
+ * 3. **离开视口 / 切走标签页也停**（`onActiveChange`）。这是 `useScrollDriver`
+ *    文件头专门留的那个口子——"谁先往这两节里加音频，第一个撞上的就是它"：
+ *    循环一停，这一节就再收不到帧，不在这儿掐断的话声音会在屏幕外接着解码。
+ *
+ * 文案（`▶ 朗读` / `■ 停止` / `aria-label`）全部来自 `reader/use-narration.ts`，
+ * 与两个阅读器**同一份** —— 它是"朗读钮该说什么"的唯一来源（其中 `aria-label`
+ * 尤其容易漂，而它是读屏唯一的入口）。
  */
 
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useNarration } from '@/components/reader/use-narration.ts'
 import useScrollDriver, { enterExitSpan } from '@/lib/useScrollDriver'
+import type { DemoBookAudio } from '@/lib/demo-book-audio.ts'
 import BookSpine from './BookSpine'
 import { flipState } from './flip'
 import { SPREAD_TINTS } from './spreadTints'
@@ -285,7 +315,7 @@ function Face({
   )
 }
 
-export default function StorybookFlip() {
+export default function StorybookFlip({ audio }: { audio: DemoBookAudio }) {
   const stageRef = useRef<HTMLDivElement>(null)
   const wrapRef = useRef<HTMLElement>(null)
 
@@ -353,14 +383,82 @@ export default function StorybookFlip() {
 
   const lastPage = leaves.length - 1
 
+  /**
+   * 到第 index 面去。
+   * 正常模式 = 滚到那一面的停顿段（p ↔ scrollY 是线性的，反推即可，见 useScrollDriver）；
+   * 静止模式 = 直接换页。
+   *
+   * ★ 反推用的量程必须与 hook 算进度用的是**同一套算法**（enterExitSpan），
+   *   不能在这里自己加 wrap.offsetHeight + innerHeight 了事：这一节是页面最后一节，
+   *   量程要夹到文档滚得到的地方，不夹的话每一格都多滚约 30% ——
+   *   点刻度第 3 格会直接跳到第 4 页上。
+   *
+   * ★ 它定义在 `useScrollDriver` **之前**，是为了下面那套朗读：`onActiveChange`
+   *   要在渲染期就引到 `stopNarration`，而 `const` 在声明之前读不到（ReferenceError）。
+   */
+  const goTo = useCallback(
+    (index: number) => {
+      const i = clamp(index, 0, lastPage)
+      if (reduced) {
+        pageRef.current = i
+        setPage(i)
+        return
+      }
+      const wrap = wrapRef.current
+      if (!wrap) return
+      const top = wrap.getBoundingClientRect().top + window.scrollY - window.innerHeight
+      const span = enterExitSpan(
+        wrap.offsetHeight,
+        window.innerHeight,
+        document.documentElement.scrollHeight,
+        top,
+      )
+      window.scrollTo({ top: top + P_AT[i] * span, behavior: 'smooth' })
+    },
+    [lastPage, reduced],
+  )
+
+  /* ── 朗读这一页 ──────────────────────────────────────────────────────────
+   * 整块逻辑在 `reader/use-narration.ts`，与 `/reader/<bookId>`、书单那本样书
+   * **共用同一份**（三代人了，理由在那个文件头）。这一层只提供它算不出来的两样：
+   * 当前是第几页、怎么翻页。
+   */
+
+  const narration = useNarration({
+    /** 第 4 个跨页两支各一段 —— 选哪朵云就念哪一段（`demoBook.ts` 的 BRANCHES） */
+    urls: audio.url[branch],
+    /** 封面是 0、四个跨页是 1–4，与 `use-narration.ts` 的屏序号口径一致 */
+    opening: page,
+    /** ★ 只有"自动朗读"那一趟读它，而这一节钉死了 `mode: 'manual'`（见文件头）。 */
+    settled: true,
+    goTo,
+    mode: 'manual',
+  })
+  /** 改名是要说清用途：这一节用它做"翻页就停"和"滚出视口就停"，不走自动朗读 */
+  const { takeOver: stopNarration } = narration
+
+  /**
+   * 人翻页了 —— 停声（文件头第 2 条）。
+   * ★ 走 `page` 而不是在 `onFrame` 里判：`page` 就是"已经翻到位的那一面"
+   *   （它是 `Math.round(q)`，补间跑着的时候不会变），所以不会有"还在翻就掐"的抖动。
+   */
+  useEffect(() => {
+    stopNarration()
+  }, [page, stopNarration])
+
   useScrollDriver(stageRef, {
     range: 'enter-exit',
     // 这一段从书露头到滚出去全程都在动，别提前掉到 30fps
     fastWindow: [0.01, 0.99],
-    /* 刻意**不传** onActiveChange：它是给"循环一停就再收不到帧"的收尾用的
-       —— 典型场景是节里有长跑的媒体，下降沿必须有人去掐断它。
-       这一节里没有那种东西：每一帧要写的都是纯量，停了就是停在原地。
-       日后往这一节加音频/视频时把它接回来。 */
+    /* ★ 2026-10-18 把这个口子接回来了 —— 这一节现在有长跑的媒体（那一页的朗读）。
+       `useScrollDriver` 的文件头就是为这件事留的：循环一停，这一节再收不到帧，
+       "从可见变成不可见"这个**下降沿**除了 hook 自己没有别人知道，不在这儿掐断，
+       声音会在屏幕外（乃至后台标签页里）接着解码。
+       ★ reduced 下同样有效：IntersectionObserver 在静止模式里照常跑，
+         `renderStatic` 只是把首帧补上。 */
+    onActiveChange: (active) => {
+      if (!active) stopNarration()
+    },
     onFrame: ({ progress, reduced: isReduced, setVar }) => {
       if (isReduced) {
         // 静止模式：这一节由按钮翻页，滚动不参与。顺手把插值重置，
@@ -426,38 +524,6 @@ export default function StorybookFlip() {
     const img = new Image()
     img.src = BRANCHES[other].image
   }, [choiceOn, branch])
-
-  /**
-   * 到第 index 面去。
-   * 正常模式 = 滚到那一面的停顿段（p ↔ scrollY 是线性的，反推即可，见 useScrollDriver）；
-   * 静止模式 = 直接换页。
-   *
-   * ★ 反推用的量程必须与 hook 算进度用的是**同一套算法**（enterExitSpan），
-   *   不能在这里自己加 wrap.offsetHeight + innerHeight 了事：这一节是页面最后一节，
-   *   量程要夹到文档滚得到的地方，不夹的话每一格都多滚约 30% ——
-   *   点刻度第 3 格会直接跳到第 4 页上。
-   */
-  const goTo = useCallback(
-    (index: number) => {
-      const i = clamp(index, 0, lastPage)
-      if (reduced) {
-        pageRef.current = i
-        setPage(i)
-        return
-      }
-      const wrap = wrapRef.current
-      if (!wrap) return
-      const top = wrap.getBoundingClientRect().top + window.scrollY - window.innerHeight
-      const span = enterExitSpan(
-        wrap.offsetHeight,
-        window.innerHeight,
-        document.documentElement.scrollHeight,
-        top,
-      )
-      window.scrollTo({ top: top + P_AT[i] * span, behavior: 'smooth' })
-    },
-    [lastPage, reduced],
-  )
 
   /**
    * 选定一朵云，并**当场替他翻过去**。
@@ -582,6 +648,54 @@ export default function StorybookFlip() {
             ›
           </button>
         </div>
+
+        {/* ------------------------------------------------------------------
+            这一页的朗读。
+
+            ★ 判据 ①（工单 08 §一）：**整本录齐了才出现**。这里的"整本"取
+              `audio.complete` —— 它按**5 个文件**算，含 4a/4b 两支，所以孩子
+              按下「去帆船云里」之后不会撞上一页没有声音的跨页。这正是上一条
+              播放条被拆掉的理由，回来的前提就是它不成立。
+              （`use-narration.ts` 自己还有一条按**当前这一支**算的 `fullyNarrated`；
+               `complete` 更强，它成立时那一支必然成立，所以这里不重复写。）
+
+            封面（page 0）没有朗读 —— 书还没打开，没有哪一页在念
+            （`docs/demo-narration-script.md` §四 那张"封面本来就不该有配音"）。
+            所以它只在翻开的跨页上出现，开关沿用 `.book-choice` 那一套 `data-on`
+            （关着的时候是 `visibility: hidden`，不从辅助技术与点击里溜走）。
+            ------------------------------------------------------------------ */}
+        {audio.complete && (
+          <div className="storybook__listen" data-on={page > 0 || undefined}>
+            <button
+              type="button"
+              className="book-listen"
+              onClick={narration.toggle}
+              aria-pressed={narration.button.pressed}
+              aria-label={narration.button.ariaLabel}
+            >
+              {narration.button.label}
+            </button>
+            {/* 判据 ②：读不出来的那一页**要说出来**，不许静默没声。
+                盘上有这个文件、播放却失败了（取不到、解不出来），
+                这是唯一能把这件事说出口的地方 —— 不写就是"按了没反应"。 */}
+            {narration.audioFailed !== null && (
+              <p className="book-listen__note">
+                第 {narration.audioFailed} 个跨页的朗读没加载出来（音频读不到，请自己念）
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* 朗读音频。`preload="none"`：5 段不该在滚到这一节时就全拉下来 ——
+            这一节落在首屏的带宽窗口里（跨页图那条注释算的是同一笔账）。
+            `src` 由 `use-narration.ts` 在按下那一刻才设上去，所以这里没有 src。 */}
+        <audio
+          ref={narration.audioRef}
+          preload="none"
+          aria-hidden="true"
+          onEnded={narration.onEnded}
+          onError={narration.onError}
+        />
 
         {/* ------------------------------------------------------------------
             选择点。**不阻塞滚动** —— 不点也能一路滚到底，默认走分支 A。

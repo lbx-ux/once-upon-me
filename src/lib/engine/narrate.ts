@@ -34,7 +34,8 @@
 import { digest } from './digest.ts'
 import { asEngineError } from './errors.ts'
 import { extensionOf } from './providers/stores.ts'
-import type { Narration, StoryNode } from './domain.ts'
+import { NARRATION_PART_LABELS } from './domain.ts'
+import type { Narration, NarrationPart, StoryNode } from './domain.ts'
 import type { EngineEventPayload } from './events.ts'
 import type { AssetStore, VoiceSynthesizer } from './providers/types.ts'
 
@@ -73,11 +74,58 @@ export function narrationTextOf(node: StoryNode): string {
 }
 
 /**
+ * 片段 → 文件名里那一截。**正文那一档是空串**，于是 `page-3-a1.mp3` 这个名字
+ * 与加共读版之前**逐字节相同**——盘上已有的书、以及所有拿旧名字做的断言都不受影响。
+ */
+const PART_SUFFIX: Record<NarrationPart, string> = {
+  body: '',
+  prompt: '-prompt',
+  'option-a': '-opt-a',
+  'option-b': '-opt-b',
+}
+
+/** 一段要合成的东西：哪一页、哪一段、念什么 */
+export type NarrationTarget = {
+  pageNo: number
+  part: NarrationPart
+  text: string
+}
+
+/**
+ * 一页要合成的**全部**片段：正文，加上（这一页是选择点时）提问与两侧选项。
+ *
+ * ★ 选择点那三段不是"顺手加的"：产品定义里选项走「**大图标 + 语音朗读**双通道」，
+ *   而孩子不识字——`label` 给眼睛看，`spoken` 就是那个耳朵通道。
+ *   `prompt`（给家长念的引导提问）也要有声音，因为家长不在的那几秒，
+ *   这一页至少得能自己把问题说出来。
+ * ★ 空文本**不进这一层**（调用方按 `text.trim() === ''` 筛）：
+ *   与"没有正文就不合成"同一条——拿空串去要音频，厂商那边要么报错要么回一段静音，
+ *   而两种都不会在界面上说清"这一页没有这句话"。
+ */
+export function targetsOfNode(node: StoryNode): NarrationTarget[] {
+  const targets: NarrationTarget[] = [
+    { pageNo: node.pageNo, part: 'body', text: narrationTextOf(node) },
+  ]
+  const choice = node.choice
+  if (choice) {
+    const [a, b] = choice.options
+    targets.push(
+      { pageNo: node.pageNo, part: 'prompt', text: choice.prompt },
+      { pageNo: node.pageNo, part: 'option-a', text: a.spoken },
+      { pageNo: node.pageNo, part: 'option-b', text: b.spoken },
+    )
+  }
+  return targets
+}
+
+/**
  * 一份录音落盘时的第几版：`books/x/page-7-a2.mp3` → 3。认不出来（没有那一页、名字不是
  * 这一套）就从 1 起。
  *
  * ★ 单独一个函数是为了它**能被测**：这段解析埋在 `rerunNarration` 里的话，
  *   "第三版会不会覆盖第二版"这件事只有真跑一本书才知道。
+ * ★ 它对四个片段**都成立**：`page-3-opt-a-a1.mp3` 尾上也是 `-a1.`，
+ *   而正则只认**第一个** `-a<数字>.`，所以每一段各自数各自的版本号。
  */
 export function nextTakeNo(previousPath: string | undefined): number {
   const matched = previousPath?.match(/-a(\d+)\.[a-z0-9]+$/i)
@@ -85,49 +133,53 @@ export function nextTakeNo(previousPath: string | undefined): number {
 }
 
 /**
- * 一页合成一份录音。**单页重配与整本都走它**（工单 01 §五）。
+ * 合成**一段**。单页重配与整本都走它（工单 01 §五）。
  *
  * 三件事按顺序发生，缺一不可：
  * 1. 带 `pageNo` 的 `stage(begin, narrating)` —— ★ 这条是**新加的**：
  *    原来 `narrateAll` 只发不带页码的那一对，于是没有任何东西说得清"**这一页**正在配音"。
  *    `frames.ts` 的 `Frame.busy = 'voicing'` 就是从它推出来的。
- * 2. 合成 + 落盘（路径带 `takeNo`）。
+ * 2. 合成 + 落盘（路径带 `part` 与 `takeNo`）。
  * 3. 带 `pageNo` 的 `stage(end, narrating)`。
  *
- * ★ 空正文**不进这一层**：没有正文的页本来就没有"配音"这回事（调用方筛掉它）。
+ * ★ 空文本**不进这一层**（调用方筛掉它）。
  */
-export async function narrateNode(
-  node: StoryNode,
+export async function narrateTarget(
+  target: NarrationTarget,
   opts: NarrateOptions,
 ): Promise<{ narration: Narration; reused: boolean }> {
-  const text = narrationTextOf(node)
-  const textHash = digest(text)
+  const textHash = digest(target.text)
   const key = `${opts.voiceId}:${textHash}`
 
-  // 规则 1：同一份录音只落一次盘，多个页面共用同一个 asset
+  // 规则 1：同一份录音只落一次盘，多处共用同一个 asset。
+  // ★ 复用的那一份带着**它第一次落盘时的 part**，所以这里要把 `part` 覆写成本次的那一个——
+  //   两个选项写成同一句话时，它们指向同一个文件，而各自都得说清"我是哪一段"。
   const reused = opts.done?.get(key)
   if (reused) {
+    const narration: Narration = { ...reused, pageNo: target.pageNo, part: target.part }
     opts.emit({
       kind: 'narration',
       stage: 'narrating',
-      pageNo: node.pageNo,
+      pageNo: target.pageNo,
+      part: target.part,
       voiceId: opts.voiceId,
       assetPath: reused.asset.path,
       reused: true,
     })
-    return { narration: { ...reused, pageNo: node.pageNo }, reused: true }
+    return { narration, reused: true }
   }
 
-  opts.emit({ kind: 'stage', stage: 'narrating', phase: 'begin', pageNo: node.pageNo })
+  opts.emit({ kind: 'stage', stage: 'narrating', phase: 'begin', pageNo: target.pageNo })
   try {
-    const response = await opts.voice.synthesize({ voiceId: opts.voiceId, text })
+    const response = await opts.voice.synthesize({ voiceId: opts.voiceId, text: target.text })
     const asset = await opts.store.put({
-      path: `books/${opts.bookId}/page-${node.pageNo}-a${opts.takeNo ?? 1}${extensionOf(response.mime)}`,
+      path: `books/${opts.bookId}/page-${target.pageNo}${PART_SUFFIX[target.part]}-a${opts.takeNo ?? 1}${extensionOf(response.mime)}`,
       bytes: response.bytes,
       mime: response.mime,
     })
     const entry: Narration = {
-      pageNo: node.pageNo,
+      pageNo: target.pageNo,
+      part: target.part,
       voiceId: opts.voiceId,
       textHash,
       asset,
@@ -136,7 +188,8 @@ export async function narrateNode(
     opts.emit({
       kind: 'narration',
       stage: 'narrating',
-      pageNo: node.pageNo,
+      pageNo: target.pageNo,
+      part: target.part,
       voiceId: opts.voiceId,
       assetPath: asset.path,
       reused: false,
@@ -145,8 +198,20 @@ export async function narrateNode(
   } finally {
     // ★ 收尾那一条放在 `finally`：合成失败时这一格不该永远停在"正在配音"上——
     //   那正是"界面撒谎"的最小样本（图上会一直转，而服务端早就放弃了）
-    opts.emit({ kind: 'stage', stage: 'narrating', phase: 'end', pageNo: node.pageNo })
+    opts.emit({ kind: 'stage', stage: 'narrating', phase: 'end', pageNo: target.pageNo })
   }
+}
+
+/**
+ * 合成**这一页的正文**那一份。单页重配（`rerunNarration`）与测试走它。
+ * ★ 选择点那三段也归那一页，所以单页重配走的是 `targetsOfNode` 把三段一起过一遍——
+ *   只重配正文的话，换了音色之后**选择点还是旧声音**，而界面上没有任何东西会提示这件事。
+ */
+export async function narrateNode(
+  node: StoryNode,
+  opts: NarrateOptions,
+): Promise<{ narration: Narration; reused: boolean }> {
+  return narrateTarget({ pageNo: node.pageNo, part: 'body', text: narrationTextOf(node) }, opts)
 }
 
 export async function narrateAll(
@@ -161,24 +226,30 @@ export async function narrateAll(
   opts.emit({ kind: 'stage', stage: 'narrating', phase: 'begin' })
 
   for (const node of nodes) {
-    if (narrationTextOf(node).trim() === '') {
-      // 空正文不合成。★ 不报错也不留空文件：没有正文的页本来就没有"配音"这回事
-      continue
-    }
-    try {
-      const { narration } = await narrateNode(node, { ...opts, done })
-      narrations.push(narration)
-    } catch (err) {
-      const failure = asEngineError(err)
-      errors.push({ pageNo: node.pageNo, message: failure.message })
-      opts.emit({
-        kind: 'error',
-        stage: 'narrating',
-        pageNo: node.pageNo,
-        code: failure.code,
-        message: `这一页没配上音：${failure.message}`,
-        fatal: false,
-      })
+    for (const target of targetsOfNode(node)) {
+      if (target.text.trim() === '') {
+        // 空文本不合成。★ 不报错也不留空文件：没有这句话本来就没有配音这回事
+        continue
+      }
+      try {
+        const { narration } = await narrateTarget(target, { ...opts, done })
+        narrations.push(narration)
+      } catch (err) {
+        const failure = asEngineError(err)
+        // ★ 报错要点名**是哪一段**（正文 / 引导提问 / 选项 A / 选项 B）：
+        //   一页现在最多四段，只说"这一页没配上音"，家长不知道缺的是哪一句
+        const label = NARRATION_PART_LABELS[target.part]
+        const what = target.part === 'body' ? '这一页' : `这一页的${label}`
+        errors.push({ pageNo: target.pageNo, message: `${what}没配上音：${failure.message}` })
+        opts.emit({
+          kind: 'error',
+          stage: 'narrating',
+          pageNo: target.pageNo,
+          code: failure.code,
+          message: `${what}没配上音：${failure.message}`,
+          fatal: false,
+        })
+      }
     }
   }
 

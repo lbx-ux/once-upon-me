@@ -59,6 +59,20 @@
   font-weight: 600;
 }
 
+/* 页头那句短说明（2026-10-18）。
+   ★ 与 `/voice` 的 `.vc__sub` / `/booklist` 的 `.blw__sub` / `/character` 的 `.cw__sub`
+     同一条规格：44ch、13px、`--ink-on-sky`。
+   ★ 只能用 `--ink-on-sky`：这一行在天空带里（这一屏整屏都在 112vh 以内），
+     而 `--ink-muted` / `--accent` 在带子里做文字会破 4.5:1（governing rule，
+     `scripts/check-scrim.mts` 对 `--ink-on-sky` 是十段全断言）。 */
+.shelf__sub {
+  max-width: 44ch;
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--ink-on-sky);
+}
+
 /* 编辑那一颗：**不占实心强调色**——那是"造东西"的专用视觉（`.cw__new` 与
    `.shelf__book--new` 上的书名），而它是个模式开关。所以它是一颗纸白底的胶囊：
    底色差来自 `--surface`，激活态靠字与边变 `--accent`（在 `--surface` 上 5.18:1，过）。 */
@@ -118,7 +132,10 @@
   margin-bottom: clamp(18px, 2.4vw, 28px);
 }
 
-.shelf__sub {
+/* ★ 类名 2026-10-18 从 `.shelf__sub` 改成 `.shelf__drafts-title`：页头那一行说明
+   要用 `.shelf__sub` 这个名字（全站 `*__sub` 都是指页头那句），而这一颗是
+   这一栏的小标题。同一处处置见 `.shelf__name` 那一段的来由。 */
+.shelf__drafts-title {
   margin: 0 0 10px;
   font-family: var(--font-serif);
   font-size: 15px;

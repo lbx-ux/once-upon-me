@@ -279,6 +279,100 @@ describe('rerunNarration · 重配一页', () => {
     expect(after.narrations[0]?.asset.path).toBe('books/b1/page-1-a2.mp3')
   })
 
+  it('★★ 重配**选择点那一页**不会把另外三段弄丢（一页四段，按 pageNo 删就会）', async () => {
+    const providers = await bundle()
+    const choicePage: StoryNode = {
+      ...node(2, ['前面有两条路。']),
+      choice: {
+        prompt: '你想走哪一条？',
+        options: [
+          { iconKey: 'tree', emoji: '🌲', label: '穿森林', spoken: '飞过树林。' },
+          { iconKey: 'ship', emoji: '⛵', label: '过大海', spoken: '跨过海面。' },
+        ],
+      },
+    }
+    const before = book({
+      form: 'shared',
+      tree: {
+        form: 'shared',
+        title: 'T',
+        rootId: 'n1',
+        nodes: [node(1, ['第一页。']), choicePage],
+      },
+      narrations: [
+        {
+          pageNo: 1,
+          voiceId: 'v-old',
+          textHash: 'h1',
+          asset: { path: 'books/b1/page-1-a1.mp3', mime: 'audio/mpeg', digest: 'd', bytes: 1 },
+        },
+        {
+          pageNo: 2,
+          voiceId: 'v-old',
+          textHash: 'h2',
+          asset: { path: 'books/b1/page-2-a1.mp3', mime: 'audio/mpeg', digest: 'd', bytes: 1 },
+        },
+        {
+          pageNo: 2,
+          part: 'prompt',
+          voiceId: 'v-old',
+          textHash: 'h3',
+          asset: {
+            path: 'books/b1/page-2-prompt-a1.mp3',
+            mime: 'audio/mpeg',
+            digest: 'd',
+            bytes: 1,
+          },
+        },
+        {
+          pageNo: 2,
+          part: 'option-a',
+          voiceId: 'v-old',
+          textHash: 'h4',
+          asset: {
+            path: 'books/b1/page-2-opt-a-a1.mp3',
+            mime: 'audio/mpeg',
+            digest: 'd',
+            bytes: 1,
+          },
+        },
+        {
+          pageNo: 2,
+          part: 'option-b',
+          voiceId: 'v-old',
+          textHash: 'h5',
+          asset: {
+            path: 'books/b1/page-2-opt-b-a1.mp3',
+            mime: 'audio/mpeg',
+            digest: 'd',
+            bytes: 1,
+          },
+        },
+      ] as Book['narrations'],
+    })
+    const after = await rerunNarration(
+      { book: before, card: CARD, pageNo: 2, voiceId: 'v-new' },
+      { providers, now: () => 0 },
+    )
+    // 第 2 页那四段都还在，而且都换成了新音色与新版本号
+    const onPage2 = after.narrations.filter((item) => item.pageNo === 2)
+    expect(onPage2.map((item) => item.part).sort()).toEqual([
+      'body',
+      'option-a',
+      'option-b',
+      'prompt',
+    ])
+    expect(onPage2.every((item) => item.voiceId === 'v-new')).toBe(true)
+    expect(onPage2.map((item) => item.asset.path).sort()).toEqual([
+      'books/b1/page-2-a2.mp3',
+      'books/b1/page-2-opt-a-a2.mp3',
+      'books/b1/page-2-opt-b-a2.mp3',
+      'books/b1/page-2-prompt-a2.mp3',
+    ])
+    // 别的页一个字没动
+    expect(after.narrations.filter((item) => item.pageNo === 1)).toHaveLength(1)
+  })
+
   it('★ 换音色时 `Book.voiceId` 跟着走（否则清单上写 A、每一页都是 B）', async () => {
     const providers = await bundle()
     const after = await rerunNarration(

@@ -15,10 +15,9 @@
  * ★ 多的事实：**三个不同的问题要分开回答**，而它们混成一个布尔之后
  * 界面上就再也说不出真话：
  *   · `user`        —— 这个人是谁
- *   · `permissions` —— **站长给了他什么**（四个开关，决定他能不能创作）
- *   · `configured`  —— **站里自己配齐了什么**（密钥在不在）
- * 「能不能生成一本书」= (`text` 有权限 **且** 服务端配了文本)
- *                    **且** (`image` 有权限 **且** 服务端配了图像)。
+ *   · `allowed`     —— **他能不能创作**（一位；2026-10-18 之前是"站长给了他哪几项"）
+ *   · `configured`  —— **站里自己配齐了什么**（密钥在不在，这一侧仍是四项独立的）
+ * 「能不能生成一本书」= `allowed` **且** 站里配了文本与图像。
  * 缺哪一半，界面上那句话是不一样的："找站长开权限" vs "站里还没配好"。
  *
  * ★ 写账号只走 `lib/auth/client.ts`（与上一版同一条纪律）：漏掉一处 `fetch`
@@ -32,9 +31,9 @@ import { NO_PERMISSIONS, type AuthUser, type Permissions } from '@/lib/auth/stat
 
 export type AuthContextValue = {
   user: AuthUser | null
-  /** 站长给这个人的四个开关。未登录时四个全 false */
-  permissions: Permissions
-  /** 站里自己配齐了哪几个能力（密钥在不在）。★ 与 `permissions` 是两件事 */
+  /** 这个人此刻能不能创作。★ 一位；未登录时是 `false` */
+  allowed: boolean
+  /** 站里自己配齐了哪几个能力（密钥在不在）。★ 与 `allowed` 是两件事 */
   configured: Permissions
   /**
    * 站里现在配的语音模型名。★ 不是密钥（那是 `TTS_API_KEY`，它一辈子不出服务端）。
@@ -56,13 +55,13 @@ export type AuthContextValue = {
   /**
    * 重新问一次"我是谁"，**并把刷新后的那份事实回给调用方**。
    *
-   * ★ 返回值不是顺手加的：`refresh()` 之后组件里那个 `permissions` 变量
-   *   **还是旧的**（它是这一次渲染的闭包），而"按下的这一刻权限是什么"
+   * ★ 返回值不是顺手加的：`refresh()` 之后组件里那个 `allowed` 变量
+   *   **还是旧的**（它是这一次渲染的闭包），而"按下的这一刻有没有权限"
    *   恰恰是调用方要的东西。返回它，调用方就不必等下一次渲染再判一遍
    *   ——那样写会变成"先放行、下一帧才发现该拦"。
    *   返回 `null` = 这一次没读回来（后端连不上 / 没登录），调用方按"判不了"处理。
    */
-  refresh: () => Promise<{ permissions: Permissions; configured: Permissions } | null>
+  refresh: () => Promise<{ allowed: boolean; configured: Permissions } | null>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -98,7 +97,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     setUser(result.user)
     setConfigured(result.configured)
     setSpeechModel(result.speechModel)
-    return { permissions: result.permissions, configured: result.configured }
+    return { allowed: result.allowed, configured: result.configured }
   }, [])
 
   useEffect(() => {
@@ -133,9 +132,9 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
-      // ★ 权限从 `user` 上读（它每次都是后端现给的），不另存一份——
+      // ★ 那一份"能不能创作"从 `user` 上读（它每次都是后端现给的），不另存一份——
       //   两份会漂，而漂的那一刻的症状是"界面说能用、服务端说不行"
-      permissions: user?.permissions ?? NO_PERMISSIONS,
+      allowed: user?.allowed ?? false,
       configured,
       speechModel,
       ready,

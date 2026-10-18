@@ -37,10 +37,17 @@
 
 import { readFile, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import { assetUrlOf } from './asset-url.ts'
+import { assetUrlOf, encodeAssetPath } from './asset-url.ts'
 import { isResizableImage, READER_PAGE_WIDTH } from './thumbs.ts'
 import type { AssetStore } from './engine/providers/types.ts'
-import { linearOrder, manifestPathOf, type Book, type StoryNode } from './engine/index.ts'
+import { iconUrlOf } from './choice-icons.ts'
+import {
+  linearOrder,
+  manifestPathOf,
+  type Book,
+  type ChoiceOption,
+  type StoryNode,
+} from './engine/index.ts'
 
 /** 预生成演示书在 `public/` 下的位置。导出脚本与这一层**共用**这串字面量 */
 export const DEMO_DIR = 'demo/books'
@@ -71,7 +78,70 @@ export type ResolvedBook = {
    * **不许拿第一页冒充封面**——那是"图没到位就留一个诚实的兜底"这条。
    */
   coverUrl: string | null
+  /**
+   * 页表：**按页号排的全表**。独读版的阅读顺序就是它。
+   * ★ 共读版**不能**拿它当阅读顺序（那会把走不到的那一支也读出来）——
+   *   共读版要的是 `story` + `storyPath()`。（2026-10-18）
+   */
   pages: ReaderPage[]
+  /** 树的形状 + 每一页的图/音/选择点。两种形态共用它，见 `readerStory` */
+  story: ResolvedStory
+}
+
+/* ─────────────────────── 共读版要的那一层：树 + 每一页的视图 ─────────────────────── */
+
+/**
+ * 一个选项**能直接渲染的样子**：图与音都算成了地址，文字是给孩子看/听的那两句。
+ *
+ * ★ `iconUrl` 为 null **不是错误**：模型写的 `iconKey` 可以不在词表里，
+ *   那时界面露 `emoji`。见 `lib/choice-icons.ts` 那段。
+ */
+export type StoryOptionView = {
+  label: string
+  spoken: string
+  emoji: string
+  iconUrl: string | null
+  /** 这一句的朗读；null = 这一句没录上（与"整本没配音"是两件事） */
+  audioUrl: string | null
+}
+
+export type StoryChoiceView = {
+  /** 给家长念的引导提问（不识字的孩子由家长念；有配音时它也会被念出来） */
+  prompt: string
+  promptAudioUrl: string | null
+  /** 顺序 = 按钮的左右顺序。`options[0]` 对应 `via: 'a'` 那一支（tree.ts 保证） */
+  options: readonly [StoryOptionView, StoryOptionView]
+}
+
+/**
+ * 一页**能直接渲染的样子**。
+ *
+ * ★ `pageNo` 是**资产编号**，不是"第几页"：共读版里这两个数必须分开
+ *   （`page-7-a1.webp` 可能是孩子读到的第 2 页）。给人看的那个数由**路径**算，
+ *   见 `components/reader/reader-model.ts` 的 `readoutOf`。
+ */
+export type StoryView = {
+  nodeId: string
+  pageNo: number
+  body: readonly string[]
+  imageUrl: string | null
+  /** 这一页**正文**的朗读 */
+  audioUrl: string | null
+  missing: boolean
+  /** 这一页的子节点。选择点两个（顺序 = 选项顺序），其余页 0 或 1 个 */
+  next: readonly string[]
+  /** 这一页是选择点时才有 */
+  choice: StoryChoiceView | null
+}
+
+export type ResolvedStory = {
+  form: 'solo' | 'shared'
+  rootId: string
+  /**
+   * **全表**（含走不到的那一支）。"哪一些会被读到"由路径决定——
+   * 这正是"预生成"这个词的形状：钱在生成那一刻就花完了，读的时候不再花钱。
+   */
+  nodes: readonly StoryView[]
 }
 
 /**
@@ -83,17 +153,9 @@ export function assetPathInDemo(bookId: string, assetPath: string): string {
   return assetPath.startsWith(prefix) ? assetPath.slice(prefix.length) : assetPath
 }
 
-function encodePath(path: string): string {
-  return path
-    .split('/')
-    .filter((segment) => segment !== '')
-    .map((segment) => encodeURIComponent(segment))
-    .join('/')
-}
-
 /** 预生成书里那张图在浏览器里的地址（静态文件，由 Next 直接出，不经 API） */
 export function demoAssetUrl(bookId: string, assetPath: string): string {
-  return `/${DEMO_DIR}/${encodeURIComponent(bookId)}/${encodePath(assetPathInDemo(bookId, assetPath))}`
+  return `/${DEMO_DIR}/${encodeURIComponent(bookId)}/${encodeAssetPath(assetPathInDemo(bookId, assetPath))}`
 }
 
 /**
@@ -182,6 +244,7 @@ export async function resolveBook(
       source: 'runtime',
       coverUrl: coverUrlOf(runtime, runtimeUrl),
       pages: readerPages(runtime, runtimeUrl),
+      story: readerStory(runtime, runtimeUrl),
     }
   }
 
@@ -198,6 +261,7 @@ export async function resolveBook(
       source: 'demo',
       coverUrl: coverUrlOf(demo, demoUrl),
       pages: readerPages(demo, demoUrl),
+      story: readerStory(demo, demoUrl),
     }
   }
   return null
@@ -220,24 +284,114 @@ export function coverUrlOf(book: Book, urlOf: (assetPath: string) => string): st
  *   这里再落一次地）：① 有图且核对过；② 有图但没核对（`verdict: 'unavailable'`）；
  *   ③ **根本没有图**（在这本书的 `errors` 里）。阅读器只关心第三种——
  *   前两种的图都是好的，照样给孩子看。
+ *
+ * ★ 2026-10-18：它现在是 `storyViewsOf` 的一个**投影**（按页号排的那一条链），
+ *   不再自己算一遍图与音——两个消费者共用一个真相（`readerStory` 那一半也要它们）。
  */
 export function readerPages(book: Book, urlOf: (assetPath: string) => string): ReaderPage[] {
-  const byPage = new Map(book.illustrations.map((item) => [item.pageNo, item]))
-  const failed = new Map(book.errors.map((item) => [item.pageNo, item.message]))
-  // ★ 按 pageNo 取，不按 asset.path 去重：同一段正文被共读版的主干页共用时，
-  //   几个 pageNo 指向**同一份录音**，但每一页都要能拿到它（narrate.ts 就是这么写的）
-  const narrationByPage = new Map(book.narrations.map((item) => [item.pageNo, item]))
+  const views = storyViewsOf(book, urlOf)
   return linearOrder(book.tree).map((node: StoryNode) => {
-    const illustration = byPage.get(node.pageNo)
-    // 缺图判定要**同时**看两处：没有 illustration 条目，或者条目指向的那个占位资产
-    const missing = !illustration || failed.has(node.pageNo)
-    const narration = narrationByPage.get(node.pageNo)
+    const view = views.get(node.nodeId)
     return {
       pageNo: node.pageNo,
-      imageUrl: illustration && !missing ? urlOf(illustration.asset.path) : null,
-      audioUrl: narration ? urlOf(narration.asset.path) : null,
+      imageUrl: view?.imageUrl ?? null,
+      audioUrl: view?.audioUrl ?? null,
       body: node.body,
-      missing,
+      missing: view?.missing ?? true,
     }
   })
+}
+
+/**
+ * 书 → **一棵能直接渲染的树**（两种形态共用）。
+ *
+ * ★ 为什么共读版不能复用 `readerPages`：它按页号排，于是两条支会被读成
+ *   "第 4 页、第 5 页"——孩子选了一次，看到的却是两条路**连着**。
+ *   阅读顺序在共读版里是**从根走到叶的那条路**（`reader-model.ts` 的 `storyPath`）。
+ * ★ 一个 builder、两个消费者：`readerPages`（独读版那条链）与 `readerStory`（树）
+ *   都从这里取"这一页的图/音/缺没缺"，于是不会出现"内页缩了、封面没缩"那种没人会去查的差异。
+ */
+export function readerStory(book: Book, urlOf: (assetPath: string) => string): ResolvedStory {
+  const views = storyViewsOf(book, urlOf)
+  return {
+    form: book.form,
+    rootId: book.tree.rootId,
+    nodes: book.tree.nodes.map((node: StoryNode) => {
+      const view = views.get(node.nodeId)
+      return {
+        nodeId: node.nodeId,
+        pageNo: node.pageNo,
+        body: node.body,
+        imageUrl: view?.imageUrl ?? null,
+        audioUrl: view?.audioUrl ?? null,
+        missing: view?.missing ?? true,
+        next: node.next,
+        choice: view?.choice ?? null,
+      }
+    }),
+  }
+}
+
+/**
+ * 每一页的图 / 音 / 缺没缺 / 选择点的三段音——**两种形态唯一的那个 builder**。
+ *
+ * 键是 `nodeId`（不是 `pageNo`）：共读版里"这一页"是节点，页号只是它的资产编号。
+ */
+function storyViewsOf(
+  book: Book,
+  urlOf: (assetPath: string) => string,
+): Map<string, Pick<StoryView, 'imageUrl' | 'audioUrl' | 'missing' | 'choice'>> {
+  const byPage = new Map(book.illustrations.map((item) => [item.pageNo, item]))
+  const failed = new Set(book.errors.map((item) => item.pageNo))
+  /**
+   * ★ 一页最多四段（正文 / 引导提问 / 选项 A / 选项 B），所以这里按 `(pageNo, part)` 收，
+   *   而不是"一页一条"。`part` 缺省就是正文——盘上已有的书没有这个字段。
+   */
+  const narrationBy = new Map(
+    book.narrations.map((item) => [`${item.pageNo}:${item.part ?? 'body'}`, item]),
+  )
+  const audioOf = (pageNo: number, part: string): string | null => {
+    const narration = narrationBy.get(`${pageNo}:${part}`)
+    return narration ? urlOf(narration.asset.path) : null
+  }
+
+  const views = new Map<string, Pick<StoryView, 'imageUrl' | 'audioUrl' | 'missing' | 'choice'>>()
+  for (const node of book.tree.nodes) {
+    const illustration = byPage.get(node.pageNo)
+    // 缺图判定要**同时**看两处：没有 illustration 条目，或者页号在硬失败那张表里
+    const missing = !illustration || failed.has(node.pageNo)
+    views.set(node.nodeId, {
+      imageUrl: illustration && !missing ? urlOf(illustration.asset.path) : null,
+      audioUrl: audioOf(node.pageNo, 'body'),
+      missing,
+      choice: node.choice
+        ? {
+            prompt: node.choice.prompt,
+            promptAudioUrl: audioOf(node.pageNo, 'prompt'),
+            options: [
+              optionViewOf(node.choice.options[0], audioOf(node.pageNo, 'option-a')),
+              optionViewOf(node.choice.options[1], audioOf(node.pageNo, 'option-b')),
+            ],
+          }
+        : null,
+    })
+  }
+  return views
+}
+
+/**
+ * 一个选项 → 能直接渲染的那一份。
+ *
+ * ★ 图标那一步是**这里**做的、在服务端：`iconUrlOf` 要查 `CHOICE_ICONS` 那张词表，
+ *   而客户端组件收到的是已经算好的地址（与页图同一条口径——见文件头
+ *   "客户端拿到的是**已经算好的 URL 列表**"）。
+ */
+function optionViewOf(option: ChoiceOption, audioUrl: string | null): StoryOptionView {
+  return {
+    label: option.label,
+    spoken: option.spoken,
+    emoji: option.emoji,
+    iconUrl: iconUrlOf(option.iconKey),
+    audioUrl,
+  }
 }

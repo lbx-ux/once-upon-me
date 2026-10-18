@@ -31,7 +31,7 @@
  * 1. **音色住服务端，权限与"站里配好了没有"也住服务端**——但它们仍然是**两个家**：
  *    前者是"我要哪个嗓子"（我们的库），后者是"我能不能用嗓子"（Java 的权限）。
  *    所以这个 Provider 读 `useAuth()`，而不是自己再去请求一遍（再请求一遍
- *    就有两份 `permissions`，它们会漂）。
+ *    就有两份"这个人能不能用"，它们会漂）。
  *
  * 2. **`canNarrate` 由三条事实合成，但缺哪一条要说得出来**（`narrationBlockOf`）。
  *    用户看到"不能用"时下一步该做什么，恰好取决于缺的是哪一条：
@@ -118,7 +118,7 @@ export default function VoiceProvider({ children }: { children: React.ReactNode 
   const [current, setCurrent] = useState('')
   const [myVoices, setMyVoices] = useState<MyVoice[]>([])
   const [voiceError, setVoiceError] = useState<string | null>(null)
-  const { permissions, configured, speechModel, user } = useAuth()
+  const { allowed, configured, speechModel, user } = useAuth()
 
   /**
    * 一次改动的统一收尾：把服务端回的那一份**整份**装进来。
@@ -212,18 +212,18 @@ export default function VoiceProvider({ children }: { children: React.ReactNode 
   )
 
   const speechBlock = useMemo<SpeechBlock | null>(
-    () => speechBlockOf({ serverHasSpeech: configured.speech, allowed: permissions.speech }),
-    [configured.speech, permissions.speech],
+    () => speechBlockOf({ serverHasSpeech: configured.speech, allowed }),
+    [configured.speech, allowed],
   )
 
   const narrateBlock = useMemo<NarrationBlock | null>(
     () =>
       narrationBlockOf({
         serverHasSpeech: configured.speech,
-        allowed: permissions.speech,
+        allowed,
         voiceId: current,
       }),
-    [configured.speech, permissions.speech, current],
+    [configured.speech, allowed, current],
   )
 
   const value = useMemo<VoiceContextValue>(

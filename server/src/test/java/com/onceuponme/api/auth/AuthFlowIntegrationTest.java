@@ -24,15 +24,15 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
- * 真跑一遍整条路：注册 → 设密码 → 登录 → 登出 → 用密码登回来 → 管理员发权限。
+ * 真跑一遍整条路：注册 → 设密码 → 登录 → 登出 → 用密码登回来 → 站长收回权限。
  *
  * <p>★ 为什么要有这个测试（而不是只测纯函数）：这一层的行为里，最要紧的几条
- * **只有整条路串起来才看得见**——"新来的号四个能力全关""权限改了不用重新登录
+ * **只有整条路串起来才看得见**——"新来的号默认就有创作权""权限改了不用重新登录
  * 就生效""拿设密码那张票当会话用会被挡"。纯函数测试全都是绿的，
  * 而这三条一条都没被验过。
  *
  * <p>★ 判据一律选**只有真做才会不同**的东西：不是"接口回 200"，
- * 而是"回的是那个 kind""permissions 里那一位是 false""不重新登录也能看见变化"。
+ * 而是"回的是那个 kind""`allowed` 那一位翻转了""不重新登录也能看见变化"。
  */
 @SpringBootTest(
     properties = {
@@ -49,7 +49,7 @@ class AuthFlowIntegrationTest {
   /* ── 演示账号 ───────────────────────────────────────────────────────────── */
 
   @Test
-  @DisplayName("演示账号 123456/123456 直接进，四个能力全开，而且不需要短信")
+  @DisplayName("演示账号 123456/123456 直接进，有创作权，而且不需要短信")
   void demoAccountSignsIn() throws Exception {
     mvc.perform(
             post("/api/auth/login")
@@ -58,14 +58,13 @@ class AuthFlowIntegrationTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.user.account").value("123456"))
         .andExpect(jsonPath("$.user.role").value("USER"))
-        .andExpect(jsonPath("$.user.permissions.text").value(true))
-        .andExpect(jsonPath("$.user.permissions.speech").value(true));
+        .andExpect(jsonPath("$.user.allowed").value(true));
   }
 
   /* ── 新用户：验证码 → 设密码 → 进来 ─────────────────────────────────────── */
 
   @Test
-  @DisplayName("新号：发码 → 核验（needs-password）→ 设密码 → 进得来，且★四个能力默认全关")
+  @DisplayName("新号：发码 → 核验（needs-password）→ 设密码 → 进得来，且★默认就有创作权")
   void newUserJourney() throws Exception {
     String phone = "13911110001";
 
@@ -96,10 +95,9 @@ class AuthFlowIntegrationTest {
                     .content(send(Map.of("ticket", ticket, "password", "yigebenzi123"))))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.user.account").value(phone))
-            // ★ 这句话是这一轮的产品口径：新来的人四个能力都没有，
-            //   于是他点「开始创作」时会看到那句"请联系管理员"
-            .andExpect(jsonPath("$.user.permissions.text").value(false))
-            .andExpect(jsonPath("$.user.permissions.image").value(false))
+            // ★ 这句话是这一轮的产品口径（2026-10-18 反过来了）：新来的人**默认就能创作**，
+            //   站长的动作变成了"把某个人的权限收回来"（见下面那一条）
+            .andExpect(jsonPath("$.user.allowed").value(true))
             .andReturn();
 
     String token = json.readTree(session.getResponse().getContentAsString()).get("token").asText();
@@ -233,7 +231,7 @@ class AuthFlowIntegrationTest {
   /* ── 权限：管理员改，用户那边当场生效 ───────────────────────────────────── */
 
   @Test
-  @DisplayName("★ 管理员勾上「图像」之后，那个人不重新登录也看得见")
+  @DisplayName("★ 管理员把权限收回去之后，那个人不重新登录也看得见")
   void permissionChangeIsVisibleWithoutRelogin() throws Exception {
     String phone = "13911110007";
     signUp(phone, "yonghu-mima-1");
@@ -241,6 +239,11 @@ class AuthFlowIntegrationTest {
 
     String adminToken = login("100000", "admin-integration-pass");
     String userId = userIdOf(userToken);
+
+    // 刚注册的人默认就有创作权（这一条是 2026-10-18 的口径，与"以前默认全关"相反）
+    mvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + userToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.allowed").value(true));
 
     // 普通用户打管理接口 → 403（这一条拦的是"自己给自己开权限"）
     mvc.perform(get("/api/admin/users").header("Authorization", "Bearer " + userToken))
@@ -250,16 +253,26 @@ class AuthFlowIntegrationTest {
             patch("/api/admin/users/" + userId + "/permissions")
                 .header("Authorization", "Bearer " + adminToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(send(Map.of("text", true, "image", true, "vision", false, "speech", false))))
+                .content(send(Map.of("allowed", false))))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.permissions.image").value(true));
+        .andExpect(jsonPath("$.allowed").value(false));
 
-    // ★ 用的是**旧的**那张票
+    // ★ 用的是**旧的**那张票：权限是"此刻的事实"，不是票里那张七天前的快照
     mvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + userToken))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.permissions.text").value(true))
-        .andExpect(jsonPath("$.permissions.image").value(true))
-        .andExpect(jsonPath("$.permissions.speech").value(false));
+        .andExpect(jsonPath("$.allowed").value(false));
+
+    // ★ 而开回来之后同样当场生效（不然"改完要重登"这件事会在另一半上复发）
+    mvc.perform(
+            patch("/api/admin/users/" + userId + "/permissions")
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(send(Map.of("allowed", true))))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.allowed").value(true));
+
+    mvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + userToken))
+        .andExpect(jsonPath("$.allowed").value(true));
   }
 
   @Test

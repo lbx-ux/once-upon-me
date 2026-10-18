@@ -41,16 +41,17 @@ import type {
   ChildProfile,
   Illustration,
   Narration,
+  NarrationPart,
   StoryNode,
   StoryTree,
 } from './domain.ts'
-import { childWordOf } from './domain.ts'
+import { childWordOf, NARRATION_PARTS } from './domain.ts'
 import { linearOrder } from './tree.ts'
 import { createEventFactory, type EngineEvent, type EngineEventPayload } from './events.ts'
 import { EngineError } from './errors.ts'
 import { planStory } from './plan.ts'
 import { illustrateAll, illustrateCover, illustrateNode } from './illustrate.ts'
-import { narrateAll, narrateNode, nextTakeNo } from './narrate.ts'
+import { narrateAll, narrateTarget, nextTakeNo, targetsOfNode } from './narrate.ts'
 import { cardDigest, validateCard } from './character-card/card.ts'
 import { digest } from './digest.ts'
 import { toDataUrl } from './providers/http.ts'
@@ -84,6 +85,7 @@ export type {
   Illustration,
   Narration,
   Provenance,
+  ChoiceOption,
   StoryChoice,
   StoryNode,
   StoryTree,
@@ -120,8 +122,11 @@ export { buildCard, attachReferenceDigest } from './character-card/card.ts'
  * 单页重配要用到的那两个（工单 01）。`narrateNode` 是循环体的那一份实现，
  * `nextTakeNo` 决定新录音落到哪个文件名——两者都是**判据**，不是实现细节：
  * 路由自己拼文件名的那天起，"第三版会不会覆盖第二版"就只有真跑一本书才知道了。
+ * ★ `targetsOfNode` 一起导出（2026-10-18）：一页现在最多四段（正文 + 选择点那三段），
+ *   想知道"这一页应该有哪几份录音"的地方（阅读器、探针、重配）只有这一个来源。
  */
-export { narrateNode, nextTakeNo, narrationTextOf } from './narrate.ts'
+export { narrateNode, targetsOfNode, nextTakeNo, narrationTextOf } from './narrate.ts'
+export type { NarrationTarget } from './narrate.ts'
 export { createProviders, describeProviders } from './providers/registry.ts'
 export { createFsStore, createMemoryStore } from './providers/stores.ts'
 export { emptyManifest, loadManifest, auditManifest } from './providers/replay.ts'
@@ -542,10 +547,35 @@ function nodeFor(book: Book, pageNo: number): StoryNode {
  * 按页号**替换**那一条。★ 是替换不是追加：`frames.ts` 判据 1 记着同一个教训——
  * 写成分页追加的话，20 页的书重画 3 页会变成 23 页。
  * 排序保持升序（清单按页号读起来才顺，阅读器也按它取）。
+ *
+ * ★ **它只适用于"一页一条"的那两种**（`illustrations` / `cover` 那一族）。
+ *   配音自从一页可以有四段之后就不能用它了——见 `replaceNarration`（2026-10-18）。
  */
 function replaceByPage<T extends { pageNo: number }>(items: readonly T[], next: T): T[] {
   const kept = items.filter((item) => item.pageNo !== next.pageNo)
   return [...kept, next].sort((left, right) => left.pageNo - right.pageNo)
+}
+
+/** 片段在清单里的次序：同一页按 正文 → 引导提问 → 选项 A → 选项 B 排 */
+function narrationOrderOf(item: Narration): number {
+  return NARRATION_PARTS.indexOf(item.part ?? 'body')
+}
+
+/**
+ * 替换**若干段**录音（一页最多四段）。
+ *
+ * ★ 为什么不能复用 `replaceByPage`：它按 `pageNo` 删条目，而一页现在有好几条——
+ *   重配选择点那一页会把同一页的另外三段**一起删掉**，
+ *   症状是"换了音色之后，提问与两个选项凭空不见了"（而这种缺失没人会去查）。
+ * ★ 键是 `(pageNo, part)`；`part` 缺省按 `body` 算（盘上已有的书没有这个字段）。
+ */
+function replaceNarration(items: readonly Narration[], next: readonly Narration[]): Narration[] {
+  const keyOf = (item: Narration): string => `${item.pageNo}:${item.part ?? 'body'}`
+  const replaced = new Set(next.map(keyOf))
+  const kept = items.filter((item) => !replaced.has(keyOf(item)))
+  return [...kept, ...next].sort(
+    (left, right) => left.pageNo - right.pageNo || narrationOrderOf(left) - narrationOrderOf(right),
+  )
 }
 
 function rerunForward(deps: RerunDeps): (payload: EngineEventPayload) => void {
@@ -647,7 +677,12 @@ export async function rerunNarration(request: PageRerunRequest, deps: RerunDeps)
   const now = deps.now ?? (() => Date.now())
   const forward = rerunForward(deps)
   const original = nodeFor(request.book, request.pageNo)
-  const previous = request.book.narrations.find((item) => item.pageNo === request.pageNo)
+  /** 这一页**某一段**原来那一份录音（缺省 = 正文）。takeNo 要按段各数各的 */
+  const previousOf = (part: NarrationPart): Narration | undefined =>
+    request.book.narrations.find(
+      (item) => item.pageNo === request.pageNo && (item.part ?? 'body') === part,
+    )
+  const previous = previousOf('body')
   const voiceId = request.voiceId ?? previous?.voiceId
   if (!voiceId) {
     throw new EngineError('invalid-request', '没说要重配成哪一个音色（voiceId）')
@@ -655,7 +690,7 @@ export async function rerunNarration(request: PageRerunRequest, deps: RerunDeps)
 
   /**
    * 改过正文就用改过的那份，并把书里那一页的正文一起换掉。
-   * ★ 空行丢掉、空白行不许留：`narrateNode` 拿到空串会去要一段空白音频，
+   * ★ 空行丢掉、空白行不许留：`narrateTarget` 拿到空串会去要一段空白音频，
    *   而厂商那边要么报错要么回一段静音——两种都不会在界面上说清"这一页没有正文了"。
    *   所以**在这里就拒绝**，让用户看到他删空了。
    */
@@ -666,14 +701,27 @@ export async function rerunNarration(request: PageRerunRequest, deps: RerunDeps)
   const node = body ? { ...original, body } : original
 
   const startedAt = now()
-  const { narration } = await narrateNode(node, {
-    voice,
-    voiceId,
-    store: providers.store,
-    bookId: request.book.bookId,
-    emit: forward,
-    takeNo: nextTakeNo(previous?.asset.path),
-  })
+  /**
+   * ★ **这一页的每一段都重录一遍**（正文 + 选择点的提问与两个选项）。
+   *
+   * 只重录正文的坏法很具体：重配最常见的原因是**换了音色**，而换了音色之后
+   * 正文是新的声音、选择点那三句还是旧声音——同一页里两个讲述者，
+   * 而界面上写着"已换"。多花的是三次合成，换的是这一页**声音是一致的**。
+   * （空文本的段照旧跳过，与整本那条同一条。）
+   */
+  const fresh: Narration[] = []
+  for (const target of targetsOfNode(node)) {
+    if (target.text.trim() === '') continue
+    const { narration } = await narrateTarget(target, {
+      voice,
+      voiceId,
+      store: providers.store,
+      bookId: request.book.bookId,
+      emit: forward,
+      takeNo: nextTakeNo(previousOf(target.part)?.asset.path),
+    })
+    fresh.push(narration)
+  }
 
   const book: Book = {
     ...request.book,
@@ -688,7 +736,7 @@ export async function rerunNarration(request: PageRerunRequest, deps: RerunDeps)
           },
         }
       : {}),
-    narrations: replaceByPage(request.book.narrations, narration),
+    narrations: replaceNarration(request.book.narrations, fresh),
     // 重配可能换了一个音色，而"这一本用哪个音色"要跟着走——
     // 不然界面上写着 A、书里每一页都是 B（`Book.voiceId` 那段）
     voiceId,

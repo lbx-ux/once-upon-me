@@ -1,29 +1,37 @@
 /**
- * chk-shell-help-gate.mjs —— 量 2026-10-17 那一批前端（工单 07 / 15 那两批之后新加的）
+ * chk-shell-gate.mjs —— 侧栏那两件事 + 「未登录就进不去」那三处入口
  *
  * 用法（先起一个**自己独占 dist** 的 dev server）：
  *
  * ```bash
  * node scripts/dev-preview.mjs --dist=.next-ui15 --port=3325
- * node scripts/chk-shell-help-gate.mjs http://127.0.0.1:3325
+ * node scripts/chk-shell-gate.mjs http://127.0.0.1:3325
  * ```
  *
- * 量四件事，每一件的判据都**只有真做出来才会不同**：
+ * 量两件事，每一件的判据都**只有真做出来才会不同**：
  *
- * 1. **「收起侧栏」那颗箭头旁边的说明只在鼠标真悬停时出现**（用户 2026-10-17 要的
- *    Gemini 那种）。判据是 CDP 发一次**真鼠标移动**前后的 `visibility` 之差——
- *    不是读 CSS 里有没有 `:hover`（那条读得到，但它不证明它生效）。
- *    ★ 起因：上一版那颗钮上用 `title=`，浏览器自己在旁边画了一个提示框，
- *      和自绘的那个叠在一起，一次出现两个。
- * 2. **「帮助」弹窗的宽度**。上一轮在 app 预览面板里量到 237px（传的是 520），
- *    怀疑是面板隐藏时 transition 冻在起点——这里用真 Chrome、真帧再量一次，
- *    判据是它的宽度是不是 `min(520, 视口 - 边距)`。
- * 3. **弹窗里没有漏出来的 Markdown 星号**。JSX 里的文字是普通文本，
- *    写 `**粗体**` 出来就是两个字面的星号（实测撞过两次），判据是正文里
- *    一个 `**` 都没有。
- * 4. **三处入口在未登录时都拦得住**（创作 / 生成人物 / 生成声音，用户原话）。
+ * 1. **「收起侧栏」那一格长得对不对**：箭头在框里、字就在旁边、`title` 也在
+ *    （收起那个方向压成两个字「展开」，"侧栏"两个字只有 `title` 里有），
+ *    以及它**在底栏的最后一格、贴着侧栏底**（用户 2026-10-17 定的位置）。
+ * 2. **三处入口在未登录时都拦得住**（创作 / 生成人物 / 生成声音，用户原话）。
  *    判据是"点了之后**还停在原来那一页**" + 弹窗里有那颗带 `?next=` 的 `<a>`。
  *    ★ 只点、不点弹窗里那颗「去登录」——那是一次真导航，会把后面的测量打断。
+ *    ★ 这一条是**「没登录的人不能创作」这句话唯一的实测**（2026-10-18 之后更是
+ *      唯一的入口检查：那三处按下去要过 `SignInGate`，而服务端那一侧是 401）。
+ *
+ * ★ 2026-10-18 删掉的三项，三项都是**没有对象了**：
+ *   · 量「帮助」弹窗宽度的那一项，与量"弹窗里有没有漏出来的 Markdown 星号"的那一项——
+ *     那个弹窗随「权限收成一位」一起拆了（没有人需要申请权限之后，它剩下的三条说明
+ *     也被用户要求一并删掉）。
+ *   · 量"悬停才出现的那颗标签（`.shell__tip`）"的那一项。★ 这一项**不是**这次删的：
+ *     它的对象在 2026-10-17（`90501be`）就没了——用户那天改口「还是改回一开始那样吧」，
+ *     收起钮回到一整行带文字，旁边那颗悬停标签就此撤掉（理由写在 `AppShell.tsx` 里：
+ *     字就在旁边，留着会变成第二个 tooltip）。它在之后那些次运行里一直读成
+ *     `有提示元素: false / 变了: false`，也就是一直在**无声地失效**——所以这一轮顺手
+ *     换成了上面第 1 条：同一格、问的是它现在真的有的那几样。
+ *   ★ 文件也顺手从 `chk-shell-help-gate.mjs` 改名成现在这个：名字里那半句
+ *     （help）已经没有对应物，而一个叫 help-gate 的脚本量的是登录闸，
+ *     下一个人会照着名字去找一个不存在的弹窗。
  *
  * ★ 它**只读**：不登录、不落盘、不改库。
  * ★ 用独立的 dist（`.next-ui15`）是自己起的 server，不与别人的会话共用产物目录——
@@ -117,20 +125,15 @@ ws.addEventListener('message', (event) => {
 
 await send('Page.enable')
 
-/** 真鼠标移动（不是改 class、也不是 `elementFromPoint`）——`:hover` 只认真事件 */
-async function moveMouse(x, y) {
-  await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, buttons: 0 })
-}
-
 /**
  * 导航到一页并等它真的 hydrate。
  *
  * ★ 闸门选的是 `AuthProvider` 那一半：未登录时侧栏那一格会渲染成「请登录」，
  *   而**服务端那一份 HTML 里也有这三个字**——所以不能用它当判据。
- *   用 `.shell__link--btn`（「帮助」）在点击后能长出 `.dlg` 这件事当判据更硬：
- *   那只有 React 跑起来才做得到。这里退一步用一个便宜的近似——
- *   轮询 `document.querySelector('.shell__collapse')` 并且试着点一次帮助，
- *   点不出弹窗就再等。
+ *   过去这里靠"点一下「帮助」看它长不长出 `.dlg`"当判据（那只有 React 跑起来才做得到），
+ *   2026-10-18 那一格拆掉之后换了回来：轮询侧栏那颗收起钮。
+ *   ★ 这是一个**弱一些**的闸门（那颗钮在服务端 HTML 里也在），所以下面每一处
+ *   "点了之后应该发生什么"的判断都仍然按真事件走，并且等它出现为止。
  */
 async function goto(path) {
   await send('Page.navigate', { url: `${base}${path}` })
@@ -145,89 +148,32 @@ async function goto(path) {
 
 const out = {}
 
-/* ── 1. 收起侧栏那颗箭头：悬停前后 ───────────────────────────────────────── */
+/* ── 1. 收起侧栏那一格：形状、文字、以及它在底部那一列的位置 ─────────────── */
 await goto('/character')
 
 out.箭头 = await evaluate(`(() => {
   const btn = document.querySelector('.shell__collapse')
   if (!btn) return { 有: false }
-  const tip = btn.querySelector('.shell__tip')
   const r = btn.getBoundingClientRect()
   const shell = document.querySelector('.shell')
   const side = document.querySelector('.shell__side')
+  const foot = document.querySelector('.shell__foot')
   return {
     有: true,
-    有提示元素: !!tip,
-    提示文字: tip?.textContent ?? null,
-    // ★ title 属性有没有：上一版那颗钮上挂着 title，浏览器自己画一个提示框，
-    //   与自绘的那个叠在一起（一次出现两个）。判据是 null
-    title属性: btn.getAttribute('title'),
-    ariaLabel: btn.getAttribute('aria-label'),
+    标签文字: btn.querySelector('.shell__link-label')?.textContent ?? null,
+    // ★ title 留着，而且它不是多余的一遍：收起那个方向压成两个字（「展开」），
+    //   "侧栏"两个字只有 title 里有（AppShell 那段注释）。判据是它**在**
+     title属性: btn.getAttribute('title'),
+    ariaExpanded: btn.getAttribute('aria-expanded'),
     中心: [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)],
     箭头svg: !!btn.querySelector('.shell__collapse-arrow'),
-    // ★ 那颗钮要在**侧栏的右上角**（用户原话）：比较它的顶边与侧栏内容区的顶边
-    到侧栏顶: side ? Math.round(r.top - side.getBoundingClientRect().top) : null,
-    侧栏右缘差: side ? Math.round(side.getBoundingClientRect().right - r.right) : null,
+    到侧栏底: side ? Math.round(side.getBoundingClientRect().bottom - r.bottom) : null,
+    是底栏最后一格: foot ? foot.lastElementChild === btn : null,
     shell展开: shell ? Math.round(shell.getBoundingClientRect().width) : null,
-    未悬停_visibility: tip ? getComputedStyle(tip).visibility : null,
-    未悬停_opacity: tip ? getComputedStyle(tip).opacity : null,
   }
 })()`)
 
-// 真鼠标移到那颗箭头上
-const center = out.箭头?.中心
-if (center) {
-  await moveMouse(center[0] - 200, center[1] + 200)
-  await sleep(250)
-  const before = await evaluate(
-    `(() => { const t = document.querySelector('.shell__tip'); return t ? {v: getComputedStyle(t).visibility, o: getComputedStyle(t).opacity} : null })()`,
-  )
-  await moveMouse(center[0], center[1])
-  await sleep(700)
-  const after = await evaluate(
-    `(() => { const t = document.querySelector('.shell__tip'); return t ? {v: getComputedStyle(t).visibility, o: getComputedStyle(t).opacity} : null })()`,
-  )
-  out.悬停 = {
-    悬停前: before,
-    悬停后: after,
-    变了: JSON.stringify(before) !== JSON.stringify(after),
-  }
-}
-
-/* ── 2/3. 「帮助」弹窗：宽度 + 有没有漏出来的星号 ─────────────────────────── */
-await evaluate(`document.querySelector('.shell__link--btn')?.click()`)
-let opened = false
-for (let i = 0; i < 15 && !opened; i += 1) {
-  await sleep(400)
-  opened = await evaluate(`!!document.querySelector('.dlg')`)
-}
-out.帮助弹窗 = opened
-  ? await evaluate(`(() => {
-      const dlg = document.querySelector('.dlg')
-      const r = dlg.getBoundingClientRect()
-      const cs = getComputedStyle(dlg)
-      const text = dlg.textContent
-      return {
-        标题: dlg.querySelector('.dlg__title')?.textContent ?? null,
-        小节: [...dlg.querySelectorAll('.help__q')].map((q) => q.textContent),
-        // ★ 判据：一个 ** 都不许有（JSX 里的星号是两个字面字符）
-        星号数: (text.match(/[*]{2}/g) ?? []).length,
-        强调tag: [...dlg.querySelectorAll('b')].map((b) => b.textContent),
-        宽: Math.round(r.width),
-        高: Math.round(r.height),
-        maxWidth: cs.maxWidth,
-        视口宽: window.innerWidth,
-        邮箱: dlg.querySelector('.help__mail')?.getAttribute('href') ?? null,
-        按钮: [...dlg.querySelectorAll('.dlg__acts button')].map((b) => b.textContent),
-      }
-    })()`)
-  : { 没打开: true }
-
-// 关掉它（点遮罩或那颗钮都行；这里点 footer 那颗，它只 setOpen(false)）
-await evaluate(`document.querySelector('.dlg__acts button')?.click()`)
-await sleep(400)
-
-/* ── 4. 三处入口：未登录时都拦得住 ──────────────────────────────────────── */
+/* ── 2. 三处入口：未登录时都拦得住 ──────────────────────────────────────── */
 const entries = [
   { 名字: '生成人物', 路径: '/character', 选择器: '.cw__new' },
   { 名字: '生成声音', 路径: '/voice', 选择器: '.vc__new' },

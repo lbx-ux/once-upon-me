@@ -16,7 +16,6 @@
  */
 
 import { readResult, unreachable, type Result } from '@/lib/auth/response.ts'
-import type { Permissions } from '@/lib/auth/state.ts'
 import {
   parseModelCandidates,
   parseModelConfigView,
@@ -78,17 +77,14 @@ export async function fetchOverview(): Promise<Outcome<AdminOverview>> {
 }
 
 /**
- * 改一个人的四个开关。★ 送的是**四个**（全量），不是"改了哪一个"——
- * 理由在 BFF 那条路由与 Java 的 `PermissionPatch` 上各写了一遍。
+ * 开 / 关一个人的创作权限。★ 送的是一位（全量），理由在 BFF 那条路由与
+ * Java 的 `PermissionPatch` 上各写了一遍。
  */
-export async function setPermissions(
-  userId: string,
-  permissions: Permissions,
-): Promise<Outcome<AdminUser>> {
+export async function setAllowed(userId: string, allowed: boolean): Promise<Outcome<AdminUser>> {
   return readUser(
     await call<unknown>(
       `/api/admin/users/${encodeURIComponent(userId)}/permissions`,
-      json('PATCH', permissions),
+      json('PATCH', { allowed }),
     ),
     '改完了，但服务端回的那一行读不出来',
   )
@@ -99,8 +95,8 @@ export async function setPermissions(
  *
  * ★ 口令**只在这个参数里存在**：不写进任何模块级变量、不进 localStorage、
  *   出错时的 `message` 里也不会带上它（那句话是服务端给的，服务端也不回显口令）。
- * ★ 新号的四个能力一律不开——那是服务端定的（见 `AdminService#createUser`），
- *   界面上的那句提示要照这个说，而不是照"给他开个基本的吧"。
+ * ★ 新号**默认就有创作权**——那是服务端定的（见 `AdminService#createUser`），
+ *   界面上的那句提示要照这个说，而不是照"先给他关着吧"。
  */
 export async function createUser(account: string, password: string): Promise<Outcome<AdminUser>> {
   return readUser(

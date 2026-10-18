@@ -19,8 +19,8 @@
  *   单元测试全绿，而 `/admin` 整页 500（webpack 的 `UnhandledSchemeError`）。
  *
  * ★ 数不出来时回**空表**而不是抛：磁盘读不到不该把整张用户表一起带走
- *   （与 `readRequests` 那条一样的判据——"某一列坏了"与"这一屏读不到"
- *   是两件事，界面上要能分开）。空表在界面上是「—」，不是「0」。
+ *   （这条判据原来对着 `readRequests` 写过一遍——权限申请那一列 2026-10-18 拆了，
+ *   所以这里不再举那个例子）。空表在界面上是「—」，不是「0」。
  */
 
 import { createUnscopedStore } from '@/lib/asset-scope.ts'

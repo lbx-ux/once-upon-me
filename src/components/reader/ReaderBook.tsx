@@ -41,6 +41,24 @@
  *    右半照实是一张白纸——那一页确实什么都没有。
  *
  * ---------------------------------------------------------------------------
+ * 共读版（2026-10-18）：**同一台阅读器，形态是入参**
+ *
+ * 产品定义里"一个引擎、两种形态"，落到这一屏就是**一个组件**：ADR-0006 的原话是
+ * "`form` 是入参不是两个入口函数，UI 那边不许出现 `runSoloBook()` / `runSharedBook()`
+ * 这种分裂"。两台阅读器的坏处是具体的——`use-narration.ts` 的文件头为
+ * "两份抄件迟早漂成两个脾气"付过一次学费。
+ *
+ * 所以这一屏多出来的东西只有三样：
+ *  1. **阅读顺序是那条路**（`storyPath`），不是页号——这一条整块在 `reader-model.ts` 里，
+ *     连"为什么不能平铺"都写在那儿；
+ *  2. **选择点那一屏**：画面停住、两颗大按钮（图 + 字 + 语音双通道）；
+ *  3. 没选之前 `›` 被挡住（`maxLeafOf`），因为"不选也能往下翻"会让共读版
+ *     退化成独读版加一页。
+ *
+ * 而 `flip.ts` 的几何、面表、叶数、挂图窗口、朗读那一套**一个字都没改**——
+ * 它们本来就是"一屏一页"的机器，共读版换掉的只是"喂给它哪些页"。
+ *
+ * ---------------------------------------------------------------------------
  * 朗读（2026-10-17 起由 `use-narration.ts` 提供，两条路）
  *
  * · **我自己翻**（默认）—— 点一下念当前这一页，念完就停，页由人翻。
@@ -57,15 +75,20 @@ import { flipState } from '@/components/book/flip.ts'
 import { useReadingLog } from '@/lib/use-reading-log.ts'
 import { useTurnMode } from '@/lib/use-reading-prefs.ts'
 import {
+  choiceScreenOf,
   leafCountOf,
+  maxLeafOf,
   openingOf,
-  readerFaces,
+  pathPages,
   readoutOf,
+  readerFaces,
   showsText,
+  storyPath,
+  type Pick,
   type ReaderFace,
 } from './reader-model.ts'
 import { useNarration } from './use-narration.ts'
-import type { ReaderPage } from '@/lib/book-source.ts'
+import type { ResolvedStory, StoryChoiceView } from '@/lib/book-source.ts'
 
 /** 每帧朝目标插值的系数。比首页第二屏的 0.12 略快：这一屏是"点一下就翻" */
 const SMOOTHING = 0.16
@@ -77,17 +100,28 @@ export type ReaderBookProps = {
   title: string
   /** 封面图。null = 这本书没有封面（仓库里那本预生成的演示书就是），照实只出书名 */
   coverUrl: string | null
-  pages: ReaderPage[]
+  /**
+   * 这本书的**形状与每一页的视图**（`resolved.story`）。
+   * ★ 拿它而不是 `resolved.pages`：后者是"按页号排的全表"，共读版要的是那条路。
+   */
+  story: ResolvedStory
   source: 'runtime' | 'demo'
 }
 
-export default function ReaderBook({ bookId, title, coverUrl, pages, source }: ReaderBookProps) {
+export default function ReaderBook({ bookId, title, coverUrl, story, source }: ReaderBookProps) {
   /**
    * 页模型（面表、叶数、opening、页码）全在 `reader-model.ts` 里，**这个组件只负责画**。
    * ★ 抽出去的理由写在那个文件头：那次返工错的不是几何，是"每一面装什么"，
    *   而那种错闸门抓不到——所以它得是一条能被断言的关系，不是散在 JSX 里的写法。
    */
-  const faces = useMemo<ReaderFace[]>(() => readerFaces(pages), [pages])
+  /* ── 路径：共读版多出来的那一样 ────────────────────────────────────────────
+   * `pick` 是"孩子选了哪一支"。**只活在内存里**——落盘（`localStorage`）是 ticket 07，
+   * 而且它落的是**这一个值**（不是整条路径：路径由树推得出来，存两份就是两个真相）。
+   * 独读版没有选择点，`pick` 永远是 null，下面那一路就是恒等式。
+   */
+  const [pick, setPick] = useState<Pick>(null)
+  const path = useMemo(() => storyPath(story, pick), [story, pick])
+  const pages = useMemo(() => pathPages(path), [path])
   const leafCount = leafCountOf(pages)
 
   const [qTarget, setQTarget] = useState(0)
@@ -110,6 +144,31 @@ export default function ReaderBook({ bookId, title, coverUrl, pages, source }: R
   const opening = Math.round(q)
   /** 页翻到位了没有。★ 是个布尔，所以 60fps 的 `q` 不会把它抖成每帧都变 */
   const settled = Math.abs(q - qTarget) < 0.02
+
+  /**
+   * 面表。★ 它跟着**路径**走（`pages`），所以选完之后翻了页、面表也跟着变长了——
+   * 这正是"共读版没有第二台阅读器"那句话在代码里的样子。
+   */
+  const faces = useMemo<ReaderFace[]>(() => readerFaces(pages), [pages])
+
+  /* ── 选择点 ────────────────────────────────────────────────────────────────
+   * 三件事都从这一处派生，别在 JSX 里各算一遍：
+   *  · `choice` —— 这一屏该浮出的选择点（不是那一屏就是 null）
+   *  · `blocked` —— 前面没路了，而拦住它的是**还没选过的那个选择点**
+   *  · `maxTarget` —— `›` 能翻到的上界（`blocked` 时封底那一片叶不给）
+   */
+  const choice = useMemo(() => choiceScreenOf(path, opening), [path, opening])
+  /**
+   * 前面没路了，而拦住它的是**还没选过的那个选择点**。
+   * 判据就一句：**这条路的最后一屏是个选择点**——`storyPath` 在没选时停在选择点上，
+   * 于是"路走到了头"与"有个岔口在等"是同一件事。独读版与选过的共读版都为 false
+   * （它们的路以叶子收尾），所以这一条也不改独读版的量程。
+   */
+  const blocked = useMemo(
+    () => pick === null && (path[path.length - 1]?.choice ?? null) !== null,
+    [pick, path],
+  )
+  const maxTarget = maxLeafOf(pages, blocked)
 
   /** 第 k 屏的朗读（封面与封底不在内）。`useMemo`：不然每次渲染换一个新数组，
    *  hook 里那条链的依赖会跟着换身份，白跑一遍 */
@@ -181,12 +240,46 @@ export default function ReaderBook({ bookId, title, coverUrl, pages, source }: R
       // ★ 调的是解构出来那个 `takeOver`（身份稳定），不是 `narration.takeOver`：
       //   后者挂在每次渲染都新建的对象上，会让这个 `useCallback` 白写
       takeOver()
-      setQTarget((current) => Math.min(leafCount, Math.max(0, current + delta)))
+      /**
+       * ★ 上界是 `maxTarget` 不是 `leafCount`（2026-10-18）：共读版**没选之前**，
+       *   封底那一片叶不给——一路点 `›` 翻到最后一屏「读完啦」而孩子一次都没选过，
+       *   等于把共读版做成了独读版加一页。理由整段在 `reader-model.ts` 的 `maxLeafOf`。
+       */
+      setQTarget((current) => Math.min(maxTarget, Math.max(0, current + delta)))
     },
-    [leafCount, takeOver],
+    [maxTarget, takeOver],
   )
 
-  /** 焦点在容器里时，左右键与空格翻页。**不在 window 上接**（见文件头第 1 条） */
+  /**
+   * 孩子按下了某一颗按钮。
+   *
+   * 三件事按顺序：**落下按下态 → 翻到那一支的第一页 → （`pick` 一变，整条路跟着变）**。
+   *
+   * ★ 翻页走 `setQTarget` 而不是 `turn(1)`：`turn` 每次都会 `takeOver()`（人翻页 = 人接管），
+   *   而在选择点上按按钮**本来就不是"人翻页"**——它是这一屏该做的事。
+   *   走 `turn` 的话，按完按钮自动朗读会被莫名其妙地关掉。
+   * ★ 按下态与路径是**同一个 state 的两个投影**（`pick`）：先落下再翻页，
+   *   那一帧里按下态就在了，所以看不到"翻过去之后才亮起来"的闪。
+   */
+  const pickVia = useCallback(
+    (via: 'a' | 'b') => {
+      takeOver()
+      setPick(via)
+      // 翻到那一支的第一页。`pick` 一变，`path` 就长了一截，所以 `current + 1` 是新路里的下一页
+      setQTarget((current) => current + 1)
+    },
+    [takeOver],
+  )
+
+  /**
+   * 焦点在容器里时，左右键与空格翻页。**不在 window 上接**（见文件头第 1 条）。
+   *
+   * ★ 这里**不写**"焦点在按钮上就让路"那一类守卫（2026-10-18 删掉过一次）：
+   *   舞台里根本没有按钮——选择点那两颗与朗读钮都刻意挂在舞台**之外**
+   *   （见下面那个定位盒与 `ChoicePoint` 的注释）。所以那类守卫是**死代码**，
+   *   而一条永远不会命中的守卫比没有更糟：它的注释会让人以为舞台里真有按钮。
+   *   真正的机制是"控件不在这个子树里，事件就到不了这儿"——那是结构，不是判断。
+   */
   const onKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLDivElement>) => {
       if (event.key === 'ArrowRight' || event.key === 'PageDown' || event.key === ' ') {
@@ -198,10 +291,10 @@ export default function ReaderBook({ bookId, title, coverUrl, pages, source }: R
       } else if (event.key === 'Home') {
         setQTarget(0)
       } else if (event.key === 'End') {
-        setQTarget(leafCount)
+        setQTarget(maxTarget)
       }
     },
-    [turn, leafCount],
+    [turn, maxTarget],
   )
 
   /* ── 触摸滑动 ──────────────────────────────────────────────────────── */
@@ -236,6 +329,17 @@ export default function ReaderBook({ bookId, title, coverUrl, pages, source }: R
    *   这一屏改页模型时一起修掉（推理与断言见 `reader-model.ts`）。
    */
   const readout = useMemo(() => readoutOf(q, pages), [q, pages])
+
+  /**
+   * 底栏那个总数（工单 04 §三）。
+   *
+   * ★ 共读版说的是「**这条路**共 N 页」，不是「共 N 页」：这个数**取决于孩子选了哪一支**
+   *   （两支允许差 1 页，`tree.ts` 的判据），而整棵树比它长。不加这三个字的症状是
+   *   家长拿它当整本页数，然后问"书里那几页去哪儿了"。
+   * ★ 独读版不加：那里没有第二条路，加了反而像在说还有别的走法。
+   */
+  const totalNote =
+    story.form === 'shared' ? `这条路共 ${pages.length} 页` : `共 ${pages.length} 页`
 
   /** 这一个 opening 的面挂不挂图（见文件头第 2 条） */
   const inWindow = useCallback((opening: number) => Math.abs(opening - q) <= IMAGE_WINDOW, [q])
@@ -299,56 +403,93 @@ export default function ReaderBook({ bookId, title, coverUrl, pages, source }: R
       data-source={source}
       aria-label={`${title} · 阅读器`}
     >
-      <div
-        className="reader__stage"
-        ref={stageRef}
-        tabIndex={0}
-        role="group"
-        aria-label="绘本翻页区（方向键或空格翻页）"
-        onKeyDown={onKeyDown}
-        onTouchStart={onTouchStart}
-        onTouchEnd={onTouchEnd}
-        data-testid="reader-stage"
-      >
-        {/* 舞台宽 = 2 × 页宽（3:4 的一页）。--book-x 是首页那套，只是多了一个末尾的合着态 */}
-        <div className="reader__book" style={{ ['--book-x' as string]: bookX }}>
-          {Array.from({ length: leafCount }, (_, leaf) => {
-            const state = states[leaf]
-            if (!state) return null
-            const front = faces[leaf * 2]
-            const back = faces[leaf * 2 + 1]
-            return (
-              <div
-                key={leaf}
-                className="reader__leaf"
-                style={{
-                  ['--leaf-angle' as string]: `${state.angle}deg`,
-                  ['--leaf-z' as string]: String(state.zIndex),
-                }}
-              >
-                {front && (
-                  <FaceView
-                    face={front}
-                    side="front"
-                    show={inWindow(openingOf(leaf * 2))}
-                    bookTitle={title}
-                    coverUrl={coverUrl}
+      {/* §桌面那层点阵（`reader-book.css`）。挂在整个 `.reader` 上 ——
+          所以它够不到上面那行「← 回…」（那在 `.reader-page` 里），
+          竖直方向靠一条锚在舞台高度上的遮罩收在书附近，止于底栏那几行字之前。
+          与 `booklist-reader.css` 那台是同一层，只是这一屏不做染色（理由在 CSS 里）。
+          纯装饰，对辅助技术整块隐藏。 */}
+      <div className="reader__ambient" aria-hidden="true" />
+
+      {/* ── 舞台 + 选择点 ────────────────────────────────────────────────────
+          这两个共用一层定位盒，理由只有一条：**选择点要浮在书上、但不能进舞台**。
+
+          · 它得有个"书有多高"的定位基准才能浮到书的下沿，而那个尺寸只有舞台有；
+          · 它**不能**进 `.reader__stage`：舞台是滑动手势与键盘翻页（容器级 onKeyDown）
+            的容器。控件落在里面，空格既激活按钮又翻页、在按钮上横扫一下还会翻页；
+          · 它更不能进 `.reader__book`：那一支是 3D 旋转的叶，控件跟进去会跟着转、点不准
+            （朗读钮放底栏是同一条）。
+
+          所以这一层 div 是**纯几何**的：没有事件、没有样式之外的职责。
+          ★ 于是"键盘：容器内翻页、容器外一点不翻"这条验收是**结构保证**的，
+            不是靠 `onKeyDown` 里判 `event.target` 是不是按钮——那条守卫删掉了，
+            理由写在 `onKeyDown` 上面。 */}
+      <div className="reader__stagewrap">
+        <div
+          className="reader__stage"
+          ref={stageRef}
+          tabIndex={0}
+          role="group"
+          aria-label="绘本翻页区（方向键或空格翻页）"
+          onKeyDown={onKeyDown}
+          onTouchStart={onTouchStart}
+          onTouchEnd={onTouchEnd}
+          data-testid="reader-stage"
+        >
+          {/* 落在桌上那团光。★ 必须在 `.reader__book` **之前** ——
+              书是定位元素又带 transform，层序由 DOM 序决定，写在后面就成了"光盖在书上"。
+              `inset` 取负值让它比书大一圈：正好贴边就成了给书画描边。 */}
+          <div className="reader__light" aria-hidden="true" />
+
+          {/* 舞台宽 = 2 × 页宽（3:4 的一页）。--book-x 是首页那套，只是多了一个末尾的合着态 */}
+          <div className="reader__book" style={{ ['--book-x' as string]: bookX }}>
+            {Array.from({ length: leafCount }, (_, leaf) => {
+              const state = states[leaf]
+              if (!state) return null
+              const front = faces[leaf * 2]
+              const back = faces[leaf * 2 + 1]
+              return (
+                <div
+                  key={leaf}
+                  className="reader__leaf"
+                  style={{
+                    ['--leaf-angle' as string]: `${state.angle}deg`,
+                    ['--leaf-z' as string]: String(state.zIndex),
+                  }}
+                >
+                  {front && (
+                    <FaceView
+                      face={front}
+                      side="front"
+                      show={inWindow(openingOf(leaf * 2))}
+                      bookTitle={title}
+                      coverUrl={coverUrl}
+                    />
+                  )}
+                  {back && (
+                    <FaceView
+                      face={back}
+                      side="back"
+                      show={inWindow(openingOf(leaf * 2 + 1))}
+                      bookTitle={title}
+                      coverUrl={coverUrl}
+                    />
+                  )}
+                  <i
+                    className="reader__shade"
+                    style={{ opacity: state.shade }}
+                    aria-hidden="true"
                   />
-                )}
-                {back && (
-                  <FaceView
-                    face={back}
-                    side="back"
-                    show={inWindow(openingOf(leaf * 2 + 1))}
-                    bookTitle={title}
-                    coverUrl={coverUrl}
-                  />
-                )}
-                <i className="reader__shade" style={{ opacity: state.shade }} aria-hidden="true" />
-              </div>
-            )
-          })}
+                </div>
+              )
+            })}
+          </div>
         </div>
+
+        {/* DOM 顺序在底栏之前，所以 Tab 的顺序是「舞台 → 两颗按钮 → 底栏」，
+            与眼睛看到的上下关系一致。它自己的开关在 `ChoicePoint` 里（`data-on`）。 */}
+        {choice && (
+          <ChoicePoint choice={choice} pressed={pick} settled={settled} onPick={pickVia} />
+        )}
       </div>
 
       <div className="reader__bar">
@@ -363,7 +504,11 @@ export default function ReaderBook({ bookId, title, coverUrl, pages, source }: R
         </button>
         <p className="reader__readout" aria-live="polite">
           {readout.label}
-          <span className="reader__total"> · 共 {pages.length} 页</span>
+          {/* ★ "共多少页"在共读版里**没选之前不报**（2026-10-18）。
+              它取决于孩子选哪一条路，而两支的页数还可能差 1 页（那是判据允许的）——
+              没选就报一个数，报的是猜的。`blocked` 正好就是"站在没选过的选择点上"，
+              于是条件就是它取反：独读版与选过的共读版都照报。 */}
+          {!blocked && <span className="reader__total"> · {totalNote}</span>}
         </p>
         {/* ★ 朗读按钮放在**底栏**，不是书页上：书页是 3D 旋转的叶，
             半翻状态下按钮会跟着转、点不准；而且它一旦落在 `.reader__stage` 里，
@@ -387,7 +532,9 @@ export default function ReaderBook({ bookId, title, coverUrl, pages, source }: R
           type="button"
           className="reader__btn"
           onClick={() => turn(1)}
-          disabled={qTarget >= leafCount}
+          /* ★ 上界是 `maxTarget`：共读版没选之前，`›` 在这一屏就是按不动的
+             （"不选也能往下翻"会让共读版退化成独读版加一页，见 `maxLeafOf`） */
+          disabled={qTarget >= maxTarget}
           aria-label="下一页"
         >
           ›
@@ -500,6 +647,150 @@ function FaceView({
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+/* ───────────────────────── 选择点 ───────────────────────── */
+
+/**
+ * 选择点那一屏：画面停住，浮出两颗大按钮（产品定义原话）。
+ *
+ * 五条判断，每条都对着一个具体的坏法：
+ *
+ * 1. **两颗按钮是那朵云自己的小画，不是系统 emoji**——emoji 是扁平高饱和的 clip-art，
+ *    与水彩是两套画法（README §五 那条判据的第三次应用）。图标没到位时 emoji 是**兜底**：
+ *    `alt=""` 的 `<img>` 在 404 时什么都不画，所以兜底会正好露出来，不留碎图标。
+ * 2. **`settled` 到了才浮出来**：翻页补间还没停就把控件亮起来，孩子会看着两颗按钮
+ *    在转着的纸上飘（朗读也是同一条规矩，见 `use-narration.ts` 规则 3）。
+ * 3. **关着的时候写 `visibility: hidden`**（在 CSS 里）：`opacity: 0` 不会把东西
+ *    从辅助技术与点击里去掉——封面那一屏会照着把两个选项念一遍。
+ * 4. **三段音频合成一句话念**（提问 → 选项 A → 选项 B），**按一下才念**。
+ *    不做"浮出来就自己念"：浏览器不允许页面在没人点过的情况下出声，
+ *    而拦掉的样子与"这本书没有朗读"一模一样（`use-narration.ts` 规则 1 的同一条）。
+ *    三段里缺任何一段就**不给这颗按钮**，并且说清为什么——只对两个选项能响的按钮，
+ *    证的是反面（首页那条拆掉的播放条）。
+ * 5. **键盘**：两颗按钮是**原生 `<button>`**，所以 Tab 到、Enter/空格选中全是浏览器
+ *    自己的行为，没有一处 `preventDefault`；只在**这一层里**补一条 ← →（在一颗上按
+ *    → 走到另一颗），那是 `radiogroup` 的习惯而 `<button>` 不给。
+ *    ★ 这一层不在 `.reader__stage` 里，所以这些键**不会被翻页抢走**——反过来说，
+ *      "容器的翻页键与控件的键互不干扰"是靠位置保证的，挪进舞台就没了。
+ */
+function ChoicePoint({
+  choice,
+  pressed,
+  settled,
+  onPick,
+}: {
+  choice: StoryChoiceView
+  /** 孩子已经选过的那一支（没选过是 null）。选过再回翻时用它还原按下态 */
+  pressed: Pick
+  settled: boolean
+  onPick: (via: 'a' | 'b') => void
+}) {
+  const audioRef = useRef<HTMLAudioElement>(null)
+  const rowRef = useRef<HTMLDivElement>(null)
+  /** 正在念第几段；null = 没在念 */
+  const [step, setStep] = useState<number | null>(null)
+
+  /** 这一遍要念的三段，按顺序。★ 缺一段就不念——见上面第 4 条 */
+  const clips = useMemo(
+    () => [choice.promptAudioUrl, choice.options[0].audioUrl, choice.options[1].audioUrl],
+    [choice],
+  )
+  const canSpeak = clips.every((url) => url !== null)
+
+  /**
+   * ← → 在两颗按钮之间走。
+   *
+   * ★ 用 `document.activeElement` 而不是自己养一个"当前是第几颗"的 state：焦点是浏览器
+   *   的事实，另存一份就是两个真相，而它们一定会漂（鼠标点完第二颗、state 还停在第一颗）。
+   * ★ 焦点不在这两颗上的时候**什么都不做**：那时按 → 不该被这一层吃掉。
+   */
+  const onRowKeyDown = (event: React.KeyboardEvent<HTMLDivElement>): void => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+    const buttons = Array.from(rowRef.current?.querySelectorAll('button') ?? [])
+    const at = buttons.indexOf(document.activeElement as HTMLButtonElement)
+    if (at < 0) return
+    event.preventDefault()
+    const delta = event.key === 'ArrowRight' ? 1 : -1
+    buttons[(at + delta + buttons.length) % buttons.length]?.focus()
+  }
+
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio) return
+    if (step === null) {
+      audio.pause()
+      return
+    }
+    const url = clips[step]
+    if (!url) {
+      setStep(null)
+      return
+    }
+    audio.src = url
+    // ★ 播放被拦（没人点过、或这一趟已经结束）就**停下来**，不装作在念：
+    //   按钮停在"正在念…"而一点声音都没有，是这一屏最难查的一种坏法
+    void audio.play().catch(() => setStep(null))
+  }, [step, clips])
+
+  /** 离开这一屏（翻走）时停声。控件自己会被卸载，但 `pause` 要在卸载前发生 */
+  useEffect(() => () => audioRef.current?.pause(), [])
+
+  return (
+    <div className="book-choice" data-on={settled || undefined} role="group" aria-label="选择点">
+      <p className="book-choice__ask">{choice.prompt}</p>
+      <div className="book-choice__row" ref={rowRef} onKeyDown={onRowKeyDown}>
+        {choice.options.map((option, index) => {
+          const via: 'a' | 'b' = index === 0 ? 'a' : 'b'
+          return (
+            <button
+              key={via}
+              type="button"
+              className="book-choice__btn"
+              aria-pressed={pressed === via}
+              onClick={() => onPick(via)}
+            >
+              <span className="book-choice__icon">
+                <span className="book-choice__glyph" aria-hidden="true">
+                  {option.emoji}
+                </span>
+                {/* 与首页那两枚同一条判断：不加 `loading="lazy"`——一枚约 2.6KB，
+                    省不下什么，而懒加载会把它拖到这一屏快露出来时才取。
+                    ★ 地址只可能来自 `iconUrlOf`，词表之外它给的是 null，
+                      所以下面那个 `&&` 不是"可能 404 的图先挂着"，是"有图才画"。 */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                {option.iconUrl && <img className="book-choice__art" src={option.iconUrl} alt="" />}
+              </span>
+              <span className="book-choice__label">{option.label}</span>
+            </button>
+          )
+        })}
+      </div>
+      {canSpeak ? (
+        <button
+          type="button"
+          className="book-choice__speak"
+          onClick={() => setStep((current) => (current === null ? 0 : null))}
+          aria-label={step === null ? '念一遍这两个选项' : '停下'}
+        >
+          {step === null ? '🔊 念一遍' : '正在念…（点一下停下）'}
+        </button>
+      ) : (
+        <p className="book-choice__note">这一页的选项没有朗读，念给孩子听吧</p>
+      )}
+      <audio
+        ref={audioRef}
+        preload="none"
+        aria-hidden="true"
+        onEnded={() =>
+          setStep((current) =>
+            current === null || current + 1 >= clips.length ? null : current + 1,
+          )
+        }
+        onError={() => setStep(null)}
+      />
     </div>
   )
 }

@@ -2,7 +2,6 @@ import type { CSSProperties } from 'react'
 
 import NewCharacterButton from '@/components/studio/NewCharacterButton.tsx'
 import WallDelete from '@/components/studio/WallDelete.tsx'
-import { assetUrlOf } from '@/lib/asset-url.ts'
 import type { ChildWallItem } from '@/lib/children-list.ts'
 import { dayKeyOf } from '@/lib/reading-log.ts'
 
@@ -123,6 +122,14 @@ export default function CharacterWall({ items }: CharacterWallProps) {
               因为这一屏列的是**卡**。左上角那颗品牌字仍然是「小主角」——
               那是产品名，不是这一屏的名字。 */}
           <h1 className="cw__title">角色卡</h1>
+          {/* ★ 这一句是**2026-10-18 加回来的**（用户：每个模块都有一句简短的介绍，
+              角色卡与书架缺这一句）。它与第四轮被划掉的那句（「每一页里那个他，
+              都由这张卡上的几条锚点决定。」）**不是同一件事**：那一句在解释机制，
+              这一句只说你会拿它干什么——与 `/voice` 的 `.vc__sub`、
+              `/booklist` 的 `.blw__sub` 同一个身份、同一种长度。
+              ★ 压在天空带上，所以只能用 `--ink-on-sky`（governing rule）。 */}
+          {/* prettier-ignore */}
+          <p className="cw__sub">给他一张卡，之后做的每一本书里都是同一个他。</p>
         </div>
         {/* ★ 这一颗现在是客户端组件（`NewCharacterButton`）：没登录时它要先弹一个
             「请先登录」，而 `<Link>` 拦不住自己那一下导航。整面墙仍然是服务端组件。 */}
@@ -156,17 +163,20 @@ export default function CharacterWall({ items }: CharacterWallProps) {
                     {/* 相纸那一层：白边 + 虚线内框，图压在框里。
                         ★ 走原生 <img>：图在资产根里、经 /api/assets 出来，
                         next/image 要另配 loader，而它是 README §五「刻意未做」那一条。
-                        ★ 取 768 那一档而不是原图：卡面显示 372 CSS px，两倍屏要 744。
+                        ★ 地址取 `card.faceUrl`（768 档那一张）：**这个数由取数层决定，不在这一屏拼**
+                          ——运行期的卡走 `/api/assets`，而示例卡走 `public/demo/cards/…` 的
+                          静态地址（未登录的访客也拿得到，见 `lib/cards-list.ts` 的 `faceUrl`）。
+                          768 那一档的来由：卡面显示 372 CSS px，两倍屏要 744。
                         原图那两档都实测过——照片做出来的卡是 **2.7 MB 的 1440² PNG**，
-                        示例卡（10-16 手工出图那两张，896×1200）是 **327 / 349 KB 的 JPEG**。
-                        768 档落在 73–76 KB，所以这一屏无论遇上哪一档都不会去拉原图。
-                        缩略档由 /api/assets 现缩并落盘缓存，见 lib/thumbs.ts */}
+                        示例卡（10-16 手工出图那两张，896×1200）是 **327 / 349 KB 的 JPEG**；
+                        768 档的 webp 实测 73–76 KB（照片卡）/ **23 / 26 KB**（两张示例卡，
+                        2026-10-18 随仓库预生成）。所以这一屏无论遇上哪一档都不会去拉原图。 */}
                     <div className="cw__mat">
                       {card ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
                           className="cw__art"
-                          src={assetUrlOf(card.referencePath, 768)}
+                          src={card.faceUrl}
                           alt={`${profile.name} 的形象`}
                           width={768}
                           height={768}

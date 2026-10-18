@@ -315,17 +315,21 @@ public class AuthService {
   }
 
   /**
-   * 这个人现在能用什么。★ **每次从库里读**，不从票里读——
-   * 管理员在管理页上勾掉一个开关之后，那个人下一次点「开始创作」就要看见变化，
+   * 这个人现在有没有创作权。★ **每次从库里读**，不从票里读——
+   * 站长在管理页上把权限收回去之后，那个人下一次点「开始创作」就要看见变化，
    * 而不是等 7 天票过期。
+   *
+   * <p>★ <b>缺行 = 有</b>（不是"没有"）：默认是给上的（见 {@code UserPermission} 与
+   * `schema.sql` 里那一列上的 {@code DEFAULT 1}），所以"没有那一行"与"没被收回过"
+   * 是同一件事——而这个判断只写在这一处，管理页与那道闸都问它。
    */
-  public Permissions permissionsOf(long userId) {
+  public boolean allowedOf(long userId) {
     UserPermission row = permissions.selectById(userId);
-    return row == null ? Permissions.none() : row.toPermissions();
+    return row == null || row.isAllowed();
   }
 
   public UserView viewOf(User user) {
-    return UserView.of(user, permissionsOf(user.getId()));
+    return UserView.of(user, allowedOf(user.getId()));
   }
 
   public boolean registrationOpen() {
@@ -339,7 +343,7 @@ public class AuthService {
     return users.selectOne(Wrappers.<User>lambdaQuery().eq(User::getAccount, account));
   }
 
-  /** 建号。★ 权限按"四个全关"建（见 {@code UserPermission#noneFor}） */
+  /** 建号。★ 权限按**默认给上**建（见 {@code UserPermission#allowedFor}）：登录即全开 */
   private User createUser(String account) {
     User user = new User();
     user.setAccount(account);
@@ -350,7 +354,7 @@ public class AuthService {
     user.setCreatedAt(Times.now());
     users.insert(user);
 
-    permissions.insert(UserPermission.noneFor(user.getId(), Times.now()));
+    permissions.insert(UserPermission.allowedFor(user.getId(), Times.now()));
     return user;
   }
 

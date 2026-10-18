@@ -73,6 +73,13 @@ next-env.d.ts
 # 引擎验收脚本的产物（node scripts/engine-run.mts --out=.out/...）
 # 不是资产，是每次跑都能重出来的东西；进仓库会让人误以为那是预生成资产
 .out/
+
+# 共读版阅读器验收用的**夹具书**（`scripts/mk-shared-fixture.mjs` 造、`--clean` 拆）。
+# ★ 它必须落在 `public/demo/books/` 下（演示书不走运行期 AssetStore，`/reader/<id>`
+#   要在没登录的情况下读得到），可那一层正是"随部署上线的演示书"。
+#   一本手工拼出来的书躺在那里，读仓库的人分不出它是生成的还是手写的，
+#   所以这里按名字忽略：**跑完验收要拆，忘了拆也提交不上去**。
+/public/demo/books/xzj-shared-verify/
 .idea/
 
 # Python 辅助脚本（scripts/*.py）跑一次就生成的字节码缓存：

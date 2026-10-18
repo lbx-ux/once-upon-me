@@ -15,10 +15,15 @@
 
 import { assetRoot } from './books-runtime.ts'
 import { assetUrlOf } from './asset-url.ts'
-import { withDemoCards } from './card-source.ts'
-import { listCardItems, type CardListItem } from './cards-list.ts'
-import { listChildren, type ChildSource, type ResolvedChild } from './children-source.ts'
-import { booksOnly, listBooks, noCovers } from './library.ts'
+import { demoAssetRoot, demoCardUrlOf, withDemoCards } from './card-source.ts'
+import { listCardItems, type CardListItem, type CardUrlFor } from './cards-list.ts'
+import {
+  listChildren,
+  listDemoChildren,
+  type ChildSource,
+  type ResolvedChild,
+} from './children-source.ts'
+import { booksOnly, listBooks, noCovers, type BookSummary } from './library.ts'
 import {
   cardDigest,
   createCardStore,
@@ -56,8 +61,11 @@ function joinChildrenWithCards(children: ResolvedChild[], cards: CardListItem[])
   }))
 }
 
-export async function listChildItems(root: string = assetRoot()): Promise<ChildListItem[]> {
-  const [children, cards] = await Promise.all([listChildren(root), listCardItems(root)])
+export async function listChildItems(
+  root: string = assetRoot(),
+  urlFor: CardUrlFor = assetUrlOf,
+): Promise<ChildListItem[]> {
+  const [children, cards] = await Promise.all([listChildren(root), listCardItems(root, urlFor)])
   return joinChildrenWithCards(children, cards)
 }
 
@@ -81,35 +89,54 @@ export type ChildWallItem = ChildListItem & {
   books: { count: number; lastCreatedAt: number | null }
 }
 
-export async function listWallItems(root: string = assetRoot()): Promise<ChildWallItem[]> {
-  const store = await createFsStore(root)
+export async function listWallItems(
+  root: string = assetRoot(),
+  urlFor: CardUrlFor = assetUrlOf,
+): Promise<ChildWallItem[]> {
   const [children, cards, allBooks] = await Promise.all([
     listChildren(root),
-    listCardItems(root),
+    listCardItems(root, urlFor),
     // 只要"用他做过几本"，这一屏不摆封面 → `noCovers`（见它的注释：
     // 不设默认值，是因为"忘了给"与"这本书没有封面"不该是同一个 null）
-    listBooks(store, noCovers),
+    listBooks(await createFsStore(root), noCovers),
   ])
   /**
    * ★ 故事草稿**不算**（`booksOnly`，2026-10-17）：这一句写的是"用他做过 **N 本书**"，
    *   而只有故事、一页没画的本子还不是一本书。把它算进来，那个数就不再是它说的话。
    */
-  const books = booksOnly(allBooks)
-  const items = joinChildrenWithCards(children, cards)
+  return withBookCounts(joinChildrenWithCards(children, cards), cards, booksOnly(allBooks))
+}
 
-  const cardIdsOf = new Map<string, Set<string>>()
+/** 卡号 → 这个孩子名下的**全部**卡号。数书要用，两个入口共用同一份 */
+function cardIdsByChild(cards: readonly CardListItem[]): Map<string, Set<string>> {
+  const out = new Map<string, Set<string>>()
   for (const card of cards) {
-    const mine = cardIdsOf.get(card.childId) ?? new Set<string>()
+    const mine = out.get(card.childId) ?? new Set<string>()
     mine.add(card.cardId)
-    cardIdsOf.set(card.childId, mine)
+    out.set(card.childId, mine)
   }
+  return out
+}
 
+/**
+ * 把"用他做过几本书"挂在每一格上。
+ *
+ * ★ `books` 是**哪一片里的书**由调用方决定，这不是随手定的参数：
+ *   登录用户在数**自己**的书（"你做了几本"），而访客数的是**示例那一片**里的书
+ *   （小宇那本演示书是真的，而且访客点得开它）。
+ */
+function withBookCounts(
+  items: ChildListItem[],
+  cards: readonly CardListItem[],
+  books: readonly BookSummary[],
+): ChildWallItem[] {
+  const ids = cardIdsByChild(cards)
   return items.map((item) => {
-    const ids = cardIdsOf.get(item.profile.childId)
+    const mine = ids.get(item.profile.childId)
     let count = 0
     let last = 0
     for (const book of books) {
-      if (!ids?.has(book.cardId)) continue
+      if (!mine?.has(book.cardId)) continue
       count += 1
       if (book.createdAt > last) last = book.createdAt
     }
@@ -121,8 +148,9 @@ export async function listWallItems(root: string = assetRoot()): Promise<ChildWa
 export async function childItemOf(
   childId: string,
   root: string = assetRoot(),
+  urlFor: CardUrlFor = assetUrlOf,
 ): Promise<ChildListItem | null> {
-  const all = await listChildItems(root)
+  const all = await listChildItems(root, urlFor)
   return all.find((item) => item.profile.childId === childId) ?? null
 }
 
@@ -247,10 +275,18 @@ export async function listChildPicker(root: string = assetRoot()): Promise<Child
 export async function childDetailOf(
   childId: string,
   root: string = assetRoot(),
+  urlFor: CardUrlFor = assetUrlOf,
 ): Promise<ChildDetail | null> {
-  const item = await childItemOf(childId, root)
-  if (!item) return null
+  const item = await childItemOf(childId, root, urlFor)
+  return item ? detailWith(item, root, urlFor) : null
+}
 
+/** 详情里"版本历史"那一半。★ 两个入口（自己那一片 / 访客看的示例那一片）共用它 */
+async function detailWith(
+  item: ChildListItem,
+  root: string,
+  urlFor: CardUrlFor,
+): Promise<ChildDetail> {
   // ★ 2026-10-17：`item.card` 可能是**示例卡**（`card-source.ts`），而它不在任何人的
   //   那一片里。这一处自己建 store，所以也要垫上示例那一层——否则示例孩子的版本历史
   //   会是空的：卡面上有形象，翻到"这一张卡走过哪些版本"却一条都没有。
@@ -259,18 +295,110 @@ export async function childDetailOf(
   const cards = item.card ? await cardStore.revisions(item.card.cardId) : []
   const currentRevision = item.card?.revision ?? null
 
-  return {
-    item,
-    revisions: cards.map((card) => ({
+  const revisions: CardRevisionView[] = []
+  for (const card of cards) {
+    revisions.push({
       cardId: card.cardId,
       revision: card.revision,
-      imageUrl: assetUrlOf(card.reference.path, 768),
+      imageUrl: await urlFor(card.reference.path, 768),
       modelId: card.provenance.modelId,
       promptVersion: card.provenance.promptVersion,
       ...(card.provenance.suggestion ? { suggestion: card.provenance.suggestion } : {}),
       generatedAt: card.provenance.generatedAt,
       digest: cardDigest(card),
       isCurrent: card.revision === currentRevision,
-    })),
+    })
   }
+  return { item, revisions }
+}
+
+/* ── 访客那一支（2026-10-18）：**只用示例那一片** ────────────────────────────
+ *
+ * 未登录的访客在角色墙、形象页、以及**创作首页那颗「小主角」药丸**里看到的是
+ * **随仓库发布的示例**（小满 / 小宇），而他们的图走 `public/demo/cards/…` 的静态地址
+ * ——那是因为 `/api/assets` 对匿名一律 401（"别人的东西拿不到"的守门人，
+ * 一个字节都没动），而静态文件不需要鉴权。
+ *
+ * ★ 三条纪律，写在这里免得下次有人顺手扩大它：
+ *   1. **只读 `public/demo/`**，根由 `demoAssetRoot()` 给。绝不传 `.out/web`
+ *      ——那底下是所有人的作品；
+ *   2. **来源必须是 `demo`**（`listDemoChildren`），不能用 `listChildren(<示例根>)`：
+ *      后者会让示例档案以 `source: 'runtime'` 出现（同 id 时运行期赢），
+ *      于是"示例"两个字与"示例不给删"的判据一起翻面；
+ *   3. "用他做过几本书"数的是**示例那一片**里的书——小宇那本演示书是真的，
+ *      而且访客点得开它（`/reader/<书号>` 不设闸）。
+ */
+
+/**
+ * 示例那一片的取数（孩子 × 卡）。★ 两个入口共用它，所以那份目录只读一遍。
+ * 把 `cards` 也交出去，是因为"用他做过几本书"要用卡号去对书。
+ */
+async function demoListing(): Promise<{ items: ChildListItem[]; cards: CardListItem[] }> {
+  const root = demoAssetRoot()
+  const [children, cards] = await Promise.all([
+    listDemoChildren(),
+    listCardItems(root, demoCardUrlOf),
+  ])
+  return { items: joinChildrenWithCards(children, cards), cards }
+}
+
+/** 访客（未登录）在角色墙看到的那一份 */
+export async function listDemoWallItems(): Promise<ChildWallItem[]> {
+  const [{ items, cards }, books] = await Promise.all([
+    demoListing(),
+    listBooks(await createFsStore(demoAssetRoot()), noCovers),
+  ])
+  return withBookCounts(items, cards, booksOnly(books))
+}
+
+/**
+ * 「选小主角」那颗药丸要的那一份：卡、名字表、以及**每张卡的显示地址**。
+ *
+ * ★ 三样一起交出去，而不是只交卡：地址这一件事在两条支路上**不是同一个函数**
+ *   （登录那一支是 `/api/assets` 的 240 档，访客那一支是 `public/` 下的静态图）。
+ *   让调用方自己判"我是哪一支"就等于把访客那三条纪律抄到界面层去，
+ *   而抄出去的那一份迟早会漂——症状是访客那颗圆点指向一个 401 的地址，
+ *   页面照旧 200，只是图空着（2026-10-18 先写成这样，e2e 当场照出来了）。
+ *   ★ 名字与卡一起交出去，是因为药丸上写的是**孩子的名字**而不是卡号；
+ *   而"档案那一层才有名字"这条纪律（见 `home/page.tsx` 文件头）对示例这一支同样成立。
+ *   ★ 对的键是 **childId**，不是 cardId——与 `listChildren` 那边同一个理由。
+ */
+export type CardPickList = {
+  cards: CardListItem[]
+  nameOf: Map<string, string>
+  /**
+   * 一张卡 → 那颗圆点该拉的地址。
+   * ★ 两个实现都**不重新算**卡上已经有的地址：示例那一支直接把 `card.faceUrl` 交出去
+   *   （它就是 `demoCardUrlOf` 的结果，而那个函数每叫一次要读一遍卡目录）。
+   */
+  faceOf: (card: CardListItem) => string
+}
+
+/**
+ * 访客（未登录）在创作首页那颗「小主角」药丸里看到的：**示例那两张卡**。
+ *
+ * ★ 2026-10-18 加的，用户点名的就是它：角色墙上已经看得见小满 / 小宇了，
+ *   而同一个人的 `/home` 那颗药丸上还写着「还没有小主角 · 先去建一个」——
+ *   两屏对**同一件事实**给了两种说法，其中一种是假的。
+ * ★ `cards` 里的 `faceUrl` 走的是 `demoCardUrlOf`（静态 `/demo/cards/…`），
+ *   所以**头像是 768 那一张**——静态文件看不懂 `?w=`，档位在导出时定死了。
+ *   代价写明：那颗 24px 的圆点拉的是 23 KB（小满）/ 26 KB（小宇）那两个兄弟文件，
+ *   比登录用户那份 240 档（实测 10 KB）大一倍多。认这笔账的理由是
+ *   **两屏共用同一个地址**：访客在 `/character` 与 `/home` 之间来回走只下一次。
+ *   真要省，该做的是导出时多生成一个 240 档兄弟文件，而不是在这里手拼宽度。
+ */
+export async function listDemoCardPicker(): Promise<CardPickList> {
+  const { items, cards } = await demoListing()
+  return {
+    cards,
+    nameOf: new Map(items.map((one) => [one.profile.childId, one.profile.name])),
+    faceOf: (card) => card.faceUrl,
+  }
+}
+
+/** 访客点开一张示例卡：只读、只碰示例那一片 */
+export async function demoChildDetailOf(childId: string): Promise<ChildDetail | null> {
+  const { items } = await demoListing()
+  const item = items.find((one) => one.profile.childId === childId) ?? null
+  return item ? detailWith(item, demoAssetRoot(), demoCardUrlOf) : null
 }

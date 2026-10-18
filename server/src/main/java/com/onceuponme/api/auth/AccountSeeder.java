@@ -26,7 +26,7 @@ import com.onceuponme.api.config.AppProperties;
  * 一个众所周知的默认管理员入口，比"暂时没有管理员"坏得多。
  *
  * <p>3. <b>演示账号的口令是公开的，所以每次启动都要把这句话喊一遍</b>。
- * 它带着四个能力，而站是挂在公网上的——这条日志是唯一一处会主动告诉站长
+ * 它带着创作权，而站是挂在公网上的——这条日志是唯一一处会主动告诉站长
  * "现在有人在替你花钱"的地方。
  */
 @Component
@@ -60,11 +60,11 @@ public class AccountSeeder implements ApplicationRunner {
   private void seedDemoAccount() {
     if (byAccount(DemoAccount.ACCOUNT) == null) {
       User demo = newUser(DemoAccount.ACCOUNT, DemoAccount.PASSWORD, "USER");
-      permissions.insert(UserPermission.allFor(demo.getId(), Times.now()));
-      log.info("已建演示账号 {}（四个能力全开，口令就是用户名）", DemoAccount.ACCOUNT);
+      permissions.insert(UserPermission.allowedFor(demo.getId(), Times.now()));
+      log.info("已建演示账号 {}（有创作权，口令就是用户名）", DemoAccount.ACCOUNT);
     }
     log.warn(
-        "演示账号 {} 的口令是公开的，而它有全部四个能力——外人在站上生成绘本花的是你的钱。要停掉：{}",
+        "演示账号 {} 的口令是公开的，而它有创作权——外人在站上生成绘本花的是你的钱。要停掉：{}",
         DemoAccount.ACCOUNT,
         DemoAccount.howToDisable());
   }
@@ -86,7 +86,7 @@ public class AccountSeeder implements ApplicationRunner {
     if (byAccount(account) != null) {
       return;
     }
-    permissions.insert(UserPermission.allFor(newUser(account, password, "ADMIN").getId(), Times.now()));
+    permissions.insert(UserPermission.allowedFor(newUser(account, password, "ADMIN").getId(), Times.now()));
     log.info("已建管理员账号 {}（口令来自配置，不在仓库里）", account);
   }
 

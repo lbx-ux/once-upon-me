@@ -16,12 +16,9 @@ import com.onceuponme.api.admin.dto.AdminUserRow;
 import com.onceuponme.api.auth.AccountRules;
 import com.onceuponme.api.auth.AuthService;
 import com.onceuponme.api.auth.DemoAccount;
-import com.onceuponme.api.auth.PermissionRequest;
-import com.onceuponme.api.auth.Permissions;
 import com.onceuponme.api.auth.Times;
 import com.onceuponme.api.auth.User;
 import com.onceuponme.api.auth.UserPermission;
-import com.onceuponme.api.auth.mapper.PermissionRequestMapper;
 import com.onceuponme.api.auth.mapper.UserMapper;
 import com.onceuponme.api.auth.mapper.UserPermissionMapper;
 import com.onceuponme.api.auth.sms.SmsRateLimiter;
@@ -29,7 +26,7 @@ import com.onceuponme.api.config.AppProperties;
 import com.onceuponme.api.support.ApiException;
 
 /**
- * 管理页那两件事：列出所有人、改一个人的四个开关。
+ * 管理页那两件事：列出所有人、开/关一个人的创作权限。
  *
  * <p>★ 两个不显然的地方：
  *
@@ -39,18 +36,18 @@ import com.onceuponme.api.support.ApiException;
  * 那正是 MyBatis 最容易写错、也最难看出来的一处。真正该换的时机是
  * "这一屏开始分页"。
  *
- * <p>2. <b>缺权限行的人按"四个全关"显示</b>（{@link Permissions#none()}），
- * 而不是显示成"没有权限数据"。前者是这个项目的口径（新用户零权限），
- * 后者会让管理页上出现一行看不懂的空格子。<b>保存时会补上这一行</b>，
- * 所以"缺行"只会出现在"这个号是更早的版本建的"这种情况下。
+ * <p>2. <b>缺权限行的人按"有"显示</b>（{@link UserPermission#allowedFor} 那一位），
+ * 而不是显示成"没有权限数据"。默认就是给上的（2026-10-18 定的口径），
+ * 所以"这个号没有那一行"与"他从来没被收回过"是同一件事；
+ * 判成"没有"的话，管理页上会凭空多出几个被关掉的人，而他们其实能用。
+ * 与 {@code AuthService#allowedOf} 是同一条口径——那一处是那道闸读的，
+ * 这一处是这一屏读的，两处必须说同一句话。
  */
 @Service
 public class AdminService {
 
   private final UserMapper users;
   private final UserPermissionMapper permissions;
-  /** ★ 删号时要把它带到别处去（见 {@link #deleteUser}） */
-  private final PermissionRequestMapper permissionRequests;
   private final SmsRateLimiter rateLimiter;
   private final AuthService auth;
   private final AppProperties properties;
@@ -60,14 +57,12 @@ public class AdminService {
   public AdminService(
       UserMapper users,
       UserPermissionMapper permissions,
-      PermissionRequestMapper permissionRequests,
       SmsRateLimiter rateLimiter,
       AuthService auth,
       AppProperties properties,
       PasswordEncoder encoder) {
     this.users = users;
     this.permissions = permissions;
-    this.permissionRequests = permissionRequests;
     this.rateLimiter = rateLimiter;
     this.auth = auth;
     this.properties = properties;
@@ -84,8 +79,8 @@ public class AdminService {
     List<AdminUserRow> rows = new ArrayList<>(all.size());
     for (User user : all) {
       UserPermission row = byUser.get(user.getId());
-      rows.add(
-          AdminUserRow.of(user, row == null ? Permissions.none() : row.toPermissions()));
+      // ★ 缺行 = 有（见类上第 2 条），而不是"没有权限数据"
+      rows.add(AdminUserRow.of(user, row == null || row.isAllowed()));
     }
 
     AppProperties.Sms sms = properties.sms();
@@ -98,13 +93,16 @@ public class AdminService {
   }
 
   /**
-   * 改一个人的四个开关。★ 全量替换（见 {@code PermissionPatch} 上那段），
-   * 并且**立刻**在返回里带上这个人现在的样子：管理页把那四个 checkbox 重绘成
+   * 开 / 关一个人的创作权限。★ 全量（见 {@code PermissionPatch} 上那段），
+   * 并且**立刻**在返回里带上这个人现在的样子：管理页那一格开关重绘成
    * 服务端说的那一份，而不是继续显示本地那一份——否则一次失败（比如网络断了）
    * 会让界面看起来"改成功了"。
+   *
+   * <p>★ 缺行时**插一行**、而不是"没得改"：缺行意味着"从来没被收回过"，
+   * 而现在要把它关掉——那是一次真正的写入，得有一行来记住这件事。
    */
   @Transactional
-  public AdminUserRow updatePermissions(long userId, Permissions next) {
+  public AdminUserRow setAllowed(long userId, boolean allowed) {
     User user = users.selectById(userId);
     if (user == null) {
       throw ApiException.notFound("user-not-found", "找不到这个账号");
@@ -112,20 +110,13 @@ public class AdminService {
 
     UserPermission row = permissions.selectById(userId);
     if (row == null) {
-      row = UserPermission.noneFor(userId, Times.now());
-    }
-    row.setCanText(next.text());
-    row.setCanImage(next.image());
-    row.setCanVision(next.vision());
-    row.setCanSpeech(next.speech());
-    row.setUpdatedAt(Times.now());
-
-    if (permissions.selectById(userId) == null) {
-      permissions.insert(row);
+      permissions.insert(UserPermission.of(userId, allowed, Times.now()));
     } else {
+      row.setAllowed(allowed);
+      row.setUpdatedAt(Times.now());
       permissions.updateById(row);
     }
-    return AdminUserRow.of(user, row.toPermissions());
+    return AdminUserRow.of(user, allowed);
   }
 
   /* ── 建号 / 停号 / 删号 / 重置别人的密码（2026-10-17，用户要的）──────────────
@@ -139,9 +130,10 @@ public class AdminService {
   /**
    * 建一个号。
    *
-   * ★ **新号的四个能力一律不开**（`Permissions.none()`）。这是"按能力授权"那条产品口径的
-   * 直接后果：默认给点什么，就等于把"要不要给他"这个决定悄悄替站长做了。
-   * 建完在那一行上勾，是两步，但两步各是一个决定。
+   * ★ **新号默认就有创作权**（`UserPermission#allowedFor`）。2026-10-18 用户定的口径是
+   * "登录之后就可以使用各种模型，默认注册的用户都有权限"，所以这里不再是"什么都不给、
+   * 等站长去勾"——多一步的意义已经没有了（99% 的号都会被勾上），
+   * 而站长手里留下的那个动作是**收回**（{@link #setAllowed}）。
    */
   @Transactional
   public AdminUserRow createUser(String account, String password) {
@@ -165,9 +157,8 @@ public class AdminService {
     user.setCreatedAt(Times.now());
     users.insert(user);
 
-    Permissions none = Permissions.none();
-    permissions.insert(UserPermission.noneFor(user.getId(), Times.now()));
-    return AdminUserRow.of(user, none);
+    permissions.insert(UserPermission.allowedFor(user.getId(), Times.now()));
+    return AdminUserRow.of(user, true);
   }
 
   /**
@@ -192,7 +183,7 @@ public class AdminService {
       user.setPasswordChangedAt(Times.now());
     }
     users.updateById(user);
-    return AdminUserRow.of(user, permissionsOf(userId));
+    return AdminUserRow.of(user, allowedOf(userId));
   }
 
   /**
@@ -203,15 +194,9 @@ public class AdminService {
    * 这句话必须写在代码里而不是只在文档里——等 owner 那一列落地之后，
    * 这个方法的语义要重新想一遍（那时它才真的面临"他的书怎么办"）。
    *
-   * <p>★ <b>而权限申请跟着走</b>（2026-10-17 端到端验出来的那个 bug）：
-   * 申请那一行是唯一一处会把"申请人"显示出来的地方，而它显示的是 `users` 表里
-   * 那个账号本身——账号没了，那一行的 `account` 就是一个空串。
-   * 不带走的话，管理页上会出现几条**看不出是谁**的申请，而更坏的是：
-   * 空白账号在 `parseRequestRow` 里是"这一行读不出来"，于是整个申请列表
-   * 会整份拒绝渲染——站长看到的是"读不到申请列表"，而它其实好好的，
-   * 只是里面混进了两个孤儿。**删一个号不该毁掉整列申请。**
-   * （这里没有外键、没有级联：这个库的 DDL 刻意只有 `IF NOT EXISTS`，
-   * 所以"一起删"这件事必须在代码里写出来。）
+   * <p>★ 2026-10-18：这里原来还要顺手清掉他在 `permission_requests` 里提过的申请
+   * （"删一个号不该毁掉整列申请"那个 bug）。那张表随"权限收成一位、注册即全开"
+   * 一起退场之后，就没有第二张表要跟着走了——现在真的只剩他自己那一行权限。
    *
    * <p>★ <b>演示账号删不掉</b>，而且要说清为什么：`AccountSeeder` 每次启动都会把它补回来，
    * 所以"删掉它"是一次会自己撤销的动作。给一个按下去会自己弹回来的按钮，
@@ -226,10 +211,8 @@ public class AdminService {
           "演示账号删了会在下次启动时长回来（AccountSeeder），要真停掉它得改配置");
     }
     guardNotLastAdmin(user, actorId, "删掉");
-    // ★ 三张表一起清：他手里的权限、他提过的申请、他自己。
-    //   顺序不重要（没有外键），但**一条都不能漏**——漏掉申请那一条的后果见上面那段
-    permissionRequests.delete(
-        Wrappers.<PermissionRequest>lambdaQuery().eq(PermissionRequest::getUserId, userId));
+    // ★ 两张表一起清：他手里的权限、他自己。
+    //   顺序不重要（没有外键），但**一条都不能漏**
     permissions.deleteById(userId);
     users.deleteById(userId);
   }
@@ -252,10 +235,10 @@ public class AdminService {
     user.setPasswordHash(encoder.encode(password));
     user.setPasswordChangedAt(Times.now());
     users.updateById(user);
-    return AdminUserRow.of(user, permissionsOf(userId));
+    return AdminUserRow.of(user, allowedOf(userId));
   }
 
-  /** 管理动作里的那个"人"。找不到就是 404，与 `updatePermissions` 同一句 */
+  /** 管理动作里的那个"人"。找不到就是 404，与 `setAllowed` 同一句 */
   private User requireUser(long userId) {
     User user = users.selectById(userId);
     if (user == null) {
@@ -264,9 +247,10 @@ public class AdminService {
     return user;
   }
 
-  private Permissions permissionsOf(long userId) {
+  /** ★ 与 `AuthService#allowedOf` 是同一条口径（缺行 = 有）。两处必须说同一句话 */
+  private boolean allowedOf(long userId) {
     UserPermission row = permissions.selectById(userId);
-    return row == null ? Permissions.none() : row.toPermissions();
+    return row == null || row.isAllowed();
   }
 
   private User byAccount(String account) {
