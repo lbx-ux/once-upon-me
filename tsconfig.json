@@ -35,6 +35,7 @@
     ".next-cd24/types/**/*.ts",
     ".next-cwsub/types/**/*.ts",
     ".next-diag/types/**/*.ts",
+    ".next-form/types/**/*.ts",
     ".next-gate/types/**/*.ts",
     ".next-own/types/**/*.ts",
     ".next-pfbg/types/**/*.ts",

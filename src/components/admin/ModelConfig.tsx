@@ -27,15 +27,38 @@
  *    `.env.local`。★ 而"那边有没有配"是**两件完全不同的事**：
  *    有配 = 回到旧值；没配 = 这一项变成空的、**这个能力当场就用不了了**。
  *    所以确认框里的那句话按 `fallback` 分开写，不写一句笼统的"确定吗"。
+ *
+ * ── 2026-10-18 加的三样（用户给了四张参考截图：「模型选择可以弄成这样的」）────
+ *
+ * · **「厂商 / 网关」下拉**（`lib/settings/gateways.ts`）：选一家就把「接口地址」
+ *   填好。换一家手抄地址的坏法是抄错一个字母而**保存成功**，一直到真的生成一本书
+ *   才以 404 的面目出现。★ 它**只填地址**，不填模型名（模型名不写死那条验收），
+ *   而且那张表是**地址书签不是背书**——本仓只实测过当下在用的那一家，
+ *   所以下拉底下跟着一句"选完点测试连通就知道通不通"。
+ * · **「拉取模型列表」挪到「模型名」右边**（原来在卡片底部那行灰字里）。
+ * · ★ **「测试连通」**：拿现在生效的那份配置**真打一次**（`/api/admin/model-test`），
+ *   通了就把结果给出来——图显示出来、音频能播、文字与视觉把它说的话写出来。
+ *   在这之前这一屏**只能填**，配错了要等到生成一本书才发现，而那条路上最贵的一步
+ *   是出图（0.2 元/张、一页十几秒）。
+ *   ★ 它发出去的那点东西由服务端写着（`TEST_REQUEST`），卡片副标题说的就是它——
+ *     两处各写一份的话，副标题会停在"64 token"而实际发 4096。
  */
 
 import { useCallback, useEffect, useState } from 'react'
 
-import { clearModelConfig, fetchModelCandidates, saveModelConfig } from '@/lib/admin/client.ts'
+import {
+  clearModelConfig,
+  fetchModelCandidates,
+  saveModelConfig,
+  testModelCapability,
+} from '@/lib/admin/client.ts'
+import { ANCHOR_LABELS } from '@/lib/engine/domain.ts'
+import { CUSTOM_GATEWAY_ID, gatewayOf, gatewaysFor } from '@/lib/settings/gateways.ts'
 import type {
   FieldId,
   ModelCandidates,
   ModelConfigView,
+  ModelTestResult,
   SectionView,
 } from '@/lib/settings/model-config-state.ts'
 
@@ -48,6 +71,11 @@ function sourceLabel(field: SectionView['fields'][number]): string {
   }
   if (field.source === 'env') return '环境变量'
   return '还没配'
+}
+
+/** 一次测试花了几秒。★ 一位小数就够：这个数用来判断"这一家能不能用来出图" */
+function secondsOf(ms: number): string {
+  return (ms / 1000).toFixed(1)
 }
 
 /** 一个能力那一张卡 */
@@ -74,13 +102,29 @@ function Section({
   )
   const hasOverride = section.fields.some((field) => field.source === 'admin')
 
+  /* ── 「厂商 / 网关」（2026-10-18）─────────────────────────────────────────
+   * ★ 选中只改**草稿**里那一格，不自动保存：保存仍是那颗按钮的事。
+   *   自动保存的话，"选错了"会当场写进磁盘上那份配置，而这一屏上别的格子
+   *   可能还有半截没填完的改动。
+   * ★ 「自定义」是空地址，选它**什么都不动**——它的意思是"别动我的格子"，
+   *   而不是"把地址清空"（清空是「恢复默认」那个动作）。 */
+  const [gatewayId, setGatewayId] = useState(() => gatewayOf(baseUrlOf(section), section.id).id)
+  const gateway = gatewaysFor(section.id).find((item) => item.id === gatewayId)
+
   /* ── 「模型名」那一格的候选（2026-10-17）─────────────────────────────────
    * 站长问的是「不是输入地址，就可以获取模型列表了吗」——能，列表就是
    * `{接口地址}/models` 那一份（`lib/settings/model-list.ts`）。
    *
-   * ★ 它是 `datalist`，**不是**下拉选择框：这个网关的 `/models` 只列对话模型，
-   *   图像在用的 `wan2.7-image` **不在**那 25 个里——做成强制选择的话，
-   *   图像那一格会当场丢掉它正在用的值。候选只是候选，手填照旧。
+   * ★ 它**不是**把 `模型名` 那一格做成强制选择框：这个网关的 `/models` 只列对话模型，
+   *   图像在用的 `wan2.7-image` **不在**那 26 个里——做成强制选择的话，
+   *   图像那一格会当场丢掉它正在用的值。那一格永远是自由文本，候选只是候选。
+   * ★ 挑候选用的是**旁边那颗真的 `<select>`**，不是 `<input list>` + `<datalist>`
+   *   （2026-10-18 用户报的：「你这里写的拉取到了，可是我点击下拉框没有啊」）。
+   *   病根是 `datalist` 的**原生过滤**：Chrome 拿输入框里现有的字去筛候选，
+   *   而这一格平时**是填好的**（`qwen3.8-flash`），26 个里只有它自己匹配得上
+   *   ——于是"拉到了 26 个"与"点开只有一个"同时成立。
+   *   那个过滤是浏览器的行为，改不了；所以换成一颗列全部候选的选择框：
+   *   它自己不存值（选完就弹回占位项），选中的那个**写进自由文本框**。
    * ★ 挂载时拉一次（每张卡一次）。失败**不是错误**：地址没配、key 不对、
    *   那个地址没有 `/models`（语音那一路很可能就是），都只是"没有候选"。
    * ★ 用的是**服务端那份配置里**的地址，不是正在输入的那一格：还没保存的地址
@@ -104,6 +148,57 @@ function Section({
     void pull()
   }, [pull])
 
+  /* ── 「测试连通」（2026-10-18）───────────────────────────────────────────
+   * ★ 两种东西分开存，因为它们要说的话不一样：
+   *   · `testFail` —— 这一按**根本没发出去**，或者厂商说了不行（一句能照做的话）；
+   *   · `tested.ok` —— 真通了，下面要画的是**通的证据本身**。
+   * ★ 预填值与副标题都从服务端来（见文件头最后一段），浏览器不另写一份。 */
+  const [testing, setTesting] = useState(false)
+  const [tested, setTested] = useState<ModelTestResult | null>(null)
+  const [testFail, setTestFail] = useState<string | null>(null)
+  /** 图像那一支：这一次测试用的提示词（**不保存**，它不是配置） */
+  const [testPrompt, setTestPrompt] = useState(section.testSeed)
+  /** 视觉那一支：选的本地图片（data URL）。★ 只在这台浏览器与那一条请求里 */
+  const [photo, setPhoto] = useState<{ name: string; dataUrl: string } | null>(null)
+
+  async function runTest() {
+    if (testing) return
+    setTesting(true)
+    setTested(null)
+    setTestFail(null)
+
+    const outcome = await testModelCapability(section.id, {
+      ...(section.id === 'image' ? { prompt: testPrompt } : {}),
+      ...(section.id === 'vision' && photo ? { photo: photo.dataUrl } : {}),
+    })
+
+    if (!outcome.ok) {
+      // 这一按没发出去（没权限、缺一格配置、网络不通）
+      setTestFail(outcome.message)
+    } else if (!outcome.data.ok) {
+      // 发出去了，厂商那边说不行——那句话带着厂商的原文（`adminFailureOf` 翻的）
+      setTested(outcome.data)
+      setTestFail(outcome.data.message ?? '这一次没通，但服务端没说是为什么')
+    } else {
+      setTested(outcome.data)
+    }
+    setTesting(false)
+  }
+
+  /** 选一张本地图片。★ 用 FileReader 读成 data URL：不经过任何服务器，先在这台机器上 */
+  function pickPhoto(file: File | undefined) {
+    if (!file) {
+      setPhoto(null)
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => {
+      const dataUrl = typeof reader.result === 'string' ? reader.result : ''
+      if (dataUrl !== '') setPhoto({ name: file.name, dataUrl })
+    }
+    reader.readAsDataURL(file)
+  }
+
   async function save() {
     if (busy || !changed) return
     setBusy(true)
@@ -123,10 +218,18 @@ function Section({
       //   （它已经交出去了，没有理由继续挂在这台电脑的屏幕上），
       //   别的格子回到服务端说的那个值
       const fresh = result.data.sections.find((item) => item.id === section.id)
-      if (fresh) setDraft(draftsOf(fresh))
+      if (fresh) {
+        setDraft(draftsOf(fresh))
+        // 地址可能刚被改掉：下拉要跟着停在新地址对应的那一家（认不出就是「自定义」）
+        setGatewayId(gatewayOf(baseUrlOf(fresh), section.id).id)
+      }
       setNote({ text: `${section.label}：改好了，下一次生成开始用新的`, bad: false })
       // ★ 地址可能刚被改掉，候选得跟着重拉一次（见上面 `pull` 那段）
       void pull()
+      // ★ 配置变了，上一次的测试结果就**不再是现在这套配置的结果**——
+      //   留着它比没有更坏：站长会以为自己刚改的这份已经验过了
+      setTested(null)
+      setTestFail(null)
     } else {
       setNote({ text: `没改成：${result.message}`, bad: true })
     }
@@ -149,8 +252,14 @@ function Section({
     if (result.ok) {
       onView(result.data)
       const fresh = result.data.sections.find((item) => item.id === section.id)
-      if (fresh) setDraft(draftsOf(fresh))
+      if (fresh) {
+        setDraft(draftsOf(fresh))
+        setGatewayId(gatewayOf(baseUrlOf(fresh), section.id).id)
+      }
       setNote({ text: `${section.label}：回到环境变量那一份了`, bad: false })
+      void pull()
+      setTested(null)
+      setTestFail(null)
     } else {
       setNote({ text: `没恢复成：${result.message}`, bad: true })
     }
@@ -162,13 +271,50 @@ function Section({
       <header className="adm__model-head">
         <h3 className="adm__model-name">
           {section.label}
-          <span className="adm__model-hint">{section.hint}</span>
+          {/* ★ 那一粒药丸：这个能力是干什么用的（写故事 / 画插画 / 核对面孔 / 朗读）。
+              它现在是一粒真的胶囊（`.adm__badge`），不再是一行灰字——
+              四张卡里最先被读到的就是这一格 */}
+          <span className="adm__badge">{section.hint}</span>
         </h3>
+        {/* ★ 这一按会做什么（服务端写的，见文件头最后一段）。它比"测试连通"
+            那四个字重要：一句话、64 token 上限、与跨页插画同一个尺寸，
+            都是站长判断"这一项能不能用"的一半判据 */}
+        <p className="adm__model-sub">{section.testLine}</p>
         {/* ★ 引擎自己那一句（文件头第 1 条） */}
         <p className="adm__model-live" title="引擎读到的配置，不是这一页拼的">
           {effective ?? '（引擎没说这一项）'}
         </p>
       </header>
+
+      {/* ── 厂商 / 网关：选一家就把地址填好（只填地址，见文件头）────────────── */}
+      <label className="adm__model-field adm__model-field--wide">
+        <span className="adm__model-label">厂商 / 网关</span>
+        <select
+          className="adm__model-select"
+          value={gatewayId}
+          onChange={(event) => {
+            const picked = event.target.value
+            setGatewayId(picked)
+            const item = gatewaysFor(section.id).find((one) => one.id === picked)
+            // ★ 「自定义」空地址 = 别动我的格子；选它只是把下拉停在那儿
+            if (item && item.id !== CUSTOM_GATEWAY_ID && item.baseUrl !== '') {
+              setDraft((all) => ({ ...all, baseUrl: item.baseUrl }))
+            }
+          }}
+        >
+          {gatewaysFor(section.id).map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      {/* ★ 这张表是**地址书签不是背书**：除了当下在用的那一家，本仓没有逐个实测过。
+          不说这一句，站长会以为"选中的那家一定对" */}
+      <p className="adm__model-gatewaynote">
+        {gateway?.note ? <span>{gateway.note} </span> : null}
+        这些地址是照各家文档抄的，本仓只实测过当下在用的那一家——选完点「测试连通」就知道通不通。
+      </p>
 
       <div className="adm__model-fields">
         {section.fields.map((field) => (
@@ -179,33 +325,67 @@ function Section({
                 {sourceLabel(field)}
               </span>
             </span>
-            <input
-              // ★ 秘密那一格用 password：站长输 key 的时候旁边可能有人
-              type={field.secret ? 'password' : 'text'}
-              value={draft[field.id]}
-              autoComplete="off"
-              spellCheck={false}
-              // ★ 「模型名」那一格挂候选（见上面 `pull` 那段）。`list` 只影响
-              //   浏览器的建议列表，**不影响能不能手填**——值仍然是自由的字符串
-              {...(field.id === 'model' ? { list: `${section.id}-models` } : {})}
-              placeholder={
-                field.secret
-                  ? field.configured
-                    ? '已配置，留空表示不改'
-                    : '还没配，粘一个进来'
-                  : field.configured
-                    ? '留空表示不改'
-                    : '还没配'
-              }
-              onChange={(event) => setDraft((all) => ({ ...all, [field.id]: event.target.value }))}
-            />
-            {field.id === 'model' ? (
-              <datalist id={`${section.id}-models`}>
-                {(candidates?.ids ?? []).map((id) => (
-                  <option key={id} value={id} />
-                ))}
-              </datalist>
-            ) : null}
+            <span className="adm__model-line">
+              <input
+                // ★ 秘密那一格用 password：站长输 key 的时候旁边可能有人
+                type={field.secret ? 'password' : 'text'}
+                value={draft[field.id]}
+                autoComplete="off"
+                spellCheck={false}
+                placeholder={
+                  field.secret
+                    ? field.configured
+                      ? '已配置，留空表示不改'
+                      : '还没配，粘一个进来'
+                    : field.configured
+                      ? '留空表示不改'
+                      : '还没配'
+                }
+                onChange={(event) =>
+                  setDraft((all) => ({ ...all, [field.id]: event.target.value }))
+                }
+              />
+              {/* ★ 「拉取模型列表」在模型名**旁边**（2026-10-18 从卡片底部那行灰字挪上来）：
+                  站长填这一格时最需要的就是它，而原来那句话离他两格远 */}
+              {field.id === 'model' ? (
+                <button
+                  type="button"
+                  className="adm__act"
+                  disabled={pulling}
+                  title="按现在生效的接口地址拉一次（改完地址要先保存）"
+                  onClick={() => void pull()}
+                >
+                  {pulling ? '在拉…' : '拉取模型列表'}
+                </button>
+              ) : null}
+              {/* ★ 候选挑一个（2026-10-18 换掉 `datalist`，理由见上面 `pull` 那段）。
+                  它**自己不存值**：选完立刻弹回占位项（`value=""` 是受控的固定值），
+                  选中的那个写进左边那格自由文本框——所以"挑一个"与"自己填"
+                  共用同一个落点，也不会把不在候选里的值（`wan2.7-image`）弄丢。
+                  拉不到候选时**不画它**：一颗只有占位项的空下拉比没有更坏。
+                  ★ 它**独占一行**（CSS 里 `flex-basis: 100%`），不是"挤在右边"：
+                    这一屏最宽 1120px，三个字段一行各 ~341px，装上输入框 + 「拉取模型列表」
+                    就再放不下 190px 的选择框了。既然无论窗口多大都在下面，
+                    下面那句灰字就说「下面那颗」——方向词得跟量出来的排版对得上。 */}
+              {field.id === 'model' && (candidates?.ids.length ?? 0) > 0 ? (
+                <select
+                  className="adm__model-pick"
+                  value=""
+                  aria-label={`从拉到的 ${candidates?.ids.length ?? 0} 个模型候选里挑一个`}
+                  onChange={(event) => {
+                    if (event.target.value === '') return
+                    setDraft((all) => ({ ...all, model: event.target.value }))
+                  }}
+                >
+                  <option value="">挑一个（{candidates?.ids.length ?? 0}）</option>
+                  {(candidates?.ids ?? []).map((id) => (
+                    <option key={id} value={id}>
+                      {id}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
+            </span>
           </label>
         ))}
       </div>
@@ -218,27 +398,112 @@ function Section({
           : candidates === null
             ? ''
             : candidates.ok
-              ? `${section.label}：从接口地址拉到 ${candidates.ids.length} 个模型候选（点「模型名」那一格就能选，也可以自己填）`
+              ? `${section.label}：从接口地址拉到 ${candidates.ids.length} 个模型候选（下面那颗「挑一个」里是全的，也可以直接填）`
               : candidates.message}
         {candidates?.ok ? <code>{candidates.endpoint}</code> : null}
-        {/* 改完地址要能重拉：不重拉的话，换了地址之后候选还是旧那家的 */}
-        <button
-          type="button"
-          className="adm__act"
-          disabled={pulling}
-          title="按现在生效的接口地址再拉一次（改完地址要先保存）"
-          onClick={() => void pull()}
-        >
-          重新拉取
-        </button>
       </p>
 
       {section.warn ? <p className="adm__model-warn">{section.warn}</p> : null}
 
+      {/* ── 测试连通 ─────────────────────────────────────────────────────── */}
+      <div className="adm__test">
+        {section.id === 'image' ? (
+          <label className="adm__model-field adm__model-field--wide">
+            <span className="adm__model-label">提示词（只用于这一次测试，不保存）</span>
+            <input
+              type="text"
+              value={testPrompt}
+              spellCheck={false}
+              placeholder={section.testSeed}
+              onChange={(event) => setTestPrompt(event.target.value)}
+            />
+          </label>
+        ) : null}
+
+        {section.id === 'vision' ? (
+          <label className="adm__model-field adm__model-field--wide">
+            <span className="adm__model-label">
+              本地图片（只在这条请求里，不落盘）
+              {photo ? <span className="adm__model-source">{photo.name}</span> : null}
+            </span>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(event) => pickPhoto(event.target.files?.[0])}
+            />
+          </label>
+        ) : null}
+
+        {section.id === 'speech' ? (
+          <p className="adm__model-label">
+            要念的那一句：<code>{section.testSeed}</code>
+          </p>
+        ) : null}
+
+        <div className="adm__test-go">
+          <button
+            type="button"
+            className="adm__newgo"
+            // ★ 视觉没有图就没得试（服务端也会拒，但那要等一个来回）
+            disabled={testing || (section.id === 'vision' && !photo)}
+            onClick={() => void runTest()}
+          >
+            {testing ? '在试…' : '测试连通'}
+          </button>
+          {section.id === 'image' ? (
+            // ★ 钱要说在按钮旁边，不是写在文档里：这一格按下去是一口价 0.2 元/张
+            //   （与 `.env.example` 的 IMAGE_UNIT_COST_CNY 同一个数）
+            <span className="adm__model-tip">这一次会真花钱：出图一口价 0.2 元/张</span>
+          ) : null}
+          {section.id === 'vision' && !photo ? (
+            <span className="adm__model-tip">先选一张本地图片</span>
+          ) : null}
+        </div>
+
+        {/* 通了：一句话 + **通的证据本身**（图 / 声 / 它说的话） */}
+        {tested?.ok ? (
+          <div className="adm__test-out">
+            <p className="adm__model-note" role="status">
+              通了 · {secondsOf(tested.ms)} 秒{tested.modelId ? ` · ${tested.modelId}` : ''}
+            </p>
+            {tested.imageDataUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img className="adm__test-shot" src={tested.imageDataUrl} alt="这一次测试出的图" />
+            ) : null}
+            {tested.audioDataUrl ? (
+              <audio className="adm__test-audio" controls src={tested.audioDataUrl} />
+            ) : null}
+            {tested.text ? <p className="adm__test-said">{tested.text}</p> : null}
+            {tested.anchors.length > 0 ? (
+              <ul className="adm__test-anchors">
+                {tested.anchors.map((item) => (
+                  <li key={item.slot}>
+                    <span>
+                      {ANCHOR_LABELS[item.slot as keyof typeof ANCHOR_LABELS] ?? item.slot}
+                    </span>
+                    {item.value}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        ) : null}
+
+        {/* 没通：一句能照做的话（厂商原文附在后面，`adminFailureOf` 拼的） */}
+        {testFail ? (
+          <p className="adm__model-note" data-bad="true" role="status">
+            {testFail}
+          </p>
+        ) : null}
+      </div>
+
       <div className="adm__model-actions">
         <button
           type="button"
-          className="adm__req-go"
+          // ★ 2026-10-18：这个类名原来写的是 `adm__req-go`，而它在 `admin.css` 里
+          //   **一处都没有**（删申请队列那次之前的遗留）——也就是说这颗保存按钮
+          //   一直是浏览器默认样式。换成页面上真有的那颗主按钮（建号表单在用同一个）
+          className="adm__newgo"
           disabled={busy || !changed}
           onClick={() => void save()}
         >
@@ -263,6 +528,11 @@ function Section({
       ) : null}
     </article>
   )
+}
+
+/** 这一节现在的接口地址（认「厂商 / 网关」用）。没有「接口地址」那一格的能力就是空串 */
+function baseUrlOf(section: SectionView): string {
+  return section.fields.find((field) => field.id === 'baseUrl')?.value ?? ''
 }
 
 function draftsOf(section: SectionView): Record<FieldId, string> {

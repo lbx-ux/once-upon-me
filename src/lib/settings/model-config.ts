@@ -23,8 +23,10 @@
  */
 
 import { describeProviders } from '@/lib/engine/providers/registry.ts'
+import { DEFAULT_IMAGE_SIZE } from '@/lib/prompts/image.ts'
 import { modelConfigFile, readOverrides } from './runtime-config.ts'
 import { serverEnv } from './server-env.ts'
+import { PREVIEW_LINE } from './preview-line.ts'
 import type { Capability, FieldId, FieldView, ModelConfigView } from './model-config-state.ts'
 
 type FieldSpec = {
@@ -47,6 +49,64 @@ type CapabilitySpec = {
 }
 
 /**
+ * ★★ 「测试连通」那一按**到底发出去什么**——写在这里，因为界面那句话要说的就是它。
+ *
+ * 2026-10-18 加的（用户给了四张参考截图：那一栏底下有一颗「测试连通」）。
+ * 它与 `testLineOf` 底下那四句是**同一件事的两种说法**，所以必须挨着：
+ * 分开写的话，副标题写着"64 token 上限"而路由发的是 4096，谁也不会发现——
+ * 而这正是"字写得很具体、做的是另一件事"这种最坏的错。
+ * ★ 于是路由从**这里** import（`app/api/admin/model-test/route.ts`），不自己抄一份。
+ */
+export const TEST_REQUEST = {
+  text: {
+    /** 一句话、尽量小：这一按问的是"通不通"，不是"文笔如何" */
+    line: '用一句话回答：你能给三岁小孩写睡前故事吗？',
+    /** ★ 上限 64 是在**防跑飞**：不设上限时一个失控的模型能吐几千 token（那是钱） */
+    maxTokens: 64,
+  },
+  image: {
+    /** 缺省提示词：一句一定画得出来的，让"通不通"不被内容问题遮住 */
+    prompt: '简笔水彩风：一只戴围巾的小猫，坐在窗台上',
+    /** ★ 用产品自己那个尺寸（与跨页插画同源），不是随便挑一个方图：见路由文件头第 4 条 */
+    size: DEFAULT_IMAGE_SIZE,
+  },
+  speech: {
+    /** ★ 与音色卡上印的那句**同一个常量**（`preview-line.ts`） */
+    line: PREVIEW_LINE,
+  },
+} as const
+
+/**
+ * 每张卡标题底下那行小字：**这一按会做什么**。
+ *
+ * ★ 四句都写实（"一句话"、"与跨页插画同一个尺寸"），因为它们各自是站长
+ *   判断"这一项能不能用"的半个判据——一句笼统的"测试连通"什么都说明不了。
+ */
+function testLineOf(capability: Capability): string {
+  switch (capability) {
+    case 'text':
+      return `发一句话，看它回不回得上（上限 ${TEST_REQUEST.text.maxTokens} token）`
+    case 'image':
+      return `按一个提示词，真出一张 ${TEST_REQUEST.image.size.replace('x', '×')} 的图——与跨页插画同一个尺寸`
+    case 'vision':
+      return '带一张本地图片，让它读一遍里面有什么（走的是角色卡「分析这张照片」那条路）'
+    case 'speech':
+      return '按「音色」那一格，合成一句试听台词'
+  }
+}
+
+/**
+ * 测试那一格**预填**什么（没有输入的那两项是空串）。
+ * ★ 由服务端给而不是浏览器写死：图像那句缺省提示词在路由里也用（`TEST_REQUEST`），
+ *   两处各写一份的话，界面预填的与真发出去的就成了两句话。
+ */
+function testSeedOf(capability: Capability): string {
+  if (capability === 'image') return TEST_REQUEST.image.prompt
+  if (capability === 'speech') return TEST_REQUEST.speech.line
+  return ''
+}
+
+/**
  * 四个能力 × 各自那几格。
  *
  * ★ 顺序与 `describeProviders` 返回的四行一致，也与工作台上那四项能力
@@ -55,7 +115,7 @@ type CapabilitySpec = {
 export const CAPABILITIES: CapabilitySpec[] = [
   {
     id: 'text',
-    label: '文字',
+    label: '文字对话',
     hint: '写故事',
     fields: [
       { id: 'model', env: 'LLM_MODEL', label: '模型名', secret: false },
@@ -65,7 +125,7 @@ export const CAPABILITIES: CapabilitySpec[] = [
   },
   {
     id: 'image',
-    label: '图像',
+    label: '图像生成',
     hint: '画插画',
     fields: [
       { id: 'model', env: 'IMAGE_MODEL', label: '模型名', secret: false },
@@ -75,7 +135,7 @@ export const CAPABILITIES: CapabilitySpec[] = [
   },
   {
     id: 'vision',
-    label: '视觉',
+    label: '视觉理解',
     hint: '核对面孔',
     fields: [
       { id: 'model', env: 'VISION_MODEL', label: '模型名', secret: false },
@@ -86,7 +146,7 @@ export const CAPABILITIES: CapabilitySpec[] = [
   },
   {
     id: 'speech',
-    label: '语音',
+    label: '语音合成',
     hint: '朗读',
     fields: [
       { id: 'model', env: 'TTS_MODEL', label: '模型名', secret: false },
@@ -117,6 +177,10 @@ export function modelConfigView(): ModelConfigView {
       id: cap.id,
       label: cap.label,
       hint: cap.hint,
+      // ★ 这两句给「测试连通」那一块用：一句是"这一按会做什么"，一句是那一格的预填值。
+      //   都由服务端给（见 `TEST_REQUEST` 那段），浏览器不另写一份
+      testLine: testLineOf(cap.id),
+      testSeed: testSeedOf(cap.id),
       warn: cap.warn ?? null,
       fields: cap.fields.map((field): FieldView => {
         const fromAdmin = (overrides[field.env] ?? '').trim() !== ''

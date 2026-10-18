@@ -19,8 +19,10 @@ import { readResult, unreachable, type Result } from '@/lib/auth/response.ts'
 import {
   parseModelCandidates,
   parseModelConfigView,
+  parseModelTestResult,
   type ModelCandidates,
   type ModelConfigView,
+  type ModelTestResult,
 } from '@/lib/settings/model-config-state.ts'
 import {
   parseOverview,
@@ -235,4 +237,38 @@ function readView(result: Result<unknown>, whenUnreadable: string): Outcome<Mode
   const view = parseModelConfigView(result.data)
   if (!view) return { ok: false, message: whenUnreadable, status: 200 }
   return { ok: true, data: view }
+}
+
+/**
+ * 「测试连通」：拿**现在生效的**那份配置真打一次厂商接口（2026-10-18）。
+ *
+ * ★ 送上去的只有能力名与（图像/视觉那两项的）一点输入，**不送地址、不送 key**：
+ *   地址与 key 由服务端按 `CAPABILITIES` 从它自己那份环境里取。
+ *   让浏览器指定"服务端带着 key 去打哪个地址"是一个洞（与 `fetchModelCandidates`
+ *   那条注释同一条理由）。
+ *
+ * ★ **没配全**与**打不通**在这一层是两种结果，而不是两种错误：
+ *   · `ok: false`（非 2xx）：这一按根本没发出去（没登录、没权限、缺一格配置）；
+ *   · `ok: true` + `data.ok === false`：真发出去了，厂商那边说不行（key 不对、模型名不存在…），
+ *     而那句话是 `adminFailureOf` 翻的、**带着厂商的原文**。
+ *   界面把前者显示成"这一项还没配好"，后者显示成"试了，不通，原因如下"。
+ *
+ * ★ 图像那一支会**慢**（实测一页十几秒的量级）且**一次 0.2 元**，
+ *   所以这里不加自己的短超时：服务端那条 `IMAGE_TIMEOUT_MS`（缺省 180 s）说了算。
+ *   客户端抢先超时只会让站长在"其实已经出图了"的时候看到一句"超时"。
+ */
+export async function testModelCapability(
+  capability: string,
+  input: { prompt?: string; photo?: string } = {},
+): Promise<Outcome<ModelTestResult>> {
+  const result = await call<unknown>(
+    '/api/admin/model-test',
+    json('POST', { capability, ...input }),
+  )
+  if (!result.ok) return { ok: false, message: result.message, status: result.status }
+  const tested = parseModelTestResult(result.data)
+  if (!tested) {
+    return { ok: false, message: '服务端回的测试结果不是我们认识的形状', status: 200 }
+  }
+  return { ok: true, data: tested }
 }

@@ -24,7 +24,10 @@ import {
   clearCapability,
   keepKnownKeys,
   modelConfigView,
+  TEST_REQUEST,
 } from './model-config.ts'
+import { DEFAULT_IMAGE_SIZE } from '@/lib/prompts/image.ts'
+import { PREVIEW_LINE } from './preview-line.ts'
 import { modelConfigFile, readOverrides, writeOverrides } from './runtime-config.ts'
 import { serverEnv } from './server-env.ts'
 
@@ -268,6 +271,37 @@ describe('show 给界面的那份', () => {
 
   it('语音那一行带警告（换模型即失效，厂商只报一句 [411]）', () => {
     expect(CAPABILITIES.find((c) => c.id === 'speech')?.warn).toContain('[411]')
+  })
+
+  /* ── 「测试连通」那两句（2026-10-18）──────────────────────────────────── */
+
+  it('★ 副标题里写的那个数，就是测试真发出去的那个数', () => {
+    // 这一条是这一组里最要紧的：副标题写着"上限 64 token"而路由发的是 4096，
+    // 谁也不会发现——那种"字写得很具体、做的是另一件事"正是最坏的错。
+    // ★ 而这两个数现在同源（都从 `TEST_REQUEST` 来），所以这一条断言的是**同源**本身
+    const line = sectionOf('text').testLine
+    expect(line).toContain(`${TEST_REQUEST.text.maxTokens} token`)
+  })
+
+  it('★ 图像那一句里的尺寸就是产品出图用的那个尺寸', () => {
+    // 挑一个产品不用的尺寸去测，通不通都不说明产品能不能跑（路由文件头第 4 条）
+    expect(sectionOf('image').testLine).toContain(TEST_REQUEST.image.size.replace('x', '×'))
+    expect(TEST_REQUEST.image.size).toBe(DEFAULT_IMAGE_SIZE)
+  })
+
+  it('测试那一格预填的，就是路由缺省会发出去的那一份', () => {
+    expect(sectionOf('image').testSeed).toBe(TEST_REQUEST.image.prompt)
+    // 语音那一句与音色卡上印的是**同一个常量**——两处漂开就是"卡片上印的
+    // 和实际念的成了两句话"，而这种错没人会去对
+    expect(sectionOf('speech').testSeed).toBe(PREVIEW_LINE)
+  })
+
+  it('文字与视觉没有预填值（它们不需要输入：一个发固定那句话，一个要的是图片本身）', () => {
+    expect(sectionOf('text').testSeed).toBe('')
+    expect(sectionOf('vision').testSeed).toBe('')
+    for (const id of ['text', 'image', 'vision', 'speech']) {
+      expect(sectionOf(id).testLine.length).toBeGreaterThan(0)
+    }
   })
 })
 

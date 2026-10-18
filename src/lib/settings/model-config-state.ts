@@ -43,6 +43,14 @@ export type SectionView = {
   id: Capability
   label: string
   hint: string
+  /**
+   * 「测试连通」那一按**会做什么**（服务端按 `TEST_REQUEST` 写的那句话）。
+   * ★ 它由服务端给而不是浏览器写死：那一按真发出去的东西（token 上限、图片尺寸、
+   *   要念的那句台词）也只有服务端知道，两处各写一份就会漂。
+   */
+  testLine: string
+  /** 测试那一格预填什么（文字与视觉没有输入，是空串） */
+  testSeed: string
   fields: FieldView[]
   warn: string | null
 }
@@ -101,6 +109,10 @@ function parseSection(raw: unknown): SectionView | null {
   const id = value['id']
   if (typeof id !== 'string' || !CAPABILITY_IDS.includes(id as Capability)) return null
   if (typeof value['label'] !== 'string' || typeof value['hint'] !== 'string') return null
+  // ★ 这两句是 2026-10-18 加的，而这里**跟别的格子一样严**：缺了就整份不认。
+  //   放宽成"缺就当空串"的话，服务端哪天少回了这一句，界面上那颗「测试连通」
+  //   会变成一颗底下没有说明的按钮——而它按下去要花钱
+  if (typeof value['testLine'] !== 'string' || typeof value['testSeed'] !== 'string') return null
   if (!Array.isArray(value['fields'])) return null
 
   const fields: FieldView[] = []
@@ -113,7 +125,15 @@ function parseSection(raw: unknown): SectionView | null {
   const warn = value['warn']
   if (warn !== null && typeof warn !== 'string') return null
 
-  return { id: id as Capability, label: value['label'], hint: value['hint'], fields, warn }
+  return {
+    id: id as Capability,
+    label: value['label'],
+    hint: value['hint'],
+    testLine: value['testLine'],
+    testSeed: value['testSeed'],
+    fields,
+    warn,
+  }
 }
 
 /**
@@ -181,4 +201,84 @@ export function parseModelCandidates(raw: unknown): ModelCandidates | null {
   const message = typeof value['message'] === 'string' ? value['message'] : null
   const endpoint = typeof value['endpoint'] === 'string' ? value['endpoint'] : ''
   return { ok: value['ok'], endpoint, ids, message }
+}
+
+/* ── 「测试连通」那一次的结果（2026-10-18）────────────────────────────────── */
+
+/**
+ * 一次真打厂商接口的结果。
+ *
+ * ★ 形状里**同时**带着两种东西，而它们服务两个不同的读者：
+ *   · `ok` + `message` + `ms` + `modelId` —— 给站长判断"这一项现在能不能用"；
+ *   · `text` / `imageDataUrl` / `audioDataUrl` / `anchors` —— **通的证据本身**。
+ *
+ * ★ 为什么要把图与音频整体带回来（data URL，图像那一张一两 MB）：
+ *   服务端把它写盘再回一个 URL，就要管清理，而这是一次性的东西
+ *   （同 `/api/voice/preview` 那条注释）。它只在这一次响应里存在。
+ *   代价是这条响应会很大——所以**只有成功那一支才有它们**。
+ *
+ * ★ `ms` 是**这一次真花的时间**（出图十几秒是常态）。不写它的话，
+ *   "通了"与"快不快"就只能靠感觉，而这个数正是"这一家能不能用来出图"的一半判据。
+ */
+export type ModelTestResult = {
+  ok: boolean
+  capability: Capability
+  /** 这一次用了多少毫秒（服务端量的墙上时间） */
+  ms: number
+  /** 引擎说的模型名。没配起来时是空串 */
+  modelId: string
+  /** 文字那一支它回的话 / 视觉那一支它自己写的说明。没有就是 null */
+  text: string | null
+  /** 图像那一支出的一张图（data URL） */
+  imageDataUrl: string | null
+  /** 语音那一支合成的那段音频（data URL） */
+  audioDataUrl: string | null
+  /** 视觉那一支读出来的锚点（槽位 → 值）。别的能力永远是空数组 */
+  anchors: { slot: string; value: string }[]
+  /** 没通时那句**能照做的话**（`userFailureOf` 翻的）；通了时通常是 null */
+  message: string | null
+}
+
+/**
+ * 读回来的那一坨 → `ModelTestResult`。认不出来就是 `null`（不抛）。
+ *
+ * ★ 与 `parseModelCandidates` 同一条松紧：**必须有的那几样**（`ok` / `capability` /
+ *   `ms`）不齐就整份不认——没有它们，界面说不清"这一格现在是什么状态"；
+ *   其余几样缺了就当空（一次文字测试本来就没有图）。
+ */
+export function parseModelTestResult(raw: unknown): ModelTestResult | null {
+  const value = asRecord(raw)
+  if (!value) return null
+  if (typeof value['ok'] !== 'boolean') return null
+  if (typeof value['ms'] !== 'number' || !Number.isFinite(value['ms'])) return null
+
+  const capability = value['capability']
+  if (typeof capability !== 'string' || !CAPABILITY_IDS.includes(capability as Capability)) {
+    return null
+  }
+
+  const text = (key: string): string | null =>
+    typeof value[key] === 'string' && value[key] !== '' ? (value[key] as string) : null
+
+  const anchors: { slot: string; value: string }[] = []
+  if (Array.isArray(value['anchors'])) {
+    for (const item of value['anchors']) {
+      const row = asRecord(item)
+      if (!row) continue
+      if (typeof row['slot'] !== 'string' || typeof row['value'] !== 'string') continue
+      anchors.push({ slot: row['slot'], value: row['value'] })
+    }
+  }
+
+  return {
+    ok: value['ok'],
+    capability: capability as Capability,
+    ms: value['ms'],
+    modelId: typeof value['modelId'] === 'string' ? value['modelId'] : '',
+    text: text('text'),
+    imageDataUrl: text('imageDataUrl'),
+    audioDataUrl: text('audioDataUrl'),
+    anchors,
+    message: text('message'),
+  }
 }

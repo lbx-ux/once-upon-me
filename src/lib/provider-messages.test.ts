@@ -139,4 +139,18 @@ describe('userFailureOf · 状态码按"错在谁"分', () => {
     ]
     expect(new Set(said).size).toBe(said.length)
   })
+
+  it('★ asset-write-failed 一句话盖两件事：不能只说磁盘（2026-10-18 真撞到的一次）', () => {
+    // `http.ts` 的 `fetchBytes` 把"把图**下回来**"那一步的失败也报成这个码，
+    // 而原来那句话只说"磁盘满了或目录不可写"。本机代理掐断 OSS 的那次
+    // （ECONNRESET），屏幕上于是让人去清一个空磁盘——**一句具体、可执行、
+    // 且与故障无关的下一步，比没有这句话更坏**。
+    const said = userFailureOf(
+      new EngineError('asset-write-failed', '下载媒体网络错误：terminated · ECONNRESET'),
+    ).message
+    expect(said).toContain('下回来')
+    expect(said).toContain('磁盘')
+    // 那件真事必须还能被指出来（原文接在后面，分流逻辑不读它）
+    expect(said).toContain('ECONNRESET')
+  })
 })

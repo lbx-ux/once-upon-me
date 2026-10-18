@@ -575,9 +575,15 @@
   color: var(--ink);
 }
 
-.adm__model-hint {
-  font-size: 11.5px;
-  font-weight: 400;
+/* ★ 这一按会做什么（2026-10-18）。原来这里是能力名那行灰字（`.adm__model-hint`），
+ *   现在能力名搬进了标题旁边那粒药丸（`.adm__badge`），这一行让给了"底下那颗按钮
+ *   按下去会发生什么"——因为"能改模型"这件事站长早就知道，他不知道的是这个。
+ *   独占一行（`flex-basis: 100%`），理由与下面 `.adm__model-live` 那条一样 */
+.adm__model-sub {
+  flex-basis: 100%;
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.7;
   color: var(--ink-muted);
 }
 
@@ -699,6 +705,171 @@
   align-items: center;
   gap: 8px;
   margin-top: 12px;
+}
+
+/* ── 「厂商 / 网关」与「测试连通」（2026-10-18）──────────────────────────
+ * 站长那一屏现在**先选一家、再试一下**，而不是只填完就走。
+ * ★ 下拉与它底下那句话是一组（"照各家文档抄的，没逐个实测过"），
+ *   所以那张表不是背书而是地址书签——这句话必须跟着下拉读。 */
+.adm__model-select {
+  padding: 7px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--ink);
+}
+
+.adm__model-select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.adm__model-gatewaynote {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: var(--ink-muted);
+}
+
+/* ★ 「拉取模型列表」挨着「模型名」那一格（它原来在卡片底部那行灰字里，
+ *   离站长当时看着的那一格隔着两格）。2026-10-18 又添了第三件（候选下拉），
+ *   所以这一行要能换行：窄屏上宁可折行，也不要把输入框挤到读不出模型名。 */
+.adm__model-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.adm__model-line input {
+  flex: 1 1 auto;
+}
+
+.adm__model-line .adm__act {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* ★ 「挑一个」（2026-10-18）：模型名的候选。
+ *   它原来是一个 `datalist`，而 Chrome 会拿输入框里现有的字去筛它——
+ *   这一格平时是填好的，于是 26 个候选里只有当前那一个匹配得上，
+ *   "拉到了 26 个"与"点开只有一个"同时成立。换成真的 `<select>` 之后
+ *   候选是**列全**的。值仍然由上面那格自由文本框拿着。
+ * ★ `flex-basis: 100%`：它**独占一行**，不是"挤在输入框右边"。
+ *   量过：这一屏最宽 1120px，三个字段一行各 ~341px（1440 窗口下量到 298px），
+ *   装上输入框 + 「拉取模型列表」（92px）之后，再放 190px 的选择框必然折行。
+ *   与其让它"有时在右、有时在下"，不如钉死在下——那一行灰字也就能老实说「下面那颗」。
+ *   顺带：整行宽度对长模型名（`deepseek-v4-flash-0731`）也够用，不必截断。 */
+.adm__model-pick {
+  flex: 1 1 100%;
+  min-width: 0;
+  padding: 7px 8px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  font: inherit;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+.adm__model-pick:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* ★ 文件与下拉都不吃上面那套"等宽输入框"的样式：文件框带上内边距与等宽字体会
+ *   画成一个奇怪的方框，而它本来就是一个原生控件 */
+.adm__model-field input[type='file'] {
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+/* 一整行的格子（图像那一格的提示词、视觉那张本地图片）：它们底下要接结果 */
+.adm__model-field--wide {
+  flex-basis: 100%;
+}
+
+.adm__test {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  margin-top: 12px;
+  padding-top: 12px;
+  /* ★ 虚线：这一块与上面"配置"那几格是**两件事**（一个是写进文件的值，
+     一个是按下就花钱的一次调用） */
+  border-top: 1px dashed var(--hairline);
+}
+
+.adm__test-go {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-basis: 100%;
+}
+
+.adm__test-out {
+  flex-basis: 100%;
+}
+
+/* ★ 图与声都是**通的证据本身**，所以给足宽度；上限 420px 是因为再大也只是
+ *   让这一屏变长，而站长要看的是"出没出图" */
+.adm__test-shot {
+  display: block;
+  width: min(420px, 100%);
+  margin-top: 8px;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+}
+
+.adm__test-audio {
+  display: block;
+  width: min(420px, 100%);
+  margin-top: 8px;
+}
+
+/* ★ 它回的那句话：与 `.adm__model-warn` 同一个形状（左边一条竖线），
+ *   但用 `--accent`——这是"真的通了"那一侧，不是警告 */
+.adm__test-said {
+  margin: 8px 0 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--accent);
+  border-radius: 0 8px 8px 0;
+  background: var(--surface-soft);
+  font-size: 12.5px;
+  line-height: 1.8;
+  color: var(--ink);
+  /* ★ 模型偶尔会带回换行与缩进，原样留着比压成一行更像它说的话 */
+  white-space: pre-wrap;
+}
+
+/* 视觉那一支读出来的锚点：一粒一粒摆开，与角色卡上的读法一致 */
+.adm__test-anchors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.adm__test-anchors li {
+  display: flex;
+  gap: 6px;
+  padding: 2px 9px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  font-size: 11.5px;
+  color: var(--ink);
+}
+
+.adm__test-anchors li span {
+  color: var(--ink-muted);
 }
 
 .adm__model-note {

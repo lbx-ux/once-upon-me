@@ -140,9 +140,17 @@ function byCode(error: EngineError): string | null {
         '换一张更清楚的：短边至少 240 像素、接近正方形。手机原图一般都可以，截图或头像小图通常不行。',
       )
     case 'asset-write-failed':
+      // ★ 这一个码盖着**两件**事（2026-10-18 在管理页「测试连通」上撞到的）：
+      //   `http.ts` 的 `fetchBytes` 把「把图**下回来**」那一步的失败（网络被掐、
+      //   签名地址过期、HTTP 非 2xx）也报成这个码，而写下去那一步（磁盘满、
+      //   目录不可写、路径越界）同样报它。
+      //   原来那句话只说后一件——于是本机代理把 OSS 那一段掐断的那次，屏幕上写着
+      //   「磁盘满了或目录不可写」，让人去清磁盘（而磁盘是空的）。改成两件都说得对。
+      // ★ 这里**不用 `**` 加粗**：这句话是当纯文本画在屏幕上的（旁边那几句用了，
+      //   于是屏幕上真的多出四个星号——那是既有的小毛病，不该再添一处）。
       return line(
-        '资产没法落盘（磁盘满了或目录不可写）',
-        '清一点磁盘空间再试。已经画好的图不会因为这一条被丢掉。',
+        '这张图没进到这本书里（要么没下回来，要么没写下去）',
+        '两种常见原因：下载那一步被掐断（网络 / 代理 / 签名地址过期），或者磁盘没空间、目录不可写。下面那句原文会说是哪一种。已经画好的图不会因为这一条被丢掉。',
       )
     case 'aborted':
       return line(
@@ -165,6 +173,35 @@ export function userMessageFor(error: unknown): string {
   const specific = byStatus(failure.httpStatus, failure.providerCode) ?? byCode(failure) ?? null
   if (!specific) return failure.message
   return `${specific}\n（供我们排障的原文：${failure.message}）`
+}
+
+/**
+ * 管理页那一侧的一次失败（2026-10-18，「测试连通」那一按）。
+ *
+ * ★ 与 `userFailureOf` 只差**一句**：`provider-not-configured`。
+ *   那一句写的是「模型与密钥由你自己提供，我们没有替你兜底的那一份」——
+ *   那是 ADR-0008 的口径（用户自己填 key 的那一版），而它 2026-10-16
+ *   就被 [ADR-0009](docs/adr/0009-model-and-key-issued-by-operator.md) 推翻了：
+ *   密钥只有站长一个来源。**在管理页看到这句话的人就是站长**，
+ *   让他"回去把模型与 key 填上"等于让他在原地找自己。
+ *   所以这一种改说"缺的是哪一格、去哪儿补"，而引擎那句话里本来就写着变量名。
+ * ★ 其余分流一个字不动：那些是厂商侧的失败（key 不对、模型名不存在、限流），
+ *   两个读者的下一步是同一件事——改配置或换模型。
+ */
+export function adminFailureOf(error: unknown): {
+  code: string
+  message: string
+  retryable: boolean
+  status: number
+} {
+  const base = userFailureOf(error)
+  if (base.code !== 'provider-not-configured') return base
+  return {
+    ...base,
+    message:
+      `这一项还没配全：${asEngineError(error).message}\n` +
+      '在管理页把缺的那一格填上并保存（改完立刻生效，不用重启），再点一次测试。',
+  }
 }
 
 /**
