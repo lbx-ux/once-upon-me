@@ -115,7 +115,7 @@
   position: absolute;
   inset: -34px -60px;
   z-index: -1;
-  background: rgba(247, 247, 248, 0.45);
+  background: rgba(var(--bg-rgb), 0.45);
   --hl-veil-x: linear-gradient(
     90deg,
     transparent 0,
@@ -157,7 +157,7 @@
    2.12:1（12px 要 4.5:1）。抬到 .86 是量出来的下限附近：雾 0.45 下最坏那一带给 4.90:1，
    而 .75 只有 4.02:1（不过）。层级靠字距（.2em）与小一号撑，不靠透明度。 */
 .hl__eyebrow-en {
-  color: rgba(23, 23, 29, 0.86);
+  color: rgba(var(--ink-rgb), 0.86);
   letter-spacing: 0.2em;
 }
 
@@ -182,7 +182,7 @@
   max-width: 46em;
   margin: 18px 0 0;
   /* 与眉标同一个理由：这行压在抬头的雾上，雾只有 0.45，灰档过不去（见 ::before 那条） */
-  color: rgba(23, 23, 29, 0.86);
+  color: rgba(var(--ink-rgb), 0.86);
   font-size: clamp(14px, 1.06vw, 17px);
   line-height: 1.78;
 }
@@ -325,9 +325,9 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid rgba(23, 23, 29, 0.07);
+  border: 1px solid rgba(var(--ink-rgb), 0.07);
   border-radius: var(--card-radius);
-  background: #fffdf7; /* 与 .book__face 的纸色同一张，不是纯白 */
+  background: var(--page-paper); /* 与 .book__face 的纸色同一张，不是纯白 */
   box-shadow:
     0 2px 6px rgba(19, 19, 28, 0.06),
     0 18px 44px rgba(19, 19, 28, 0.14);
@@ -340,7 +340,7 @@
 }
 .hl__card[data-hover] {
   translate: 0 -6px; /* = tilt.ts 的 TILT.liftPx，两处一起改 */
-  border-color: rgba(23, 23, 29, 0.11);
+  border-color: rgba(var(--ink-rgb), 0.11);
   box-shadow:
     0 4px 10px rgba(19, 19, 28, 0.08),
     0 26px 56px rgba(19, 19, 28, 0.2);
@@ -360,7 +360,7 @@
   inset: 0;
   z-index: 1;
   pointer-events: none;
-  background: rgba(247, 247, 248, 0.1);
+  background: rgba(var(--bg-rgb), 0.1);
 }
 
 /* ----------------------------------------------------------------------------
@@ -370,12 +370,17 @@
  * docs/highlights-art-prompts.md）。`.hl__art` 那层 CSS 暖纸底纹**保留当退路**：
  * 图挂了、或网络掐了的时候，这里露出的仍然是一张按主题色画的水彩纸 + 一枚编号，
  * 读起来是"这一条有一张图"，而不是"这里坏了"。
+ *
+ * ★ 2026-10-18 配色审查 B4：下面那两层的暖纸色原来是 `#efe7db` 与 `#f2e9dc`
+ *   两个字面量，与 `--card-paper`(#f7efe3) 的 ΔE2000 只有 **2.80 / 2.15**
+ *   ——同一张相纸，写了三遍。两处都归到 `--card-paper`（零视觉变化的合并）。
+ *   它在这儿的身份也确实是那一条：**物件**（一张相纸），不是光。
  * -------------------------------------------------------------------------- */
 .hl__frame {
   position: relative;
   overflow: hidden;
   aspect-ratio: 16 / 9;
-  background: #efe7db;
+  background: var(--card-paper);
 }
 
 /* 兜底底纹那一层。GSAP 的视差写在这一层（它比框四周各多出 6%，
@@ -383,7 +388,7 @@
 .hl__art {
   position: absolute;
   inset: -6%;
-  background-color: #f2e9dc;
+  background-color: var(--card-paper);
   /* 兜底底纹：两团极淡的暖色 + 一层纸纹。刻意不像"图片加载失败"。
      读起来是"这一条有一张图"，而不是"这里坏了"。 */
   background-image:
@@ -414,7 +419,7 @@
   display: grid;
   place-items: center;
   padding-bottom: 8%; /* 视觉中心比几何中心略高，正字放在中间会显得往下坠 */
-  color: rgba(23, 23, 29, 0.055);
+  color: rgba(var(--ink-rgb), 0.055);
   font-family: Georgia, 'Songti SC', 'Noto Serif SC', serif;
   /* 上限压在框高之内：这枚字是兜底，不该被 overflow 切掉半截 —— 切了就又变回"像坏了"。 */
   font-size: clamp(88px, 12vw, 148px);
@@ -429,7 +434,7 @@
   bottom: 10px;
   padding: 2px 7px;
   border-radius: 5px;
-  background: rgba(255, 253, 247, 0.72);
+  background: rgba(var(--page-paper-rgb), 0.72);
   color: var(--ink-soft);
   font-size: 13px;
   font-weight: 600;
@@ -495,8 +500,15 @@
 .hl__slot[data-current] .hl__index {
   color: var(--accent);
 }
+/* ★ 2026-10-18 配色审查 A4：下面这两处原来是 `rgba(23,23,29,.32)` 与 `.38`，
+   压在 `--bg` 上只有 **2.04:1** 与 **2.38:1**。而它们**不是装饰**：
+   `HighlightsReel.tsx` 在这儿渲染的是 " / 12"（一共几条）与分类标签——
+   真信息。原来的症状是"1 / 12"只剩一个"1"。
+   ★ 归到 `--ink-muted`（对 `--bg` 4.98:1）。"次要"这件事改由
+     **字号与字重**承担（12px / 400 vs 编号的 600），不再由透明度承担——
+   同 A3 那条：降层级不该降可读性。`.hl__cat` 本来就是这个色，现在两处齐了。 */
 .hl__index-of {
-  color: rgba(23, 23, 29, 0.32);
+  color: var(--ink-muted);
   font-weight: 400;
 }
 .hl__cat {
@@ -505,7 +517,7 @@
   white-space: nowrap;
 }
 .hl__tag {
-  color: rgba(23, 23, 29, 0.38);
+  color: var(--ink-muted);
   letter-spacing: 0.14em;
 }
 
@@ -540,7 +552,7 @@
   gap: 14px;
   margin-top: 4px;
   padding-top: 16px;
-  border-top: 1px solid rgba(23, 23, 29, 0.07);
+  border-top: 1px solid rgba(var(--ink-rgb), 0.07);
 }
 .hl__chips {
   display: flex;
@@ -552,7 +564,7 @@
 }
 .hl__chip {
   padding: 3px 10px;
-  border: 1px solid rgba(23, 23, 29, 0.12);
+  border: 1px solid rgba(var(--ink-rgb), 0.12);
   border-radius: 999px;
   color: var(--ink-muted);
   font-size: 11.5px;

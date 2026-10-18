@@ -111,7 +111,7 @@
 .dk__plan-retry {
   margin: 0 0 9px;
   padding-left: 10px;
-  border-left: 2px solid rgba(var(--accent-rgb), 0.45);
+  border-left: 2px solid rgba(var(--accent-rgb), var(--accent-a4));
   font-size: 12.5px;
   line-height: 1.7;
   color: var(--ink-on-sky);
@@ -410,7 +410,7 @@
   min-width: 18px;
   padding: 1px 5px;
   border-radius: 999px;
-  background: rgba(var(--select-rgb), 0.92);
+  background: var(--select-deep);
   color: var(--surface);
   font-size: 11px;
   font-weight: 600;
@@ -419,9 +419,15 @@
 }
 
 .dk__branch[data-side='b'] {
-  /* ★ α 与 A 那一颗**逐字一样**（0.92）：两颗角标是同一件东西的两种颜色，
-     一个实心一个半透明的话，"哪一颗更重"就成了一条没人打算表达的信息 */
-  background: rgba(var(--accent-rgb), 0.92);
+  /* ★ 2026-10-18 配色审查 A2：这一行原来与 A 那颗**逐字一样**是 `α 0.92`
+     （"两颗角标是同一件东西的两种颜色，一个实心一个半透明的话，'哪一颗更重'
+     就成了一条没人打算表达的信息"）。那条要求仍然成立，但**α 相等做不到它**：
+     蓝与橙的亮度不同，同一个 α 叠出来白字对比度是 **3.45** 与 **4.61**
+     ——同一枚角标，一颗合格一颗不合格，而"一样重"变成了"一样 α、不一样好读"。
+     ★ 现在改为按**可读性齐平**取底：A 用 `--select-deep`（白字 5.14:1），
+       B 保持 `--accent` 的 0.92（白字 4.61:1）。两颗的"重"是量出来的，
+       不是用一个共同的 α 假装出来的。 */
+  background: rgba(var(--accent-rgb), var(--accent-a5));
 }
 
 /* 那一句解释。★ 与 `.dk__notes` 同一条：它不在纸里、压在天空带上，
@@ -433,14 +439,22 @@
   color: var(--ink-on-sky);
 }
 
-/* 那一句里"蓝色是 A、橙色是 B"两个词跟着各自的颜色。
-   ★ 它们**不靠加粗**也能站住（前面还写着颜色名），颜色是给眼睛的第二次机会 */
+/* 那一句里"蓝色是 A、橙色是 B"两个词。
+   ★ 2026-10-18 配色审查 A1：这两行原来分别是 `--select`（3.42:1）与 `--accent`
+     （4.58:1，只对 `--sky` 那一个值成立），**两个都破在天空带上**——
+     带内实测：`--select` 2.48–3.42、`--accent` 3.32–3.78，而这条带子最暗处
+     是 rgb(200,209,204)，两条都过不去。
+   ★ 所以它们回到**这一屏压在天空上的字唯一允许的两颗之一**（`--ink-on-sky`，
+     带内 5.68–7.84，同 `.dk__notes` 与文件头第 5 条那张十带表）。
+   ★ 原来那句"颜色是给眼睛的第二次机会"没有丢，是**换了承担者**：现在由
+     `.dk__branch` 那两枚角标（白字 5.14 / 4.61）与 `.dk__band` 那两条色带说话。
+     把这两个词染成蓝橙做不到那件事——天空带上没有一档蓝或橙过得去。 */
 .dk__branches-a {
-  color: var(--select);
+  color: var(--ink-on-sky);
 }
 
 .dk__branches-b {
-  color: var(--accent);
+  color: var(--ink-on-sky);
 }
 
 .dk__sound {
@@ -504,7 +518,7 @@
 }
 
 .dk__notes li[data-tone='warn'] {
-  border-left-color: rgba(var(--accent-rgb), 0.5);
+  border-left-color: rgba(var(--accent-rgb), var(--accent-a4));
 }
 
 .dk__notes li[data-tone='bad'] {

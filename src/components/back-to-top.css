@@ -18,11 +18,11 @@
   width: 48px;
   height: 48px;
   padding: 0;
-  border: 1px solid rgba(23, 23, 29, 0.1);
+  border: 1px solid rgba(var(--ink-rgb), 0.1);
   border-radius: 999px;
   /* 与卡片同一张纸，不是深色实心圆 —— 深色圆在浅灰底上是全页最重的一个元素，
      会把视线从内容上抢走（理由写在组件头）。 */
-  background: rgba(255, 253, 247, 0.94);
+  background: rgba(var(--page-paper-rgb), 0.94);
   color: var(--ink-soft);
   cursor: pointer;
   /* ★ 刻意**不用** backdrop-filter。它是 position: fixed 的元素，
@@ -57,7 +57,7 @@
     visibility 0s;
 }
 .to-top:hover {
-  border-color: rgba(23, 23, 29, 0.22);
+  border-color: rgba(var(--ink-rgb), 0.22);
   box-shadow:
     0 4px 10px rgba(19, 19, 28, 0.09),
     0 16px 32px rgba(19, 19, 28, 0.16);

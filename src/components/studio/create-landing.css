@@ -13,7 +13,7 @@
  *
  * ★ 三处刻意的判断：
  *   1. **主按钮是首页那颗墨色药丸**，不是原来的橙色圆圈 `↑`。
- *      首页 `.btn`（hero-orbit.css §5）是 `#1a1a20` / 52px / radius 999 / 白字 /
+ *      首页 `.btn`（hero-orbit.css §5）是 `--ink` / 52px / radius 999 / 白字 /
  *      hover 抬起 2px。同一个动作在两屏长两个样子，是"两个网站"最省力的证据。
  *      这里连高度、圆角、底色、hover 位移一起抄，只把横向 padding 收到 26px。
  *   2. **卡片不用 `--card-shadow`**——那是给**图片**浮在页面上用的（globals.css 写了理由）。
@@ -178,7 +178,7 @@ button.cl__pill {
 
 a.cl__pill:hover,
 button.cl__pill:hover {
-  border-color: rgba(var(--accent-rgb), 0.5);
+  border-color: rgba(var(--accent-rgb), var(--accent-a4));
 }
 
 /* 没有卡时那颗：它是"去做一件事"，所以颜色往强调色靠，
@@ -639,7 +639,7 @@ button.cl__pill:hover {
 }
 
 .cl__roll:hover {
-  border-color: rgba(var(--accent-rgb), 0.5);
+  border-color: rgba(var(--accent-rgb), var(--accent-a4));
   color: var(--accent);
 }
 
@@ -669,7 +669,7 @@ button.cl__pill:hover {
   width: 40px;
   height: 40px;
   padding: 0;
-  border: 1px solid rgba(var(--accent-rgb), 0.45);
+  border: 1px solid rgba(var(--accent-rgb), var(--accent-a4));
   border-radius: 999px;
   background: var(--surface);
   color: var(--accent);
@@ -884,8 +884,8 @@ button.cl__pill:hover {
   padding: 0 26px;
   border: 0;
   border-radius: 999px;
-  background: #1a1a20;
-  color: #fff;
+  background: var(--ink);
+  color: var(--surface);
   font: inherit;
   font-size: 15px;
   font-weight: 500;
@@ -968,7 +968,7 @@ button.cl__pill:hover {
 
 .cl__theme:hover {
   transform: translateY(-2px);
-  border-color: rgba(var(--accent-rgb), 0.45);
+  border-color: rgba(var(--accent-rgb), var(--accent-a4));
   box-shadow: var(--sheet-shadow);
 }
 

@@ -183,6 +183,12 @@ const INKS = {
   /* ★ `--danger` 也在表里：卡面上那颗「删掉他」hover 时就是它（`.cw__del:hover`），
      而"红色在卡面上够不够"这件事以前没人量过——它一直是靠"红了就行"选出来的 */
   '--danger': parseHex(globals, 'danger'),
+  /* ★ `--warn` 是 2026-10-18 配色审查 C1 新拆出来的一颗（`--danger` 原来一个人演
+     两个角色：真失败与"只是要你留意"）。它一出生就进表——新令牌**不许**在没人量的
+     情况下落地，否则它就重走了 `--danger` 当年"靠红了就行"那条路。
+     实测六面全过：--paper 5.54 · --surface 5.93 · --card-paper 5.20 · --sky 5.24
+     · --page-paper 5.55 · 玻璃合成 5.22。 */
+  '--warn': parseHex(globals, 'warn'),
   /* 压在天空上的次级文字。★ 它必须在这张表里，否则改暗一点/亮一点没人会发现 */
   '--ink-on-sky': parseHex(globals, 'ink-on-sky'),
 } as Record<string, Rgb>
@@ -457,6 +463,12 @@ for (const [name, v] of Object.entries(PAPER_CR)) {
  *   （一句真语料 + 一颗按钮）。也就是说"卡面上有正文的面"从两层变成了三层——
  *   量具不跟着走，就有一层没量过的面留在那儿。
  *
+ * ★ `--page-paper` 是 2026-10-18 配色审查 B3 加进这张表的，起因是同一个毛病：
+ *   书页纸（`storybook-flip.css` / `reader-book.css` 里那张 `#fbf7ef`）此前是
+ *   **五个字面量**，从来没进过任何一张表——而它上面真的落着正文（同一句话
+ *   在两台阅读器上都排在它上面，还有那两颗选择点的纸片按钮）。
+ *   它现在是令牌了，也就在这张表里了。
+ *
  * ★ 为什么这两行必须进这支脚本（工单 05）
  * ---------------------------------------------------------------------------
  * 2026-10-15 角色墙的卡身从 `--card-paper` 换成 `--surface`。当时要回答的问题是
@@ -465,7 +477,7 @@ for (const [name, v] of Object.entries(PAPER_CR)) {
  * 谁改了令牌，这两行当场变；下面的断言红了，就是那一屏真的读不了了。
  * ★ 门槛与纯纸同一条：卡面上落的也是正文级的小字（13–15px），不是大标题。
  */
-const CARD_FACES = ['surface', 'card-paper', 'sky'] as const
+const CARD_FACES = ['surface', 'card-paper', 'page-paper', 'sky'] as const
 const CARD_CR: Record<string, Record<string, number>> = {}
 for (const face of CARD_FACES) {
   const L = luminance(parseHex(globals, face))
@@ -474,7 +486,8 @@ for (const face of CARD_FACES) {
   ) as Record<string, number>
 }
 console.log(
-  `\n   卡面上那三层（卡身 --surface / 相纸 --card-paper / 声音卡那一格 --sky）—— 与纸同一条门槛：`,
+  `\n   卡面上那四层（卡身 --surface / 相纸 --card-paper / 书页纸 --page-paper / ` +
+    `声音卡那一格 --sky）—— 与纸同一条门槛：`,
 )
 console.log(
   `     ${''.padEnd(12)} ${Object.keys(INKS)
@@ -813,6 +826,78 @@ console.log(
     )},${Math.round(darkestSky.px.g)},${Math.round(darkestSky.px.b)})）`,
 )
 for (const [name, v] of Object.entries(GLASS_CR)) {
+  if (v < THRESHOLD) fail = true
+  console.log(`     ${name.padEnd(12)} ${fmt(v)}:1 ${v >= THRESHOLD ? ' ' : '✗'}`)
+}
+
+/**
+ * ── 只读块/错误块那一层浅底（`--surface-soft`，2026-10-18 配色审查 E1）─────────
+ *
+ * `--surface-soft` 是 `rgba(28, 28, 36, 0.05)` —— 与玻璃同一个毛病：**它是半透明的，
+ * 算不出来**，所以 `CARD_FACES` 那张表（只读十六进制）够不着它。全站 32 处在用它，
+ * 而它上面落着 12–13px 的正文与状态色（`.nv__error` / `.vc__why` / `.adm__error` /
+ * `.cl__gate` / `.dk__notes li` …）。
+ *
+ * ★ 为什么它必须进脚本：审查里漏掉的那两处（占位符 2.35:1、首页第三屏 2.04:1）
+ *   是**同一个病**——"颜色写在组件里、压在没被任何一张表列过的面上"。
+ *   量具的表是白名单制的，白名单之外的面就是没人看的面。
+ *
+ * ★ 取最暗的那个底（`--paper`）算，因为这一层**不只落在白卡上**：
+ *   `globals.css` 的 `.reader-page__empty code` 就压在页面底上——那里是 `--paper`。
+ *   （`--bg` 与 `--paper` 的相对亮度只差 0.0014，读数同档，所以一行够用。）
+ *
+ * ★ 这一行把 `--accent` **明确排除在外**，因为它在这一档只有 **4.40:1**，够不着 4.5。
+ *   也就是说：**`--surface-soft` 上的字不许用 `--accent`**——除非那一块确定压在白卡上
+ *   （那样合成出的是 `#f4f4f4`，4.51:1，刚够）。今天全站 32 处一处都没这么用
+ *   （把这句写下来的那一刻是逐块 grep 过的），所以排除它不会放过任何现存问题。
+ * ★ 它是**排除**而不是"降门槛"：门槛还是 4.5，只是这一层上那颗颜色被指名禁用。
+ *   改 CSS 让它够得着，或者别在这层上用它——两条路都在，改门槛不在。
+ */
+const SOFT_ALPHA = must(
+  Number(
+    /--surface-soft:\s*rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*([\d.]+)\s*\)/.exec(globals)?.[1],
+  ),
+  'globals.css 的 --surface-soft（形如 `--surface-soft: rgba(28, 28, 36, 0.05)`）',
+)
+const SOFT_TINT = (() => {
+  const m = /--surface-soft:\s*rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*[\d.]+\s*\)/.exec(
+    globals,
+  )
+  must(m, '解析 --surface-soft 的 rgb')
+  return { r: Number(m![1]), g: Number(m![2]), b: Number(m![3]) }
+})()
+/** 任意色按 α 压在任意底上。★ 上面那两个 `over()`（纸压在天上）与 `whiteOver()`
+ *  （白压在天光上）都把其中一端写死了——这一层两端的颜色都不是常量，所以要第三个。 */
+function tintOver(base: Rgb, tint: Rgb, alpha: number): Rgb {
+  const k = Math.min(1, Math.max(0, alpha))
+  return {
+    r: tint.r * k + base.r * (1 - k),
+    g: tint.g * k + base.g * (1 - k),
+    b: tint.b * k + base.b * (1 - k),
+  }
+}
+const softBase = tintOver(PAPER, SOFT_TINT, SOFT_ALPHA)
+const SOFT_CR: Record<string, number> = Object.fromEntries(
+  Object.entries(INKS).map(([name, rgb]) => [name, contrast(luminance(softBase), luminance(rgb))]),
+) as Record<string, number>
+console.log('')
+console.log(
+  `   只读块/错误块那层浅底（--surface-soft α=${SOFT_ALPHA}，压在 --paper 上）—— 与纸同一条门槛：`,
+)
+console.log(
+  `     最暗的落法：合成后 rgb(${Math.round(softBase.r)},${Math.round(softBase.g)},${Math.round(
+    softBase.b,
+  )})`,
+)
+for (const [name, v] of Object.entries(SOFT_CR)) {
+  /* `--accent` 在这一档够不着 4.5（4.40）——指名禁用，不参与断言（理由见上） */
+  if (name === '--accent') {
+    console.log(
+      `     ${name.padEnd(12)} ${fmt(v)}:1   ← 这一层不许用它（对 --paper 够不着 ${THRESHOLD}；` +
+        `压在白卡上才是 4.51）`,
+    )
+    continue
+  }
   if (v < THRESHOLD) fail = true
   console.log(`     ${name.padEnd(12)} ${fmt(v)}:1 ${v >= THRESHOLD ? ' ' : '✗'}`)
 }

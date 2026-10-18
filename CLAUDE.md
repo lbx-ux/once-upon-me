@@ -14,6 +14,18 @@
    pnpm format:check && pnpm lint && pnpm typecheck
    ```
 
+   **动了颜色再加两条**（配色改动没有闸门等于没有纪律，2026-10-18 配色审查补的）：
+
+   ```bash
+   pnpm check:colors && pnpm check:scrim
+   ```
+
+   `check:colors` 扫组件样式表里「面与墨」位置上写死的颜色——令牌表管不到的字面量
+   就是这条闸门在管；`check:scrim` 是那把对比度量具，它按 `globals.css` 的真值
+   现算一遍全部分面 × 全部墨色，掉到 4.5:1 以下就红。
+   `check:colors --fix` 能自动改掉"某颗令牌的颜色被写成字面量"那一类（不透明色
+   要人决定归哪颗令牌，它只报不改）。
+
    提交消息格式见 [docs/commit-convention.md](docs/commit-convention.md)。
 
 ## 四条硬约束

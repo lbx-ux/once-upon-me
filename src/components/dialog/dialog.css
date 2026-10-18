@@ -23,7 +23,7 @@
   align-items: center;
   justify-content: center;
   padding: 20px;
-  background: rgba(23, 23, 29, 0.34);
+  background: rgba(var(--ink-rgb), 0.34);
 }
 
 .dlg {
@@ -126,7 +126,7 @@
   border: 0;
   border-radius: 999px;
   background: var(--ink);
-  color: #fff;
+  color: var(--surface);
   font: inherit;
   font-size: 15px;
   font-weight: 600;
@@ -151,7 +151,7 @@
   border: 0;
   border-radius: 999px;
   background: var(--danger);
-  color: #fff;
+  color: var(--surface);
   font: inherit;
   font-size: 15px;
   font-weight: 600;
@@ -174,8 +174,14 @@
   line-height: 1.7;
 }
 
+/* ★ 2026-10-18 配色审查 C1：这一条原来借的是 `--danger`。它的名字里就写着 warn，
+   而它说的是"这么做会有代价"，不是"这一轮坏了"——两颗颜色混用之后，
+   红就不再表示任何东西了（`globals.css` 里 `--danger` 那一段的原话）。
+   现在走 `--warn`（暖色那一支的加深，对 `--surface` 5.93:1）。
+   ★ 另一半没变：`.dlg__danger` 那颗**按钮**仍然用 `--danger`——
+   "确认删掉"是不可逆的，那是失败那一侧的事。 */
 .dlg__hint--warn {
-  color: var(--danger);
+  color: var(--warn);
 }
 
 /* 弹窗里那张**清单**（"还差这几处"）。

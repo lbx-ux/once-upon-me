@@ -269,8 +269,16 @@
   outline: none;
 }
 
+/* ★ 2026-10-18 配色审查 A3：原来这里是 `rgba(28, 28, 36, 0.38)`——
+   在纸白上合成出 `#a9a9ac`，对 `--paper` 只有 **2.35:1**，破正文级 AA。
+   `story-sheet.css` 与 `fields.css` 对同一个问题早就有答案（"占位文字要落在一个
+   **量过对比度**的令牌上，不能听浏览器的默认灰"），用的是 `--ink-muted`（4.99:1）；
+   这一处是漏网的。要它轻，靠字号与字重，不靠降对比度。
+   `opacity: 1` 与那两处同一条理由：不写它 Firefox 会把 `--ink-muted` 再调暗一档，
+   同一句提示在两家浏览器上是两种灰。 */
 .login__input::placeholder {
-  color: rgba(28, 28, 36, 0.38);
+  color: var(--ink-muted);
+  opacity: 1;
 }
 
 .login__send {
@@ -278,9 +286,9 @@
   height: 32px;
   margin-left: 8px;
   padding: 0 12px;
-  border: 1px solid rgba(var(--accent-rgb), 0.28);
+  border: 1px solid rgba(var(--accent-rgb), var(--accent-a3));
   border-radius: 999px;
-  background: rgba(var(--accent-rgb), 0.08);
+  background: rgba(var(--accent-rgb), var(--accent-a1));
   color: var(--accent);
   font: inherit;
   font-size: 13px;
@@ -292,7 +300,7 @@
 }
 
 .login__send:hover:not(:disabled) {
-  background: rgba(var(--accent-rgb), 0.13);
+  background: rgba(var(--accent-rgb), var(--accent-a2));
   transform: translateY(-1px);
 }
 
@@ -348,7 +356,7 @@
   border-radius: 999px;
   /* 稿子那颗浅蓝（`rgba(232,243,244,.72)` = `--sky` 的 rgb）。★ 它能用是因为
      这一栏的底就是 `--paper`，与稿子同一块纸；铺了天空带就不能这么写 */
-  background: rgba(232, 243, 244, 0.72);
+  background: rgba(var(--sky-rgb), 0.72);
 }
 
 .login__mode {
@@ -408,9 +416,12 @@
 }
 
 /* 主按钮 = 首页那颗墨色药丸（`hero-orbit.css` §5 的 `.btn`）：
-   `#1a1a20` / 52px / radius 999 / 白字 / hover 抬起 2px。
+   `--ink` / 52px / radius 999 / 白字 / hover 抬起 2px。
    ★ 稿子本来就写对了，一个字没改——同一个动作在两屏长两个样子，
-   是"两个网站"最省力的证据（同 `create-landing.css` 文件头第 1 条） */
+   是"两个网站"最省力的证据（同 `create-landing.css` 文件头第 1 条）
+   ★ 2026-10-18 配色审查 B1：那颗底色原来在本仓里是字面量 `#1a1a20`（四处都是），
+     与 `--ink`(`#17171d`) 的 ΔE2000 只有 **1.52**——同一颗墨，写了两遍。
+     现在四颗药丸一律 `var(--ink)`，改配色时真的只需动 `:root`。 */
 .login__submit {
   display: inline-flex;
   align-items: center;
@@ -421,8 +432,8 @@
   padding: 0 30px;
   border: 0;
   border-radius: 999px;
-  background: #1a1a20;
-  color: #fff;
+  background: var(--ink);
+  color: var(--surface);
   font: inherit;
   font-size: 15px;
   font-weight: 500;

@@ -380,6 +380,15 @@
   cursor: pointer;
 }
 
+/* ★ 2026-10-18 配色审查 D：`.blr__audio` 有焦点圈，**翻页这两颗没有**——
+   而 `/booklist/*` 不在 `.shell` 下（`(studio)` 那一组才包 `AppShell`），
+   拿不到 `app-shell.css` 那条全局约定。档位与 `.reader__btn` 那一条逐字一致：
+   两台阅读器是同一个动作，焦点圈不该在两屏长得不一样。 */
+.blr__btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
 .blr__btn:disabled {
   opacity: 0.35;
   cursor: default;

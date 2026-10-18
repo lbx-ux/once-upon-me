@@ -115,7 +115,7 @@
 
 .cf__chip[data-active='true'] {
   border-color: var(--accent);
-  background: rgba(var(--accent-rgb), 0.1);
+  background: rgba(var(--accent-rgb), var(--accent-a2));
   color: var(--accent);
 }
 

@@ -152,8 +152,18 @@
   height: 44px;
   padding: 0 26px;
   border-radius: 999px;
-  background: #1a1a20;
-  color: #fff;
+  /* ★ 2026-10-18 配色审查 B2：这一颗原来是全站那颗墨色药丸的字面量 `#1a1a20`
+     （与首页 `.btn` 同一颗墨），而这一屏**整体是蓝的**——它是全站唯一一组
+     按页另开的令牌（`--pf-*`，2026-10-17 用户指定）。
+     墨色在这屏并不违和，但它让"主按钮"和这一屏的色系没有关系；
+     既然这一屏的次级元素（链接、标签、头像、选中态）全走 `--pf-accent`，
+     主按钮跟它才是同一句话。
+     ★ 白字对 `--pf-accent` 是 **5.16:1**（过正文级 4.5）——与全站 `--accent`
+       的 5.18:1 齐平，所以这一改不动"白字压填底"那条线（`node scripts/check-scrim.mts`
+       的「个人主页那一屏」那一节会重新量）。
+     ★ 这是本次配色收口里**唯一一处看得见的改动**，单独一颗提交，好回退。 */
+  background: var(--pf-accent);
+  color: var(--surface);
   font-size: 14px;
   font-weight: 500;
   text-decoration: none;
@@ -262,7 +272,7 @@
   width: 76px;
   height: 22px;
   border-radius: 3px;
-  background: rgba(255, 255, 255, 0.62);
+  background: rgba(var(--surface-rgb), 0.62);
   transform: translateX(-50%) rotate(-4deg);
   box-shadow: 0 6px 14px -12px rgba(55, 82, 99, 0.4);
 }
@@ -353,7 +363,7 @@
 .pf__tag {
   padding: 5px 11px;
   border-radius: 999px;
-  background: rgba(var(--pf-accent-rgb), 0.1);
+  background: rgba(var(--pf-accent-rgb), var(--accent-a2));
   color: var(--pf-accent);
   font-size: 12px;
   font-weight: 600;
@@ -386,7 +396,7 @@
    一次误点的代价是"重新登录一次"而不是"关掉一个输入框"。 */
 .pf__ghost--danger {
   flex: 1;
-  border-color: rgba(164, 48, 12, 0.22);
+  border-color: rgba(var(--danger-rgb), 0.22);
   color: var(--danger);
 }
 
@@ -412,7 +422,7 @@
 
 .pf__ghost:hover {
   color: var(--ink);
-  border-color: rgba(var(--pf-accent-rgb), 0.4);
+  border-color: rgba(var(--pf-accent-rgb), var(--accent-a4));
 }
 
 /* ── 两个只读字段 ───────────────────────────────────────────────────────── */
@@ -508,16 +518,20 @@
   outline: none;
 }
 
+/* ★ 2026-10-18 配色审查 A3：与 `login.css` 同一处漏网——`rgba(28,28,36,.38)`
+   在纸白上只有 **2.35:1**。这一屏的底比别处还花（三团蓝光晕），所以更不能靠淡。
+   同 `story-sheet.css` / `fields.css`：用 `--ink-muted`（对 `--surface` 5.33:1）。 */
 .pf__input::placeholder {
-  color: rgba(28, 28, 36, 0.38);
+  color: var(--ink-muted);
+  opacity: 1;
 }
 
 .pf__save {
   height: 40px;
   padding: 0 18px;
-  border: 1px solid rgba(var(--pf-accent-rgb), 0.28);
+  border: 1px solid rgba(var(--pf-accent-rgb), var(--accent-a3));
   border-radius: 999px;
-  background: rgba(var(--pf-accent-rgb), 0.08);
+  background: rgba(var(--pf-accent-rgb), var(--accent-a1));
   color: var(--pf-accent);
   font: inherit;
   font-size: 13px;
@@ -527,7 +541,7 @@
 }
 
 .pf__save:hover:not(:disabled) {
-  background: rgba(var(--pf-accent-rgb), 0.13);
+  background: rgba(var(--pf-accent-rgb), var(--accent-a2));
 }
 
 /* ★ 没改动时这颗是禁用的：一颗"点了什么都不发生"的保存按钮，
@@ -702,7 +716,7 @@
 }
 
 .pf__book-tag[data-kind='narrated'] {
-  background: rgba(var(--pf-accent-rgb), 0.1);
+  background: rgba(var(--pf-accent-rgb), var(--accent-a2));
   color: var(--pf-accent);
 }
 
@@ -746,7 +760,7 @@
   width: 34px;
   height: 34px;
   border-radius: 11px;
-  background: rgba(var(--pf-accent-rgb), 0.08);
+  background: rgba(var(--pf-accent-rgb), var(--accent-a1));
   color: var(--pf-accent);
 }
 

@@ -36,13 +36,17 @@
   margin-top: 8px;
 }
 
-/* ── 问题汇总（在最上面） ─────────────────────────────────────────────────── */
+/* ── 问题汇总（在最上面） ───────────────────────────────────────────────────
+ *
+ * ★ 0.35 是 `--accent` 刻度外的例外，理由与那三处的账写在
+ *   `generation-run.css` 的 `.gr__error` 上（同一张"提醒卡"的同一档描边）。
+ *   底走的是刻度里的 a1 —— 描边与填底是两件事，只有描边留了那一档。 */
 
 .ss__problems {
   padding: 12px 14px;
   border: 1px solid rgba(var(--accent-rgb), 0.35);
   border-radius: var(--card-radius);
-  background: rgba(var(--accent-rgb), 0.07);
+  background: rgba(var(--accent-rgb), var(--accent-a1));
 }
 
 .ss__problems-head {
@@ -109,14 +113,14 @@
 
 .ss__input:focus-visible {
   border-color: var(--accent);
-  outline: 2px solid rgba(var(--accent-rgb), 0.25);
+  outline: 2px solid rgba(var(--accent-rgb), var(--accent-a3));
   outline-offset: 1px;
 }
 
 /* ★ 改坏了的那一格：橙色描边 + 淡橙底。**尺寸不动**（见文件头第 3 条） */
 .ss__input[data-bad='true'] {
   border-color: var(--accent);
-  background: rgba(var(--accent-rgb), 0.06);
+  background: rgba(var(--accent-rgb), var(--accent-a1));
 }
 
 .ss__input:disabled {
@@ -187,9 +191,9 @@
 .ss__shape {
   margin: 0;
   padding: 10px 14px;
-  border-left: 2px solid rgba(var(--accent-rgb), 0.5);
+  border-left: 2px solid rgba(var(--accent-rgb), var(--accent-a4));
   border-radius: 0 8px 8px 0;
-  background: rgba(var(--accent-rgb), 0.06);
+  background: rgba(var(--accent-rgb), var(--accent-a1));
   color: var(--ink);
   font-size: 13.5px;
   font-variant-numeric: tabular-nums;
@@ -211,9 +215,9 @@
   margin: 2px 0 0;
   padding: 12px 14px;
   border: 0;
-  border-left: 2px solid rgba(var(--accent-rgb), 0.45);
+  border-left: 2px solid rgba(var(--accent-rgb), var(--accent-a4));
   border-radius: 0 10px 10px 0;
-  background: rgba(var(--accent-rgb), 0.045);
+  background: rgba(var(--accent-rgb), var(--accent-a1));
 }
 
 .ss__choice-head {
@@ -292,14 +296,14 @@
 
 .ss__select:focus-visible {
   border-color: var(--accent);
-  outline: 2px solid rgba(var(--accent-rgb), 0.25);
+  outline: 2px solid rgba(var(--accent-rgb), var(--accent-a3));
   outline-offset: 1px;
 }
 
 /* ★ 与 `.ss__input[data-bad]` 同一对颜色、同一条"尺寸不动"（见文件头第 4 条） */
 .ss__select[data-bad='true'] {
   border-color: var(--accent);
-  background: rgba(var(--accent-rgb), 0.06);
+  background: rgba(var(--accent-rgb), var(--accent-a1));
 }
 
 .ss__select:disabled {

@@ -106,7 +106,7 @@
   margin: 10px 0 0;
   padding: 8px 12px;
   border-left: 3px solid var(--accent);
-  background: rgba(var(--accent-rgb), 0.06);
+  background: rgba(var(--accent-rgb), var(--accent-a1));
   color: var(--ink-soft);
   font-size: 13px;
   line-height: 1.7;
@@ -192,7 +192,7 @@
 
 .cd__version[data-active='true'] {
   border-color: var(--accent);
-  background: rgba(var(--accent-rgb), 0.08);
+  background: rgba(var(--accent-rgb), var(--accent-a1));
 }
 
 .cd__version-no {
@@ -315,7 +315,7 @@
   margin: 10px 0 0;
   padding: 8px 12px;
   border-radius: var(--card-radius);
-  background: rgba(var(--accent-rgb), 0.1);
+  background: rgba(var(--accent-rgb), var(--accent-a2));
   font-size: 13px;
   line-height: 1.7;
 }

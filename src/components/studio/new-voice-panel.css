@@ -200,7 +200,7 @@
 }
 
 .nv__ghost:hover:not(:disabled) {
-  border-color: rgba(var(--accent-rgb), 0.5);
+  border-color: rgba(var(--accent-rgb), var(--accent-a4));
   color: var(--accent);
 }
 

@@ -1,0 +1,7 @@
+[
+  {
+    "file": "src/components/hero/hero-orbit.css",
+    "literal": "#f6eddc",
+    "why": "品牌标记（.hero__brand .mark）的底色取的是那张插图**自己的**纸色，用来填住图片加载前那一帧。它跟设计令牌无关——它属于那张 png。令牌化它会在下次换 logo 图时先闪一下错的颜色。见该处的注释。"
+  }
+]

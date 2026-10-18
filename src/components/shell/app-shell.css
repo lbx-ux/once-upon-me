@@ -266,7 +266,7 @@
 
 .shell__collapse:hover {
   color: var(--ink);
-  border-color: rgba(var(--accent-rgb), 0.4);
+  border-color: rgba(var(--accent-rgb), var(--accent-a4));
 }
 
 /* 折叠箭头是内联 SVG（组件里），这里只管尺寸与格子。
@@ -310,7 +310,7 @@
   position: absolute;
   width: 15px;
   height: 15px;
-  border: 2px solid rgba(var(--accent-rgb), 0.25);
+  border: 2px solid rgba(var(--accent-rgb), var(--accent-a3));
   border-top-color: var(--accent);
   border-radius: 50%;
   opacity: 0;
@@ -373,7 +373,7 @@
 
 .shell__collapse:hover {
   color: var(--ink);
-  border-color: rgba(var(--accent-rgb), 0.4);
+  border-color: rgba(var(--accent-rgb), var(--accent-a4));
 }
 
 /* 折叠箭头是内联 SVG（组件里），这里只管尺寸。

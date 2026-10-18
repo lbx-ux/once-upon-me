@@ -222,7 +222,7 @@
 .cw__card:hover,
 .cw__card:focus-within {
   transform: rotate(0deg) translateY(-10px);
-  border-color: rgba(var(--accent-rgb), 0.4);
+  border-color: rgba(var(--accent-rgb), var(--accent-a4));
   box-shadow:
     0 3px 6px rgba(19, 19, 28, 0.1),
     0 26px 44px -12px rgba(19, 19, 28, 0.22);
@@ -277,8 +277,8 @@
   /* 两层：下面那层是胶带本身的暖褐半透明，上面那层是它表面的高光 */
   background:
     linear-gradient(rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0.12)), rgba(150, 118, 72, 0.17);
-  border-left: 1px dashed rgba(255, 255, 255, 0.55);
-  border-right: 1px dashed rgba(255, 255, 255, 0.55);
+  border-left: 1px dashed rgba(var(--surface-rgb), 0.55);
+  border-right: 1px dashed rgba(var(--surface-rgb), 0.55);
   box-shadow: 0 1px 2px rgba(19, 19, 28, 0.14);
   transition: transform 0.3s cubic-bezier(0.2, 0.7, 0.25, 1);
 }
@@ -401,7 +401,7 @@
   text-decoration: underline;
   text-decoration-thickness: 2px;
   text-underline-offset: 4px;
-  text-decoration-color: rgba(var(--accent-rgb), 0.5);
+  text-decoration-color: rgba(var(--accent-rgb), var(--accent-a4));
 }
 
 /* 「示例」：这一张是合成角色，不是谁的孩子。★ 标在**来源**上（档案从 public/demo 读来） */

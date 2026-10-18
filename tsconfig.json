@@ -33,6 +33,7 @@
     ".next-access/types/**/*.ts",
     ".next-audio/types/**/*.ts",
     ".next-audit/types/**/*.ts",
+    ".next-autosize-pane/types/**/*.ts",
     ".next-autosize/types/**/*.ts",
     ".next-avatar/types/**/*.ts",
     ".next-build/types/**/*.ts",
@@ -53,7 +54,7 @@
     ".next-verify/types/**/*.ts",
     ".next/types/**/*.ts",
     "next-env.d.ts",
-    ".next-autosize-pane/types/**/*.ts"
+    ".next-color/types/**/*.ts"
   ],
   "exclude": ["node_modules"]
 }

@@ -522,7 +522,7 @@
   padding: 0;
   border: 1px solid var(--hairline);
   border-radius: 9px;
-  background: rgba(255, 255, 255, 0.88);
+  background: rgba(var(--surface-rgb), 0.88);
   color: var(--ink);
   font: inherit;
   font-size: 14px;

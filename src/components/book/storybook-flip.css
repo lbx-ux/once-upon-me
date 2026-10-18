@@ -198,7 +198,7 @@
   backface-visibility: hidden;
   border-radius: 2px;
   box-shadow: 0 2px 7px rgba(19, 19, 28, 0.1);
-  background-color: #fbf7ef; /* 图铺不满时的纸色，不是白 */
+  background-color: var(--page-paper); /* 图铺不满时的纸色，不是白 */
   background-repeat: no-repeat;
   background-position: 50% 50%;
   background-size: cover; /* 封面/封底：3:4 的封面装进 3:4 的页面，一比一，不裁 */
@@ -325,7 +325,7 @@
   line-height: 1.6;
 }
 .book__back .book__note {
-  color: #fff;
+  color: var(--surface);
 }
 
 /* ----------------------------------------------------------------------------
@@ -357,7 +357,7 @@
    跨组件借用样式会把两节的改版绑在一起；这几十行重复是有意的。
    ★ 2026-10-17：它是 `<Link>`（一颗真 `<a href="/home">`）了，所以补 `text-decoration: none`
    —— 全局没有 `a` 的重置，这个仓库里每条链接样式自己写。别的属性原样够用：
-   `border: 0`（button 的默认边框）与 `color: #fff`（a 默认会被 UA 染成蓝的）都在这儿了。 */
+   `border: 0`（button 的默认边框）与 `color: var(--surface)`（a 默认会被 UA 染成蓝的）都在这儿了。 */
 .book-cta {
   display: inline-flex;
   align-items: center;
@@ -365,8 +365,8 @@
   padding: 0 30px;
   border: 0;
   border-radius: 999px;
-  background: #1a1a20;
-  color: #fff;
+  background: var(--ink);
+  color: var(--surface);
   font: inherit;
   font-size: 15px;
   font-weight: 500;
@@ -407,14 +407,14 @@
   padding: 0;
   border: 0;
   border-radius: 2px;
-  background: rgba(23, 23, 29, 0.2);
+  background: rgba(var(--ink-rgb), 0.2);
   cursor: pointer;
   transition:
     width 0.24s cubic-bezier(0.22, 1, 0.36, 1),
     background 0.24s ease;
 }
 .book-spine__tick:hover {
-  background: rgba(23, 23, 29, 0.42);
+  background: rgba(var(--ink-rgb), 0.42);
 }
 .book-spine__tick[data-on] {
   width: 34px;
@@ -515,9 +515,9 @@
   align-items: center;
   gap: 12px;
   padding: 9px 22px 9px 9px;
-  border: 1.5px solid rgba(23, 23, 29, 0.13);
+  border: 1.5px solid rgba(var(--ink-rgb), 0.13);
   border-radius: 20px;
-  background: #fbf7ef;
+  background: var(--page-paper);
   color: var(--ink-muted);
   font: inherit;
   font-size: clamp(13px, 1.02vw, 15px);
@@ -544,7 +544,7 @@
 .book-choice__btn[aria-pressed='true'] {
   --lift: -1px;
   border-color: var(--accent);
-  background: #fffdf7;
+  background: var(--page-paper-raised);
   color: var(--ink);
   box-shadow:
     0 0 0 3px rgba(var(--accent-rgb), 0.18),
@@ -570,7 +570,7 @@
   height: 20px;
   border-radius: 999px;
   background: var(--accent);
-  color: #fff;
+  color: var(--surface);
   font-size: 12px;
   line-height: 1;
   box-shadow: 0 2px 6px rgba(19, 19, 28, 0.2);
@@ -586,7 +586,7 @@
   flex: none;
   overflow: hidden;
   border-radius: 15px;
-  background: rgba(255, 255, 255, 0.55);
+  background: rgba(var(--surface-rgb), 0.55);
   box-shadow: inset 0 0 0 1px rgba(23, 23, 29, 0.07);
 }
 /* 图还没进来时露出 emoji；图到了就是一张不透明的水彩小画，正好把它盖住。
@@ -654,9 +654,9 @@
   align-items: center;
   height: 40px;
   padding: 0 20px;
-  border: 1.5px solid rgba(23, 23, 29, 0.13);
+  border: 1.5px solid rgba(var(--ink-rgb), 0.13);
   border-radius: 999px;
-  background: #fbf7ef;
+  background: var(--page-paper);
   color: var(--ink-muted);
   font: inherit;
   font-size: 14px;
@@ -673,7 +673,7 @@
 }
 .book-listen:hover {
   transform: translateY(-2px);
-  border-color: rgba(23, 23, 29, 0.26);
+  border-color: rgba(var(--ink-rgb), 0.26);
   color: var(--ink);
 }
 .book-listen:active {
@@ -692,6 +692,38 @@
   color: var(--ink-muted);
   font-size: 12.5px;
   line-height: 1.5;
+}
+
+/* ----------------------------------------------------------------------------
+ * 6.7 焦点可见（2026-10-18 配色审查 D）
+ *
+ * ★ 这一节此前**不存在**：`storybook-flip.css` 与 `hero-orbit.css` 两个文件里
+ *   一条 `:focus-visible` 都没有，而首页（`/`）**不在 `.shell` 下**——
+ *   只有 `(studio)` 那一组包了 `AppShell`（见 `(studio)/layout.tsx`），
+ *   所以 `app-shell.css` 那条 `.shell :focus-visible` 覆盖不到这一屏。
+ *   症状：全站其余三十几处、加上模态与工作台，焦点圈都是
+ *   `2px solid var(--accent)`，唯独首页这五颗走浏览器默认圈。
+ *   其中 `.book-choice__btn` 是**这本书唯一的选择点**——最该看清的一颗。
+ *
+ * ★ 一次列全这一屏的五个可交互元素（`StorybookFlip.tsx` / `BookSpine.tsx`
+ *   里全是真 `<button>` / `<Link>`，没有装了样子的 div，所以这五条就是全部）：
+ *     `.book-cta`（收尾那顆「去做一本」）、`.book-spine__tick`（右侧刻度）、
+ *     `.storybook__pager button`（窄屏那两个 ‹ ›）、`.book-listen`（听这一页）、
+ *     `.book-choice__btn`（选择点的两片纸）。
+ *
+ * ★ `outline-offset: 3px` 与 `.shelf__edit` / `.cw__cta` / `.dk__open` 同一档：
+ *   这几颗底下都有投影，圈贴边会糊进阴影里。
+ * ★ 后三颗压在这一页的**画**上（它们自己是 `--page-paper` 的不透明白片，
+ *   圈落在画面那一侧），所以这一条的可见性不能只按纸算——`--accent` 对
+ *   `--page-paper` 4.85:1 是达标的那一半，另一侧要看画。真机验证见工单。
+ * -------------------------------------------------------------------------- */
+.book-cta:focus-visible,
+.book-spine__tick:focus-visible,
+.storybook__pager button:focus-visible,
+.book-listen:focus-visible,
+.book-choice__btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
 }
 
 /* ----------------------------------------------------------------------------
@@ -752,7 +784,7 @@
     margin: 0 auto;
     border-radius: var(--card-radius);
     box-shadow: var(--card-shadow);
-    background-color: #fbf7ef;
+    background-color: var(--page-paper);
     background-repeat: no-repeat;
     background-position: 50% 50%;
     background-size: cover;
@@ -791,7 +823,7 @@
     height: 44px;
     border: 0;
     border-radius: 999px;
-    background: rgba(23, 23, 29, 0.06);
+    background: rgba(var(--ink-rgb), 0.06);
     color: var(--ink);
     font: inherit;
     font-size: 20px;

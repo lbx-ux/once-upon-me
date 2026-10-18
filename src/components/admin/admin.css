@@ -138,7 +138,7 @@
 
 /* ★ 演示账号那一行**整行**淡染一层：它是"谁在花我的钱"这个问题最上面那个答案 */
 .adm__table tbody tr[data-demo='true'] {
-  background: rgba(var(--accent-rgb), 0.06);
+  background: rgba(var(--accent-rgb), var(--accent-a1));
 }
 
 .adm__th--cap,
@@ -172,7 +172,7 @@
 }
 
 .adm__badge[data-demo='true'] {
-  background: rgba(var(--accent-rgb), 0.12);
+  background: rgba(var(--accent-rgb), var(--accent-a2));
   color: var(--accent);
 }
 
@@ -689,15 +689,24 @@
   color: var(--ink);
 }
 
+/* 提醒（视觉回落、换语音模型即失效）——上面那条注释解释了**形状**为什么是竖条。
+ * ★ 2026-10-18 配色审查 C1：颜色从 `--danger` 换成 `--warn`。
+ *   那条 token 自己的契约是"**只用在'这一轮真的坏了'的地方**"（globals.css），
+ *   而这两句话不是那种事：现在什么都没坏，是你**将要**让某个东西失效。
+ *   借红来说它，红就不再表示任何东西了——而下一条注释（`.adm__model-cand`）
+ *   恰恰在依赖"红只有一个意思"这条约定。形状一个字没改（还是那条 3px 竖条
+ *   + `--surface-soft` 底），只换了色相那一支。
+ *   对 `--surface` 5.93:1，比原来的 `--danger`(6.98) 低一档——这正是要的：
+ *   警告不该喊得比错误还响。 */
 .adm__model-warn {
   margin: 10px 0 0;
   padding: 8px 12px;
-  border-left: 3px solid var(--danger);
+  border-left: 3px solid var(--warn);
   border-radius: 0 8px 8px 0;
   background: var(--surface-soft);
   font-size: 12px;
   line-height: 1.75;
-  color: var(--danger);
+  color: var(--warn);
 }
 
 .adm__model-actions {

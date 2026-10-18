@@ -122,7 +122,7 @@
      它让书"放在桌上"而不是"贴在灰墙上"；用户要"只有背景"，于是连影一起删 ——
      书与底图之间**不再有任何暗线或阴**。数值在 git 里，理由见 §桌面 第四轮。 */
   /* 纸色：图铺不满时露出来的那一层，不是白 */
-  background-color: #fbf7ef;
+  background-color: var(--page-paper);
   /* ★ 这四行**只有封面用**（封面图直接挂在 `__face` 上，内页在图挂 `__half` 上）。
      漏了 `background-size: cover` 的症状很隐蔽：图按原始像素铺（1024×1365 塞进
      464×619 的一页），于是只剩左上角一小块——看着像"封面没生成好"。 */
@@ -311,6 +311,17 @@
   font-size: 20px;
   line-height: 1;
   cursor: pointer;
+}
+
+/* ★ 2026-10-18 配色审查 D：`.reader__stage` / `.reader__audio` /
+   `.book-choice__speak` 都有焦点圈，**唯独翻页这两颗没有**——而 `/reader/*`
+   不在 `.shell` 下（`(studio)` 那一组才包 `AppShell`），拿不到
+   `app-shell.css` 那条"键盘走到哪里都要看得见"的全局约定。
+   这一屏是**睡前用**的一屏，翻页多半靠键盘，补上。
+   档位（3px offset）与 `.shelf__edit` / `.cw__cta` / `.dk__open` 一致。 */
+.reader__btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
 }
 
 .reader__btn:disabled {
