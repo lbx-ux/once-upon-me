@@ -13,6 +13,7 @@
  */
 
 import type { ParseResult } from './book-api.ts'
+import { voiceIdProblem } from './voices/id.ts'
 
 /** 「这一次哪里不对」那句补充的上界 */
 export const MAX_FIX_NOTE = 200
@@ -57,7 +58,10 @@ export function parseRerunBody(raw: unknown): ParseResult<RerunBody> {
   }
 
   const voiceId = typeof body['voiceId'] === 'string' ? body['voiceId'].trim() : ''
-  if (voiceId.length > 64) problems.push('音色 id 太长了（64 字以内）')
+  // ★ 判据在 `voices/id.ts` —— 这里原来是**硬写的 64**，与 `book-api.ts` 那份各写一遍，
+  //   而 64 本身是错的（真克隆出来的 id 是 68 字，见那个文件的文件头）
+  const voiceIdIssue = voiceIdProblem(voiceId)
+  if (voiceIdIssue) problems.push(voiceIdIssue)
 
   const fixNoteRaw = body['fixNote']
   if (fixNoteRaw !== undefined && typeof fixNoteRaw !== 'string') {

@@ -22,6 +22,7 @@ import {
   type BookForm,
   type ChildProfile,
 } from './engine/index.ts'
+import { voiceIdProblem } from './voices/id.ts'
 
 /** 草稿 / 成品。★ 判据的那一份在 `engine/domain.ts`（`Book.status` + `isDraft`） */
 export type BookStatus = 'draft' | 'published'
@@ -75,8 +76,6 @@ export type ParseResult<T> = { ok: true; value: T } | { ok: false; problems: str
 
 const MAX_TAGS = 8
 const MAX_TEXT = 200
-/** 音色 id 的长度上界。见 `parseCreateBody` 里那段：它防的是"字段串了"，不是"名字太长" */
-const MAX_VOICE_ID = 64
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -155,12 +154,14 @@ export function parseCreateBody(raw: unknown): ParseResult<CreateBookBody> {
   }
 
   // 音色 id 是厂商侧的一个标识（`longjielidou_v3.6`、或克隆来的 voice_id）。
-  // ★ 上界取 64：写长了必然是别的字段串进来了——而它会被原样送去 TTS 那边，
-  //   报回来的错是"音色不存在"，与真正的问题（表单串了）隔着两层
+  // ★★ 这条判据 2026-10-18 从"64 字以内"改成了 `lib/voices/id.ts` 里那一条，
+  //    起因是用户报「选自己生成的声音就报错」——量下来克隆出来的 id 是 **68 字**
+  //    （厂商把 `qwen-audio-3.0-tts-flash` + prefix + 32 位随机拼起来了），
+  //    而那 64 是当初猜的。长度与字符集两条判据、以及那次测量的完整记录都在那个文件里。
+  //    ★ 它会被原样送去 TTS：判漏了报回来的错是"音色不存在"，与真正的问题隔着两层。
   const voiceId = str(body['voiceId'])
-  if (voiceId.length > MAX_VOICE_ID) {
-    problems.push(`音色 id 太长了（${MAX_VOICE_ID} 字以内），多半是别的字段串进来了`)
-  }
+  const voiceIdIssue = voiceIdProblem(voiceId)
+  if (voiceIdIssue) problems.push(voiceIdIssue)
 
   const statusRaw = str(body['status'])
   const status = BOOK_STATUSES.find((item) => item === statusRaw)

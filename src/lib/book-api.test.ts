@@ -55,11 +55,25 @@ describe('voiceId：配音这条线接上没有', () => {
     expect('voiceId' in valueOf({ voiceId: '   ' })).toBe(false)
   })
 
+  it('★ 真克隆出来的那条 id 要过：厂商回的是 68 字，原来那条 64 的线把它拦下来了', () => {
+    // 形状照抄实测（`.out/voice-id-shape.mts`）：模型名 + prefix + 32 位随机
+    const cloned = `qwen-audio-3.0-tts-flash-xiaozhujue-${'a1b2c3d4e5f60718293a4b5c6d7e8f90'}`
+    expect(cloned.length).toBe(68)
+    expect(valueOf({ voiceId: cloned }).voiceId).toBe(cloned)
+  })
+
   it('★ 太长要拦住：那个长度必然是别的字段串进来了', () => {
     // 放过去的话，报回来的错是"音色不存在"，与真正的问题（表单串了）隔着两层
-    const parsed = parseCreateBody(body({ voiceId: 'v'.repeat(65) }))
+    const parsed = parseCreateBody(body({ voiceId: 'v'.repeat(129) }))
     expect(parsed.ok).toBe(false)
     if (!parsed.ok) expect(parsed.problems.join()).toContain('音色 id 太长')
+  })
+
+  it('★ 串了字段要拦住：判据是**字符集**，不是长度', () => {
+    // 一个串了字段的字符串里一定会带空格 / 引号 / 中文，而它在 128 字以内
+    const parsed = parseCreateBody(body({ voiceId: '我的声音 小宇' }))
+    expect(parsed.ok).toBe(false)
+    if (!parsed.ok) expect(parsed.problems.join()).toContain('不该有的字符')
   })
 })
 
