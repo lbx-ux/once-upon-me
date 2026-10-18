@@ -31,7 +31,9 @@
     "**/*.ts",
     "**/*.tsx",
     ".next-access/types/**/*.ts",
+    ".next-audio/types/**/*.ts",
     ".next-audit/types/**/*.ts",
+    ".next-autosize/types/**/*.ts",
     ".next-avatar/types/**/*.ts",
     ".next-build/types/**/*.ts",
     ".next-cd24/types/**/*.ts",
@@ -40,16 +42,18 @@
     ".next-form/types/**/*.ts",
     ".next-gate/types/**/*.ts",
     ".next-hl/types/**/*.ts",
+    ".next-insp/types/**/*.ts",
     ".next-own/types/**/*.ts",
     ".next-pfbg/types/**/*.ts",
     ".next-session/types/**/*.ts",
     ".next-shelfbig/types/**/*.ts",
+    ".next-shelftext/types/**/*.ts",
     ".next-ui15/types/**/*.ts",
     ".next-uia/types/**/*.ts",
     ".next-verify/types/**/*.ts",
     ".next/types/**/*.ts",
     "next-env.d.ts",
-    ".next-insp/types/**/*.ts"
+    ".next-autosize-pane/types/**/*.ts"
   ],
   "exclude": ["node_modules"]
 }

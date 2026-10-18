@@ -23,7 +23,7 @@ import { asPlanDraft, planDraftCodec, planJsonSchema, type PlanDraft } from '../
 import { formatFailures, parseWith } from '../schemas/schema.ts'
 import { EngineError } from './errors.ts'
 import type { BookForm, StoryTree } from './domain.ts'
-import { buildTree, type TreeProblem } from './tree.ts'
+import { branchPagesOf, buildTree, type TreeProblem } from './tree.ts'
 import type { EngineEventPayload } from './events.ts'
 import type { TextDelta, TextGenerator, TextRequest } from './providers/types.ts'
 
@@ -139,6 +139,9 @@ export async function planStory(input: StoryPlanInput, opts: PlanOptions): Promi
       title: built.tree.title,
       nodeCount: built.tree.nodes.length,
       choicePages: built.tree.nodes.filter((node) => node.choice).map((node) => node.pageNo),
+      // 两条支各自的页（工单 05 §三）：画桌要按它给岔路那几格挂色带。
+      // ★ 与上面那两行同一个来源（同一棵已经校验过的树），所以不会各说一套
+      branchPages: branchPagesOf(built.tree),
     })
     return {
       tree: built.tree,

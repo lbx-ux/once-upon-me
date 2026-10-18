@@ -1,30 +1,60 @@
 'use client'
 
 /**
- * GenerationSetupDialog —— 「这一本要怎么做」（工单 04）
+ * GenerationSetupDialog —— 「这一本要怎么做」（工单 04 / 06）
  *
- * `/home` 上点「开始创作」之后浮出来的那一个：**页数**四档 + **要不要朗读**。
- * 确认之后 `/create` 就开始跑——所以这两件事必须在**跑之前**问完，
+ * `/home` 上点「开始创作」之后浮出来的那一个：**形态** + **页数**四档 + **要不要朗读**。
+ * 确认之后 `/create` 就开始跑——所以这三件事必须在**跑之前**问完，
  * 跑起来再问就等于让用户等两次。
  *
- * 四条判断：
+ * 五条判断：
  *
- * 1. **页数给四档，不给一个数字输入框**。生成一本书的成本与时间跟页数近乎线性
+ * 1. ★ **形态是这里的第一问**（2026-10-18 搬进来）。它原来站在 `/home` 标题**上方**
+ *    那一行（`.cl__forms`，两颗按钮、共读版那颗真 `disabled` 写着「还没做」）。
+ *    用户这一轮把那一行整个撤了，理由不是"少一个控件"：形态换的是**这一本怎么做**，
+ *    那和"几页""要不要朗读"是同一类问题，同一个问题的三问摆在两处，
+ *    人就得多想一次"我该在哪儿定这件事"。
+ *    ★ 那里预登记过一条代价（`create-landing.css` 原来那段：这一屏**不解释**
+ *      "独读版/共读版"是什么意思，"共读版真能选的那一天必须补一行说明"）。
+ *      说明补上了，**当天又被用户划掉**——他看到弹窗的截图，把三处说明（形态、
+ *      页数、音色）一并划了。所以这一版**一格解释都没有**，控件自己说完。
+ *      ★ 这条推翻上一条的理由不是"用户随口说的"：这一屏每一组都只有一行控件，
+ *        说明比控件还长的时候，人读的是说明、选的是控件，而这两个词的含义
+ *        本来也不在弹窗里才成立（GLOSSARY §语言 是它的家）。
+ *      ★ **代价如实记下**：第一次来的人看到"独读版 / 共读版"两个词，
+ *        **界面上没有任何地方告诉他差别**——只能各做一本试试。共读版比独读版
+ *        多画的那一支、页数是"路长"这件口径，界面上一概不说（确切张数本来就该在
+ *        故事闸门那一屏给，见工单 05；那里现在是空的）。
+ *    ★ 选中态**跟着这一屏的既有语言走**（`.gsd__chip`：accent 边 + 淡底 + accent 字），
+ *      没有把那两颗的"只有四周变蓝、中间不变"一起搬进来。那一句是给**压在天空带上
+ *      的白胶囊**定的（白底是它的对比度安全区），搬进一块已经是白的面板之后，
+ *      它只剩"与同面板里另一排长得不一样"这一件事。`globals.css` 的 `--select`
+ *      那段记的是同一个决定。
+ * 2. **页数给四档，不给一个数字输入框**。生成一本书的成本与时间跟页数近乎线性
  *    （`illustrate.ts` 里那次实测：一次出图尝试 ≈154 s），所以"我要 17 页"不是一个
  *    该被支持的输入——它只会让人对着一个转很久的圈后悔。四档各自是一个**能承诺的规模**。
- * 2. ★ **音色只显示，不在这里改**。它写的是 `settings.speech.voice`——那**唯一一份**，
+ *    ★ 共读版那一档说的是**这条路读下来多少页**（路长），不是全树节点数——
+ *      这句话 2026-10-18 之前写在下面那行说明里，说明划掉之后它就只剩代码里这一处。
+ *      **要么在闸门那一屏补上（工单 05 的 §三），要么这一档对共读版就是没说清。**
+ * 3. ★ **音色只显示，不在这里改**。它写的是 `settings.speech.voice`——那**唯一一份**，
  *    而 `/home` 那颗声音药丸已经是它的下拉。在这里再摆一个下拉就是两个下拉写同一个值
  *    （`CreateLanding` 文件头那条"一个值只有一个家"）。要改，关掉这个弹窗去那颗药丸改。
- * 3. ★ **缺语音能力时开关是禁用的，而且点它会打开设置**——不是报一句错就完。
- *    缺的东西在哪里就把哪里打开（`CreateLanding.optimize()`、`CreateFlow` 那颗
- *    「打开模型与密钥」都是这条）。**绝不静默降级成不配音**：那会让人以为自己开了朗读，
- *    而书里没有声音。
- * 4. **Esc 关、点遮罩关、焦点进去、关掉后回原处**——与 `CreateLanding` 那两个下拉、
+ *    ★ 那句"要换音色就关掉这个窗口去首页改"的提示 2026-10-18 随另外两处说明一起划掉了：
+ *      判断没变（音色仍然**只**在那颗药丸上改），变的是**说不说**——用哪个音色那颗药丸上
+ *      就写着，弹窗里再说一遍是重复。代价：在这里找不到"去哪儿改"的那一句话。
+ * 4. ★ **缺语音能力时开关是真 `disabled`，而且那句说明要说清缺的是哪一样**——
+ *    不是报一句错就完，也**绝不静默降级成不配音**：那会让人以为自己开了朗读，
+ *    而书里没有声音。2026-10-17 之前它是"点下去打开设置"，那个抽屉已经没有了
+ *    （密钥由站长分配），见下面那颗开关自己的注释。
+ * 5. **Esc 关、点遮罩关、焦点进去、关掉后回原处**——与 `CreateLanding` 那两个下拉、
  *    `SettingsDrawer` 同一套习惯，不另发明一套。
  */
 
 import { useState } from 'react'
 
+// ★ 领域常量走 `domain.ts`，不走 `engine/index.ts`——后者会把 providers 与 `node:fs`
+//   一起拖进浏览器 bundle（那条 `no-restricted-imports` 的判据就在 eslint 配置里）
+import { BOOK_FORMS, FORM_LABELS, type BookForm } from '@/lib/engine/domain.ts'
 import { DEFAULT_PAGES, PAGE_CHOICES } from '@/lib/creation/state.ts'
 import { useVoice } from '@/components/voices/VoiceProvider.tsx'
 import { useAuth } from '@/components/auth/AuthProvider.tsx'
@@ -35,6 +65,8 @@ import { canCreate } from '@/lib/auth/state.ts'
 import Dialog from '@/components/dialog/Dialog.tsx'
 
 export type SetupChoice = {
+  /** `solo` = 独读版，`shared` = 共读版（GLOSSARY「形态」）。它进 URL 的 `form=` */
+  form: BookForm
   pages: number
   /** `undefined` = 这一本不配音。★ 与"空串"不是一回事（见 `book-api.ts` 的 `voiceId`） */
   voiceId?: string
@@ -55,7 +87,7 @@ export default function GenerationSetupDialog({
   onConfirm,
   busy = false,
 }: GenerationSetupDialogProps) {
-  const { current, voices, canNarrate, narrateBlock } = useVoice()
+  const { current, canNarrate, narrateBlock } = useVoice()
   const { allowed: mayCreate, configured } = useAuth()
   /**
    * ★ 第二道闸（工单 07 第 1 条）。第一道在 `CreateLanding` 那颗「开始创作」上，
@@ -65,6 +97,11 @@ export default function GenerationSetupDialog({
    *   两道都只是体验；真正管用的是 `/api/books` 那条 403。
    */
   const allowed = mayCreate && canCreate(configured)
+  /**
+   * 形态。★ 默认独读版——它是产品的默认（睡前那一档），也是这个弹窗第一次浮出来时
+   * 唯一一个"不选也能往下走"的值。
+   */
+  const [form, setForm] = useState<BookForm>('solo')
   const [pages, setPages] = useState<number>(DEFAULT_PAGES)
   /**
    * 「要不要朗读」是**这一本**的属性（进请求体的 `voiceId`），不是设置项——
@@ -79,8 +116,6 @@ export default function GenerationSetupDialog({
    */
   const [voiceChoice, setVoiceChoice] = useState<boolean | null>(null)
   const voiceOn = voiceChoice ?? canNarrate
-
-  const voiceName = voices.find((item) => item.id === current)?.name ?? ''
 
   return (
     <Dialog
@@ -103,6 +138,7 @@ export default function GenerationSetupDialog({
             title={allowed ? undefined : '当前用户没有权限，请联系管理员'}
             onClick={() =>
               onConfirm({
+                form,
                 pages,
                 // ★ 关掉朗读时**这个字段根本不传**——不是传一个空串
                 //   （`book-api.ts` 的 `voiceId` 那段：引擎那边"没填"与"填了个空的"
@@ -122,6 +158,26 @@ export default function GenerationSetupDialog({
     >
       <p className="gsd__wish">「{wish}」</p>
 
+      {/* 形态（判断 1）。★ 摆在最前面，因为**下面两问的意思跟着它变**：
+          共读版的"几页"是路长，而两支各自收尾这件事也决定了这本书读起来是什么样。
+          ★ 这里**没有解释那一行**（用户 2026-10-18 把三处说明全划掉了，见判断 1） */}
+      <fieldset className="gsd__group">
+        <legend className="gsd__label">这一本怎么读</legend>
+        <div className="gsd__chips">
+          {BOOK_FORMS.map((item) => (
+            <button
+              key={item}
+              type="button"
+              className="gsd__chip"
+              aria-pressed={form === item}
+              onClick={() => setForm(item)}
+            >
+              {FORM_LABELS[item]}
+            </button>
+          ))}
+        </div>
+      </fieldset>
+
       <fieldset className="gsd__group">
         <legend className="gsd__label">这一本做多少页</legend>
         <div className="gsd__chips">
@@ -131,7 +187,7 @@ export default function GenerationSetupDialog({
               type="button"
               className="gsd__chip"
               // ★ `aria-pressed` 而不是 radio：与仓库既有的分段控件一套
-              //   （`CreateLanding` 的 `.cl__form`、`fields.tsx` 的 `Chip` 都是它）
+              //   （`LoginPage` 那两颗「验证码 / 密码」、`fields.tsx` 的 `Chip` 都是它）
               aria-pressed={pages === count}
               onClick={() => setPages(count)}
             >
@@ -139,10 +195,6 @@ export default function GenerationSetupDialog({
             </button>
           ))}
         </div>
-        <p className="dlg__hint">
-          页数越多越久。一次出图 + 一次核对大约一两分钟，所以 5 页是「看一眼」、 20
-          页是「认真做一本」。
-        </p>
       </fieldset>
 
       <fieldset className="gsd__group">
@@ -168,17 +220,17 @@ export default function GenerationSetupDialog({
             <span className="gsd__knob" aria-hidden="true" />
           </button>
         </div>
-        {canNarrate ? (
-          <p className="dlg__hint">
-            {voiceName ? `用「${voiceName}」念。` : '还没选过音色，用的是默认那一个。'}
-            要换音色就关掉这个窗口，在首页那颗声音上改——那里是**唯一**一处选音色的地方。
-          </p>
-        ) : (
+        {canNarrate ? null : (
           /*
-           * ★ 这句话是判断 3 的兑现处，而 2026-10-17 起它**必须说清是哪一条**：
+           * ★ 这句话是判断 4 的兑现处，而 2026-10-17 起它**必须说清是哪一条**：
            *   以前只有一种原因（"用户没填 key"），现在有三个，而它们对用户来说
            *   是三个不同的下一步——找站长开、等站里配好、还是自己去挑一个音色。
            *   `NARRATION_BLOCK_MESSAGE` 是这个映射唯一的一份（见 `voices/state.ts`）。
+           * ★ 能朗读那一支**不再配说明**（用户 2026-10-18 划掉了"用「灵灵」念。要换音色…"
+           *   那一句）：用哪个音色在 `/home` 那颗药丸上就写着，这里再说一遍是重复。
+           *   这一支剩下的字就是开关左边那句「这一本会配上朗读 / 不配音」。
+           * ★ 而这一支**必须留着**：它说的是"为什么按不动"，不是"怎么用"——
+           *   删了它就是静默降级成不配音（判断 4 的全部理由）。
            */
           <p className="dlg__hint dlg__hint--warn">
             {narrateBlock === 'no-voice' ? (

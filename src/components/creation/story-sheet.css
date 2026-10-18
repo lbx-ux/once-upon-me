@@ -92,7 +92,11 @@
   font: inherit;
   font-size: 14.5px;
   line-height: 1.7;
-  resize: vertical;
+  /* ★ 2026-10-18 起**不给手动拉**了（原来是 `resize: vertical`）：三个框都由
+     `useAutosize` 自己长到装下内容（用户："把这个文本框拉长，这件事不要让用户去做"）。
+     留着一个拖过之后下一次敲字就被冲掉的把手，是让那一格看起来能调、其实不能——
+     而这个项目里"看起来能"就是坏的（README §五）。 */
+  resize: none;
 }
 
 /* 见文件头第 3 条：占位文字要落在一个**量过对比度**的令牌上，不能听浏览器的默认灰。
@@ -175,6 +179,133 @@
   font-size: 12px;
 }
 
+/* ── 这一版是什么形状（工单 05 §二） ─────────────────────────────────────────
+   一行数字，压在书名下面。★ 它**不是**说明文字：两个数（读下来的长度 / 要画的
+   页数）在这一屏上是"这笔钱花在哪儿"的唯一答案，所以给它 `--ink` 而不是 `--ink-muted`
+   ——同一屏上，说明用 muted（`.ss__hint` / 括号里那句"含走不到的那一支"就留在原句里），
+   而**要人读的数字**不降到灰里去 */
+.ss__shape {
+  margin: 0;
+  padding: 10px 14px;
+  border-left: 2px solid rgba(var(--accent-rgb), 0.5);
+  border-radius: 0 8px 8px 0;
+  background: rgba(var(--accent-rgb), 0.06);
+  color: var(--ink);
+  font-size: 13.5px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.7;
+}
+
+/* ── 选择点（工单 05 §一） ───────────────────────────────────────────────────
+   它住在那一页的卡里，占满标题列右边的整幅（`grid-column` 那一条），因为它是
+   **这一页自己的另一组字段**，不是第 5 个并列的框。
+
+   ★ 一圈左边的橙线而不是另起一张卡：这一组与上面三格说的是同一页的事，
+     再套一张卡会让"这一页"读起来像两页。橙线是这一屏既有的语气
+     （`.ss__problems` 那条边、`.ss__input[data-bad]` 那圈描边都用 `--accent`）——
+     它在这里说的是"这一页和别的页不一样"，不是"这里错了" */
+.ss__choice {
+  grid-column: 2 / -1;
+  display: grid;
+  gap: 10px;
+  margin: 2px 0 0;
+  padding: 12px 14px;
+  border: 0;
+  border-left: 2px solid rgba(var(--accent-rgb), 0.45);
+  border-radius: 0 10px 10px 0;
+  background: rgba(var(--accent-rgb), 0.045);
+}
+
+.ss__choice-head {
+  padding: 0;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ss__option {
+  display: grid;
+  /* 三个框一排：图标 / 按钮上的字 / 念出来的。窄屏在下面那条断点里收成一列 */
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  background: var(--surface-glass);
+}
+
+/* ★ A 蓝、B 橙（2026-10-18 用户："在这个画画的地方，AB应该采用不同的配色，
+   比如A是蓝的，B就是橙色的"）。**这里与画桌那几格是同一对颜色**——
+   家长在闸门这一屏改了 A，往下滚到画桌看到的还是那支蓝，两处对得上。
+
+   ★ 颜色只落在**左边那道边**上，字不染色：`--select` 蓝在纸上只有 3.87:1
+     （令牌表里写着"够非文字元素那条 3:1、不够正文级 4.5:1"），
+     而这一格的字是 12.5px 的正文——染上去就是一处量得出过不了线的字。
+     所以「选项 A / 选项 B」仍然是 `--ink-muted`，颜色由边承担 */
+.ss__option[data-side='a'] {
+  border-left: 3px solid var(--select);
+}
+
+.ss__option[data-side='b'] {
+  border-left: 3px solid var(--accent);
+}
+
+.ss__option-head {
+  grid-column: 1 / -1;
+  color: var(--ink-muted);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.ss__icon-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 缺图时按钮上露的就是这一个 emoji。★ 它是**值**不是装饰，所以不压灰、也够大：
+   家长要一眼看出"选了这个词，按钮上就是这个字" */
+.ss__glyph {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 17px;
+  line-height: 1;
+}
+
+.ss__select {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  background: var(--paper-glass);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+}
+
+.ss__select:focus-visible {
+  border-color: var(--accent);
+  outline: 2px solid rgba(var(--accent-rgb), 0.25);
+  outline-offset: 1px;
+}
+
+/* ★ 与 `.ss__input[data-bad]` 同一对颜色、同一条"尺寸不动"（见文件头第 4 条） */
+.ss__select[data-bad='true'] {
+  border-color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.06);
+}
+
+.ss__select:disabled {
+  opacity: 0.66;
+}
+
 /* ── 每一页 ─────────────────────────────────────────────────────────────── */
 
 .ss__pages {
@@ -205,14 +336,73 @@
   white-space: nowrap;
 }
 
+/* ── 岔路底下那几页（2026-10-18） ─────────────────────────────────────────────
+   这一屏是 8–20 张卡一路排下来，而选择点之后的**一半卡孩子永远读不到**——
+   在那之前它们与独读版的页长得一模一样（用户："一点都不明显看上去和独读版一样了"）。
+
+   ★ 三样东西，各答一个问题：
+     · 顶上那条带（`.ss__branch`）：**这一页属于哪一支**，以及支头那一页上"它叫什么名字"；
+     · 卡片左边那道边（`.ss__page[data-branch]`）：滚到中途也知道"这几张是一组"；
+     · 带里那个色块（`.ss__swatch`）：**颜色自己说不了话**，所以要有一个把这支色
+       摆在眼前的东西——它与画桌那条色带同色（A 蓝、B 橙）。
+   ★ 为什么文字不染色：`--select` 蓝在纸上 3.87:1、`--accent` 橙 4.54:1——
+     蓝那一条**不够正文级那 4.5**（令牌表里写着它只能做非文字元素）。
+     所以带里的字一律 `--ink`，颜色只出现在色块与边这两处非文字元素上。 */
+.ss__branch {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: -4px 0 2px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* 那个色块。★ 尺寸取 10px：比这一行 12.5px 的字略小一点，
+   压得住这一行的左端，又不会被读成一个可点的东西 */
+.ss__swatch {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--select);
+}
+
+.ss__branch[data-side='b'] .ss__swatch {
+  background: var(--accent);
+}
+
+/* "选了它的孩子读这 N 页"。★ 它是**数字**（这一条支有几页），不降到灰里去——
+   与 `.ss__shape` 那一行同一条理由：这一屏上要人读的数不写灰字。
+   但因为它是同一句话的后半段，用 `--ink-soft` 让它比支名轻半档 */
+.ss__branch-note {
+  color: var(--ink-soft);
+  font-weight: 400;
+}
+
+/* 卡片左边那道边：与画桌那条 4px 的窄带同一个记号（那边是往右连成一段，
+   这里是往下一列连成一段）。★ 用 `border-left` 而不是伪元素：卡本身已经有边框，
+   再叠一层绝对定位的东西会在圆角处露出来——而圆角是这一屏每张卡的同一个形 */
+.ss__page[data-branch='a'] {
+  border-left: 3px solid var(--select);
+}
+
+.ss__page[data-branch='b'] {
+  border-left: 3px solid var(--accent);
+}
+
 .ss__field {
   display: grid;
   gap: 4px;
   min-width: 0;
 }
 
-/* 「情节」那一行占满剩下的两列：它是整页的一句话，与正文/画面并排会挤成一团 */
-.ss__field:last-child {
+/* 「情节」那一行占满剩下的两列：它是整页的一句话，与正文/画面并排会挤成一团。
+   ★ 用一个显式的类，不用 `:last-child`（2026-10-18）：加了选择点那一组之后，
+     情节那一格**不再是卡里最后一个孩子**，而 `:last-child` 会当场失效——
+     症状是共读版那几页的三格挤在前两列里，而独读版一切正常 */
+.ss__field--wide {
   grid-column: 2 / -1;
 }
 
@@ -221,7 +411,16 @@
     grid-template-columns: 1fr;
   }
 
-  .ss__field:last-child {
+  .ss__field--wide {
     grid-column: auto;
+  }
+
+  /* 选择点那一组跟着收成一列（它上面那条 `grid-column: 2 / -1` 在单列里没有意义） */
+  .ss__choice {
+    grid-column: auto;
+  }
+
+  .ss__option {
+    grid-template-columns: 1fr;
   }
 }

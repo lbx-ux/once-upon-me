@@ -6,6 +6,8 @@
  * ```bash
  * # ① 走用户那条路（/home 写一句话 → 弹窗 → /create），要浏览器里有 Key
  * node scripts/chk-run-motion.mjs http://127.0.0.1:3321 --pages=5 .out/run-motion.png
+ * # ①' 同一条，但选共读版（`--form=shared`）。★ 它会真多画一支，别当默认跑
+ * node scripts/chk-run-motion.mjs http://127.0.0.1:3321 --form=shared .out/run-motion.png
  *
  * # ② 盯着**别人发起**的一轮（`?book=` 重放那条路）：脚本在服务端拿 .env.local 起跑，
  *    UI 这边只看。★ 这条路不需要浏览器里有 Key——密钥从来不进 localStorage（设置层
@@ -49,11 +51,17 @@ const base = (positional[0] ?? 'http://127.0.0.1:3321').replace(/\/+$/, '')
 const OUT = positional[1] ?? null
 /**
  * 页数。★ **必须是 `PAGE_CHOICES` 里那四档之一**（5 / 8 / 12 / 20，见 `state.ts`）——
- * 弹窗给的是四档而不是一个数字输入框（`GenerationSetupDialog` 判断 1）。
+ * 弹窗给的是四档而不是一个数字输入框（`GenerationSetupDialog` 判断 2）。
  * 传一个不在档里的数，这一趟会**静默按默认那一档跑**（`setPages` 没被调用），
  * 所以下面点不到时会直接把四档打出来，而不是继续跑一个不是你要的规模
  */
 const PAGES = Number(flag('pages', '5'))
+/**
+ * 形态（2026-10-18 起它是弹窗的**第一问**，`BOOK_FORMS` 里的一档：solo / shared）。
+ * ★ 默认 solo，与弹窗自己的默认一致——不点它也是这个值，所以下面点它只为把
+ *   "这一问真的能选"这件事走一遍。共读版那一档会真的多画一支，别拿它当默认跑全量。
+ */
+const FORM = flag('form', 'solo')
 const WISH = flag('wish', '一只纸箱小船顺着雨后的水沟，一路漂到月亮旁边')
 /** 最多盯多久（毫秒）。20 页的书会超——那时候改大它 */
 const LIMIT_MS = Number(flag('limit', '420000'))
@@ -245,13 +253,37 @@ if (!WATCH) {
     console.log('  ★ 没选角色卡时「开始创作」会走 /character/new（`CreateLanding.submit` 那条）')
     process.exit(1)
   }
+  /* ★ 形态那一组（2026-10-18 加进弹窗，是**第一组**）。
+     点它之前先确认它在——它是"两种形态都能真的选"这件事在界面上的唯一一处。
+     ★ 两组的按钮都是 `.gsd__chip`，所以下面凡是要读页数的地方都按"文字以 页 结尾"
+       筛一遍：不筛的话读到的第一颗会是「独读版」。 */
+  const formPicked = await evaluate(`(() => {
+  const btn = [...document.querySelectorAll('.gsd__chip')].find((b) => b.textContent.trim() === '${FORM === 'shared' ? '共读版' : '独读版'}')
+  if (!btn) return null
+  btn.click()
+  return btn.textContent.trim()
+})()`)
+  if (formPicked === null) {
+    console.log(
+      '✗ 形态那一组里没有这一颗：',
+      await evaluate(
+        `[...document.querySelectorAll('.gsd__chip')].map((b) => b.textContent.trim())`,
+      ),
+    )
+    process.exit(1)
+  }
   await evaluate(
     `[...document.querySelectorAll('.gsd__chip')].find((b) => b.textContent.trim() === '${PAGES} 页')?.click()`,
   )
-  const picked = await evaluate(`(() => ({
-  四档: [...document.querySelectorAll('.gsd__chip')].map((b) => b.textContent.trim()),
-  选中: document.querySelector('.gsd__chip[aria-pressed="true"]')?.textContent.trim() ?? null,
-}))()`)
+  const picked = await evaluate(`(() => {
+  const chips = [...document.querySelectorAll('.gsd__chip')]
+  const pages = chips.filter((b) => b.textContent.trim().endsWith('页'))
+  return {
+  形态: chips.filter((b) => b.getAttribute('aria-pressed') === 'true' && !b.textContent.trim().endsWith('页')).map((b) => b.textContent.trim()),
+  四档: pages.map((b) => b.textContent.trim()),
+  选中: pages.find((b) => b.getAttribute('aria-pressed') === 'true')?.textContent.trim() ?? null,
+}
+})()`)
   if (picked.选中 !== `${PAGES} 页`) {
     console.log(`✗ 没点中 ${PAGES} 页那一档：`, JSON.stringify(picked))
     console.log('  ★ 只能选这四档之一（`PAGE_CHOICES`）')
@@ -262,18 +294,32 @@ if (!WATCH) {
   const sw = document.querySelector('.gsd__switch')
   if (sw && sw.getAttribute('aria-checked') === 'true') sw.click()
 })()`)
-  const chosen = await evaluate(`(() => ({
-  页数: document.querySelectorAll('.gsd__chip[aria-pressed="true"]')[0]?.textContent?.trim() ?? null,
+  const chosen = await evaluate(`(() => {
+  const pages = [...document.querySelectorAll('.gsd__chip')].filter((b) => b.textContent.trim().endsWith('页'))
+  return {
+  页数: pages.find((b) => b.getAttribute('aria-pressed') === 'true')?.textContent?.trim() ?? null,
   朗读: document.querySelector('.gsd__switch')?.getAttribute('aria-checked'),
-}))()`)
-  console.log('弹窗里选的：', JSON.stringify(chosen))
+}
+})()`)
+  console.log(
+    '弹窗里选的：',
+    JSON.stringify({ ...chosen, ...(picked.形态.length ? { 形态: picked.形态 } : {}) }),
+  )
   await evaluate(`document.querySelector('.dlg__go').click()`)
 
   if (!(await waitFor(`location.pathname === '/create'`, 15000))) {
     console.log('✗ 没有跳到 /create，现在在：', await evaluate(`location.href`))
     process.exit(1)
   }
-  console.log(`已经在 /create 上，${PAGES} 页，不配音。开始盯它。\n`)
+  /* ★ 形态**必须真的挂到地址上**（`CreateLanding.startRun` 那一行），
+     而它是这一趟唯一一个"服务端要靠 URL 才知道"的新参数：读 `location.search`
+     而不是读弹窗里的 state —— 前者是 `/create` 真正拿到的那一份 */
+  const search = await evaluate(`location.search`)
+  if (!search.includes(`form=${FORM}`)) {
+    console.log(`✗ 地址上没有 form=${FORM}：`, search)
+    process.exit(1)
+  }
+  console.log(`已经在 /create 上，${PAGES} 页，${FORM}，不配音。开始盯它。\n`)
 }
 
 /* ── ③ 盯着它跑 ───────────────────────────────────────────────────────── */

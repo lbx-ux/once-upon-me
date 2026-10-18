@@ -31,7 +31,7 @@ import { buildTree } from './engine/tree.ts'
 import { CHOICE_CELLS, planDraftCodec } from './schemas/story.ts'
 import type { BookForm } from './engine/domain.ts'
 import type { ParseFailure } from './schemas/schema.ts'
-import type { NodeDraft, PlanDraft } from './schemas/story.ts'
+import type { ChoiceCell, NodeDraft, PlanDraft } from './schemas/story.ts'
 
 /**
  * 问题落在书架那一屏的哪一格上。`nodes` 是"整篇"那一档（页数不够、整份不是数组）。
@@ -44,6 +44,18 @@ export type StoryProblem = {
   field: StoryField
   /** 正文的第几句（1 起）。只有 `body` 有 */
   line?: number
+  /**
+   * 选择点那九格里的哪一格（工单 05）。只有 `field === 'choice'` 且认得出格子时才有。
+   *
+   * ★ 加它是为了让那句话挂在**对的那个框**下面：一个选择点有九格，
+   *   而"太短了：至少要 2 个字"这一句在「按钮上的字」下面读和在「念出来的」下面读
+   *   是两件事。★ 顺带修掉一个**真的坏过**的形状：`dedupe` 的键原来不含它，
+   *   于是同一页上 `labelA` 与 `spokenA` 都太短时，后一条会被当成重复的丢掉——
+   *   家长改完一处，屏幕上另一处还是红的，而清单里从没提过它。
+   * ★ 认不出是哪一格（比如 `iconA` 之外的东西、或者 tree.ts 那句"缺 spokenA"）时
+   *   **不带这个字段**：那一句挂在整组上，不硬塞进某一格。
+   */
+  cell?: ChoiceCell
   /** 一句人话，直接印在那一格下面 */
   message: string
 }
@@ -85,7 +97,13 @@ export function storyProblemsOf(form: BookForm, doc: PlanDraft): StoryProblem[] 
       problems.push({
         // `buildTree` 的 index 就是页号（1 起）；0 = 不属于任何一页
         pageNo: problem.index,
-        field: problem.index === 0 ? 'nodes' : 'scene',
+        // ★ 落在哪一组框上由**树**说（`TreeProblem.field`，工单 05）：选择点那一族问题
+        //   （两条分支 / 写了一半 / 多出来的孩子 / 整本一个都没有）归闸门新摊开的那一组，
+        //   `mood` 归语气。**不在这里按消息猜**——猜的那一天起，改一句话就会改掉
+        //   它落在哪儿，而屏幕上没有任何东西会提示这件事。
+        //   没标字段的（父节点序号这类结构问题）仍旧落在「情节」上：那是界面上
+        //   唯一一个能承载"这一页结构不对"的框。
+        field: problem.field ?? (problem.index === 0 ? 'nodes' : 'scene'),
         message: problem.message,
       })
     }
@@ -103,7 +121,8 @@ export function storyProblemsOf(form: BookForm, doc: PlanDraft): StoryProblem[] 
 function dedupe(problems: StoryProblem[]): StoryProblem[] {
   const seen = new Set<string>()
   return problems.filter((problem) => {
-    const key = `${problem.pageNo}:${problem.field}:${problem.line ?? ''}`
+    // ★ 键里带 `cell`：同一个选择点的两格各是**各自的问题**（见 `StoryProblem.cell`）
+    const key = `${problem.pageNo}:${problem.field}:${problem.line ?? ''}:${problem.cell ?? ''}`
     if (seen.has(key)) return false
     seen.add(key)
     return true
@@ -124,27 +143,30 @@ function shapeProblemOf(failure: ParseFailure): StoryProblem {
 
   const pageNo = Number(match[1]) + 1
   const rest = match[2] ?? ''
-  const [head, tail] = splitField(rest)
-  const line = tail === undefined ? undefined : Number(tail) + 1
+  const { field, line, cell } = splitPath(rest)
   return {
     pageNo,
-    field: head,
-    ...(head === 'body' && line !== undefined ? { line } : {}),
-    message: friendly(failure.message, head),
+    field,
+    ...(line === undefined ? {} : { line }),
+    ...(cell === undefined ? {} : { cell }),
+    message: friendly(failure.message, field),
   }
 }
 
-/** `body[1]` → `['body', '1']`；`labelA` → `['choice', undefined]` */
-function splitField(rest: string): [StoryField, string | undefined] {
+/** `body[1]` → 正文第 2 句；`labelA` → 选择点的「按钮上的字」那一格；`scene` → 情节 */
+function splitPath(rest: string): { field: StoryField; line?: number; cell?: ChoiceCell } {
   const line = LINE_PATH.exec(rest)
-  if (line) return ['body', line[1]]
+  if (line) return { field: 'body', line: Number(line[1]) + 1 }
   const head = rest.split('.')[0] ?? ''
-  // ★ 选择点那九格（平铺在节点上，见 `schemas/story.ts` 那段 ★★）都归到界面上那一组框。
+  // ★ 选择点那九格（平铺在节点上，见 `schemas/story.ts` 那段 ★★）都归到界面上那一组框，
+  //   而且**认得出是哪一格**（`cell`）——那句话要挂在对的输入框下面。
   //   名字只有一份（`CHOICE_CELLS`），而且有一条用例拿 schema 逐个核对——
   //   漏掉一格，家长就会在**别的格子**下面读到一句关于这一格的话。
-  if ((CHOICE_CELLS as readonly string[]).includes(head)) return ['choice', undefined]
+  if ((CHOICE_CELLS as readonly string[]).includes(head)) {
+    return { field: 'choice', cell: head as ChoiceCell }
+  }
   const known: StoryField[] = ['scene', 'body', 'imagePrompt', 'mood', 'choice']
-  return [(known.find((field) => field === head) ?? 'nodes') as StoryField, undefined]
+  return { field: (known.find((field) => field === head) ?? 'nodes') as StoryField }
 }
 
 /**

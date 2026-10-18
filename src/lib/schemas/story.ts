@@ -122,6 +122,9 @@ export const CHOICE_CELLS = [
   'emojiB',
 ] as const
 
+/** 上面那九格之一。★ 收窄成一个类型，界面上"把这一句挂在哪一个框下面"才有判据 */
+export type ChoiceCell = (typeof CHOICE_CELLS)[number]
+
 export type ChoiceDraft = {
   /** 给家长念的引导提问 */
   ask?: string

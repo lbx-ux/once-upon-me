@@ -35,7 +35,8 @@
  * ```
  */
 
-import { copyFile, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
+import { copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 
 import { assetPathInDemo, DEMO_DIR } from '../src/lib/book-source.ts'
@@ -45,11 +46,87 @@ import { writeWebpSiblings } from './webp-siblings.mts'
 
 type BookJson = {
   bookId: string
+  cover?: { asset: { path: string } }
   illustrations: { asset: { path: string } }[]
+  narrations?: { asset: { path: string } }[]
   errors: { pageNo: number }[]
 }
 
 const kb = (bytes: number): string => `${(bytes / 1024).toFixed(0)} KB`
+
+/** 逻辑路径（`books/<书号>/page-1-a1.png`）→ 目录里那个文件名 */
+const fileNameOf = (path: string): string => path.split('/').pop() ?? ''
+
+/**
+ * 清单**引用到**的那些文件名。
+ *
+ * ★ 2026-10-18 加的，起因是一次真导出：8 个节点的书导出成 **34 MB**，其中
+ *   5 张是**重画时的中间产物**（`page-3-a2`、`page-3-a3` 这些）——一致性核对
+ *   打回重画过的页会在目录里留下每一次尝试，而清单只认最后留下的那一版。
+ *   那些字节**没有任何东西会去读**（阅读器读的是清单里那几个名字），
+ *   跟着进仓库就是把"这一轮的草稿"当资产提交上去。
+ * ★ 这不是"替资产做决定"：`book.json` 仍然是**逐字节原样拷过去**的（ADR-0003 那条
+ *   "资产要能被比对"管的是它），而 `.webp` 兄弟文件本来就是这个脚本生成的派生物
+ *   ——导出从来不是"目录原样搬一份"，是"导出**这本书**"。
+ */
+function referencedFiles(book: BookJson): Set<string> {
+  const wanted = new Set<string>(['book.json', 'events.jsonl'])
+  if (book.cover) wanted.add(fileNameOf(book.cover.asset.path))
+  for (const item of book.illustrations) wanted.add(fileNameOf(item.asset.path))
+  for (const item of book.narrations ?? []) wanted.add(fileNameOf(item.asset.path))
+  return wanted
+}
+
+/**
+ * 一本书在盘上的目录。
+ *
+ * ★ 2026-10-18 修的：这个脚本原来只看 `<root>/books/<id>`，而工单 16（2026-10-17）
+ *   之后书住在**每个人自己那一片**里（`<root>/u/<userId>/books/<id>`，中间那层
+ *   是**数字 userId**）——于是它对**任何一本真书**都找不到源目录，
+ *   报出来的是一句"要 --book=<bookId>"（看着像参数没给，其实是路径规则变了）。
+ *   导出演示书这条路必须能走通（ADR-0003 的断网演示全靠它），所以两种布局都认。
+ * ★ 同名书号落在好几片里只可能发生在"两个人做了同一个主题"（书号是指纹、不含人），
+ *   那时候取 **mtime 最新**的那一份：那是最新的一次生成。
+ */
+async function bookDirsUnder(root: string): Promise<string[]> {
+  const dirs: string[] = []
+  const flat = join(root, 'books')
+  if (existsSync(flat)) dirs.push(flat)
+  const sliceRoot = join(root, 'u')
+  for (const userId of await readdir(sliceRoot).catch(() => [] as string[])) {
+    const dir = join(sliceRoot, userId, 'books')
+    if (existsSync(dir)) dirs.push(dir)
+  }
+  return dirs
+}
+
+async function findBookDir(root: string, bookId: string): Promise<string | null> {
+  const direct = join(root, 'books', bookId)
+  if (existsSync(join(direct, 'book.json'))) return direct
+
+  let best: string | null = null
+  let newest = 0
+  for (const dir of await bookDirsUnder(root)) {
+    const candidate = join(dir, bookId)
+    const info = await stat(join(candidate, 'book.json')).catch(() => null)
+    if (info && info.mtimeMs > newest) {
+      best = candidate
+      newest = info.mtimeMs
+    }
+  }
+  return best
+}
+
+/** 盘上都有哪些书（两种布局都算）。只用来把错话说全 */
+async function listBookIds(root: string): Promise<string[]> {
+  const found: string[] = []
+  for (const dir of await bookDirsUnder(root)) {
+    for (const name of await readdir(dir).catch(() => [] as string[])) {
+      if (!found.includes(name)) found.push(name)
+    }
+  }
+  return found.sort()
+}
 
 async function main(): Promise<void> {
   const env = await readEnv()
@@ -58,11 +135,13 @@ async function main(): Promise<void> {
   const to = resolve('public', DEMO_DIR, bookId || 'x')
   const thumbsOnly = process.argv.includes('--thumbs-only') || arg('thumbs-only', '') !== ''
 
-  if (!bookId)
-    throw new Error('要 --book=<bookId>。可用：' + (await readdir(join(root, 'books'))).join(' '))
+  if (!bookId) throw new Error('要 --book=<bookId>。可用：' + (await listBookIds(root)).join(' '))
+
+  const from = await findBookDir(root, bookId)
+  if (!from)
+    throw new Error(`盘上找不到这本书：${bookId}。可用：${(await listBookIds(root)).join(' ')}`)
 
   if (!thumbsOnly) {
-    const from = join(root, 'books', bookId)
     const book = JSON.parse(await readFile(join(from, 'book.json'), 'utf8')) as BookJson
 
     // 覆盖式导出：先清掉旧的那一份，免得留下上一版的孤儿图
@@ -70,9 +149,19 @@ async function main(): Promise<void> {
     await mkdir(to, { recursive: true })
 
     const files = await readdir(from)
+    const wanted = referencedFiles(book)
     let copied = 0
+    let skipped = 0
+    let skippedBytes = 0
     for (const name of files) {
       if (name === 'book.json') continue
+      if (!wanted.has(name)) {
+        // 重画时的中间产物、以及那份已经过时的草稿：清单里没有它们
+        const info = await stat(join(from, name)).catch(() => null)
+        skipped += 1
+        skippedBytes += info?.size ?? 0
+        continue
+      }
       await copyFile(join(from, name), join(to, assetPathInDemo(bookId, `books/${bookId}/${name}`)))
       copied += 1
     }
@@ -90,6 +179,9 @@ async function main(): Promise<void> {
     process.stdout.write(
       `导出 ${bookId}\n  源 ${from}\n  目标 ${to}\n` +
         `  文件 ${copied} 个（清单 ${book.illustrations.length} 页 · 页级失败 ${book.errors.length} 页）\n` +
+        (skipped > 0
+          ? `  跳过 ${skipped} 个清单里没有的文件（重画的中间产物 / 过时的草稿，共 ${kb(skippedBytes)}）\n`
+          : '') +
         `  资产自洽：${missing.length === 0 ? '清单里每一张图都在盘上 ✓' : `★ 缺 ${missing.length} 张：${missing.join(' ')}`}\n`,
     )
     process.exitCode = missing.length === 0 ? 0 : 1

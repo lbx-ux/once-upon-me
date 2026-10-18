@@ -111,17 +111,15 @@ export function staggerFor(count: number): number {
   return STAGGER_BUDGET / (count - 1)
 }
 
-/** 时间线的形状。顺序即层级：笔 → 形态 → 标题 → 胶囊 → 纸 → 墙
+/** 时间线的形状。顺序即层级：笔 → 标题 → 胶囊 → 纸 → 墙
  *  ★ 原来「说明」那一行（`.cl__sub`）在标题与胶囊之间，2026-10-15 按用户要求撤了，
  *    它那一步跟着删。`at` 都是绝对秒数，所以删一步不会挪动别步的时序——
  *    留下一个选不中任何元素的选择器只会让下一个人以为那一行还在。
- *  ★ 2026-10-16 加了「书的形态」（`.cl__forms`，标题上方那一行），排在**第二条**：
- *    `at` 必须非递减，而 `useEnterTimeline.test.ts` 钉着第一条必须是 `.cl__doodle`
- *    （两笔装饰最先"被画出来"），所以它只能排在装饰之后、取同拍（`at: 0`）——
- *    视觉上它与标题几乎同时到，这是对的：它是这一页的"环境"，不是内容。 */
+ *  ★ 2026-10-16 加过「书的形态」（`.cl__forms`，标题上方那一行）那一步，排在最前；
+ *    那一行 2026-10-18 拆掉（形态搬进 `/home` 的弹窗），这一步按同一条删掉。
+ */
 export const ENTER_STEPS: readonly EnterStep[] = [
   { sel: '.cl__doodle', from: { opacity: 0, y: 0 }, duration: 0.5, at: 0 },
-  { sel: '.cl__forms', from: { opacity: 0, y: 10 }, duration: 0.4, at: 0 },
   { sel: '.cl__title', from: { opacity: 0, y: 14 }, duration: 0.5, at: 0.05 },
   { sel: '.cl__pills', from: { opacity: 0, y: 10 }, duration: 0.4, at: 0.24 },
   { sel: '.cl__card', from: { opacity: 0, y: 18 }, duration: 0.55, at: 0.3 },

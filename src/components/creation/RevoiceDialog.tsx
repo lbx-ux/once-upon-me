@@ -76,7 +76,18 @@ export default function RevoiceDialog({
     >
       <p className="rdg__label">这一页现在的录音</p>
       {page.narrationUrl ? (
-        <audio className="rvd__audio" src={page.narrationUrl} controls preload="none" />
+        /* ★ `preload="metadata"`，不是 `none`（2026-10-18，用户："我点开是0秒"）。
+           `preload="none"` 下打开这个弹窗**一个字节都不拉**，于是原生播放器
+           只能显示 `0:00` 与一条空进度条——家长看见的是"这一页没有录音"，
+           而它其实有。这一屏的整个理由就是"先听得见"（文件头第 1 条），
+           所以这里该在**打开的那一刻**就把时长拿到。
+           ★ 实测代价就是这一页的音频（143,611 字节一条 206：浏览器发的是
+             `Range: bytes=0-`，也就是整份）——换来 `duration=7.176s` 与可拖的进度条
+             （修之前是 `NaN` 与 `seekable=0`）。读数与复现命令见
+             `.scratch/w3-shared-reading/issues/09-audio-range.md`。
+           ★ 阅读器那两个 `<audio>` 仍然是 `preload="none"`：那边是一本 20 页
+             两三兆，而且从来不读 `duration`（只吃 `onEnded`），不是同一件事。 */
+        <audio className="rvd__audio" src={page.narrationUrl} controls preload="metadata" />
       ) : (
         /* ★ 没有录音时说"没有"，不画一个空的播放器：一个点了不响的控件
            会让人以为是自己这边的声音坏了 */

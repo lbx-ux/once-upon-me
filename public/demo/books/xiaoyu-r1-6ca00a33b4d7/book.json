@@ -1,0 +1,463 @@
+{
+  "bookId": "xiaoyu-r1-6ca00a33b4d7",
+  "cardId": "xiaoyu-r1",
+  "cardRevision": 1,
+  "form": "shared",
+  "tree": {
+    "form": "shared",
+    "title": "云端的小路",
+    "rootId": "n1",
+    "nodes": [
+      {
+        "nodeId": "n1",
+        "pageNo": 1,
+        "scene": "小宇坐在软绵绵的白云上，周围是蓝天和飞翔的小鸟。",
+        "body": [
+          "小宇坐在一朵大云上。",
+          "云朵像棉花糖一样软。",
+          "风轻轻吹过他的耳朵。",
+          "小宇在云朵上停了一下，听见风从很远的地方吹过来。"
+        ],
+        "imagePrompt": "一个小孩坐在蓬松洁白的积云顶端，背景是明亮的蓝天，阳光柔和，几只小鸟在远处飞翔，画面清新明亮。",
+        "mood": "wonder",
+        "next": [
+          "n2"
+        ],
+        "pathFromRoot": [
+          "n1"
+        ]
+      },
+      {
+        "nodeId": "n2",
+        "pageNo": 2,
+        "scene": "前方出现两条不同的云径，一条通向彩虹桥，一条通向星星屋。",
+        "body": [
+          "前面有两条小路分开了。",
+          "左边通往七彩的彩虹桥。",
+          "右边通往闪闪的星星屋。"
+        ],
+        "imagePrompt": "云层向前延伸出两条岔路，左侧云雾中隐约可见一座横跨天际的彩色拱桥，右侧云雾深处有一座由金色光芒组成的尖顶小屋，色彩梦幻。",
+        "mood": "wonder",
+        "choice": {
+          "prompt": "小宇该往哪边走？你觉得哪边更有趣呢？",
+          "options": [
+            {
+              "iconKey": "bridge",
+              "emoji": "🌈",
+              "label": "去彩虹桥",
+              "spoken": "我想去看看彩虹桥"
+            },
+            {
+              "iconKey": "star",
+              "emoji": "⭐",
+              "label": "去星星屋",
+              "spoken": "我想去找找星星屋"
+            }
+          ]
+        },
+        "next": [
+          "n3",
+          "n5"
+        ],
+        "pathFromRoot": [
+          "n1",
+          "n2"
+        ]
+      },
+      {
+        "nodeId": "n3",
+        "pageNo": 3,
+        "scene": "小宇走上彩虹桥，脚下是透明的颜色，他滑到了终点。",
+        "body": [
+          "小宇踩上红橙黄绿蓝。",
+          "脚底下凉凉的，真舒服。",
+          "哧溜一下滑到了尽头。"
+        ],
+        "imagePrompt": "特写视角，小孩的脚踩在半透明的彩色光带上，周围环绕着雾气般的彩虹色，光线折射出美丽的光谱，充满动感。",
+        "mood": "joy",
+        "next": [
+          "n4"
+        ],
+        "pathFromRoot": [
+          "n1",
+          "n2",
+          "n3"
+        ]
+      },
+      {
+        "nodeId": "n4",
+        "pageNo": 4,
+        "scene": "小宇站在彩虹的另一端，看到了满天的晚霞，心里很满足。",
+        "body": [
+          "哇，天边开满了红花。",
+          "晚霞把天空染成金色。",
+          "小宇开心地笑出声来。"
+        ],
+        "imagePrompt": "广角镜头，绚丽的晚霞铺满天空，紫红色与金黄色交织，小宇的背影站在高处眺望远方，画面温暖而壮丽。",
+        "mood": "proud",
+        "next": [],
+        "pathFromRoot": [
+          "n1",
+          "n2",
+          "n3",
+          "n4"
+        ]
+      },
+      {
+        "nodeId": "n5",
+        "pageNo": 5,
+        "scene": "小宇走进星星屋，屋里有很多发光的小星星在跳舞。",
+        "body": [
+          "推开亮晶晶的小木门。",
+          "许多星星在屋里跳舞。",
+          "它们围着小宇转圈圈。"
+        ],
+        "imagePrompt": "室内场景，一间由星光构成的温馨小屋，无数微小的金色光点像萤火虫一样在空中盘旋，营造出神秘又可爱的氛围。",
+        "mood": "tender",
+        "next": [
+          "n6"
+        ],
+        "pathFromRoot": [
+          "n1",
+          "n2",
+          "n5"
+        ]
+      },
+      {
+        "nodeId": "n6",
+        "pageNo": 6,
+        "scene": "小宇带着星星走出屋子，看到外面的夜空很美，心里很平静。",
+        "body": [
+          "捧着星星走回云路上。",
+          "夜色温柔地抱住大家。",
+          "小宇觉得心里暖洋洋。"
+        ],
+        "imagePrompt": "夜晚的天空，深蓝色的背景点缀着繁星，小宇双手捧着一团柔和的光晕走在云端，月光洒在身上，宁静祥和。",
+        "mood": "calm",
+        "next": [],
+        "pathFromRoot": [
+          "n1",
+          "n2",
+          "n5",
+          "n6"
+        ]
+      }
+    ]
+  },
+  "cover": {
+    "asset": {
+      "path": "books/xiaoyu-r1-6ca00a33b4d7/cover.png",
+      "digest": "fc786a41f9d2",
+      "bytes": 2861471,
+      "mime": "image/png",
+      "originUrl": "https://tokenrhythm-prod-backup-oss.oss-cn-beijing.aliyuncs.com/generated-images/09c0991b-51cc-4844-9f70-f6573e5a3259/2026/10/4736681b-a597-457a-bcd8-e8928fe13506.png?x-oss-credential=STS.NZ3iwqZqbF2qCevawrqDVUkTa%2F20261018%2Fcn-beijing%2Foss%2Faliyun_v4_request&x-oss-date=20261018T105544Z&x-oss-expires=3539&x-oss-signature-version=OSS4-HMAC-SHA256&x-oss-security-token=CAIS6gJ1q6Ft5B2yfSjIr5mGIs3Ft65D8fCaQUPHhXcnfct6uq7%2Fgzz2IHhMfXNvCOodsvwynG1W6%2Fkclol4UZJJSErYbMJ09dFR9g%2BsYZGE4pPkt%2Bde0Mz5RTTCWkYlZF9Mn7mrIunGc9KBNnrm9EYqs5aYGBymW1u6S%2B7r7bdsctUQWCShcDNCH604DwB%2BqcgcRxCzXLTXRXyMuGfLC1dysQdRkH527b%2FFoveR8R3Dllb3uIR3zsbTWsH%2BNZU3bM0lC4ftgLMtKvf7vXQOu0QQxsBfl7dZ%2FDrLhNaZDmRK7g%2BOW%2BiuqYU3dVUmN%2FJhR%2FYZ9KWiyKImoKTPkIf6zQxNLP1VVi3UR4%2BtxsbeEf%2BkOtM0ebfyIXPJ38AWryAJQNnaC5hyFHSpG7JJQhcYYXSn%2Bq%2FLjBDmtnp%2BwxZx5tlkwSBHMGtPxSEM17BkCXbB7cu3%2F0hmVNGywQ3mVXo0mViFWMtg12TDoe95W979JRqAAY5krqh8ZVVUIXR3Yj9PQtxb63CU63CmnS6AjqpUERjVnbWBtyr1yp1jYYOpo9HY9TEsqtxJhgsLgbJU4EYJfRZ2rxZeJnW6vOL4p18KrwgW0T2WgKLk4pVOfiWpuR8C4wZr%2FeBqtEfCrD%2FVcuWeKsOwBasXi%2B%2BmwmMcG3T5UBIfIAA%3D&x-oss-signature=fdaebecea1489d6cf147758b683d0b309afc947705be11f3f51e30b57f6d5fef",
+      "originExpiresAt": 1792324483061
+    },
+    "provenance": {
+      "modelId": "wan2.7-image",
+      "promptVersion": "image-page@v3",
+      "cardRevision": 1,
+      "generatedAt": 1792320944826
+    },
+    "costCny": 0.2
+  },
+  "illustrations": [
+    {
+      "pageNo": 1,
+      "attempt": 2,
+      "asset": {
+        "path": "books/xiaoyu-r1-6ca00a33b4d7/page-1-a2.png",
+        "digest": "bcd5ba1c6b25",
+        "bytes": 2454529,
+        "mime": "image/png",
+        "originUrl": "https://tokenrhythm-prod-backup-oss.oss-cn-beijing.aliyuncs.com/generated-images/09c0991b-51cc-4844-9f70-f6573e5a3259/2026/10/b6167505-0d6e-4e1a-be16-e2eac9f8832d.png?x-oss-credential=STS.NZZEVeRfXC4bWnE3R1qxrDi3S%2F20261018%2Fcn-beijing%2Foss%2Faliyun_v4_request&x-oss-date=20261018T104014Z&x-oss-expires=3539&x-oss-signature-version=OSS4-HMAC-SHA256&x-oss-security-token=CAIS6gJ1q6Ft5B2yfSjIr5nvDuzRv7l59PaJVUj011Jkffdeq6yYsTz2IHhMfXNvCOodsvwynG1W6%2Fkclol4UZJJSErYbMJ09dFR9g%2BsYZGE4pPkt%2Bde0MX8RTfLVUYiRBhMn7mrIunGc9KBNnrm9EYqs5aYGBymW1u6S%2B7r7bdsctUQWCShcDNCH604DwB%2BqcgcRxCzXLTXRXyMuGfLC1dysQdRkH527b%2FFoveR8R3Dllb3uIR3zsbTWsH%2BNZU3bM0lC4ftgLMtKvf7vXQOu0QQxsBfl7dZ%2FDrLhNaZDmRK7g%2BOW%2BiuqYU3dVUmN%2FJhR%2FYZ9KWiyKImoKTPkIf6zQxNLP1VVi3UR4%2BtxsbeEf%2BkOtM0ebfyIXPJ38AWryAJQNnaC5hyFHSpG7JJQhcYYXSn%2BmFLi1Dmtnp%2BwxZx5tlkwSBHMGtPxSEM17BkCXbB7cu3%2F0hmVNGywQ3mVXo0mViFWMtg12QERKRnW979JRqAAV7D3lY1rTVRHNeqxwn189ANRJkU9ymY6k3wsJAcQ8lpv8evSFO6%2BkZRnlfZJqdKifnwANnI4pKrsC7bNNoexxf12qIo251deL1KVsjK04nlkmjUwl6%2BNizD5XEfgUuqW804MP%2FcwAwnmsZWsh9B0Tn2MklBzvlUyqoFuJtuVevwIAA%3D&x-oss-signature=8e35c32bfa5cdfa19605ed2a6d884a90287cf56f22a591f66877606b3faed667",
+        "originExpiresAt": 1792323553248
+      },
+      "provenance": {
+        "modelId": "wan2.7-image",
+        "promptVersion": "image-page@v3",
+        "cardRevision": 1,
+        "generatedAt": 1792320015578
+      },
+      "consistency": {
+        "pageNo": 1,
+        "attempt": 2,
+        "score": 0.95,
+        "verdict": "pass",
+        "threshold": 0.75,
+        "missedAnchors": [],
+        "reason": "主要人物与标准像为同一孩子，圆脸、宽眼距、左上方翘发、暖黄肤色及膝盖晒痕等关键特征均一致，坐姿未改变核心锚点。"
+      },
+      "needsHumanReview": false,
+      "costCny": 0.4
+    },
+    {
+      "pageNo": 2,
+      "attempt": 1,
+      "asset": {
+        "path": "books/xiaoyu-r1-6ca00a33b4d7/page-2-a1.png",
+        "digest": "02c93c4dab76",
+        "bytes": 2768717,
+        "mime": "image/png",
+        "originUrl": "https://tokenrhythm-prod-backup-oss.oss-cn-beijing.aliyuncs.com/generated-images/09c0991b-51cc-4844-9f70-f6573e5a3259/2026/10/924b5fb7-e91d-4a46-9b4c-4758bd505bcf.png?x-oss-credential=STS.NY9MFPELUReLWAjKtuFfMP3Aj%2F20261018%2Fcn-beijing%2Foss%2Faliyun_v4_request&x-oss-date=20261018T104210Z&x-oss-expires=3539&x-oss-signature-version=OSS4-HMAC-SHA256&x-oss-security-token=CAIS6gJ1q6Ft5B2yfSjIr5qMBvzkqJN05aenVWfbr3QgSulhv%2FbqiDz2IHhMfXNvCOodsvwynG1W6%2Fkclol4UZJJSErYbMJ09dFR9g%2BsYZGE4pPkt%2Bde0MT%2BQTfPVEYyT2FMn7mrIunGc9KBNnrm9EYqs5aYGBymW1u6S%2B7r7bdsctUQWCShcDNCH604DwB%2BqcgcRxCzXLTXRXyMuGfLC1dysQdRkH527b%2FFoveR8R3Dllb3uIR3zsbTWsH%2BNZU3bM0lC4ftgLMtKvf7vXQOu0QQxsBfl7dZ%2FDrLhNaZDmRK7g%2BOW%2BiuqYU3dVUmN%2FJhR%2FYZ9KWiyKImoKTPkIf6zQxNLP1VVi3UR4%2BtxsbeEf%2BkOtM0ebfyIXPJ38AWryAJQNnaC5hyFHSpG7JJQhcYYXSnemFdt1Dmtnp%2BwxZx5tlkwSBHMGtPxSEM17BkCXbB7cu3%2F0hmVNGywQ3mVXo0mViFWMtg12TiRxXKW979JRqAAaPQQ0I%2FkNnIYy3oaMZxa94clMxfHkiGWUOr8X%2BgQo5CPDie%2Fh7zKZWb%2BEF7J9iTnnz6%2F6hOHOAJ452W3ptiXfztWt7vj14fcdqRFU2EmTtr9NUlEKUQkLpo7lePHY9vUsXZN3rCeExTXaM8OeQrkLEA3rZiWv20cCovOm%2FL4TcYIAA%3D&x-oss-signature=d3c2d169855a3030cf06fe4f8f07fddfa952d54495f26159f6ae30c3606c9c9a",
+        "originExpiresAt": 1792323669322
+      },
+      "provenance": {
+        "modelId": "wan2.7-image",
+        "promptVersion": "image-page@v3",
+        "cardRevision": 1,
+        "generatedAt": 1792320144141
+      },
+      "consistency": {
+        "pageNo": 2,
+        "attempt": 1,
+        "score": 0.95,
+        "verdict": "pass",
+        "threshold": 0.75,
+        "missedAnchors": [],
+        "reason": "圆脸饱满、深棕圆眼、头身比及四肢比例、暖黄肤色与膝盖晒印均一致；黑发质感与头顶翘发特征保留，虽因视角与场景光致肤色明暗略有差异，但无硬锚点不符。"
+      },
+      "needsHumanReview": false,
+      "costCny": 0.2
+    },
+    {
+      "pageNo": 3,
+      "attempt": 3,
+      "asset": {
+        "path": "books/xiaoyu-r1-6ca00a33b4d7/page-3-a3.png",
+        "digest": "c324fca56d07",
+        "bytes": 2927749,
+        "mime": "image/png",
+        "originUrl": "https://tokenrhythm-prod-backup-oss.oss-cn-beijing.aliyuncs.com/generated-images/09c0991b-51cc-4844-9f70-f6573e5a3259/2026/10/df48275a-04f7-4bf1-913f-6d9cd271b2b3.png?x-oss-credential=STS.NXn5Ff9cZjQht7acJPQYXVJ5d%2F20261018%2Fcn-beijing%2Foss%2Faliyun_v4_request&x-oss-date=20261018T104731Z&x-oss-expires=2075&x-oss-signature-version=OSS4-HMAC-SHA256&x-oss-security-token=CAIS6gJ1q6Ft5B2yfSjIr5vbfvzS1Lx73ZODdhHQh0oFXdZ0uY%2Behjz2IHhMfXNvCOodsvwynG1W6%2Fkclol4UZJJSErYbMJ09dFR9g%2BsYZGE4pPkt%2Bdd2Mz1RzbPUEYQJyZMn7mrIunGc9KBNnrm9EYqs5aYGBymW1u6S%2B7r7bdsctUQWCShcDNCH604DwB%2BqcgcRxCzXLTXRXyMuGfLC1dysQdRkH527b%2FFoveR8R3Dllb3uIR3zsbTWsH%2BNZU3bM0lC4ftgLMtKvf7vXQOu0QQxsBfl7dZ%2FDrLhNaZDmRK7g%2BOW%2BiuqYU3dVUmN%2FJhR%2FYZ9KWiyKImoKTPkIf6zQxNLP1VVi3UR4%2BtxsbeEf%2BkOtM0ebfyIXPJ38AWryAJQNnaC5hyFHSpG7JJQhcYYXSnSocEtgzbgxlM7lMWwUwpBD3Sfb40ljPGtLOhbBP0SNbSmk17UeQnZDgTWnBboyqPO8FpfWQG478zW979JRqAAT35bTH7O0pN46SlZVgzF5zHCSuiGQLV61kp0%2FXNTVhE0Fg7LfnVQVKWaXksCSKiAjFCDPlzGW9jChBf24Gb1E%2BF9IV8jk33PI27k8uhES1jyQiPX7AibTuW9c1mKyrsZt1jr0XwNoO4T3Lxxe3DCYE87opUf1peGFrRfPT15zMOIAA%3D&x-oss-signature=55c3bd47602829bd4751f8585e21146e98894fc58e96e47439961e38871667c6",
+        "originExpiresAt": 1792322525612
+      },
+      "provenance": {
+        "modelId": "wan2.7-image",
+        "promptVersion": "image-page@v3",
+        "cardRevision": 1,
+        "generatedAt": 1792320451189
+      },
+      "consistency": {
+        "pageNo": 3,
+        "attempt": 3,
+        "score": 1,
+        "verdict": "pass",
+        "threshold": 0.75,
+        "missedAnchors": [],
+        "reason": "骨相、眼睛、头发、头身比、肤色均与标准像一致，无硬锚点偏离。"
+      },
+      "needsHumanReview": false,
+      "costCny": 0.6
+    },
+    {
+      "pageNo": 4,
+      "attempt": 2,
+      "asset": {
+        "path": "books/xiaoyu-r1-6ca00a33b4d7/page-4-a2.png",
+        "digest": "029257013a70",
+        "bytes": 2879342,
+        "mime": "image/png",
+        "originUrl": "https://tokenrhythm-prod-backup-oss.oss-cn-beijing.aliyuncs.com/generated-images/09c0991b-51cc-4844-9f70-f6573e5a3259/2026/10/d2d0133b-be6c-4ba7-9195-102d4e532f28.png?x-oss-credential=STS.NYH1LfA1KK9NczDrDGSpcp52a%2F20261018%2Fcn-beijing%2Foss%2Faliyun_v4_request&x-oss-date=20261018T105038Z&x-oss-expires=3537&x-oss-signature-version=OSS4-HMAC-SHA256&x-oss-security-token=CAIS6gJ1q6Ft5B2yfSjIr5r9evbSrO5q%2FPulYVz1lkQSX%2F9Pn%2FCZgzz2IHhMfXNvCOodsvwynG1W6%2Fkclol4UZJJSErYbMJ09dFR9g%2BsYZGE4pPkt%2Bde0MP%2BRzPPVkZnX0JMn7mrIunGc9KBNnrm9EYqs5aYGBymW1u6S%2B7r7bdsctUQWCShcDNCH604DwB%2BqcgcRxCzXLTXRXyMuGfLC1dysQdRkH527b%2FFoveR8R3Dllb3uIR3zsbTWsH%2BNZU3bM0lC4ftgLMtKvf7vXQOu0QQxsBfl7dZ%2FDrLhNaZDmRK7g%2BOW%2BiuqYU3dVUmN%2FJhR%2FYZ9KWiyKImoKTPkIf6zQxNLP1VVi3UR4%2BtxsbeEf%2BkOtM0ebfyIXPJ38AWryAJQNnaC5hyFHSpG7JJQhcYYXSn2otlt7JFGSjVePGlUoaP5rMY21SJvzojBTJD3qFumlhgKM%2F1037ttqLpXfVsvhMKCkRtKGS2xLGlW979JRqAARr11iuahuqhReS0w%2BlJR0ofZnlywBYFEA9mBrKIjMg7tosgfrgKwZnEXZXNbSnppeVfAs0nr7hbzm5ZRM0yNMBJftPuIFJahKzXP5no59mtc%2FudqW9roUKRgMm7ko1XU81Y9L3GVib0alfP71Ug7PjzltAWFA6zl41o9Zfi4EewIAA%3D&x-oss-signature=d85ad2b612585569fbbcd758d6c6a5e248454299d6e01d1a404b934c0fadce6a",
+        "originExpiresAt": 1792324174690
+      },
+      "provenance": {
+        "modelId": "wan2.7-image",
+        "promptVersion": "image-page@v3",
+        "cardRevision": 1,
+        "generatedAt": 1792320638682
+      },
+      "consistency": {
+        "pageNo": 4,
+        "attempt": 2,
+        "score": 1,
+        "verdict": "pass",
+        "threshold": 0.75,
+        "missedAnchors": [],
+        "reason": "背影角度虽不可见眼睛，但头型轮廓、左上方翘起的发撮、头身比、暖黄肤色及膝盖深色印记均与标准像吻合，无硬锚点不符。"
+      },
+      "needsHumanReview": false,
+      "costCny": 0.4
+    },
+    {
+      "pageNo": 5,
+      "attempt": 1,
+      "asset": {
+        "path": "books/xiaoyu-r1-6ca00a33b4d7/page-5-a1.png",
+        "digest": "897a0d78867c",
+        "bytes": 3037135,
+        "mime": "image/png",
+        "originUrl": "https://tokenrhythm-prod-backup-oss.oss-cn-beijing.aliyuncs.com/generated-images/09c0991b-51cc-4844-9f70-f6573e5a3259/2026/10/55cd0592-31a8-45d8-b3a6-b0b638101ee1.png?x-oss-credential=STS.NZg9TknDB448XmcF2S16ymFNZ%2F20261018%2Fcn-beijing%2Foss%2Faliyun_v4_request&x-oss-date=20261018T105217Z&x-oss-expires=3539&x-oss-signature-version=OSS4-HMAC-SHA256&x-oss-security-token=CAIS6gJ1q6Ft5B2yfSjIr5nScu7fg5tjg%2FbTWkvSojIGPblVgoPluDz2IHhMfXNvCOodsvwynG1W6%2Fkclol4UZJJSErYbMJ09dFR9g%2BsYZGE4pPkt%2Bde0ML%2BRjDNVkYSNEtMn7mrIunGc9KBNnrm9EYqs5aYGBymW1u6S%2B7r7bdsctUQWCShcDNCH604DwB%2BqcgcRxCzXLTXRXyMuGfLC1dysQdRkH527b%2FFoveR8R3Dllb3uIR3zsbTWsH%2BNZU3bM0lC4ftgLMtKvf7vXQOu0QQxsBfl7dZ%2FDrLhNaZDmRK7g%2BOW%2BiuqYU3dVUmN%2FJhR%2FYZ9KWiyKImoKTPkIf6zQxNLP1VVi3UR4%2BtxsbeEf%2BkOtM0ebfyIXPJ38AWryAJQNnaC5hyFHSpG7JJQhcYYXSnSgWOoyzbgxlM7lMWwUwpBD3Sfb40ljPGtLOhbBP0SNbSmk17UeQnZDgTWnBboyqPO8FpfWRM01I7W979JRqAARZZ5u33fXdS3zY%2BO7M2bEAgzTYE%2Fc2MSXO4O0NdpasoERQzKRu1vptC9D5TUa%2FBWmGrh1WKpw8q4kj3wbQ1iZ%2FPq6kbK6BucViQ5k%2BJcfoP6R7N2q7tdfDMLGgn8JKk6c4n%2B0AxHu4Q1dIP5uJjS84tX2VXBmtTiR0ShrnIeBv3IAA%3D&x-oss-signature=6a6faf915221fa41f5621403cac1c63148ce41d96d65317dc5f390287311a65e",
+        "originExpiresAt": 1792324276127
+      },
+      "provenance": {
+        "modelId": "wan2.7-image",
+        "promptVersion": "image-page@v3",
+        "cardRevision": 1,
+        "generatedAt": 1792320737864
+      },
+      "consistency": {
+        "pageNo": 5,
+        "attempt": 1,
+        "score": 1,
+        "verdict": "pass",
+        "threshold": 0.75,
+        "missedAnchors": [],
+        "reason": "骨相、眼睛、头发、头身比、肤色五项硬锚点均与标准像一致，判定为同一角色。"
+      },
+      "needsHumanReview": false,
+      "costCny": 0.2
+    },
+    {
+      "pageNo": 6,
+      "attempt": 1,
+      "asset": {
+        "path": "books/xiaoyu-r1-6ca00a33b4d7/page-6-a1.png",
+        "digest": "96c5a446edaa",
+        "bytes": 3165592,
+        "mime": "image/png",
+        "originUrl": "https://tokenrhythm-prod-backup-oss.oss-cn-beijing.aliyuncs.com/generated-images/09c0991b-51cc-4844-9f70-f6573e5a3259/2026/10/cf0f49c6-68dd-40c5-b1a9-26eb39b0dec0.png?x-oss-credential=STS.NZXbEAbJd4r2jTSujSYhwSQXW%2F20261018%2Fcn-beijing%2Foss%2Faliyun_v4_request&x-oss-date=20261018T105353Z&x-oss-expires=3539&x-oss-signature-version=OSS4-HMAC-SHA256&x-oss-security-token=CAIS6gJ1q6Ft5B2yfSjIr5ntKf%2F1j5VFg7DZaHLikWoGVedbvJTztTz2IHhMfXNvCOodsvwynG1W6%2Fkclol4UZJJSErYbMJ09dFR9g%2BsYZGE4pPkt%2Bde0M3%2BQjPMVUY%2FWFZMn7mrIunGc9KBNnrm9EYqs5aYGBymW1u6S%2B7r7bdsctUQWCShcDNCH604DwB%2BqcgcRxCzXLTXRXyMuGfLC1dysQdRkH527b%2FFoveR8R3Dllb3uIR3zsbTWsH%2BNZU3bM0lC4ftgLMtKvf7vXQOu0QQxsBfl7dZ%2FDrLhNaZDmRK7g%2BOW%2BiuqYU3dVUmN%2FJhR%2FYZ9KWiyKImoKTPkIf6zQxNLP1VVi3UR4%2BtxsbeEf%2BkOtM0ebfyIXPJ38AWryAJQNnaC5hyFHSpG7JJQhcYYXSneoqNryzbgxlM7lMWwUwpBD3Sfb40ljPGtLOhbBP0SNbSmk17UeQnZDgTWnBboyqPO8FpfWRhX03tW979JRqAARezoUmgtCI3jydJLBbCuN%2FuaHs%2Bi3Ljbp28VDD2d305H6GCXrKhAhSnzjNLkzpn5a2XlTOnpHsZ1JpttEO3mVGV0PtZsaHGt9FCn%2F4nT75DW1cJYbHsTQVtVq2C1JcLqbWk2ESd0ylOaNv7HSmp%2FadBS0D8ISTcE959RDlTXHAEIAA%3D&x-oss-signature=a3441888408f8446a03dc506388a1b6a22e73828248179770dcae057139ffe22",
+        "originExpiresAt": 1792324371917
+      },
+      "provenance": {
+        "modelId": "wan2.7-image",
+        "promptVersion": "image-page@v3",
+        "cardRevision": 1,
+        "generatedAt": 1792320833758
+      },
+      "consistency": {
+        "pageNo": 6,
+        "attempt": 1,
+        "score": 0.85,
+        "verdict": "pass",
+        "threshold": 0.75,
+        "missedAnchors": [],
+        "reason": "骨相、眼型、头发翘起位置及头身比均与标准像一致，肤色基调吻合，夜空偏蓝光下膝盖晒黑印辨识度略降但可见。"
+      },
+      "needsHumanReview": false,
+      "costCny": 0.2
+    }
+  ],
+  "errors": [],
+  "narrations": [
+    {
+      "pageNo": 1,
+      "part": "body",
+      "voiceId": "longjielidou_v3.6",
+      "textHash": "4214947d9e99",
+      "asset": {
+        "path": "books/xiaoyu-r1-6ca00a33b4d7/page-1-a1.mp3",
+        "digest": "5ff4e2ba5825",
+        "bytes": 242971,
+        "mime": "audio/mpeg"
+      }
+    },
+    {
+      "pageNo": 2,
+      "part": "body",
+      "voiceId": "longjielidou_v3.6",
+      "textHash": "048d4bc4f30f",
+      "asset": {
+        "path": "books/xiaoyu-r1-6ca00a33b4d7/page-2-a1.mp3",
+        "digest": "f292c1daf002",
+        "bytes": 153211,
+        "mime": "audio/mpeg"
+      }
+    },
+    {
+      "pageNo": 2,
+      "part": "prompt",
+      "voiceId": "longjielidou_v3.6",
+      "textHash": "9922503ba9b5",
+      "asset": {
+        "path": "books/xiaoyu-r1-6ca00a33b4d7/page-2-prompt-a1.mp3",
+        "digest": "5b033994121b",
+        "bytes": 77851,
+        "mime": "audio/mpeg"
+      }
+    },
+    {
+      "pageNo": 2,
+      "part": "option-a",
+      "voiceId": "longjielidou_v3.6",
+      "textHash": "a6376c4d353d",
+      "asset": {
+        "path": "books/xiaoyu-r1-6ca00a33b4d7/page-2-opt-a-a1.mp3",
+        "digest": "9c7214759cdc",
+        "bytes": 39451,
+        "mime": "audio/mpeg"
+      }
+    },
+    {
+      "pageNo": 2,
+      "part": "option-b",
+      "voiceId": "longjielidou_v3.6",
+      "textHash": "fa1db2e31365",
+      "asset": {
+        "path": "books/xiaoyu-r1-6ca00a33b4d7/page-2-opt-b-a1.mp3",
+        "digest": "cf4919eed508",
+        "bytes": 36571,
+        "mime": "audio/mpeg"
+      }
+    },
+    {
+      "pageNo": 3,
+      "part": "body",
+      "voiceId": "longjielidou_v3.6",
+      "textHash": "219f05613c49",
+      "asset": {
+        "path": "books/xiaoyu-r1-6ca00a33b4d7/page-3-a1.mp3",
+        "digest": "ee0e643f6aef",
+        "bytes": 153211,
+        "mime": "audio/mpeg"
+      }
+    },
+    {
+      "pageNo": 4,
+      "part": "body",
+      "voiceId": "longjielidou_v3.6",
+      "textHash": "58341b488d29",
+      "asset": {
+        "path": "books/xiaoyu-r1-6ca00a33b4d7/page-4-a1.mp3",
+        "digest": "d62782f88783",
+        "bytes": 142171,
+        "mime": "audio/mpeg"
+      }
+    },
+    {
+      "pageNo": 5,
+      "part": "body",
+      "voiceId": "longjielidou_v3.6",
+      "textHash": "4ff3c6a0c5bb",
+      "asset": {
+        "path": "books/xiaoyu-r1-6ca00a33b4d7/page-5-a1.mp3",
+        "digest": "b79bcf57b7e6",
+        "bytes": 135451,
+        "mime": "audio/mpeg"
+      }
+    },
+    {
+      "pageNo": 6,
+      "part": "body",
+      "voiceId": "longjielidou_v3.6",
+      "textHash": "c185dd5d26dc",
+      "asset": {
+        "path": "books/xiaoyu-r1-6ca00a33b4d7/page-6-a1.mp3",
+        "digest": "339451acf89d",
+        "bytes": 154651,
+        "mime": "audio/mpeg"
+      }
+    }
+  ],
+  "voiceId": "longjielidou_v3.6",
+  "createdAt": 1792319834439,
+  "stats": {
+    "elapsedMs": 1147813,
+    "imageCalls": 11,
+    "firstPassCount": 3,
+    "redrawCount": 3,
+    "totalCostCny": 2,
+    "nodesPlanned": 6,
+    "nodesGenerated": 6
+  },
+  "cardDigest": "8a1bd36bbdba"
+}

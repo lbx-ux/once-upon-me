@@ -36,7 +36,7 @@
  *   要**按一下朗读**才算数：不按的话两边都是零，那是一条没有判别力的断言。
  */
 import { spawn } from 'node:child_process'
-import { writeFile } from 'node:fs/promises'
+import { rm, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve } from 'node:path'
 
@@ -62,6 +62,16 @@ const check = (label, ok, detail = '') => {
   results.push({ label, ok })
   console.log(`${ok ? '✓' : '✗'} ${label}${detail ? ` —— ${detail}` : ''}`)
 }
+
+/**
+ * ★ **每次从干净的 profile 开始**（2026-10-18 加，工单 07 落地那天）。
+ *
+ * 这台阅读器现在会**记住孩子选了哪一支**（`lib/reading-path.ts`，`localStorage`），
+ * 而 profile 是复用的——上一趟留下的 `'a'` 会让这一趟一开始就"已经选过"：
+ * 选择点上已经按着一颗、`›` 也没被挡住，于是这个脚本里那些"第一次站上岔口"的
+ * 判据从此**验的是另一件事，而它照样全绿**。跑一次的脚本不能依赖上一次的残留。
+ */
+await rm(PROFILE, { recursive: true, force: true })
 
 const chrome = spawn(CHROME, [
   '--headless=new',
@@ -143,6 +153,11 @@ const failedAssets = []
  */
 const apiCalls = []
 const exceptions = []
+/**
+ * 非本机的请求（应该**一条都没有**）：这是"断网演示"那条判据的机械版——
+ * 演示书走的是 `public/demo/` 里的静态字节，整条路上不该出现任何外部主机。
+ */
+const foreign = []
 /** 别人正在存盘的证据：HMR 一存就整页重载，那会让这一趟的判据全部失真（共享工作区） */
 const reloads = []
 await send('Network.enable')
@@ -159,6 +174,13 @@ ws.addEventListener('message', (event) => {
     }
     if (url.includes('/api/')) apiCalls.push(`${method} ${url.slice(url.indexOf('/api/'))}`)
     if (url.includes('hot-update.json')) reloads.push(url.split('/').pop())
+    // ★ **只碰本机**（2026-10-18 加，工单 08 §二 的"断网演示"那条判据）：
+    //   这一屏（以及整条演示路径）一个外部主机都不许问。`data:` / `blob:` 是本页自己
+    //   造出来的，不算外部。★ 只有真做才会不同——挂一个 CDN 字体、一个外链 audio、
+    //   或者把出图地址写成一个绝对 URL，这一条当场就红，而那正是"断网演示"会碎的地方。
+    if (!url.startsWith(BASE) && !url.startsWith('data:') && !url.startsWith('blob:')) {
+      foreign.push(url.slice(0, 120))
+    }
   }
   if (msg.method === 'Network.responseReceived') {
     const { url, status } = msg.params.response
@@ -769,6 +791,14 @@ check(
   '★★ 阅读器全程只做 GET：建书 / 出图 / 改故事 / 发布那些写接口**一次都没被碰**',
   apiWrites.length === 0,
   `这一趟的 /api/ 请求：${apiCalls.length} 条${apiWrites.length ? `，其中写操作 ${apiWrites.join(' | ')}` : '，全是 GET'}`,
+)
+
+/* ── 判据 11：整条路上一个外部主机都没问（工单 08 §二 的"断网演示"） ───────────── */
+
+check(
+  '★★ 从头到尾只请求本机：演示这本书的字节全在盘上（断网也读得了）',
+  foreign.length === 0,
+  foreign.length ? `问到过外面：${[...new Set(foreign)].join(' | ')}` : '外部主机 0 次',
 )
 
 /* ── 收口 ──────────────────────────────────────────────────────────────────── */

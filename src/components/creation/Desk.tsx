@@ -29,16 +29,36 @@
  *    整轮坏掉（`fatal`）由 `CreateFlow` 用 `role="alert"` 摊在画桌**上面**——
  *    藏进格子里的话，它就成了"第 7 页有点小问题"。
  * 4. **文案不在这里写**：每一格那句话来自 `describeEvent`（引擎侧唯一那一份）。
+ * 5. ★ **岔路那几格标出来**（2026-10-18，工单 05 §三）。共读版的两条支在这排格子上
+ *    长得和普通页一模一样（按 `pageNo` 摆成一排），家长会把"第 4 页、第 5 页"
+ *    读成连续的两页——而它们其实是**两条不同的路**，孩子只会读到其中一条。
+ *    所以给那几格挂一条窄色带 + 一颗 A / B 角标，并在整排上面说一句它是怎么回事。
+ *    ★ 归属**从事件来**（`plan-ready` 的 `branchPages` → `Frame.via`），不是
+ *      从"第 N 格之后都算岔路"猜的：平铺顺序与支上的路本来就不是一回事
+ *      （验证夹具里 a 支的第 4 页排在 b 支那几页**前面**）。
+ *    ★ 一条都没有时不出现（独读版、以及 2026-10-18 之前落盘的旧日志）。
  *
  * ★ 静止模式（`prefers-reduced-motion`）下每一格都是**终态**：正在画那一格不呼吸，
  *   改用一圈静态描边。它不是动画驱动的东西，状态本来就是从事件来的。
+ *
+ * 6. ★ **编故事那几分钟不能只有一句话**（2026-10-18，用户："这个编故事和用户一点都没有
+ *    互动感，就直接说正在编故事，这个地方优化一下，哪怕把字体变成橙色呢"）。
+ *    这一段是**整条流水线上最长的一段没有任何产出的时间**（`plan-ready` 之前
+ *    屏幕上一条事件都没有，连一个空画框都摆不出来），而它原来只是一行灰字。
+ *    现在它有三样东西：一句话在**轮着换**（`plan-lines.ts`，说的是这件活在做什么）、
+ *    一个**橙色的**标题（这一屏上"正在忙"的那一支色）、以及**真的失败过一次时**
+ *    那句原话（`desk.planning` ——"第 2 次重写：故事结构不对"）。
+ *    ★ 三样都是真的：轮播那几句不承诺时刻（有测试），重写那句来自事件。
+ *      这一屏**仍然没有**百分比、秒数、"还剩多久"（第 1 条的末尾那句一个字没改）。
  */
 
 import { useState, type CSSProperties } from 'react'
 
 import { assetUrlOf } from '@/lib/asset-url.ts'
+import { useRotatingLine } from '@/lib/use-rotating-line.ts'
 
-import { drawnCount, drawnRatio, type DeskState, type Frame } from './frames.ts'
+import { drawnCount, drawnRatio, hasBranches, type DeskState, type Frame } from './frames.ts'
+import { PLAN_LINES } from './plan-lines.ts'
 
 /** 一格里的图。★ 独立的组件是为了让"取不到图"这件事有一个自己的 state */
 function Figure({ frame }: { frame: Frame }) {
@@ -57,7 +77,14 @@ function Figure({ frame }: { frame: Frame }) {
       // ★ 这一格有没有画。**给 CSS 用的是这一个属性，不是"里面有没有 .dk__art"**：
       //   图取不到时那一格会退回空框（下面那个 `broken`），而它仍然是"画好了"的一页
       data-filled={url && !broken ? 'true' : 'false'}
+      // ★ 这一格属于哪一条支（工单 05 §三）。`null` = 主干上的页。
+      //   属性留给 CSS 做左边那道窄色带，字母见下面那颗角标
+      data-branch={frame.via ?? undefined}
     >
+      {/* 窄色带：沿左边一整条。★ 它在**整排**上的样子才是重点——
+          几格同色连成一段，"这几页是另一条路"一眼就看得出来，
+          而单看一格只是一个记号 */}
+      {frame.via && <span className="dk__band" aria-hidden="true" />}
       {url && !broken ? (
         // 原生 <img>：图经 /api/assets 出来，next/image 要另配 loader（README §五）
         // eslint-disable-next-line @next/next/no-img-element
@@ -77,6 +104,21 @@ function Figure({ frame }: { frame: Frame }) {
       )}
 
       <span className="dk__no">{frame.pageNo}</span>
+
+      {/* 哪一条支（工单 05 §三）。★ 字母与闸门那一屏的「选项 A / 选项 B」是同一对
+          字母——家长在那里改过的那两颗按钮，在这里认得出是哪一条。
+          ★ `data-side` 是给 CSS 的：A 蓝、B 橙（2026-10-18 用户要的），
+            颜色写在 `desk.css` 那一族规则里，这里只说"我是哪一支" */}
+      {frame.via && (
+        <span
+          className="dk__branch"
+          data-side={frame.via}
+          title="这一页在岔路上：只有选了它那一条的孩子才会读到"
+        >
+          {frame.via === 'a' ? 'A' : 'B'}
+          <span className="dk__sr">岔路 {frame.via === 'a' ? 'A' : 'B'} 支</span>
+        </span>
+      )}
       {frame.narrated && (
         <span className="dk__sound" title="这一页配好音了">
           {/* 小喇叭，内联 SVG：emoji 是扁平 clip-art，与水彩是两套画法（首页 §五 那条） */}
@@ -180,6 +222,17 @@ export type DeskProps = {
 export default function Desk({ desk, actions, published = false, live = false }: DeskProps) {
   const drawn = drawnCount(desk)
   const ratio = drawnRatio(desk)
+  /**
+   * 现在是不是在**编故事**那一段（还没有书名 = `plan-ready` 还没到）。
+   *
+   * ★ 判据是 `desk.stage === 'planning' && desk.title === null`，两个都要：
+   *   重跑一本已经画过的书时，日志里**老的那条 `plan-ready` 还在**，那一刻
+   *   `stage` 已经是 `planning` 而 `title` 不是 null —— 那不是"在编故事"，
+   *   是"在重编这一本的故事，而屏幕上是上一版的画"，两者要说的话不一样。
+   */
+  const planning = desk.stage === 'planning' && desk.title === null
+  /** 轮着播的那一句。`active` 为假时它回到第一句（见 `useRotatingLine`） */
+  const planLine = useRotatingLine(PLAN_LINES, planning)
   return (
     <div className="dk">
       {/* ── 现在在第几段 + 走到哪儿了 ───────────────────────────────────
@@ -197,12 +250,30 @@ export default function Desk({ desk, actions, published = false, live = false }:
           ★ 2026-10-16 用户说"正在画怎么空拉拉的……比如加个进度条这些的"，
             于是在这句话下面补了一条真的进度条（下面 `.dk__bar` 那一段）。
             **没有另加一个数字**：`k / N` 仍然只在阶段轨上说一处（上面第 ① 条）。
-            条的长度、那条走光、以及下面的说明都在 CSS 里，判据写在 `desk.css` 文件头。 */}
-      {desk.stageLine && !desk.ready && (
+            条的长度、那条走光、以及下面的说明都在 CSS 里，判据写在 `desk.css` 文件头。
+          ★ 2026-10-18（文件头第 6 条）：编故事那一段换成轮播的那一句 + 橙色。
+            其余阶段照旧摊引擎的原话——它们说的都是"正在画第 7 页"这种具体的事。 */}
+      {(planning || (desk.stageLine && !desk.ready)) && (
         <div className="dk__prog">
-          <p className="dk__stage" role="status">
-            {desk.stageLine}
-          </p>
+          {planning ? (
+            <p className="dk__stage" data-planning="true" role="status">
+              {planLine}
+            </p>
+          ) : (
+            <p className="dk__stage" role="status">
+              {desk.stageLine}
+            </p>
+          )}
+          {/* ★ 编故事那一段**真的失败过一次**时说的那句原话（`desk.planning`）。
+              它只说"正在重写"以及**为什么**——第几次、什么事——不留历史，
+              下一版写成了它就消失（`plan-ready` 那一处清）。
+              ★ 用 `role="status"`：它是一条会自己出现的进展，不是一处错误，
+                也不该抢读屏的焦点（真正的硬失败仍然走上面那个 `role="alert"`）。 */}
+          {planning && desk.planning && (
+            <p className="dk__plan-retry" role="status">
+              {desk.planning}
+            </p>
+          )}
           {/* ★ 页数还不知道时（`plan-ready` 之前）**不摆这条**：
               一根分母是 0 的条只能画成"刚起步"的样子，那是在编一个进度 */}
           {desk.total > 0 && (
@@ -227,19 +298,33 @@ export default function Desk({ desk, actions, published = false, live = false }:
 
       {/* ── 那排画框 ─────────────────────────────────────────────────── */}
       {desk.frames.length > 0 && (
-        <ol className="dk__frames">
-          {desk.frames.map((frame) => (
-            // ★ key 用**图的路径**，不是页码（2026-10-16）。理由是"这一格的图换了"
-            //   在屏幕上是一件新事：换了 key 才会重新挂载，那一下的入场动画
-            //   （`.dk__frame[data-filled='true']` 那圈闪 + `.dk__art` 的淡入）才播得出来。
-            //   按页码做 key 的话，重画之后新图是**原地换 src**，屏幕上什么都不发生——
-            //   而"我点的那一下有反应"正是用户点重画之后要看的东西
-            <li key={frame.assetPath ?? `page-${frame.pageNo}`}>
-              <Figure frame={frame} />
-              {actions && <FrameActions pageNo={frame.pageNo} actions={actions} />}
-            </li>
-          ))}
-        </ol>
+        <>
+          {/* ★ 岔路那一句（工单 05 §三）。只在真的有支时才说，而且只说一次：
+              角标（A / B）与左边缘那道窄色带是**标记**，标记不解释就得让人自己猜。
+              ★ 措辞里没有"分支""树"这些词：家长看到的是一本书里两段不同的结尾
+              ★ 2026-10-18 起**两条支的颜色不一样了**（A 蓝、B 橙，用户要的），
+                所以这一句必须把颜色对上号——颜色自己说不了"哪一支是哪一支" */}
+          {hasBranches(desk) && (
+            <p className="dk__branches">
+              标着 A / B 的是岔路那几页——<b className="dk__branches-a">蓝色是 A</b>、
+              <b className="dk__branches-b">橙色是 B</b>
+              。两条路各是一个完整的结尾，孩子只会读到其中一条。
+            </p>
+          )}
+          <ol className="dk__frames">
+            {desk.frames.map((frame) => (
+              // ★ key 用**图的路径**，不是页码（2026-10-16）。理由是"这一格的图换了"
+              //   在屏幕上是一件新事：换了 key 才会重新挂载，那一下的入场动画
+              //   （`.dk__frame[data-filled='true']` 那圈闪 + `.dk__art` 的淡入）才播得出来。
+              //   按页码做 key 的话，重画之后新图是**原地换 src**，屏幕上什么都不发生——
+              //   而"我点的那一下有反应"正是用户点重画之后要看的东西
+              <li key={frame.assetPath ?? `page-${frame.pageNo}`}>
+                <Figure frame={frame} />
+                {actions && <FrameActions pageNo={frame.pageNo} actions={actions} />}
+              </li>
+            ))}
+          </ol>
+        </>
       )}
 
       {/* 为什么现在还点不动重做。★ 禁用要给理由，不是灰着不说 */}

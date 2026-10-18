@@ -394,7 +394,9 @@ export type ChoiceOption = {
  * ★ 挑词表的三条口径（都是判据，不是审美）：
  *   1. **每枚都要能当任一侧的选项**——不要"上/下""左/右"这类方向词。
  *      一条岔路是"恐龙背 vs 船肚子"，不是"左边 vs 右边"。
- *   2. **一枚一个物件**：不画场景、不画人物。它在按钮里只有 96–120px。
+ *   2. **一枚一个物件**：不画场景、不画人物。它在按钮里只有 **56px** 见方
+ *      （`.book-choice__icon`，`storybook-flip.css`；2026-10-18 从代码量出来的，
+ *      这里原来写的是 96–120px —— 那是更早一版按钮的尺寸，按它去挑细节会挑多了）。
  *   3. **与绘本同一支笔**（水彩 + 彩铅收形）。emoji 是扁平 clip-art，
  *      与水彩是两套画法——这正是"不许只放 emoji"的判据（README §五 那句话的第二次应用）。
  *
@@ -435,6 +437,46 @@ export type ChoiceIcon = (typeof CHOICE_ICONS)[number]
  */
 export function hasChoiceIcon(key: string): key is ChoiceIcon {
   return (CHOICE_ICONS as readonly string[]).includes(key)
+}
+
+/**
+ * 那 20 个 key 各叫什么（中文）。**给闸门那一屏的下拉框用**。
+ *
+ * ★ 2026-10-18 用户原话：「这个选项都是英文，换成中文，避免一些家长不知道」。
+ *   在那之前下拉框里列的就是 `dino` / `ship` / `kite` 这一串 key——
+ *   它是**盘上的文件名**，不是给家长看的字。
+ *
+ * ★ 为什么这张表在引擎这一层而不是 UI 那一层：它与 `CHOICE_ICONS` 是**同一件事的两面**
+ *   （键与名），两个文件的坏法是"加了新 key 却没人给它起名，下拉框里那一项空白"。
+ *   放在一起，`domain.test.ts` 一条 `every(hasLabel)` 就能把它钉死。
+ *   ★ 与 `NARRATION_PART_LABELS` / `MOODS` 那两张表同一条做法：**这不是业务逻辑，
+ *     但它是判据的一部分**——名字缺一个，界面上就是一行空白。
+ *
+ * ★ 值里**不带 emoji**：emoji 是另一个真字段（`ChoiceOption.emoji`，模型写、
+ *   家长能改），它在下拉框左边单独一格摆着（`.ss__glyph`）。名字里再塞一个，
+ *   屏幕上就会出现两个不一样的 emoji 并排——而那会让人以为自己改坏了什么。
+ */
+export const CHOICE_ICON_LABELS: Record<ChoiceIcon, string> = {
+  dino: '恐龙',
+  ship: '帆船',
+  rocket: '火箭',
+  bird: '小鸟',
+  cat: '小猫',
+  fish: '小鱼',
+  moon: '月亮',
+  star: '星星',
+  tree: '大树',
+  house: '房子',
+  cloud: '云朵',
+  door: '门',
+  bridge: '桥',
+  lamp: '台灯',
+  flower: '花',
+  car: '小汽车',
+  kite: '风筝',
+  balloon: '气球',
+  cake: '蛋糕',
+  drum: '小鼓',
 }
 
 export type StoryTree = {

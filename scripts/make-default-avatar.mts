@@ -11,10 +11,36 @@
  * # 只拼表，**不调模型**：拿盘上已有的原图拼，缺哪张就少哪一行
  * node scripts/make-default-avatar.mts --sheet
  *
- * # ② 挑中的那一张缩到 256×256 落 public/avatars/yun.webp
+ * # ② 挑中的那一张缩到 256×256 落 public/avatars/dushu.webp
  * node scripts/make-default-avatar.mts --apply=yun-light     # 按键名挑
  * node scripts/make-default-avatar.mts --apply=2             # 或按表上的行号（1 起）
+ *
+ * # ③ 不调模型：把一张**现成的图**裁到 256 落盘（用户给的那张就是这么进来的）
+ * node scripts/make-default-avatar.mts --from=.out/avatar-src/source.webp
+ * node scripts/make-default-avatar.mts --from=<文件> --half=420   # 换裁剪框
  * ```
+ *
+ * ★ ② 与 ③ 落的是**同一个文件**（站上那唯一一张）。现在盘上那一张来自 ③。
+ *
+ * ## v5：用户自己给了一张画，这一条路**不经过模型**（2026-10-18，盘上现在这张）
+ *
+ * ```bash
+ * node scripts/make-default-avatar.mts --from=.out/avatar-src/source.webp
+ * ```
+ *
+ * 用户把一张水彩画（1024×1024，一个背对着看书的孩子）发过来说「把系统提供的默认头像
+ * 换成这个」。于是这一版**没有提示词、没有候选、没有对照表可挑**——原图就是判据，
+ * 脚本这一步只做"裁 + 缩 + 落"。
+ *
+ * ★ 这一条的来历值得记着：v3 与 v4 的读数**全部过了判据**，两次都是"量着没问题、
+ *   看一眼不要"（v3 的原话是「想粑粑一样」）。四轮提示词调下来，能证伪的都证伪完了，
+ *   剩下的分歧**没有数值判据**——它的判据是"这是不是我们要的那张画"，
+ *   而那个只有人能回答。所以 v5 换的不是提示词，是**出图的人**。
+ *   v1–v4 那几节留着，因为它们是"提示词过拟合到某个模型"与"判据量不出审美"的物证。
+ *
+ * ★ 裁剪框是**量出来的**（`CROP` 那一节），不是拍的 `(512,512)`；原图留在 `.out/`
+ *   （gitignored）——**1024 的原图不进 `public/`**，那是 `avatars.test.ts` 里
+ *   那条 256×256 在挡的事：`public/` 会进公开仓库的历史，进去就撤不回来。
  *
  * ## 它替换的是什么
  *
@@ -190,12 +216,51 @@ import { arg, flag, readEnv } from './env.mts'
 /** ★ 每迭代一次提示词就换一个目录，上一版的原图留着（并排比才看得出改了哪儿）
  *  v3 那四张仍在 `.out/avatars/v3/`：它们是"明度修好了、但还是不能用"的物证 */
 const RAW_DIR = resolve('.out/avatars/v4')
-const OUT_FILE = resolve('public/avatars/yun.webp')
+
+/**
+ * 站上那**唯一一个**默认头像落在哪儿。
+ *
+ * ★ 文件名跟着画面走：`dushu`（一个在看书的孩子）。换图时**连着文件名一起换**——
+ *   上一版叫 `yun.webp`，把它留着装一张看书的画，比不放注释更坏
+ *   （名字是一句没人会去核对的断言）。
+ */
+const OUT_FILE = resolve('public/avatars/dushu.webp')
+
+/**
+ * 用户给的那张原画（v5）的裁剪框。
+ *
+ * ★ 这两个数不是拍脑袋的 `(512,512)`：先沿 1440 条射线**从外往里**扫出那圈手绘水彩
+ *   蓝环的采样点，再做一次 Kasa 圆拟合，解出**圆心 (513.5, 507.9)、半径中位 415.7**
+ *   （半径残差 p05 −6.2 / 中位 −1.2 / p95 +8.8 px）。量法与拟合一次性写在
+ *   `.out/avatar-src/avatar-sheet.py`，不进仓库（它是一次性的量法，不是要重跑的东西）。
+ *   ★ 判据是"与纸底中位色 (251,242,223) 的**色距** > 29"，不是"找蓝色"：
+ *     按 `B−R` 找蓝的上一版失败了——这条环右下半圈淡到几乎化进纸里，
+ *     `B−R` 那一列在中轴上**一个点都找不到**（读出来是 `center col: None`）。
+ *   ★ 从外往里扫也是修出来的：第一版从圆心往外走，第一处非纸的东西是中间那个孩子，
+ *     于是 1440 条射线全在 r=0 命中，量出来"环半径 0"。
+ *
+ * ★ `half` 取 380 = **环内**，也就是这一张上**看不到那圈蓝环**。三个读数是这么比的
+ *   （圆内非纸像素占比，非纸 = 与纸底色距 > 29；"蓝" = B−R ≥ 12 且 B > 90）：
+ *
+ *   | half | 直径 | 圆内非纸 | 圆内蓝  |                                    |
+ *   | ---- | ---- | -------- | ------- | ---------------------------------- |
+ *   | 310  | 620  | 63.2%    | 0.35%   | 主体把圆挤满了，四周一点余量都没有 |
+ *   | 380  | 760  | 44.6%    | 0.23%   | ✓ **选它**（那 0.23% 是画里自己的蓝） |
+ *   | 420  | 840  | 44.9%    | 1.37%   | 环开始进来：它正好压在头像的圆边上 |
+ *
+ *   环半径最小约 409，所以半边长要到 420 才够得着它；而 420 时环被
+ *   `border-radius:50%` 切出一条粗细不均的边——比干脆不要它更难看。
+ */
+const CROP = {
+  cx: 513.5,
+  cy: 507.9,
+  half: 380,
+}
 
 /** 出图尺寸。★ `wan2.7-image` 那张模型级白名单里有它（见 tokenrhythm-image.ts） */
 const SIZE = '1024x1024'
 
-/** 落库尺寸。★ 最大显示 64px（`.pf__avatar`），2x 有余量；再大是白付字节 */
+/** 落库尺寸。★ 最大显示 92px（`.pf__avatar`），2x 有余量；再大是白付字节 */
 const FINAL = 256
 
 /** 拼对照表时垫的底：这一屏最深的那一层（`--pf-wash-bottom`） */
@@ -426,6 +491,25 @@ async function sheetOf(raw: { key: string; bytes: Buffer }[]): Promise<Buffer> {
     .toBuffer()
 }
 
+/**
+ * 一张图 → 站上那唯一一张（256×256 webp）。
+ *
+ * ★ 缩 + 落这两步**只有这一份实现**：`--apply=`（挑一张模型出的候选）与
+ *   `--from=`（裁一张现成的图）走的是同一段。判据是"落盘那一步只有一处"——
+ *   两处各写一遍的话，两边迟早会落出不一样的尺寸或质量，而那是看不出来的。
+ */
+async function land(bytes: Buffer, note: string): Promise<void> {
+  await mkdir(resolve('public/avatars'), { recursive: true })
+  const out = await sharp(bytes)
+    .resize(FINAL, FINAL, { fit: 'cover' })
+    .webp({ quality: 88 })
+    .toBuffer()
+  await writeFile(OUT_FILE, out)
+  console.log(
+    `\n落好了：${OUT_FILE}（${FINAL}×${FINAL}，${(out.length / 1024).toFixed(1)}KB${note}）`,
+  )
+}
+
 async function main(): Promise<void> {
   const apply = arg('apply')
 
@@ -455,6 +539,44 @@ async function main(): Promise<void> {
     return
   }
 
+  /**
+   * `--from=<文件>`：**不调模型**，把一张现成的图裁到 256 落盘。
+   *
+   * ★ 用户给的那张画（v5）就是这么进来的。这一条与 `--apply=` 的区别只有一个：
+   *   图从哪儿来——一个从 `RAW_DIR` 里挑，一个从命令行给。**裁 + 缩 + 落**是同一段。
+   * ★ 裁框默认取 `CROP`（量出来的圆心与半边长，理由写在那儿），`--half=` 可以覆盖：
+   *   想要连那圈蓝环一起要的话就是 `--half=420`。
+   * ★ 出界要**当场报**，不能让 sharp 抛它自己的那句：`extract` 越过边界时抛的是
+   *   "bad extract area"，看到那句话的人第一反应是"我参数写错了"，
+   *   而真正要说的是"这张原图没有那么大"。
+   */
+  if (flag('from')) {
+    const file = resolve(arg('from'))
+    const half = Number(arg('half', String(CROP.half)))
+    if (!Number.isFinite(half) || half <= 0) throw new Error(`--half=${arg('half')} 不是正数`)
+    const bytes = await readFile(file).catch(() => null)
+    if (!bytes) throw new Error(`读不到 ${file}`)
+    const { width = 0, height = 0 } = await sharp(bytes).metadata()
+    const size = Math.round(half * 2)
+    const left = Math.round(CROP.cx - half)
+    const top = Math.round(CROP.cy - half)
+    if (left < 0 || top < 0 || left + size > width || top + size > height) {
+      throw new Error(
+        `裁框 ${size}×${size} @(${left},${top}) 出界了——${file} 只有 ${width}×${height}`,
+      )
+    }
+    const cropped = await sharp(bytes)
+      .extract({ left, top, width: size, height: size })
+      .png()
+      .toBuffer()
+    await land(
+      cropped,
+      `，裁自 ${width}×${height} 的 (${left},${top}) 起 ${size}×${size}` +
+        `（圆心 ${CROP.cx} ${CROP.cy}，半边长 ${half}）`,
+    )
+    return
+  }
+
   if (apply) {
     // ★ 键名或行号都收：行号是"表上从上往下数第几个"（1 起），键名是左边那个标签
     const byKey = CANDIDATES.find((c) => c.key === apply)
@@ -468,13 +590,7 @@ async function main(): Promise<void> {
     const file = join(RAW_DIR, `${picked.key}.png`)
     const bytes = await readFile(file).catch(() => null)
     if (!bytes) throw new Error(`没有 ${file}——先不带参数跑一次出图`)
-    await mkdir(resolve('public/avatars'), { recursive: true })
-    const out = await sharp(bytes)
-      .resize(FINAL, FINAL, { fit: 'cover' })
-      .webp({ quality: 88 })
-      .toBuffer()
-    await writeFile(OUT_FILE, out)
-    console.log(`\n落好了：${OUT_FILE}（${FINAL}×${FINAL}，${(out.length / 1024).toFixed(1)}KB）`)
+    await land(bytes, `，来自 ${picked.key}`)
     return
   }
 

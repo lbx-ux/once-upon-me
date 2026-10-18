@@ -7,7 +7,13 @@ import { listChildPicker } from '@/lib/children-list.ts'
 import { assetRoot } from '@/lib/books-runtime.ts'
 import { createUserStore, userSliceRoot } from '@/lib/asset-scope.ts'
 import { currentUserId } from '@/lib/auth/session.ts'
-import { isDraft, manifestPathOf, type Book } from '@/lib/engine/index.ts'
+import {
+  isDraft,
+  manifestPathOf,
+  BOOK_FORMS,
+  type Book,
+  type BookForm,
+} from '@/lib/engine/index.ts'
 import { readStory } from '@/lib/story-draft.ts'
 import { DEFAULT_PAGES } from '@/lib/creation/state.ts'
 import { THEMES } from '@/lib/themes.ts'
@@ -21,11 +27,11 @@ import { THEMES } from '@/lib/themes.ts'
  *
  * 三个入口，三条不同的路：
  *
- * | URL                                 | 盘上有什么  | 做什么 |
- * | ----------------------------------- | ----------- | ------ |
- * | `?wish=&theme=&card=&pages=&voice=` | ——          | 开跑一本新的（**只跑①编故事**，然后停在闸门那一屏） |
- * | `?book=<bookId>`                    | `story.json` | 进**闸门那一屏**接着改故事（还没开始画） |
- * | `?book=<bookId>`                    | `book.json`  | 重放这一轮的过程（画过的那一本，不重跑、不重花） |
+ * | URL                                        | 盘上有什么  | 做什么 |
+ * | ------------------------------------------ | ----------- | ------ |
+ * | `?wish=&theme=&card=&form=&pages=&voice=`  | ——          | 开跑一本新的（**只跑①编故事**，然后停在闸门那一屏） |
+ * | `?book=<bookId>`                           | `story.json` | 进**闸门那一屏**接着改故事（还没开始画） |
+ * | `?book=<bookId>`                           | `book.json`  | 重放这一轮的过程（画过的那一本，不重跑、不重花） |
  *
  * ★ **参数不全就回 `/home`**，不在这一屏摆一个"还没开始"的空态：
  *   这一屏没有"这一轮"就无事可做，而"写一句话"这件事只有一个地方能写
@@ -148,6 +154,16 @@ export default async function CreatePage({
 
   const themeKey = str(params['theme'])
   const themeLabel = THEMES.find((item) => item.key === themeKey)?.label ?? ''
+  /**
+   * 形态（GLOSSARY「形态」）。它从 `/home` 那个弹窗的第一问来（`CreateLanding` 的
+   * `startRun` 把 `form=` 挂到地址上）。
+   * ★ **认不出的取值退回独读版**，不是报错、更不是 500：地址栏被人手改成
+   *   `form=banana` 时这一屏该做的是照常跑一本独读版（与"存储里认不出来的值一律
+   *   退回默认"同一条）。校验落回 `BOOK_FORMS`——那**一份**清单是形态的判据
+   *   （`book-api.ts` 那边是权威，这里是"地址被手改时不至于把请求发出去"）。
+   */
+  const formRaw = str(params['form'])
+  const bookForm: BookForm = BOOK_FORMS.find((item) => item === formRaw) ?? 'solo'
   const pagesRaw = Number(str(params['pages']))
   const pages =
     Number.isInteger(pagesRaw) && pagesRaw >= MIN_PAGES && pagesRaw <= MAX_PAGES
@@ -181,12 +197,12 @@ export default async function CreatePage({
       theme: { theme: themeLabel, wish },
     },
     /**
-     * 形态：这一周的界面**只做独读版**（共读版整套交互在 W3，`/home` 上没有那一格）。
+     * 形态：从地址那一份来（上面 `bookForm`）。
      * ★ 它必须显式写在 `plan` 上，不能在运行视图里写死：闸门那一屏要拿它跑
      *   `buildTree` 校验家长改过的故事，而"独读版不许有选择点"这条在共读版上是反的
      *   （见 `RunPlan.bookForm`）。
      */
-    bookForm: 'solo',
+    bookForm,
     pages,
     ...(voiceId ? { voiceId } : {}),
   }

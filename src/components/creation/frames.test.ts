@@ -21,6 +21,7 @@ import {
   deskOf,
   drawnCount,
   drawnRatio,
+  hasBranches,
   EMPTY_DESK,
   railOf,
   storyDeskOf,
@@ -202,6 +203,79 @@ describe('重画途中那一格的样子', () => {
     expect(frame?.noteTone).toBe('warn')
     // 图还是上一版那张——新版还没回来，界面不能假装有了
     expect(frame?.assetPath).toBe('books/b/page-1-a1.webp')
+  })
+})
+
+/**
+ * ★ 2026-10-18：**编故事**那一段的失败（用户圈出来的那一行）。
+ *
+ * 在那之前它是一句"不太像，正在重画（第 1 / 3 次）：故事结构不对（1 处）"，
+ * 落在画桌**最底下**（`notes`：不属于任何一页的提醒）——用户的原话是
+ * "这个错误提示怎么跑到最下面了，用户怎么知道是哪个画出错了"：
+ * 他以为某张图出了错，而那一刻一张图都还没画（那是模型交回的故事表不合法，
+ * 整篇要重写）。所以现在它有一格自己的位置（`desk.planning`），紧跟"正在编故事"那一行。
+ */
+describe('编故事那一段失败过一次', () => {
+  const RETRY = {
+    kind: 'retry',
+    stage: 'planning',
+    attempt: 1,
+    maxAttempts: 3,
+    reason: '故事结构不对（1 处）',
+  } as const
+
+  it('★ 它进 `planning`，**不进**最底下那一栏 notes（那里离它说的事最远）', () => {
+    const desk = deskOf(stream([{ kind: 'stage', stage: 'planning', phase: 'begin' }, RETRY]))
+    expect(desk.planning).toBe(
+      '这一版故事没通过校验，正在重写（第 1 / 3 次）：故事结构不对（1 处）',
+    )
+    expect(desk.notes).toEqual([])
+  })
+
+  it('★ 故事写成了它就作废（`plan-ready` 一到，屏幕上不该还挂着上一版的失败）', () => {
+    const desk = deskOf(
+      stream([
+        { kind: 'stage', stage: 'planning', phase: 'begin' },
+        RETRY,
+        {
+          kind: 'plan-ready',
+          stage: 'planning',
+          form: 'solo',
+          title: '云上的小路',
+          nodeCount: 3,
+          choicePages: [],
+        },
+      ]),
+    )
+    expect(desk.planning).toBeNull()
+    // 而画桌本身照旧（书名、格子数都在）
+    expect(desk.title).toBe('云上的小路')
+    expect(desk.total).toBe(3)
+  })
+
+  it('重写两次只剩最后一次（屏幕不是过程面板，两次失败长得一样）', () => {
+    const desk = deskOf(stream([RETRY, { ...RETRY, attempt: 2, reason: '故事表格式不对（2 处）' }]))
+    expect(desk.planning).toContain('第 2 / 3 次')
+    expect(desk.planning).toContain('故事表格式不对（2 处）')
+  })
+
+  it('出图期的 retry 照旧落在那一格上（这一条没被碰坏）', () => {
+    const desk = deskOf(
+      stream([
+        {
+          kind: 'retry',
+          stage: 'retrying',
+          pageNo: 2,
+          attempt: 2,
+          maxAttempts: 3,
+          reason: '不太像',
+        },
+      ]),
+    )
+    expect(desk.planning).toBeNull()
+    // ★ 按页码找那一格，不按数组下标：这一条流里没有 plan-ready，
+    //   所以整排只有"被点到的那一格"（`frameFor` 只造它自己）
+    expect(desk.frames.find((one) => one.pageNo === 2)?.note).toContain('第 2 / 3 次')
   })
 })
 
@@ -769,5 +843,96 @@ describe('★ 进度条：那一段有多宽（真数，不是估的）', () => 
     const desk = deskOf(STUB_RUN_EVENTS)
     expect(drawnCount(desk)).toBe(desk.total)
     expect(drawnRatio(desk)).toBe(1)
+  })
+})
+
+describe('岔路那几格带不带 via（工单 05 §三）', () => {
+  /** 一本共读版：主干 1–2、选择点 2、a 支第 3 页、b 支第 4–5 页 */
+  function sharedStream(payloads: EngineEventPayload[] = []): EngineEvent[] {
+    return stream([
+      {
+        kind: 'plan-ready',
+        stage: 'planning',
+        form: 'shared',
+        title: '小宇的云',
+        nodeCount: 5,
+        choicePages: [2],
+        branchPages: { a: [3], b: [4, 5] },
+      },
+      ...payloads,
+    ])
+  }
+
+  it('★ 归属从事件来：主干上是 null，两条支各是 a / b', () => {
+    const desk = deskOf(sharedStream())
+    expect(desk.frames.map((frame) => frame.via)).toEqual([null, null, 'a', 'b', 'b'])
+    expect(hasBranches(desk)).toBe(true)
+  })
+
+  it('★ 不靠位置猜：a 支那一页排在 b 支前面，而它属于 a', () => {
+    const desk = deskOf(sharedStream())
+    const a = desk.frames.find((frame) => frame.via === 'a')
+    const b = desk.frames.filter((frame) => frame.via === 'b')
+    expect(a?.pageNo).toBe(3)
+    expect(b.map((frame) => frame.pageNo)).toEqual([4, 5])
+  })
+
+  it('★ 图比 `plan-ready` 先到时也带得上（那一串先整串扫过一遍）', () => {
+    // 乱序/重放时真有这种顺序：格子先于计划被造出来
+    const desk = deskOf(
+      stream([
+        {
+          kind: 'illustration',
+          pageNo: 4,
+          attempt: 1,
+          assetPath: 'books/b/page-4-a1.webp',
+          modelId: 'm',
+        },
+        {
+          kind: 'plan-ready',
+          stage: 'planning',
+          form: 'shared',
+          title: '小宇的云',
+          nodeCount: 5,
+          choicePages: [2],
+          branchPages: { a: [3], b: [4, 5] },
+        },
+      ]),
+    )
+    expect(desk.frames.find((frame) => frame.pageNo === 4)?.via).toBe('b')
+  })
+
+  it('独读版：一格都不标，`hasBranches` 为假（那一句解释也就不出现）', () => {
+    const desk = deskOf(
+      stream([
+        {
+          kind: 'plan-ready',
+          stage: 'planning',
+          form: 'solo',
+          title: '小满',
+          nodeCount: 3,
+          choicePages: [],
+        },
+      ]),
+    )
+    expect(desk.frames.every((frame) => frame.via === null)).toBe(true)
+    expect(hasBranches(desk)).toBe(false)
+  })
+
+  it('★ 2026-10-18 之前落盘的旧日志没有 branchPages：不标，而不是标错', () => {
+    const desk = deskOf(
+      stream([
+        {
+          kind: 'plan-ready',
+          stage: 'planning',
+          form: 'shared',
+          title: '小宇的云',
+          nodeCount: 3,
+          choicePages: [2],
+        },
+      ]),
+    )
+    expect(desk.frames.every((frame) => frame.via === null)).toBe(true)
+    expect(hasBranches(desk)).toBe(false)
   })
 })

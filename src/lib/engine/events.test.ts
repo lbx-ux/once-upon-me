@@ -49,6 +49,39 @@ describe('describeEvent 的页号', () => {
     } as unknown as EngineEvent)
     expect(text).toBe('故事编好了：《云朵小船去旅行》，20 页')
   })
+
+  /**
+   * ★ 2026-10-18：`retry` 这条事件有**两种**来源，而它们说的是两件事。
+   *
+   * 抓它的是用户圈出来的那一行——他在画桌上读到
+   * 「不太像，正在重画（第 1 / 3 次）：故事结构不对（1 处）」，
+   * 而那一刻一张图都还没画：那是**编故事**时模型交回的故事表不合法（`plan.ts`），
+   * 整篇要重写。"不太像"说的是谁、在重画什么，两句话都对不上。
+   */
+  it('★ 规划期的 retry 说"故事没通过校验、正在重写"，不说"不太像、正在重画"', () => {
+    const text = describeEvent({
+      kind: 'retry',
+      stage: 'planning',
+      attempt: 1,
+      maxAttempts: 3,
+      reason: '故事结构不对（1 处）',
+    } as unknown as EngineEvent)
+    expect(text).toBe('这一版故事没通过校验，正在重写（第 1 / 3 次）：故事结构不对（1 处）')
+    expect(text).not.toContain('不太像')
+    expect(text).not.toContain('第 页')
+  })
+
+  it('出图期的 retry 照旧（那句话本来就是给图的：哪一页、为什么）', () => {
+    const text = describeEvent({
+      kind: 'retry',
+      stage: 'retrying',
+      pageNo: 3,
+      attempt: 2,
+      maxAttempts: 3,
+      reason: '相似度 0.30 低于 0.75',
+    } as unknown as EngineEvent)
+    expect(text).toBe('第 3 页不太像，正在重画（第 2 / 3 次）：相似度 0.30 低于 0.75')
+  })
 })
 
 /**

@@ -1,6 +1,7 @@
 # 02 · 选择点图标：封闭词表 + 手工出一批
 
-Status: open
+Status: open（**提示词已成文**：2026-10-18 写出 [`docs/choice-icon-prompts.md`](../../../docs/choice-icon-prompts.md)，
+20 枚的形状要点、通用骨架、盘上那两枚的实测数与验收表都在里面；**等出图**，18 枚待画）
 依赖：[01](01-shape-and-prompt.md)（词表定稿在那边）
 
 ## 做什么

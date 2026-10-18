@@ -452,7 +452,11 @@
   color: var(--ink-muted);
 }
 
-.shelf__audio {
+/* 两枚角标（「有朗读」/「共读版」）**是同一种东西**——一句话说这本书有某个性质——
+   所以只有这一条样式规则，不新造一套。两个类名各说各的（名字是给 JSX 读的），
+   样式是同一条：改这一处就是改两枚。 */
+.shelf__audio,
+.shelf__form {
   padding: 0 6px;
   border: 1px solid var(--dot);
   border-radius: 999px;

@@ -13,9 +13,15 @@
  * ★ 落盘位置沿用 `ChoiceOption.iconKey` 注释里那句话：`choice-{key}.webp`。
  *   首页第二屏那两枚（`choice-dino` / `choice-ship`）就是这个命名，所以
  *   `CHOICE_ICONS` 里前两个落地第一天就有图，其余按 ticket 02 出。
+ *
+ * ★ 2026-10-18：这一行原来是 `@/lib/engine/domain.ts`（**别名**），而这一条链
+ *   （`book-source.ts` → 这里）是 `scripts/export-demo-book.mts` 要走的——
+ *   node 直接跑 `.mts` 时不认 tsconfig 的 `paths`，症状是
+ *   `Cannot find package '@/lib'`，整个导出演示书的路当场断掉（工单 08 实测撞到）。
+ *   `src/lib/**` 里对着引擎叶子模块一律用**相对路径**（`story-problems.ts`、
+ *   `story-shape.ts` 都是这么写的），别名留给 `src/components/**`。
  */
-
-import { hasChoiceIcon } from '@/lib/engine/domain.ts'
+import { hasChoiceIcon } from './engine/domain.ts'
 
 /** 图标所在的静态目录。与 `public/book/` 下那两枚同处——它们是同一个批次的东西 */
 const CHOICE_ICON_DIR = '/book'

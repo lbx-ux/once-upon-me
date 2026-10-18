@@ -11,16 +11,23 @@
  *    理由是"我的故事"这个标题：随仓库提交的演示书不是用户做的，混进来就是往
  *    "已创作故事"里灌一个假数。演示书有自己的入口（`/shelf` 空态那条线；
  *    首页那颗「看一本成品」2026-10-17 起改指 `/booklist`，走的是另一批样书）。
- * 2. **摘要里的每个数都来自清单本身**，一个都不推算。页数 = `tree.nodes.length`，
+ * 2. **摘要里的每个数都来自清单本身**（★ 2026-10-18 起"来自清单"包含**照清单算一步**）：
+ *    页数 = 清单里那棵树的路长（`pageCount`；全表节点数是另一个字段 `nodeCount`），
  *    有图页数 = `illustrations` 里真的有条目的那些，"有朗读" = `narrations` 非空。
- *    推算出来的数（比如"大概 20 分钟能读完"）不进这里——那是另一种编。
+ *    推算出来的数（比如"大概 20 分钟能读完"）仍旧不进这里——那是另一种编。
+ *    ★ 为什么"路长"这一步可以算：它在清单里**已经定死了**（`tree.next` / `pathFromRoot`
+ *      是②装订时写进去的，不是这里猜的），而节点数不是这个问题的答案（见 `pageCount`）。
+ *      草稿那一档（`summarizeStory`）算的是同一个量、用的是闸门那一屏**同一个**函数。
  * 3. **封面地址由调用方给**（`urlOf`）。这一屏要把封面显示多大是显示的事，
  *    不是书库的事；而"资产路径 → 地址"那条翻译只有一条
  *    （`book-source.ts` 的 `runtimeAssetUrl`，以 `coverUrlOf` 递进来）。
  */
 
 import { manifestPathOf, isDraft, type Book } from './engine/index.ts'
+import { pathLengthsOf } from './engine/tree.ts'
+import { storyShapeOf } from './story-shape.ts'
 import type { AssetStore } from './engine/providers/types.ts'
+import type { BookForm } from './engine/domain.ts'
 import { readStory, STORY_FILE, type StoryDraft } from './story-draft.ts'
 
 /**
@@ -46,8 +53,33 @@ export type BookStatus = 'story' | 'draft' | 'published'
 export type BookSummary = {
   bookId: string
   title: string
-  /** 故事树里的页数 */
+  /**
+   * 这本书**读起来有多少页** = 路长（工单 06 §三，2026-10-18）。
+   *
+   * ★ 2026-10-18 之前它是"表里的节点数"。共读版落地那一刻这个口径就成了假话：
+   *   一棵树有两条路，而那个孩子只走其中一条；另一支的页也在盘上、也花了钱，
+   *   但他永远读不到。书架上的"几页"回答的是**这本书读起来多长**，所以它是路长。
+   * ★ 两条支不一样长时取**长的**那一条（`readPages`）：书架上的数是"最多读到多少"，
+   *   短的那一支读到少一页是它自己的路。差 1 页是常态（`buildTree` 钉着）。
+   * ★ 要"这本书一共画了几页"请看 `nodeCount`——那是**另一个数**、另一个问题。
+   */
   pageCount: number
+  /**
+   * 全树节点数（含走不到的那一支）。管理页与审计看的是它。
+   *
+   * ★ 与 `pageCount` 分开记：两个数在独读版上相等、在共读版上差着那一支——
+   *   合成一个数，症状是"书架说 7 页，而这本书有 9 张图"，两个都说不清。
+   */
+  nodeCount: number
+  /**
+   * 这一本是独读版还是共读版（工单 06 §三）。
+   *
+   * ★ 书架要拿它标出「共读版」：两种形态在架子上**长得一模一样**（封面 + 书名 + N 页），
+   *   不标就分不出——而它们对孩子是两件事（一本听完就睡，一本中途要选一次）。
+   * ★ 没有这个字段的书（类型上不该有，盘上确实一本都没有）就是**不标**：
+   *   `solo` 是"没有选择点"，那正是它们的形状。不为一个不存在的形状写一段兜底。
+   */
+  form: BookForm
   /** 真的落了图的页数。★ 与页数分开记：一本 20 页里 3 页没出图是可能的，那是两件事 */
   illustratedCount: number
   /** 这本书有没有朗读（`narrations` 非空） */
@@ -120,12 +152,33 @@ export const SHELF_COVER_WIDTH = 384
  */
 export const noCovers = (): null => null
 
+/**
+ * 路长（一个树上所有"从根到叶"的长度）→ 书架上写的那个数。**取长的**。
+ *
+ * ★ 两条路不一样长时取长的：架子上的"8 页"是**最多读到多少**，那么没有一个孩子会
+ *   读到比它更多的页（走短那一支的读到 7 页，那是他自己的路）。反过来取短的，
+ *   家长按 7 页安排睡前时间、孩子读了 8 页——而架子写的是一个确定数，不像"至少"。
+ * ★ 用 `pathLengthsOf` 的**升序**去重表，最后一个就是最长的（不必 `Math.max`）。
+ * ★ 问不出路长时（一个数都没有）回全表节点数：它与 `nodeCount` 相等，
+ *   不是第二个口径，是"路长在这棵树上问不出答案"时唯一数得出的东西。
+ *   两种触发都真实：树是坏的（一个叶都没有），或者清单里的 `pathFromRoot` 是空的
+ *   （手工摆的 fixture 就是这样——本书架的单测里有一条钉着它）。
+ */
+function readPages(pathPages: readonly number[], nodeCount: number): number {
+  const longest = pathPages[pathPages.length - 1]
+  return longest ? longest : nodeCount
+}
+
 /** 一份清单 → 一行摘要。纯函数，所以"页数怎么算"这件事可以被测 */
 export function summarize(book: Book, coverUrl: string | null): BookSummary {
+  const nodeCount = book.tree?.nodes?.length ?? 0
   return {
     bookId: book.bookId,
     title: book.tree?.title ?? '(没有名字的书)',
-    pageCount: book.tree?.nodes?.length ?? 0,
+    // ★ 树里已经有 `next` 与 `pathFromRoot`（②装订时算好的），这里只是把它读成一个数
+    pageCount: readPages(book.tree?.nodes ? pathLengthsOf(book.tree) : [], nodeCount),
+    nodeCount,
+    form: book.form,
     illustratedCount: book.illustrations?.length ?? 0,
     hasNarration: (book.narrations?.length ?? 0) > 0,
     // ★ 判据走 `isDraft`，不在这里再写一遍 `book.status === 'draft'`：
@@ -150,10 +203,24 @@ export function summarize(book: Book, coverUrl: string | null): BookSummary {
  * ★ 封面是 `null`：`cover.png` 是装订那一步的产物，而这一本还没装订。
  */
 export function summarizeStory(bookId: string, draft: StoryDraft, drawn = 0): BookSummary {
+  /*
+   * 页数口径与 `summarize` 一样是**路长**，而且用的是闸门那一屏**同一个**
+   * `storyShapeOf`（它内部就是 `buildTree`）：两处各算一份的症状是
+   * "书架说 9 页、闸门说 7 页"，而这两个数说的是同一本书。
+   * ★ 草稿存的是 `doc`（平铺的页表），路长要从它派生——`story-draft.ts` 文件头第 1 条
+   *   写着"派生只发生在两处：②开跑前，与书架数页数"，这就是那第二处。
+   * ★ 树建不起来（这一版还有错、正停在闸门那一屏）时 `storyShapeOf` 回 `null`：
+   *   那时候两个数都是**全表节点数**。路长在这份草稿上还不存在（正是那些错让它不存在），
+   *   而闸门那一屏正在说为什么。这不是拿节点数冒充路长——是那个数还没算出来。
+   */
+  const nodeCount = draft.doc.nodes.length
+  const shape = storyShapeOf(draft.input.form, draft.doc)
   return {
     bookId,
     title: draft.doc.title.trim() === '' ? '(还没有名字)' : draft.doc.title,
-    pageCount: draft.doc.nodes.length,
+    pageCount: readPages(shape?.pathPages ?? [], nodeCount),
+    nodeCount,
+    form: draft.input.form,
     illustratedCount: drawn,
     hasNarration: false,
     status: 'story',

@@ -181,3 +181,69 @@ describe('storyProblemsOf', () => {
     expect(storyProblemText(many)).toContain('另有 1 处')
   })
 })
+
+describe('选择点的问题落在哪一格上（工单 05 §一）', () => {
+  it('★ 认得出是哪一格：`labelA` 太短 → `{ field: choice, cell: labelA }`', () => {
+    const problems = storyProblemsOf(
+      'shared',
+      story({ nodes: [node({ labelA: '左' }), node(), node()] }),
+    )
+    const one = problems.find((problem) => problem.field === 'choice')
+    expect(one?.cell).toBe('labelA')
+    expect(one?.pageNo).toBe(1)
+  })
+
+  it('★ 同一个选择点的两格各报各的——`dedupe` 不再把它们当成同一条', () => {
+    // 这条钉的是一个**真的坏过**的形状：键里不带 `cell` 时，
+    // 同一页上 `labelA` 与 `spokenA` 都太短，后一条会被当重复的丢掉，
+    // 于是家长改完一处、另一处还是红的，而清单里从没提过它
+    const problems = storyProblemsOf(
+      'shared',
+      story({ nodes: [node({ labelA: '左', spokenA: '右' }), node(), node()] }),
+    )
+    const cells = problems.filter((one) => one.field === 'choice').map((one) => one.cell)
+    expect(cells.sort()).toEqual(['labelA', 'spokenA'])
+  })
+
+  it('认不出是哪一格的（树说"缺 spokenA…"）不带 `cell`：那句话挂在整组上', () => {
+    const problems = storyProblemsOf(
+      'shared',
+      story({ nodes: [node({ ask: '你选哪个？' }), node(), node()] }),
+    )
+    const one = problems.find((problem) => problem.message.includes('写了一半'))
+    expect(one?.cell).toBeUndefined()
+  })
+})
+
+describe('树上的问题是哪一组框的（工单 05）', () => {
+  it('★ 选择点那一族落在「选择点」上，不落在「情节」上', () => {
+    // 写了一半：树说「缺 labelA / spokenA（A 那颗按钮…）」
+    const half = storyProblemsOf(
+      'shared',
+      story({ nodes: [node({ ask: '你选哪个？' }), node(), node()] }),
+    )
+    expect(half.find((one) => one.message.includes('写了一半'))?.field).toBe('choice')
+    // 这一页有两条路却没写选择点：也归那一组（家长要在那里补上提问与两个选项）
+    expect(half.find((one) => one.message.includes('却有'))?.field ?? 'choice').toBe('choice')
+  })
+
+  it('★ 整本一个选择点都没有：不属于任何一页，而名字仍然是「选择点」', () => {
+    const problems = storyProblemsOf('shared', story())
+    const only = problems.find((one) => one.message.includes('一个选择点都没有'))
+    expect(only?.pageNo).toBe(0)
+    expect(only?.field).toBe('choice')
+    expect(whereOf(only!)).toBe('选择点')
+  })
+
+  it('语气的问题落在「语气」上（字段名与界面上那一档对齐）', () => {
+    // ★ 这一条**由 schema 报出来**，不是树：`enumOf(MOODS)` 先拦下（实测过——
+    //   树里那句"不在枚举里"在 `planStory` 那条路上到不了）
+    const problems = storyProblemsOf(
+      'solo',
+      story({ nodes: [node({ mood: 'happy' }), node(), node()] }),
+    )
+    const one = problems.find((problem) => problem.field === 'mood')
+    expect(one?.pageNo).toBe(1)
+    expect(whereOf(one!)).toBe('第 1 页的语气')
+  })
+})

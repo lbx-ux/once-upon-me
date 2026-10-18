@@ -14,9 +14,93 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { booksOnly, listBooks, noCovers, summarize } from './library.ts'
+import { booksOnly, listBooks, noCovers, summarize, summarizeStory } from './library.ts'
 import { createMemoryStore } from './engine/providers/stores.ts'
-import type { Book } from './engine/index.ts'
+import type { Book, StoryNode, StoryTree } from './engine/index.ts'
+import type { NodeDraft } from './schemas/story.ts'
+import type { StoryDraft } from './story-draft.ts'
+
+/**
+ * 树上的一页。
+ *
+ * ★ 这个 helper 是 2026-10-18 抽出来的，因为这一组 fixture **原来是假的**：
+ *   三个 `next: []`、`pathFromRoot: []` 的节点——那不是一棵树，是三个孤立的点，
+ *   而真实的书是 `buildTree` 装订出来的，`next` 与 `pathFromRoot` **一定有**。
+ *   页数口径改成**路长**之后（工单 06 §三），假 fixture 会量出 0 页，
+ *   而那是"数据不对"，不是"代码不对"。要测那条兜底就照实造一个假形状（下面有一条）。
+ */
+function treeNode(
+  pageNo: number,
+  next: readonly string[] = [],
+  pathFromRoot: readonly string[] = [],
+): StoryNode {
+  return {
+    nodeId: `n${pageNo}`,
+    pageNo,
+    scene: '',
+    body: [],
+    imagePrompt: '',
+    mood: 'calm',
+    next,
+    pathFromRoot,
+  }
+}
+
+/**
+ * 一棵**真的共读版**的树：主干 4 页 → 第 4 页分岔 → A 支 3 页（路长 7）、
+ * B 支 4 页（路长 8），一共 11 个节点。
+ *
+ * ★ 它就是验收判据里那个形状：「一本 8 页路长、11 个节点的书，架子写 8 不写 11」。
+ *   两条支不一样长是**常态**（`buildTree` 只要求差 ≤ 1），所以这条 fixture 也钉住
+ *   "取长的那一条"这个选择（另一条用例钉两条一样长的情形）。
+ */
+function sharedTree(): StoryTree {
+  /** 每一页有哪几个孩子。顺序照 `buildTree` 摆出来的（via=a 在前） */
+  const children: Record<number, number[]> = {
+    1: [2],
+    2: [3],
+    3: [4],
+    4: [5, 8],
+    5: [6],
+    6: [7],
+    8: [9],
+    9: [10],
+    10: [11],
+  }
+  const paths = new Map<number, string[]>()
+  /** ★ `pathFromRoot` **含自己**（引擎的 `computePaths` 就是这么填的，别少一个） */
+  const walk = (pageNo: number, soFar: string[]): void => {
+    const here = [...soFar, `n${pageNo}`]
+    paths.set(pageNo, here)
+    for (const child of children[pageNo] ?? []) walk(child, here)
+  }
+  walk(1, [])
+
+  return {
+    form: 'shared',
+    title: '两条路',
+    rootId: 'n1',
+    nodes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((pageNo) => ({
+      ...treeNode(
+        pageNo,
+        (children[pageNo] ?? []).map((child) => `n${child}`),
+        paths.get(pageNo) ?? [],
+      ),
+      // 第 4 页是那个选择点（路长与节点数的差就是从它这儿来的）
+      ...(pageNo === 4
+        ? {
+            choice: {
+              prompt: '往哪边走？',
+              options: [
+                { iconKey: 'dino', emoji: '🦕', label: '骑恐龙', spoken: '我们骑恐龙去看看' },
+                { iconKey: 'ship', emoji: '⛵', label: '上小船', spoken: '我们上小船去看看' },
+              ],
+            },
+          }
+        : {}),
+    })),
+  }
+}
 
 function book(parts: Partial<Book> & { bookId: string }): Book {
   return {
@@ -48,38 +132,11 @@ describe('summarize', () => {
           form: 'solo',
           title: 'T',
           rootId: 'n1',
-          // 3 个节点
+          // 3 个节点、一条链——独读版就是这样，所以路长与节点数相等
           nodes: [
-            {
-              nodeId: 'n1',
-              pageNo: 1,
-              scene: '',
-              body: [],
-              imagePrompt: '',
-              mood: 'calm',
-              next: [],
-              pathFromRoot: [],
-            },
-            {
-              nodeId: 'n2',
-              pageNo: 2,
-              scene: '',
-              body: [],
-              imagePrompt: '',
-              mood: 'calm',
-              next: [],
-              pathFromRoot: [],
-            },
-            {
-              nodeId: 'n3',
-              pageNo: 3,
-              scene: '',
-              body: [],
-              imagePrompt: '',
-              mood: 'calm',
-              next: [],
-              pathFromRoot: [],
-            },
+            treeNode(1, ['n2'], ['n1']),
+            treeNode(2, ['n3'], ['n1', 'n2']),
+            treeNode(3, [], ['n1', 'n2', 'n3']),
           ],
         },
         // 只有 2 页有图
@@ -103,7 +160,42 @@ describe('summarize', () => {
       NO_COVER,
     )
     expect(summary.pageCount).toBe(3)
+    expect(summary.nodeCount).toBe(3)
     expect(summary.illustratedCount).toBe(2)
+  })
+
+  /* ── 页数口径：路长 vs 全树节点数（工单 06 §三，2026-10-18） ───────────── */
+
+  it('★ 共读版：页数是**路长**，不是全树节点数（8 页 / 11 个节点）', () => {
+    const summary = summarize(book({ bookId: 'b1', form: 'shared', tree: sharedTree() }), NO_COVER)
+    // 两条路是 7 页与 8 页 —— 取长的那一条（孩子**最多**读到 8 页）
+    expect(summary.pageCount).toBe(8)
+    // 而这本书真的要画 11 页的图（那一支走不到也得画）——所以这个数另记
+    expect(summary.nodeCount).toBe(11)
+    expect(summary.form).toBe('shared')
+  })
+
+  it('共读版的形态跟着摘要走（独读版是 solo，书架靠它决定标不标角标）', () => {
+    expect(summarize(book({ bookId: 'b1' }), NO_COVER).form).toBe('solo')
+    expect(summarize(book({ bookId: 'b2', form: 'shared' }), NO_COVER).form).toBe('shared')
+  })
+
+  it('清单里没有路径（手工摆的假树）时退回节点数，不写 0 页', () => {
+    // 真实的书不会有这个形状：`buildTree` 装订出来的树每页都有 `next` 与
+    // `pathFromRoot`。但清单是**盘上的 JSON**，读到一个没有路径的表时，
+    // 架子上写 0 页是一句假话，写节点数是这棵树上唯一数得出的东西。
+    const shapeless = book({
+      bookId: 'b1',
+      tree: {
+        form: 'solo',
+        title: 'T',
+        rootId: 'n1',
+        nodes: [treeNode(1), treeNode(2), treeNode(3)],
+      },
+    })
+    const summary = summarize(shapeless, NO_COVER)
+    expect(summary.pageCount).toBe(3)
+    expect(summary.nodeCount).toBe(3)
   })
 
   it('有朗读看 narrations；没有就是 false（不是"未知"）', () => {
@@ -136,6 +228,78 @@ describe('summarize', () => {
       '/api/assets/x?w=384',
     )
     expect(summarize(book({ bookId: 'b1' }), NO_COVER).coverUrl).toBeNull()
+  })
+})
+
+/**
+ * 草稿那一档的页数（工单 06 §三）。
+ *
+ * ★ 它与成品那一档**必须是同一个口径**：一本共读版在闸门那一屏写"读下来 4 页"，
+ *   而书架上写"5 页"，家长看到的是同一本书上的两个数（草稿存的是平铺的页表，
+ *   路长要从它派生——用的是闸门那一屏同一个 `storyShapeOf`）。
+ */
+describe('summarizeStory：草稿的页数也是路长', () => {
+  /** 一份共读版草稿：5 页、第 3 页分岔、两支各 1 页 —— 路长 4、表里 5 页 */
+  function sharedDraft(choicePage: Partial<NodeDraft> = {}): StoryDraft {
+    const page = (extra: Partial<NodeDraft> = {}): NodeDraft => ({
+      scene: '场景',
+      body: ['正文'],
+      imagePrompt: '画面',
+      mood: 'calm',
+      ...extra,
+    })
+    return {
+      bookId: 's1',
+      input: {
+        child: {
+          childId: 'k1',
+          name: '小乐',
+          nameReading: 'xiǎo lè',
+          ageBand: '4-6',
+          lookTags: [],
+          interestTags: [],
+        },
+        cardId: 'c1',
+        cardRevision: 1,
+        theme: '两条路',
+        form: 'shared',
+      },
+      doc: {
+        title: '两条路',
+        nodes: [
+          page(),
+          page(),
+          page({
+            ask: '往哪边走？',
+            labelA: '骑恐龙',
+            spokenA: '我们骑恐龙去看看',
+            labelB: '上小船',
+            spokenB: '我们上小船去看看',
+            ...choicePage,
+          }),
+          page({ from: 3, via: 'a' }),
+          page({ from: 3, via: 'b' }),
+        ],
+      },
+      provenance: { modelId: 'm', promptVersion: 'story-plan@v3', attempts: 1 },
+      planMs: 1000,
+      createdAt: 10,
+    }
+  }
+
+  it('★ 共读版草稿：写的是路长（4 页），不是表里的 5 页', () => {
+    const summary = summarizeStory('s1', sharedDraft())
+    expect(summary.pageCount).toBe(4)
+    expect(summary.nodeCount).toBe(5)
+    expect(summary.form).toBe('shared')
+  })
+
+  it('树建不起来（这一版还有错）时两个数都是表里的页数——路长这时候还不存在', () => {
+    // 把 B 那颗按钮的"念出来的"删掉：`buildTree` 会说"选择点写了一半"，
+    // 而那一本正停在闸门那一屏上等家长改（`storyProblemsOf` 会说清是哪一格）
+    const summary = summarizeStory('s1', sharedDraft({ spokenB: undefined }))
+    expect(summary.pageCount).toBe(5)
+    expect(summary.nodeCount).toBe(5)
   })
 })
 
@@ -241,7 +405,10 @@ describe('listBooks', () => {
       status: 'story',
       title: '绿天空',
       // 页数来自故事里的页数；而"有几页有图"是 0——它真的还没画
+      // ★ 独读版草稿的页数**等于**表里的页数（路长与节点数在这一档上相等）
       pageCount: 3,
+      nodeCount: 3,
+      form: 'solo',
       illustratedCount: 0,
       hasNarration: false,
       coverUrl: null,

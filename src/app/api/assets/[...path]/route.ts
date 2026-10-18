@@ -35,12 +35,21 @@
  * 4. **`?w=<档>` 要缩略图**（`lib/thumbs.ts` 那五个档）。缩出来的 WebP 落盘缓存，
  *    第二次就是纯读盘。★ 缩不动（图坏了、sharp 装不上）时**回原图**而不是 500：
  *    一个性能优化不该变成一次故障——这是这一层与"密钥没配"那类错误唯一的不同。
+ * 5. **`Range` 要支持，而且 `Content-Length` 要回**（2026-10-18 补）。
+ *    在这一天之前，这条出口回的是 `Transfer-Encoding: chunked`、也不认 `Range`；
+ *    后果是「重配这一页」那个播放器打开时显示 `0:00`、进度条拖不动——
+ *    实测与理由在 `lib/http-range.ts` 的文件头，逐条读数与复现命令在
+ *    `.scratch/w3-shared-reading/issues/09-audio-range.md`（那 16 个 TTS 产物
+ *    **一个 Xing 头都没有**，所以时长只能靠"读末尾"得到，而那就需要 Range）。
+ *    ★ 原来的注释写着"对朗读音频是可以接受的"——那句话是**没有量过的推测**，
+ *      量过之后它是错的：`seekable` 恒为 0，"从头播完就够"只是没人去拖而已。
  */
 
 import { createUserStore } from '@/lib/asset-scope.ts'
 import { assetRoot } from '@/lib/books-runtime.ts'
 import type { AssetStore } from '@/lib/engine/providers/types.ts'
 import { requireCapability } from '@/lib/auth/session.ts'
+import { parseRange } from '@/lib/http-range.ts'
 
 import type { NextRequest } from 'next/server'
 import { isResizableImage, renderThumb, thumbKeyOf, thumbWidthOf } from '@/lib/thumbs.ts'
@@ -78,22 +87,62 @@ function contentTypeOf(name: string): string {
                   : 'application/octet-stream'
 }
 
-function byteResponse(bytes: Uint8Array, contentType: string, cacheable: boolean): Response {
-  return new Response(
-    // 交出 ArrayBuffer 而不是 Uint8Array 视图：BodyInit 收 ArrayBuffer，
-    // 而 Uint8Array<ArrayBufferLike> 在新版 TS 的 lib 里不再被接受
-    bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
-    {
+function byteResponse(
+  bytes: Uint8Array,
+  contentType: string,
+  cacheable: boolean,
+  rangeHeader: string | null,
+): Response {
+  const cache = cacheable ? 'public, max-age=31536000, immutable' : 'no-store'
+  const size = bytes.byteLength
+  const wanted = parseRange(rangeHeader, size)
+
+  // ★ 要不到那一段：416 + `bytes */size`，让浏览器知道这一份有多大
+  if (wanted === 'unsatisfiable') {
+    return new Response(null, {
+      status: 416,
+      headers: {
+        'Content-Range': `bytes */${size}`,
+        'Accept-Ranges': 'bytes',
+        'Cache-Control': cache,
+      },
+    })
+  }
+
+  // 交出 ArrayBuffer 而不是 Uint8Array 视图：BodyInit 收 ArrayBuffer，
+  // 而 Uint8Array<ArrayBufferLike> 在新版 TS 的 lib 里不再被接受
+  const bodyOf = (part: Uint8Array): ArrayBuffer =>
+    part.buffer.slice(part.byteOffset, part.byteOffset + part.byteLength) as ArrayBuffer
+
+  if (wanted === null) {
+    return new Response(bodyOf(bytes), {
+      status: 200,
       headers: {
         'Content-Type': contentType,
-        // ★ 这条出口**不支持 Range**（要支持得自己切 206 与 Content-Range）。
-        //   对朗读音频是可以接受的：一页一百来 KB，从头播完就够，
-        //   拖动进度条那种"任意位置起播"才需要 Range。
-        //   图片与清单是整数取的，本来也不需要。
-        'Cache-Control': cacheable ? 'public, max-age=31536000, immutable' : 'no-store',
+        // ★ 这三条头是 2026-10-18 补的（用户："我点开是0秒"）：
+        // · `Content-Length`：不写它 Next 会走 `Transfer-Encoding: chunked`，
+        //   浏览器**连这一份多大**都不知道——而 mp3 没有 Xing 头时，
+        //   时长只有"读末尾"这一条路（见 `http-range.ts` 文件头）；
+        // · `Accept-Ranges`：告诉浏览器"可以来要某一段"；
+        // · `Cache-Control` 见上。
+        'Content-Length': String(size),
+        'Accept-Ranges': 'bytes',
+        'Cache-Control': cache,
       },
+    })
+  }
+
+  const slice = bytes.subarray(wanted.start, wanted.end + 1)
+  return new Response(bodyOf(slice), {
+    status: 206,
+    headers: {
+      'Content-Type': contentType,
+      'Content-Length': String(slice.byteLength),
+      'Content-Range': `bytes ${wanted.start}-${wanted.end}/${size}`,
+      'Accept-Ranges': 'bytes',
+      'Cache-Control': cache,
     },
-  )
+  })
 }
 
 /** 越界与不存在对外是同一件事，所以这里只区分"读到"与"读不到" */
@@ -125,12 +174,14 @@ export async function GET(
   const store = await createUserStore(assetRoot(), guard.session.userId)
   const name = relative.split('/').pop() ?? ''
   const cacheable = FINGERPRINTED.test(name)
+  /** ★ 那个 `<audio>` 拖得动、也知道时长，全靠这一条（见 `http-range.ts` 文件头） */
+  const rangeHeader = req.headers.get('range')
 
   const width = thumbWidthOf(new URL(req.url).searchParams.get('w'))
   if (width !== null && isResizableImage(relative)) {
     const key = thumbKeyOf(relative, width)
     const cached = await readOrNull(store, key)
-    if (cached) return byteResponse(cached, 'image/webp', cacheable)
+    if (cached) return byteResponse(cached, 'image/webp', cacheable, rangeHeader)
 
     const original = await readOrNull(store, relative)
     if (!original) return new Response('资产不存在', { status: 404 })
@@ -138,7 +189,7 @@ export async function GET(
       const thumb = await renderThumb(original, width)
       // 写盘是尽力而为：缓存写不进去（只读挂载、磁盘满）也不该让这张图出不来
       await store.put({ path: key, bytes: thumb, mime: 'image/webp' }).catch(() => undefined)
-      return byteResponse(thumb, 'image/webp', cacheable)
+      return byteResponse(thumb, 'image/webp', cacheable, rangeHeader)
     } catch {
       // ★ 回原图。宁可慢一次，不给界面留一个碎图标
     }
@@ -146,5 +197,5 @@ export async function GET(
 
   const bytes = await readOrNull(store, relative)
   if (!bytes) return new Response('资产不存在', { status: 404 })
-  return byteResponse(bytes, contentTypeOf(name), cacheable)
+  return byteResponse(bytes, contentTypeOf(name), cacheable, rangeHeader)
 }

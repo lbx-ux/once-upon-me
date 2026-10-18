@@ -27,7 +27,26 @@ import type { BookForm, ChoiceOption, Mood, StoryChoice, StoryNode, StoryTree } 
 import { MOODS } from './domain.ts'
 import type { NodeDraft } from '../schemas/story.ts'
 
-export type TreeProblem = { index: number; message: string }
+/**
+ * 这个结构问题该由界面上的**哪一组框**收下（工单 05，2026-10-18）。
+ *
+ * ★ 不给 = 那一页的「情节」——它是界面上唯一一个能承载"这一页的结构不对"这句话的框
+ *   （正文与画面各有自己的判据，结构类的话落在它们下面就是**指错地方**）。
+ * ★ `'choice'` 是这一条新加的：选择点那一族问题（两条分支、写了一半、多出来的孩子、
+ *   整本一个都没有）原来也落在「情节」上——于是「缺 `spokenA`（A 那颗按钮）」这句话
+ *   出现在一个与它无关的框下面，而闸门新摊开的那一组框（提问 / 图标 / 两个选项）
+ *   什么都没说。收下它的是 `story-problems.ts`（那一层把话绑到框上）。
+ * ★ 值取自 `StoryField` 那一套名字（`lib/story-problems.ts`），但这一层不 import 它
+ *   （它 import 这里，绕成环），所以两边靠**名字**对齐——`story-problems.test.ts`
+ *   里有一条用例钉着这个映射。
+ * ★ **只有这一档**：`mood` 那一句（"不在枚举里"）本来也想标，但它在
+ *   `planStory` 那条路上**到不了**——schema 的 `enumOf(MOODS)` 先拦下并报了同一件事
+ *   （实测：那份输入下 `storyProblemsOf` 只会给出 schema 那一条）。一个到不了的标记
+ *   是死代码，所以不写。
+ */
+export type TreeProblemField = 'choice'
+
+export type TreeProblem = { index: number; message: string; field?: TreeProblemField }
 
 export type BuildTreeResult =
   { ok: true; tree: StoryTree; problems: [] } | { ok: false; tree: null; problems: TreeProblem[] }
@@ -92,6 +111,7 @@ export function buildTree(
       if (children.length !== 2) {
         problems.push({
           index: parentNo,
+          field: 'choice',
           message: `选择点有 ${children.length} 条分支，必须是 2 条`,
         })
       }
@@ -99,6 +119,7 @@ export function buildTree(
       if (!vias.includes('a') || !vias.includes('b')) {
         problems.push({
           index: parentNo,
+          field: 'choice',
           message: `两条分支要分别标 via=a 与 via=b，实际是 ${vias.join(',') || '（空）'}`,
         })
       }
@@ -109,6 +130,8 @@ export function buildTree(
     } else if (children.length > 1) {
       problems.push({
         index: parentNo,
+        // 也是选择点那一族：这一页有两条以上的路，却没说这两条路是什么
+        field: 'choice',
         message: `这一页没有 choice，却有 ${children.length} 个子节点`,
       })
     } else {
@@ -119,7 +142,7 @@ export function buildTree(
   /*
    * ★ 共读版**恰好一个**选择点（2026-10-18）。
    *
-   * 产品定义里写的是"2–3 层分支"，落地时收窄成一档，理由是**钱**：
+   * 产品定义那一版设想的是"多几层分支"，落地时收窄成一档，理由是**钱**：
    * 两条支不能汇合（见文件头那条 ★），所以一条支必须自带到结尾的全部页，
    * 于是每加一层要多付一整条尾巴——路长 8 页时 1 层 ≈11 张图、2 层 ≈14
    * （**43% 的书那个孩子永远读不到**）、3 层 ≈22（64%）。
@@ -135,11 +158,13 @@ export function buildTree(
     if (choices.length === 0) {
       problems.push({
         index: 0,
+        field: 'choice',
         message: '共读版一个选择点都没有——那就是独读版，请改 form 或补分支',
       })
     } else if (choices.length > 1) {
       problems.push({
         index: 0,
+        field: 'choice',
         message:
           `共读版这一版只支持一个选择点，实际有 ${choices.length} 个` +
           `（第 ${choices.map((node) => node.pageNo).join('、')} 页）——` +
@@ -151,11 +176,12 @@ export function buildTree(
       const [headA, headB] = only.next
       // 两个头都有才量深度：分支数不对时上面已经报过，这里不重复报第三遍
       if (headA && headB) {
-        const pagesA = branchPagesOf(nodes, headA)
-        const pagesB = branchPagesOf(nodes, headB)
+        const pagesA = pagesFrom(nodes, headA)
+        const pagesB = pagesFrom(nodes, headB)
         if (Math.abs(pagesA - pagesB) > 1) {
           problems.push({
             index: only.pageNo,
+            field: 'choice',
             message:
               `两条分支的页数差太多（一支 ${pagesA} 页、另一支 ${pagesB} 页）——` +
               '一半的孩子读到的东西会明显更少，而书上没有任何东西提示这件事',
@@ -165,7 +191,7 @@ export function buildTree(
     }
   }
   if (form === 'solo' && nodes.some((n) => n.choice)) {
-    problems.push({ index: 0, message: '独读版不许有选择点（睡前越选越兴奋）' })
+    problems.push({ index: 0, field: 'choice', message: '独读版不许有选择点（睡前越选越兴奋）' })
   }
 
   if (problems.length > 0) return { ok: false, tree: null, problems }
@@ -184,8 +210,14 @@ export function buildTree(
  * ★ 不会死循环：父引用只许向前（`from < 自己`），所以图是一条有向森林，
  *   走不到回头路——这也是当初选"序号"而不是自造 ID 的第二个理由。
  *   节点数上界是 schema 给的 40，递归深度跟着它，不需要改成迭代。
+ * ★ 名字叫 `pagesFrom` 而不是 `branchPagesOf`：后者是**同一族里另一个公开函数**
+ *   （收 `StoryTree`、回两条支各自的页码表），两个同名的函数会让整个服务端
+ *   **编译不过**——2026-10-18 真的这么炸过一次，症状是"所有接口 500"，
+ *   而报错只在 dev server 的错误页里，`tsc` 那句话（Duplicate function
+ *   implementation）要自己想起来去跑。它量的是"从某个头往下有多少页"，
+ *   所以参数是 `(nodes, startId)`。
  */
-function branchPagesOf(nodes: readonly StoryNode[], startId: string): number {
+function pagesFrom(nodes: readonly StoryNode[], startId: string): number {
   const byId = new Map(nodes.map((node) => [node.nodeId, node]))
   let deepest = 0
   const walk = (id: string, depth: number): void => {
@@ -221,6 +253,27 @@ function optionOf(draft: NodeDraft, side: 'A' | 'B'): ChoiceOption | null {
 }
 
 /**
+ * 这一页的草稿**算不算一个选择点**——写了一个格子就算。**只有这一处判断**，
+ * 两个消费者都从这里取：
+ *
+ * - `toChoice()` 用它决定"要不要组装出一个 choice"（写了一半的走下面那条报错）；
+ * - 故事闸门用它决定**这一页摊不摊那九个框**（工单 05 §一）——摊开的判据必须比
+ *   `toChoice` **宽**：写了一半的那一页正是最需要能改的那一页，用"树建成了"当判据的话，
+ *   树正因为这半页建不起来，于是那三个框不出现、家长改不了，屏幕上只有一句红字。
+ *
+ * ★ 判据落在 `label + spoken` 齐全的选项上，**不是"九个格子里有任意一个"**：
+ *   `iconA` / `emojiA` / `iconB` / `emojiB` 在 codec 里是 `withDefault`，
+ *   **过一遍校验就会给每一页都填上**（`'generic'` / `'✨'`），拿它们当判据等于每页都是选择点。
+ */
+export function isChoicePage(draft: NodeDraft): boolean {
+  return (
+    (draft.ask?.trim() ?? '') !== '' ||
+    optionOf(draft, 'A') !== null ||
+    optionOf(draft, 'B') !== null
+  )
+}
+
+/**
  * 九个平铺格子 → `choice`。
  *
  * ★ 为什么线格式是平铺的、而这里又组装成嵌套的 `StoryChoice`：见 `schemas/story.ts`
@@ -240,7 +293,9 @@ function toChoice(
   const a = optionOf(draft, 'A')
   const b = optionOf(draft, 'B')
 
-  if (ask === '' && !a && !b) return undefined
+  // ★ 「一个格子都没写」这一条只有一处实现（`isChoicePage`）——故事闸门拿它决定
+  //   "这一页摊不摊那九个框"，两处各写一遍的话，界面与校验会开始不一样
+  if (!isChoicePage(draft)) return undefined
   if (form === 'solo') {
     problems.push({ index: pageNo, message: '独读版不该出现 choice' })
     return undefined
@@ -253,6 +308,9 @@ function toChoice(
   if (!b) missing.push('labelB / spokenB（B 那颗按钮，走 via=b 那一支）')
   problems.push({
     index: pageNo,
+    // ★ 这一句最容易落错地方：它说的是选择点那九格缺了哪几个，
+    //   所以要挂进闸门新摊开的那一组框（工单 05），不是那一页的「情节」
+    field: 'choice',
     message: `选择点写了一半：缺 ${missing.join('、')}——一个选择点 = 一句提问 + 两个选项，一个都不能少`,
   })
   return undefined
@@ -281,6 +339,85 @@ function computePaths(nodes: readonly StoryNode[], rootId: string): Map<string, 
 /** 选择点所在的页号，进度条要提前标出来（events.ts 的 plan-ready 带它） */
 export function choicePagesOf(tree: StoryTree): number[] {
   return tree.nodes.filter((node) => node.choice).map((node) => node.pageNo)
+}
+
+/**
+ * 两条支各自的页码（1 起）。`a` 是第一个选项那一支，`b` 是第二个——
+ * 与 `choice.next` 的顺序（`buildTree` 按 via 排过）严格对应。
+ *
+ * ★ 判据是**这一页从根走过来的路经不经过选择点的哪一个孩子**，
+ *   **不是**"选择点之后的每一页都算岔路"。后者今天就能说假话：表里的平铺顺序
+ *   与两支的路不是一回事（a 支的页可以排在 b 支的页后面——验证夹具就是这么摆的），
+ *   而"第 N 页之后"只认得平铺顺序。所以这一层必须看 `pathFromRoot`。
+ * ★ **选择点那一页不属于任何一支**：它从根走过来的路上还没有这两个孩子，
+ *   而两条路都要经过它——它在主干上。所以它不在这两个表里。
+ * ★ 独读版（没有选择点）回两个空表，不是抛：调用方只要照常什么都不标就行。
+ */
+export function branchPagesOf(tree: StoryTree): { a: number[]; b: number[] } {
+  const choice = tree.nodes.find((node) => node.choice)
+  const headA = choice?.next[0] ?? ''
+  const headB = choice?.next[1] ?? ''
+  const a: number[] = []
+  const b: number[] = []
+  if (headA === '' || headB === '') return { a, b }
+
+  for (const node of tree.nodes) {
+    if (node === choice) continue
+    if (node.pathFromRoot.includes(headA)) a.push(node.pageNo)
+    else if (node.pathFromRoot.includes(headB)) b.push(node.pageNo)
+  }
+  return { a: a.sort((left, right) => left - right), b: b.sort((left, right) => left - right) }
+}
+
+/**
+ * **草稿那一层**每一页属于哪一条支（1 起页号 → `'a' | 'b' | null`）。
+ *
+ * ★ 为什么要有它、而不是复用上面那个 `branchPagesOf(tree)`：闸门那一屏必须在
+ *   **树建不起来的时候**也能标出分支（工单 05 对 `isChoicePage` 立的正是同一条判据：
+ *   写了一半的树正是最需要能改的时候）。那棵树不存在，于是只能从平铺的草稿上算：
+ *   `via` 就是"从父节点走的是哪条边"，一路继承下去即可。
+ *
+ * ★ 一条**向前的单趟**就够，不需要 BFS：`buildTree` 要求父节点序号严格小于本页
+ *   （那条"父节点序号 N 不合法"的判据），所以在任何一份**合法**草稿里父页一定在前面。
+ *   不合法的那几页（`from` 指到后面、指到自己）在这里**算不出归属就回 null**——
+ *   那是标记，不是校验：真正的错由 `buildTree` 报，这里跟着它显示就好，
+ *   报错的地方多一个只会让人在两个地方读同一句话。
+ *
+ * ★ 缺省父节点与 `buildTree` **逐字同一条**（`draft.from ?? (i === 0 ? null : i)`）：
+ *   两处各写一遍的话，一份没写 `from` 的草稿会在闸门上被标成"不属于任何一支"，
+ *   而它其实好好地长在主干上。
+ *
+ * ★ 选择点那一页回 `null`（主干），与 `branchPagesOf` 那条"选择点不属于任何一支"
+ *   是同一条事实的两种写法。
+ */
+export function branchLabelsOf(drafts: readonly NodeDraft[]): readonly ('a' | 'b' | null)[] {
+  const labels: ('a' | 'b' | null)[] = []
+  drafts.forEach((draft, i) => {
+    const parentNo = draft.from ?? (i === 0 ? null : i)
+    const parentOk = parentNo !== null && parentNo >= 1 && parentNo <= i
+    const inherited = parentOk ? (labels[parentNo - 1] ?? null) : null
+    const via = parentOk && (draft.via === 'a' || draft.via === 'b') ? draft.via : null
+    labels.push(via ?? inherited)
+  })
+  return labels
+}
+
+/**
+ * 从根走到叶的那些路各有多长（页）。**去重升序**——共读版有两条路，
+ * 两支深度差 ≤ 1（`buildTree` 钉着），所以这里最多两个数、而且相邻。
+ *
+ * ★ 它回答的是**孩子读到的长度**（"这条路读下来 8 页"），不是表里有多少节点。
+ *   两者在独读版上相等，共读版上差着走不到的那一支——而那一支也是要画的，
+ *   所以界面上那两个数必须分开说（工单 05 §二）。
+ * ★ 用 `pathFromRoot.length` 而不是自己从 `next` 往下走：路径只有一处算法
+ *   （`computePaths`），这里再走一遍就是第二个真相。
+ */
+export function pathLengthsOf(tree: StoryTree): number[] {
+  const ends = tree.nodes.filter((node) => node.next.length === 0)
+  if (ends.length === 0) return []
+  return [...new Set(ends.map((node) => node.pathFromRoot.length))].sort(
+    (left, right) => left - right,
+  )
 }
 
 /** 从根走到某个节点要经过哪些页 —— "走过的路"与"上次你走的是这条路"的数据源 */

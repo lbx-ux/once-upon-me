@@ -67,6 +67,18 @@ export type EngineEventPayload = (
       title: string
       nodeCount: number
       choicePages: readonly number[]
+      /**
+       * 两条支各自的页码（工单 05 §三）。`a` = 第一个选项那一支。
+       *
+       * ★ 加它的理由与 `choicePages` 同一条：**画桌只吃事件**（`frames.ts` 那条
+       *   "一张桌子只取决于事件流"），而"这一格属于哪一支"这件事只从
+       *   草稿的 `via` 里读得出来——事件流里没有草稿。
+       *   从草稿读的话，同一串事件会折出两张不同的桌子，重放（从书架进来，
+       *   没有草稿）又什么都不标。
+       * ★ **可选**：2026-10-18 之前落盘的日志没有这个字段（那是历史，不重录），
+       *   读的时候没有就不标——`Frame.via` 为 null，画桌上一条色带都不挂。
+       */
+      branchPages?: { a: readonly number[]; b: readonly number[] }
     }
   | { kind: 'illustration'; assetPath: string; modelId: string; costCny?: number }
   | {
@@ -178,7 +190,17 @@ export function describeEvent(event: EngineEvent): string {
         ? `${page}没法核对（比对模型不可用）`
         : `${page}的小主角${event.verdict === 'pass' ? '是他' : `不太像（${event.score.toFixed(2)} < ${event.threshold.toFixed(2)}）`}`
     case 'retry':
-      return `${page}不太像，正在重画（第 ${event.attempt ?? '?'} / ${event.maxAttempts} 次）：${event.reason}`
+      // ★ 2026-10-18：这条文案原来只有一句「${page}不太像，正在重画（第 k / N 次）：reason」，
+      //   而**规划阶段的失败也走这条事件**（`plan.ts` 的两条：schema 没过、树形不合法）。
+      //   于是家长在画桌上读到的是「不太像，正在重画（第 1 / 3 次）：故事结构不对（1 处）」——
+      //   那一刻一张图都还没画，"不太像"说的是谁、在重画什么，两句话都对不上。
+      //   抓它的是一次真跑：用户圈出来的正是屏幕上那一行（他以为某张图出了错）。
+      //   ★ 又因为规划期的 `retry` **没有页号**，它只能落进画桌底部那一栏"不属于任何一页的提醒"，
+      //     离它说的事最远——所以 `frames.ts` 把它单独收进 `desk.planning`，
+      //     摆回"正在编故事"那一行底下（那边有注释）。
+      return event.stage === 'planning'
+        ? `这一版故事没通过校验，正在重写（第 ${event.attempt ?? '?'} / ${event.maxAttempts} 次）：${event.reason}`
+        : `${page}不太像，正在重画（第 ${event.attempt ?? '?'} / ${event.maxAttempts} 次）：${event.reason}`
     case 'review':
       return `${page}${event.check === 'safety' ? '内容检查' : '前后连贯检查'}：${event.verdict}`
     case 'narration': {

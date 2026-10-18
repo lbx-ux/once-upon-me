@@ -65,6 +65,7 @@ import type { BookForm } from '@/lib/engine/domain.ts'
 import type { EngineEvent } from '@/lib/engine/events.ts'
 import type { StoryDoc } from '@/lib/schemas/story.ts'
 import { storyProblemsOf, storyProblemText } from '@/lib/story-problems.ts'
+import { storyShapeOf } from '@/lib/story-shape.ts'
 import {
   ApiError,
   createBook,
@@ -259,6 +260,13 @@ export default function GenerationRun({ plan, resume }: GenerationRunProps) {
    *   所以按钮亮不亮与服务端收不收永远是一致的——这正是把它做成纯函数的目的。
    */
   const problems = useMemo(() => (story ? storyProblemsOf(bookForm, story) : []), [story, bookForm])
+
+  /**
+   * 这一版故事**长什么形状**（工单 05 §二）：孩子读到的长度 vs 一共要画多少页。
+   * ★ 与上面那条**同一个 `buildTree`**（各算一份的症状是"闸门说 8 页、书里 9 页"）。
+   *   树建不起来时它是 `null`——那一行数字就不出现，改完自然就有。
+   */
+  const shape = useMemo(() => (story ? storyShapeOf(bookForm, story) : null), [story, bookForm])
 
   /** 一条帧进来：攒事件、重算画桌、按帧的种类改状态。实时与重放**共用这一个** */
   const onFrame = useCallback((frame: BookStreamFrame) => {
@@ -667,7 +675,13 @@ export default function GenerationRun({ plan, resume }: GenerationRunProps) {
               也不会丢掉已经画好的那些页。所以现在说的是**这一本怎么找回来**，
               而"没做完的书在书架那一栏里"正是上一单（工单 10）刚做出来的东西。
             ★ 「这一轮不会停」五个字留着不删：不说的话，"可以先离开"读起来像"放弃它"。 */}
-        {phase === 'planning' && '正在编故事。编好之后会停下来让你先看一眼，你说画才开始画。'}
+        {/* ★ 2026-10-18：这一句原来是从「正在编故事。编好之后会停下来让你先看一眼……」
+            起头的，而画桌上方那一行（`.dk__stage`）说的是同一件事——
+            同一句话说两遍，读的人会开始怀疑哪一处才对（`Desk.tsx` 文件头第 ① 条
+            就是为这条删掉了原来那一行 `dk__head`）。所以"正在编故事"这份活现在
+            **只在画桌那一行说**（而且它在轮着换、颜色是橙的），这里留下的是
+            **接下来会发生什么**——那才是家长真正在等的那个承诺 */}
+        {phase === 'planning' && '编好之后会停下来让你先看一眼，你说画才开始画。'}
         {/* ★ 闸门那一屏的主句（2026-10-17）：说清**为什么停在这儿**——钱还没花 */}
         {atGate &&
           '故事写好了，先看一遍——不满意的地方直接改，改完点「就按这个画」才出图。图是按你改好的这一版画的。'}
@@ -704,6 +718,7 @@ export default function GenerationRun({ plan, resume }: GenerationRunProps) {
         <StorySheet
           story={story}
           problems={problems}
+          shape={shape}
           busy={gateBusy}
           dirty={dirty}
           onChange={(next) => {

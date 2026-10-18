@@ -506,9 +506,11 @@ export default function ShelfDashboard({ books }: ShelfDashboardProps) {
           <h2 className="shelf__drafts-title" id="shelf-drafts-head">
             正在编辑
           </h2>
+          {/* ★ 这一句**写在一行里**：JSX 把文本里的换行折成一个空格，拆两行就会在
+              「的。」和「点开」之间多一个空格（第一版就是这样，从 SSR 出来的 HTML 上看见的）。
+              `.out/shelftext/check.mjs` 就是那句话的读法。 */}
           <p className="shelf__drafts-hint">
-            在运行视图里点过「退出」的放在这里。故事写好了还没开始画的也在这一栏——点开接着改；
-            已经在画的那一本点开是画桌（那一本还没装订，所以还没有「制作为绘本」）。
+            这里放的是还没完成的书：退出的、故事写好但还没开始画的，以及正在画但还没装订的。点开可以继续；已经开始画的书会打开画桌。
           </p>
           <ul className="shelf__draftlist">
             {drafts.map((book) => {
@@ -529,7 +531,20 @@ export default function ShelfDashboard({ books }: ShelfDashboardProps) {
                       {/* ★ 「正在编辑」是一句**说明**，不是一个标签：它说的是这本书现在的状态，
                           点不动。而"继续编辑"是那一下点击本身，所以它写在下一行 */}
                       <span className="shelf__meta">
-                        {book.pageCount} 页 ·{' '}
+                        {book.pageCount} 页
+                        {/* ★ 草稿这一栏也要标形态：一本**共读版**的故事草稿与独读版
+                            在架子上同样分不出。★ 它这一栏的页数口径与成品那一栏
+                            是**同一个**（`summarizeStory`）——写的也是路长，
+                            所以那一本 9 个节点 / 路长 7 的草稿在这里写 7 页 */}
+                        {book.form === 'shared' && (
+                          <span
+                            className="shelf__form"
+                            title="两条路各是一个结尾，孩子只会读到其中一条；架子上写的就是那一条的长度"
+                          >
+                            共读版
+                          </span>
+                        )}
+                        {' · '}
                         {/* ★ 2026-10-17（用户实测报的 bug）：只有故事的那一本**不一定**还没开始画。
                             他点完「就按这个画」、从运行视图退出之后，盘上已经躺着几张页图，
                             而这一行原来恒写"还没开始画"——他的原话是"他告诉我正在生成中，
@@ -629,10 +644,24 @@ export default function ShelfDashboard({ books }: ShelfDashboardProps) {
               <span className="shelf__label">
                 <span className="shelf__name">{book.title}</span>
                 <span className="shelf__meta">
+                  {/* ★ 页数是**路长**（孩子会读到的那条路），不是这本书一共画了几页——
+                      共读版多出来的那一支永远读不到，而"这本书读起来多长"才是家长在
+                      架子上挑一本书时要比的数（`BookSummary.pageCount` 那条注释） */}
                   {book.pageCount} 页
                   {/* ★ 只有真的有朗读才写这一句。没有的不写"无朗读"——
                       一本没有朗读的书不需要一直在书名旁边道歉（旧版同一条） */}
                   {book.hasNarration && <span className="shelf__audio">有朗读</span>}
+                  {/* ★ 共读版必须标：两种形态在架子上**长得一模一样**（封面 + 书名 + N 页），
+                      不标就分不出——而它们对孩子是两件事。`title` 里那句回答的正是
+                      家长会问的那一问："为什么页数比图少" */}
+                  {book.form === 'shared' && (
+                    <span
+                      className="shelf__form"
+                      title="两条路各是一个结尾，孩子只会读到其中一条；架子上写的就是那一条的长度"
+                    >
+                      共读版
+                    </span>
+                  )}
                 </span>
               </span>
             </>

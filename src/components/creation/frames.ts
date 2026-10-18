@@ -67,6 +67,17 @@ export type Frame = {
   note: string | null
   noteTone: FrameTone
   /**
+   * 这一页属于哪一条支（工单 05 §三）。`null` = 主干上的页（两条路都要经过它）。
+   *
+   * ★ 它**只从事件来**（`plan-ready` 的 `branchPages`）。草稿里也有这个事实
+   *   （节点的 `via`），但这一层的纪律是"一张桌子只取决于事件流"——
+   *   从草稿读的话，同一串事件会折出两张不同的桌子，而**重放**（从书架进来、
+   *   没有草稿）会一条色带都不挂。
+   * ★ 2026-10-18 之前落盘的日志没有这个字段，于是它是 null——
+   *   画桌上不标，不是标错。
+   */
+  via: 'a' | 'b' | null
+  /**
    * 这一格**此刻**在做什么。终态是 null，静止模式下只有一个静态描边（见 CSS）。
    *
    * ★ `'drawing'` 只在引擎真的说了"开始画这一页"（`stage(begin, illustrating)`）或
@@ -108,6 +119,25 @@ export type DeskState = {
    */
   stage: Stage | null
   notes: DeskNote[]
+  /**
+   * 编故事那一段**刚失败过一次**（`stage: 'planning'` 的 `retry`）——存的是那句原话
+   * （`describeEvent` 给的，与写进日志的**是同一句**）。`plan-ready` 一到就清空：
+   * 那是"这一版写好了"，之前那几次重写不再算数。
+   *
+   * ★ 2026-10-18 加的，起因是用户圈出了屏幕上的那一行
+   *   「不太像，正在重画（第 1 / 3 次）：故事结构不对（1 处）」：
+   *   ① 那句话是**编故事**时的事（模型交回的故事表不合法），可它说的是"重画"、
+   *      "不太像"，家长读起来像某张图出了错（文案已改，见 `events.ts` 那一处）；
+   *   ② 它没有页号，于是掉进 `notes`（"不属于任何一页的提醒"），画在**整排画框
+   *      底下**——离它说的事最远，而且那一轮早就过去了它还在那儿站着。
+   *   所以给它一个自己的位置：画在"正在编故事"那一行底下，`plan-ready` 一来说明它作废。
+   *
+   * ★ **只留最后一次，而且不留结构化的那三个字段**（`attempt` / `maxAttempts` / `reason`）：
+   *   屏幕不是过程面板（同一条纪律见文件头第 3 条："一格上的话只写那格的事"），
+   *   第 1 次和第 2 次失败长得一样，摆两条是噪音；而那三个字段除了拼出这句话以外
+   *   没有任何读者——拼在引擎那一处（`describeEvent`）就不会出现两个版本。
+   */
+  planning: string | null
   /** 书做好了：收起整排，只留封面与那一条路 */
   ready: { bookId: string; coverPath: string | null; stats: Record<string, number> } | null
   /** 致命错误：原样带着，由界面用 `role="alert"` 摊开——**不藏进任何一格** */
@@ -123,6 +153,7 @@ export const EMPTY_DESK: DeskState = {
   stageRunning: false,
   stage: null,
   notes: [],
+  planning: null,
   ready: null,
   fatal: null,
 }
@@ -156,6 +187,21 @@ export function deskOf(events: readonly EngineEvent[]): DeskState {
   const byPage = new Map<number, Frame>()
 
   /**
+   * 哪几页属于哪一条支（工单 05 §三）。
+   * ★ **先整串扫一遍再折**，不在 `case 'plan-ready'` 里就地记：格子是 `frameFor()`
+   *   造出来的，而 `plan-ready` 之前到的 `illustration`（乱序或重放时真有）会先造格子，
+   *   那时若还没记下这张表，那一格的 `via` 就永远是 null——屏幕上表现为
+   *   "有一格没挂色带"，而没有任何东西提示它是标漏了还是本来就在主干上。
+   * ★ 同一页被两条支都点到是不可能的（一支一个孩子），真有就以最后一条为准。
+   */
+  const viaByPage = new Map<number, 'a' | 'b'>()
+  for (const event of events) {
+    if (event.kind !== 'plan-ready' || !event.branchPages) continue
+    for (const pageNo of event.branchPages.a) viaByPage.set(pageNo, 'a')
+    for (const pageNo of event.branchPages.b) viaByPage.set(pageNo, 'b')
+  }
+
+  /**
    * 取这一格的引用，没有就补一格。
    * ★ `total` 一起抬到至少 `pageNo`：否则会出现"上面写着 3 页、下面有 4 格"，
    *   而那一句"k / N 页"里的 N 就是从 `total` 来的
@@ -171,6 +217,7 @@ export function deskOf(events: readonly EngineEvent[]): DeskState {
       note: null,
       noteTone: 'info',
       busy: null,
+      via: viaByPage.get(pageNo) ?? null,
     }
     byPage.set(pageNo, frame)
     desk.frames.push(frame)
@@ -215,6 +262,9 @@ export function deskOf(events: readonly EngineEvent[]): DeskState {
 
       case 'plan-ready': {
         desk.title = event.title
+        // ★ 故事这一版写成了：编故事那一段的重写记录**到此作废**（见 `DeskState.planning`）。
+        //   与"新图到了，上一张的'不太像'就让位"是同一条（下面 `illustration` 那一处）
+        desk.planning = null
         // ★ 只增不减。乱序或重放时 total 变小会让已经画好的格子被"裁掉"
         desk.total = Math.max(desk.total, event.nodeCount)
         // 空画框立刻摆出来——**这才是进度**：N 个框、k 个有画
@@ -260,6 +310,12 @@ export function deskOf(events: readonly EngineEvent[]): DeskState {
       case 'retry': {
         const text = describeEvent(event)
         const retryPage = pageOf(event)
+        // ★ 编故事那一段的重写：**没有页号，但它有一个该去的地方**（"正在编故事"那一行底下）。
+        //   掉进 `notes` 的坏法见 `DeskState.planning` 那段注释。
+        if (event.stage === 'planning') {
+          desk.planning = text
+          break
+        }
         if (retryPage === null) {
           desk.notes.push({ key: `e${event.seq}`, text, tone: toneOf(event) })
           break
@@ -346,6 +402,17 @@ export function deskOf(events: readonly EngineEvent[]): DeskState {
 /** 已经画好几格。界面上的"k / N"就是它 */
 export function drawnCount(desk: DeskState): number {
   return desk.frames.filter((frame) => frame.assetPath !== null).length
+}
+
+/**
+ * 这一张桌子上**有没有岔路**（工单 05 §三）：有没有哪一格属于某一条支。
+ *
+ * ★ 画桌据此决定说不说那句解释——一个角标不解释，等于让人自己猜那条色带是什么意思。
+ * ★ 它问的是 `via` 而不是"form 是不是 shared"：`desk` 里根本没有 form
+ *   （事件流里有，但画桌不为此另存一个字段），而 `via` 本来就是从事件里来的。
+ */
+export function hasBranches(desk: DeskState): boolean {
+  return desk.frames.some((frame) => frame.via !== null)
 }
 
 /**

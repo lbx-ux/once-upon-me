@@ -1,13 +1,22 @@
 /**
- * example-wishes.ts —— 工作台「创作」那一屏给的几句**示例愿望**
+ * example-wishes.ts —— 主题墙那 12 格各自的那**一句**
  *
  * ★ 这一份表里的句子是为人写的样例，不是从任何数据里算出来的数——
- *   界面上它们出现在输入框的占位、"换一句"按钮与 12 张主题封面卡里，
+ *   界面上它们只出现在一处：**主题墙的 12 张封面卡**（`CreateLanding` 的 `.cl__wall`）。
  *   点一下就是把这句话填进输入框，用户可以照改。
  *   （与"统计卡上那个没出处的 6"不同类：那是一条主张，这是一句可改的输入。）
  *
+ * ★ 2026-10-18：**「换一句」那颗骰子不再读这里**（用户："现在这个随机选取并不是真正的
+ *   随机，只是按顺序从下面 12 个主题里面选取"）。骰子改读一个 72 条的独立池子
+ *   （`inspirations.ts`），池子里每条**可以**带主题、也可以不带。
+ *   ★ 拆开的理由不是"表太大了"，是这两份表回答的是**两个问题**：
+ *     这里回答"恐龙那一格点下去填哪句"（一问一答，而且**图是配着这句话出的**，
+ *     所以它必须稳定、必须 12 个主题一个不缺）；池子回答"随便给我一句没见过的"。
+ *   ★ 于是 `nextExample` 整条删掉了：它唯一的读者是骰子，而骰子现在是发牌
+ *     （`drawInspiration`）。留一个没人读的函数，下一个改池子的人会漏改它。
+ *
  * 每条都带一个 `theme`，而且是 `THEME_KEYS` 里真实存在的键：
- * 点建议卡进创作流时一起带上 `?theme=`，第 2 步的主题档就同步选中了。
+ * 点主题卡进创作流时一起带上 `?theme=`，第 2 步的主题档就同步选中了。
  * ★ 不带一个不存在的键（哪怕只差一个字）——`initialThemeKey` 找不到就不选，
  *   那会让"点了月亮那句、结果主题不是月亮"变成一条静默的错。
  */
@@ -42,12 +51,6 @@ export const EXAMPLE_WISHES: readonly ExampleWish[] = [
 /** 主题墙那一格用哪一句：只按 `theme` 查，12 条全部有归属 */
 export function ofTheme(theme: ThemeKey): ExampleWish | null {
   return EXAMPLE_WISHES.find((item) => item.theme === theme) ?? null
-}
-
-/** "换一句"按钮：给一个索引，回一条。循环而不是随机，是因为随机会连着给同一条 */
-export function nextExample(index: number): ExampleWish {
-  const i = ((index % EXAMPLE_WISHES.length) + EXAMPLE_WISHES.length) % EXAMPLE_WISHES.length
-  return EXAMPLE_WISHES[i] as ExampleWish
 }
 
 /** 表本身要与主题表同构：新增主题忘了配例句时，测试会红（见 example-wishes.test.ts） */
