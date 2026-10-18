@@ -6,34 +6,22 @@
  * 版式（2026-10-15 与首页并成同一世界之后）：左对齐的标题 → 两颗胶囊 →
  * 一张纸（输入区 / 分隔线 / **左边两颗工具 + 右边「开始创作」**）→
  * **12 个主题的封面墙**。
- * ★ 2026-10-16 起标题**上方**还有一行「书的形态」（`.cl__forms`）——那一行是**居中**的，
- *   而它以下的一切仍然是左对齐的。这是按用户画的草图标上去的（他在标题上方画了两个框），
- *   是一次**刻意的不对称**，不是没对齐：形态换的是"这一页在给谁做书"，
- *   它管的是整块，所以它在上方居中；标题以下管的是"这本书"，所以左对齐。
+ * ★ 2026-10-16 到 2026-10-18 之间，标题**上方**还有一行「书的形态」（`.cl__forms`，
+ *   居中、两颗按钮、共读版那颗写着「还没做」）。**那一行用户 2026-10-18 要求撤掉了**，
+ *   现在这一屏上没有任何形态控件。
+ *   撤的理由不是"少一个控件"：形态换的是**这一本怎么做**，与"几页""要不要朗读"
+ *   是同一类问题，所以它搬进了点「开始创作」之后那个弹窗的**第一问**
+ *   （见 `GenerationSetupDialog` 判断 1，那里也是唯一一处解释这两个词的地方）。
+ *   ★ 撤掉的是一个**当时只有一档能选**的分段控件（另一档真 `disabled`）——
+ *     所以这里没有丢任何"用户能做的动作"，丢的是"产品有两种形态"这件事实的可见性。
+ *     那一行原来那三段判断（为什么它能在"没有第二个值"的情况下站住、为什么它是居中
+ *     的不对称、为什么「还没做」不做低对比）随它一起删掉了；这一条是它剩下的全部记录。
  *
  * ★ 2026-10-15 按用户要求删掉这**两行字**，别把它们当成漏了：
  *   1. 标题下那行说明（`.cl__sub`，"选好小主角和声音…"）
  *   2. 输入框下那行小字（`.cl__hint`，"一句话就够…"）
  *   3. 那句语音警示（`.cl__warn` 原来那一句，"语音的 Key 或模型名还没填…"）
  *   留下的只有"他必须看见的那几件"：两颗胶囊、输入框，以及动作栏里那三颗按钮。
- *
- * ★ 2026-10-16 「书的形态」那一行（`.cl__forms`）：**两颗按钮，但只有一颗能选**，
- *   因为共读版还没开始做（看板排在 W3，README §一 记着"未开始"）。用户这一轮要的就是
- *   把产品**有两种形态**这件事摆出来（GLOSSARY §语言：独读版 / 共读版）。
- *   1. ★ **共读版那一颗是真 `disabled`，而且按钮上直接写着「还没做」。**
- *      这个项目的既有判断是"没有的东西直说没有""一颗点了没反应的按钮不如没有"
- *      （CLAUDE.md §不糊弄）——所以它不许是一颗看着能点、点了什么都不发生的按钮。
- *      「还没做」这句话也**不做低对比**：禁用态本来不受对比度约束，但淡到没人看见
- *      "还没做"，那才是骗人。整颗控件落在 `--surface` 上，小字用 `--ink-muted`（5.33:1）。
- *   2. **刻意没有 `useState`、没有 `onClick`**：只有一个可选值的时候，状态是假的。
- *      共读版落地时要接线的地方写在下面那一段注释里（`toBookBody()` 现在写死 `'solo'`）。
- *   3. ★ 会被质疑的一条：一个"只有一档能选的分段控件"，看起来正撞在
- *      `.scratch/studio-round2/issues/02-home-two-picks.md` §一（画风那一格为什么撤：
- *      "一个用户动不了的格子占着可选项的位置，只是在数这一屏还剩几个格子"）。
- *      **两者不是同一件事**，差别在"有没有第二个值"：画风是产品**永远只有一档**，
- *      而形态**真的有两档，且引擎侧两档都成立**（ADR-0006：`BookRequest.form` 是入参）。
- *      缺的只是界面与"读"，而且已排期。所以这里摆的不是一个假选择，
- *      是**产品形状的可见性**。下一个人若想拿 §一 把这两颗也撤掉，先读这一条。
  *
  * ★ 2026-10-16 两个下拉各**减一行**，都是用户要求（"只显示照片和姓名就行，
  *   不用写那么多"）：
@@ -352,6 +340,11 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
     /* ★ `voice=off` 与"不带这个参数"是**同一件事**（这一本不配音），但写成显式的 off
        更好读——而 `/create` 那边两条都当"不配音"处理（老书签里没有这个参数） */
     params.set('voice', choice.voiceId ?? 'off')
+    /* ★ 形态跟着页数一起进 URL（2026-10-18 起这一问在弹窗的第一问里，
+       见 `GenerationSetupDialog` 判断 1）。
+       写进地址而不是只挂在组件状态上：刷新、书签、从别处点回来都要回到同一轮
+       （与 `pages` / `voice` 同一条），而 `/create` 那边是**服务端**读它 */
+    params.set('form', choice.form)
     router.push(`/create?${params.toString()}`)
   }
 
@@ -438,27 +431,6 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
 
   return (
     <section className="cl" ref={rootRef}>
-      {/* 书的形态。★ 两颗按钮，**只有一颗能选**：共读版还没开始做（W3）。
-          ★ 这里刻意**不写 `useState`、不写 `onClick`**——只有一个可选值的时候，
-            状态是假的。共读版落地时，接线点是 `lib/creation/state.ts` 的 `toBookBody()`：
-            它现在写死 `form: 'solo'`，要走的是**那一个入参**，不是新开一条生成路径
-            （ADR-0006 明说不许出现 `runSoloBook()` / `runSharedBook()` 这种分裂）。
-          ★ 共读版那一颗是真 `disabled` + 按钮上写着「还没做」——理由写在文件头第 1 条 */}
-      <div className="cl__forms" role="group" aria-label="书的形态">
-        <button type="button" className="cl__form" data-active="true" aria-pressed="true">
-          独读版
-        </button>
-        <button
-          type="button"
-          className="cl__form"
-          disabled
-          title="共读版还没开始做——现在做出来的都是独读版"
-        >
-          共读版
-          <span className="cl__form-todo">还没做</span>
-        </button>
-      </div>
-
       <h1 className="cl__title">
         {/* 两笔手绘装饰：纯装饰，读屏不念（aria-hidden）。进场时被"画"出来，静止模式下直接在场 */}
         <svg className="cl__doodle cl__doodle--spark" viewBox="0 0 40 40" aria-hidden="true">
@@ -659,10 +631,16 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
           />
         </label>
 
-        {/* 建议区。★ 它在**框下面**、在动作栏上面：这一块只属于"这句话"，不属于整张卡 */}
+        {/* 建议区。★ 它在**框下面**、在动作栏上面：这一块只属于"这句话"，不属于整张卡
+            ★ `role="status"`（2026-10-18）：这一块是**按下一颗按钮之后才出现**的，
+              而它出现时读屏什么都不会说——那颗按钮的可访问名只是从"正在想…"变回
+              "优化提示词"，听起来就是"什么也没发生"。急了眼的用户会再点一次。
+              只给那句建议（不给整块）加上，免得连两颗按钮一起被念一遍 */}
         {suggest && (
           <div className="cl__suggest">
-            <p className="cl__suggest-text">{suggest.text}</p>
+            <p className="cl__suggest-text" role="status">
+              {suggest.text}
+            </p>
             {suggest.tooLong && (
               <p className="cl__suggest-note">
                 比一句话该有的长度长了一点（超了 80 字），用之前可以再删几个字。
@@ -710,15 +688,28 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
                 ★ 2026-10-15 按用户要求**去掉可见文字、只留那枚图标**。于是有了两条必须补的：
                   ① `aria-label`——没有可见文字之后，读屏能念的就只剩它，少了就是一颗匿名按钮；
                   ② `data-busy`——"正在想…"原来靠按钮上的字说，字没了就得靠**状态**说：
-                     图标自己呼吸 + `aria-busy`，静止模式下停在**一个固定的暗档**
-                    （不是"停下动画、卡在某一帧"，见 CSS 那条 @media） */}
+                     图标呼吸 + 一圈荡出去的光晕，整颗按钮**变得更实**（不是变淡）；
+                     静止模式下两条动画都停，但实心橙与那圈固定的光晕都还在
+                     （所以静止态丢的只是那点动，见 CSS 那条 @media）
+                ★ 2026-10-18 补第三个属性 `data-has-suggestion`：用户报"点了之后一会浅色
+                  一会原色，还以为没成功"。除了把忙态从"变淡"翻成"变实"（CSS 那一段），
+                  还有一件事要说：成功之后唯一的信号是框下面多出一块，而那一块会把
+                  整条动作栏往下推——他按的那颗钮挪了位，视线却还在原处。
+                  右上角那颗小圆点钉在原地，说"结果在这儿，还没用" */}
             <button
               type="button"
               className="cl__optimize"
               data-busy={thinking ? 'true' : 'false'}
+              data-has-suggestion={suggest && !applied ? 'true' : 'false'}
               onClick={() => void optimize()}
               disabled={!ready || thinking}
-              aria-label={thinking ? '正在想…' : '优化提示词'}
+              aria-label={
+                thinking
+                  ? '正在想…'
+                  : suggest && !applied
+                    ? '优化提示词（有一条改好的句子还没用）'
+                    : '优化提示词'
+              }
               aria-busy={thinking}
               title={
                 textBlocked
