@@ -291,6 +291,13 @@
   color: var(--danger);
 }
 
+/* ★ 「重写好了」（2026-10-18）与上面几档的语气不同：它是**一件事做完了**，
+   不是"你这边的改动存下去了"。所以给 `--ink`（那一格里最强的一档墨）——
+   刚等了 101 秒的人要读的就是这一句，别把它压进灰里（同 `.ss__shape` 那条理由） */
+.gr__save[data-state='rewritten'] {
+  color: var(--ink);
+}
+
 .gr__composer-acts {
   display: flex;
   align-items: center;

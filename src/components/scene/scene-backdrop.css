@@ -99,10 +99,10 @@
   inset: 0;
 }
 .scene-backdrop__layer[data-scene='1']::after {
-  background: rgba(247, 247, 248, 0.12);
+  background: rgba(var(--bg-rgb), 0.12);
 }
 .scene-backdrop__layer[data-scene='2']::after {
-  background: rgba(247, 247, 248, 0.12);
+  background: rgba(var(--bg-rgb), 0.12);
 }
 .scene-backdrop__layer[data-scene='3']::after {
   background: linear-gradient(

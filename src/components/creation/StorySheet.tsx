@@ -72,6 +72,22 @@
  *      那一版故事有错时树根本建不起来，而那一刻正是家长最需要看清哪几页属于哪一支的时候。
  *    ★ 两条支**各说一句**，不是每页都重复那一句：同一句话抄在四张卡上，
  *      读起来像四件不同的事（这一屏的长短本来就让人累）。
+ * 8. ★★ **重写那 101 秒里，屏幕上要有话说**（2026-10-18，用户的原话是
+ *    「当我输入这个是，前端什么反馈都没有，只是文字我输入文本框的文字消失了，
+ *    这样用户怎么知道有没有重新生成故事呢」）。三件事一起改，每件都对应他看见的一处：
+ *    ① **那一颗按钮忙起来**（`data-busy`）：实心橙 + 一圈荡出去的光 + 呼吸。
+ *       原样是"按下去就变淡"，而"变淡"读起来是"这一颗不能用了"——与 `CreateLanding`
+ *       那颗优化按钮踩过的是同一个坑（用户当时说"一会浅色一会原色，还以为没成功"）。
+ *    ② **家长写的那一句不再一点就清**（`onRewrite` 现在回一个 Promise，成了才清）：
+ *       他看见的"文字消失了"正是这一句，而重写失败时它还得回来。
+ *    ③ **引擎自己那句话摊在按钮旁边**（`.ss__rewrite-live`）：`desk.stageLine`
+ *       与"这一版没通过校验，正在重写（第 k / N 次）"**早就算好了**，只是原来一个
+ *       读者都没有——画桌在闸门这一屏不渲染（`atGate`），于是那句话无处可去。
+ *    ★ 判据不是"按钮换了个样子"，是**这段等待里屏幕上有没有一句真话**：
+ *      `.out/probe-rewrite.mjs` 把那条 SSE 请求拦下来（真服务端一个字节都收不到），
+ *      量的是按钮的 `data-busy`、按钮旁边那句话、以及框里那句还在不在。
+ *      真实那一次是 **101 秒 / 3 次尝试**（`events.jsonl` 六条事件，首尾差 101.48 s），
+ *      而屏幕上一个字都没多——这是量出来的，不是推出来的。
  */
 
 import { useMemo, useRef, useState, type ReactNode } from 'react'
@@ -141,12 +157,29 @@ export type StorySheetProps = {
    *   改完自然就有（`lib/story-shape.ts` 回了 null 的判据写在那里）
    */
   shape: StoryShape | null
-  /** 正在重写 / 正在出图：整屏只读 */
+  /** 正在重写（闸门这一屏**只会**因为重写而忙：「就按这个画」一点就翻到画桌那一屏了）。
+   *  整屏只读——改到一半被自己的请求盖回去，是这类表单最典型也最难查的一种坏法 */
   busy: boolean
+  /**
+   * 重写中**引擎自己那句话**（`desk.stageLine` / "这一版没通过校验，正在重写（第 k / N 次）…"）。
+   *
+   * ★ 它由 `GenerationRun` 从画桌里取（`planning ?? stageLine`），**不是这里编的**：
+   *   同一句话要能写进日志、进 MCP 返回（`describeEvent` 的纪律），各写一份必然漂。
+   * ★ `null` = 还没有一句话可说（请求刚发出去、第一帧还没回来）。那就不渲染——
+   *   按钮上"重写中…"已经在说了，旁边再补一句同义的话是噪音（见文件头第 8 条③）
+   */
+  busyLine: string | null
   /** 家长手改过没有（自动保存那一句要靠它决定说不说"重写会盖掉"） */
   dirty: boolean
   onChange: (next: StoryDoc) => void
-  onRewrite: (note: string) => void
+  /**
+   * 「让 AI 重写一版」。**回一个 Promise**：`true` = 真的换成了新的一版。
+   *
+   * ★ 为什么要回值（文件头第 8 条②）：家长写的那一句要到**成功**才清。
+   *   原来是一点就清（`onRewrite(note); setNote('')`），于是失败时他没得可改、
+   *   只能重打一遍——而他看得见的那一处变化恰恰就是"字没了"。
+   */
+  onRewrite: (note: string) => Promise<boolean>
 }
 
 /** 选择点那九格里**哪一侧**的哪一格。★ 两个侧面各写一遍三元的前提：
@@ -159,6 +192,7 @@ export default function StorySheet({
   problems,
   shape,
   busy,
+  busyLine,
   dirty,
   onChange,
   onRewrite,
@@ -282,19 +316,37 @@ export default function StorySheet({
           onChange={setNote}
         />
         <div className="ss__rewrite-acts">
+          {/* ★ 忙态的整套长相在 `story-sheet.css` 的 `[data-busy='true']` 那一段
+              （实心橙 + 荡出去的一圈光 + `cursor: progress`）。
+              ★ `data-busy` 与 `disabled` **同时**在：这一颗此时确实按不动（那是真的），
+                但要画成"在做事"而不是"不能用"——见文件头第 8 条① */}
           <button
             type="button"
             className="ss__rewrite-btn"
+            data-busy={busy ? 'true' : 'false'}
             disabled={busy || note.trim() === ''}
+            aria-busy={busy}
+            title={busy ? '正在按你写的这句重写整篇' : '按你写的这句让 AI 重写整篇故事'}
             onClick={() => {
-              onRewrite(note.trim())
-              setNote('')
+              const text = note.trim()
+              // 成了才清（文件头第 8 条②）：失败时这一句还在框里，改一改再点一次就行
+              void onRewrite(text).then((done) => {
+                if (done) setNote('')
+              })
             }}
           >
-            让 AI 重写一版
+            {busy ? '重写中…' : '让 AI 重写一版'}
           </button>
-          {/* ★ 只在手改过时说（见文件头第 4 条） */}
-          {dirty && <span className="ss__warn">重写会盖掉你手改的地方</span>}
+          {/* ★ 只在手改过时说（见文件头第 4 条）。★ 忙的时候它让位给下面那句话：
+              警告说的是"接下来会盖掉什么"，而那时候已经盖下去了 */}
+          {!busy && dirty && <span className="ss__warn">重写会盖掉你手改的地方</span>}
+          {/* ★ 重写中：引擎自己那句话（见文件头第 8 条③）。
+              `role="status"`：读屏也要听得见这一步在做什么，它只看得见按钮上的字 */}
+          {busy && busyLine !== null && (
+            <span className="ss__rewrite-live" role="status">
+              {busyLine}
+            </span>
+          )}
         </div>
       </div>
 

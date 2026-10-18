@@ -94,6 +94,7 @@ import {
   storyDeskOf,
   withStoryTitle,
   type DeskState,
+  type RailNode,
 } from './frames.ts'
 
 /**
@@ -165,8 +166,12 @@ export type GenerationRunProps = {
  */
 type Phase = 'planning' | 'story' | 'running' | 'ready' | 'failed' | 'replaying'
 
-/** 自动保存那行小字的状态机。★ `'failed'` 是**必须存在**的一档：存不上要说得出来 */
-type SaveState = 'idle' | 'saving' | 'saved' | 'failed'
+/** 那行小字的状态机。★ `'failed'` 是**必须存在**的一档：存不上要说得出来。
+ *  ★ 2026-10-18 多一档 `'rewritten'`：重写成功之后这一屏上要有一句"换成新的了"——
+ *    整篇被换掉是**悄悄发生**的（同一屏、同一批框，只是字不一样了），而家长刚等了
+ *    101 秒（实测），他需要一个答案："刚才那一眼是不是白等"。用户原话：
+ *    「这样用户怎么知道有没有重新生成故事呢」。它与会话里其余几档同寿：一动笔就归零。 */
+type SaveState = 'idle' | 'saving' | 'saved' | 'failed' | 'rewritten'
 
 export default function GenerationRun({ plan, resume }: GenerationRunProps) {
   const [desk, setDesk] = useState<DeskState>(EMPTY_DESK)
@@ -521,29 +526,59 @@ export default function GenerationRun({ plan, resume }: GenerationRunProps) {
    * ★ 回来之后重新取一次 `story.json`（而不是"把流里的事件拼一份出来"）：
    *   盘上那一份是服务端写的，与拿去画的那一份**必然**是同一个——
    *   在客户端再拼一次就是同一个值有第二个来源。
+   * ★ 返回 **`true` 才算换成了新的一版**（`StorySheet` 拿它决定清不清那一格，
+   *   见那边文件头第 8 条②）。三条"不算成"的路都回 false：请求本身失败、
+   *   流里来了一条 `fatal` 帧（服务端把这一轮终止了，而**流仍然是正常结束的**——
+   *   原来这里只看 promise 成没成，于是失败也会一路走到"换成新的了"）、
+   *   以及这一本已经有活干着。
    */
   const rewrite = useCallback(
-    async (rewriteNote: string) => {
-      if (!bookId || working) return
+    async (rewriteNote: string): Promise<boolean> => {
+      if (!bookId || working) return false
       setWorking('rewriting')
       setNote(null)
-      // 整篇都会被换掉，所以那一份"改过没改过"的记录跟着归零
-      setDirty(false)
+      /* ★ 客户端这一份事件日志**跟着服务端一起截断**（`rewrite/route.ts` 文件头第 2 条：
+         重写第一步就是 `log.truncate`）——它是同一份日志的镜像，不跟着截就会错在页数上：
+         16 页重写成 10 页之后，先前那条 `plan-ready`（`nodeCount: 16`）还留在数组里，
+         而 `deskOf` 的 `total` **只增不减**（`frames.ts` 判据 2，那一条是为乱序与重放
+         写的），于是点「就按这个画」时折出来的桌子仍按 16 页摆格子，最后留下 6 个
+         永远填不上的空框、上面写着 `10 / 16 页画好了`。服务端那一半是同一条纪律，
+         只不过它那边防的是重放。
+       ★ desk 一起清：书名照旧有着落（`shownDesk` 读的是**手上这一份 `story`**，
+         它到成功那一刻才被换掉），而"编故事正在做"这件事由 `rail` 那一条说
+         （见 `rail` 那个 useMemo：重写是**已经发生的事实**，不等事件）。
+       ★ 顺手把 desk 清成空的也让"上一版每页的正文"不留在折出来的桌子里——
+         这一屏的正文本来就来自 `story`，不从 desk 来。 */
+      eventsRef.current = []
+      setDesk(EMPTY_DESK)
+      /** 流里来的 `fatal`（服务端把这一轮终止了）。★ 它**不算异常**：流是正常收尾的。
+       *  ★ 装在一个对象里而不是一个 `let` 变量：`let x: string | null = null` 在这里
+       *    会被 TS 收窄成 `null`，底下那句判断就报"两个类型不重叠"——
+       *    而属性上的收窄会在每次函数调用之后作废，正是这里要的。 */
+      const failure: { note: string | null } = { note: null }
       try {
         await rewriteStory(bookId, rewriteNote, (frame) => {
           if (frame.kind === 'engine') {
             eventsRef.current.push(frame.event)
             setDesk(deskOf(eventsRef.current))
           } else if (frame.kind === 'fatal') {
+            failure.note = frame.message
             setNote(frame.message)
           }
         })
+        if (failure.note !== null) return false
         const doc = await fetchStory(bookId)
         setStory(doc)
         setDesk(storyDeskOf(doc))
-        setSaveState('saved')
+        /* ★ 整篇都换掉了，那一份"改过没改过"的记录跟着归零——但**放在成功这一支**：
+           失败时家长手改的那些字还在屏幕上，`dirty` 一归零，自动保存就再也不会去存它们
+           （他改的东西会在他离开这一屏之后真的没有）。 */
+        setDirty(false)
+        setSaveState('rewritten')
+        return true
       } catch (err) {
         setNote(err instanceof Error ? err.message : String(err))
+        return false
       } finally {
         setWorking(null)
       }
@@ -620,7 +655,30 @@ export default function GenerationRun({ plan, resume }: GenerationRunProps) {
    *   进来走的正是这一条——那一刻日志就是唯一事实。
    */
   const shownDesk = useMemo(() => withStoryTitle(desk, story), [desk, story])
-  const rail = railOf(shownDesk, voiceOn)
+  /**
+   * 阶段轨。★ 重写那一段要**手改一格**（2026-10-18，与用户那句"前端什么反馈都没有"
+   * 是同一件事的一半：屏幕上在做的事，轨道说已经做完了）。
+   *
+   * `railOf` 只认 desk 里已经成立的事实，而「编故事」那一格的判据是**书名在不在**
+   * （`plan-ready` 说的）。重写时书名有两个来源、都指向上一次：
+   * ① desk 里那条旧的 `plan-ready`——`rewrite()` 已经把它截掉了；
+   * ② **手上这一份 `story`**——`withStoryTitle` 会把书名从它那儿取回来
+   *    （那一条本是为"家长改了书名再点画"写的，这里正好被它盖住）。
+   * 于是那一格会一直写着「已完成」，而屏幕上正在做的恰恰是它。
+   *
+   * ★ 所以这里按 `working` 说，而不是再从 desk 里推：重写**在请求发出去的那一刻**
+   *   就是确定的事实（按钮的忙态、那一行主句都按它说），与 `illustrate()` 点下去先
+   *   `setPhase('running')` 是同一条——"点下去就是在做这件事了"，不是推断。
+   * ★ 只动这一格：其余三格（逐页画 / 配音 / 装订）在重写期间本来就该是"还没轮到"。
+   */
+  const rail = useMemo(() => {
+    const nodes = railOf(shownDesk, voiceOn)
+    if (working !== 'rewriting') return nodes
+    return nodes.map((node): RailNode =>
+      node.key === 'planning' ? { ...node, state: 'now' } : node,
+    )
+  }, [shownDesk, voiceOn, working])
+
   /**
    * 服务端这一轮**还在跑**。★ 它是 `Desk` 那条进度条上要不要扫过一道光的唯一依据，
    * 而这件事只有**拿着连接的这一方**知道：画桌上的事件只说明"走到哪儿了"，
@@ -639,6 +697,18 @@ export default function GenerationRun({ plan, resume }: GenerationRunProps) {
   const atGate = phase === 'story' && story !== null
   /** 闸门那一屏整屏只读（重写中 / 出图中） */
   const gateBusy = working !== null
+  /**
+   * 重写中那颗按钮旁边要说的一句话：引擎自己的话（`deskOf` 折出来的，见 `frames.ts`）。
+   *
+   * ★ 两个来源，优先级是有讲究的：
+   *   ① `desk.planning` —— "这一版故事没通过校验，正在重写（第 k / N 次）：…"。
+   *      它是**最该看见的那一句**：重写一次里模型常要试 2–3 遍（实测那一次 3 遍、
+   *      101 秒），家长等的这段时间里屏幕上只有它说得出"还在动，动到第几遍了"；
+   *   ② `desk.stageLine` —— "正在编故事…"，第一帧到、还没有重试之前的那一句。
+   * ★ `null` = 一句话都还没有（请求刚发出去）：那一格就不渲染，
+   *   按钮上"重写中…"已经在说这件事了。
+   */
+  const rewriteLine = working === 'rewriting' ? (shownDesk.planning ?? shownDesk.stageLine) : null
   /** 「就按这个画」亮不亮。★ 判据来自 `problems`（与服务端那一关同一个函数） */
   const canDraw = atGate && !gateBusy && problems.length === 0
 
@@ -682,10 +752,22 @@ export default function GenerationRun({ plan, resume }: GenerationRunProps) {
             **只在画桌那一行说**（而且它在轮着换、颜色是橙的），这里留下的是
             **接下来会发生什么**——那才是家长真正在等的那个承诺 */}
         {phase === 'planning' && '编好之后会停下来让你先看一眼，你说画才开始画。'}
-        {/* ★ 闸门那一屏的主句（2026-10-17）：说清**为什么停在这儿**——钱还没花 */}
+        {/* ★ 闸门那一屏的主句（2026-10-17）：说清**为什么停在这儿**——钱还没花。
+            ★ 2026-10-18：重写那一段时间它换一句（用户："前端什么反馈都没有……
+              这样用户怎么知道有没有重新生成故事呢"）。这一句是**这一屏上最大的一行字**，
+              而原来它在那 101 秒里一个字都不变；换掉的这一句同时答两个问题：
+              现在在做什么、做完之后会怎样。
+            ★ 原来这里还挂着一条 `{phase === 'story' && !atGate && '正在重写这一版故事…'}`，
+              而它**一次也没上过屏幕**：`atGate` 的定义里就含 `story !== null`，
+              而重写全程 `story` 都在手上（整篇换掉是成功之后才 `setStory`），
+              所以 `phase === 'story' && !atGate` 永远不成立。写那句话的人要说的
+              正是下面这一句——话是对的，位置错了。 */}
         {atGate &&
+          working !== 'rewriting' &&
           '故事写好了，先看一遍——不满意的地方直接改，改完点「就按这个画」才出图。图是按你改好的这一版画的。'}
-        {phase === 'story' && !atGate && '正在重写这一版故事…'}
+        {atGate &&
+          working === 'rewriting' &&
+          '正在按你说的重写这一版故事——写好了这一屏会自己换过来，你刚写的那句还留在框里。'}
         {phase === 'running' &&
           '正在一页一页做。不想等的话可以先离开，这一轮不会停——做完之后在书架的「正在编辑」里找它，在那里接着编辑。'}
         {phase === 'replaying' &&
@@ -720,6 +802,7 @@ export default function GenerationRun({ plan, resume }: GenerationRunProps) {
           problems={problems}
           shape={shape}
           busy={gateBusy}
+          busyLine={rewriteLine}
           dirty={dirty}
           onChange={(next) => {
             setStory(next)
@@ -729,7 +812,7 @@ export default function GenerationRun({ plan, resume }: GenerationRunProps) {
             // 书名改了，上面那个大标题与阶段轨要跟着走（那是同一份数据的两种显示）
             setDesk(storyDeskOf(next))
           }}
-          onRewrite={(rewriteNote) => void rewrite(rewriteNote)}
+          onRewrite={(rewriteNote) => rewrite(rewriteNote)}
         />
       )}
 
@@ -774,12 +857,16 @@ export default function GenerationRun({ plan, resume }: GenerationRunProps) {
                 : published
                   ? '这本已经装订好了，在书架上放着。'
                   : '这一本还没装订。不满意哪一页就在那一页重做，都没问题再点确定。'}
-            {/* 自动保存那行小字（文件头第 6 条）。★ 只在闸门那一屏说，且只在有话说时说 */}
+            {/* 自动保存那行小字（文件头第 6 条）。★ 只在闸门那一屏说，且只在有话说时说。
+                ★ `'rewritten'` 那一档（2026-10-18）说的是**另一件事**：自动保存说的是
+                  "你改的字存下去了"，而它是"整篇换成新的了"——重写成功是悄悄发生的
+                  （同一屏、同一批框，只是字不一样），刚等了 101 秒的人需要一个答案 */}
             {atGate && saveState !== 'idle' && (
-              <span className="gr__save" data-state={saveState}>
+              <span className="gr__save" data-state={saveState} role="status">
                 {saveState === 'saving' && '正在存…'}
                 {saveState === 'saved' && '改的已经存上了'}
                 {saveState === 'failed' && '没存上——检查一下网络，改动还在这一屏里'}
+                {saveState === 'rewritten' && '重写好了——上面这一屏已经是新的一版'}
               </span>
             )}
           </p>

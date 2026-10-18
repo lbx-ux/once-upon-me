@@ -28,6 +28,12 @@
  *    "跳一下"，而这一屏本来就长——跳一下会让人以为自己改错了地方。
  * 5. **窄屏是单列**：三个框在 560px 以下竖着排（`grid-template-columns` 那一处），
  *    与运行视图底部那条同一个断点，不另发明一个。
+ * 6. ★ **重写那一颗忙起来是"变实"不是"变淡"**（2026-10-18，用户："前端什么反馈都没有，
+ *    只是我输入文本框的文字消失了，这样用户怎么知道有没有重新生成故事呢"）。
+ *    那一次实测等了 101 秒（`events.jsonl`），而屏幕上唯一的变化是这一颗变浅了——
+ *    变浅读起来是"这一颗不能用了"，与 `create-landing.css` 那颗优化按钮
+ *    踩过的是同一个坑（当时用户的原话是"还以为没成功"）。整套长相与那条同源：
+ *    实心橙 + 一圈荡出去的光 + `cursor: progress`，静止模式下停在固定的光晕上。
  */
 
 .ss {
@@ -161,9 +167,60 @@
   color: var(--accent);
 }
 
-.ss__rewrite-btn:disabled {
+/* 「还按不动」= 框里还没写字。★ `:not([data-busy='true'])` 这一截与
+   `create-landing.css` 那颗优化按钮同一条（2026-10-18，用户报的也正是同一件事的
+   原话："点了之后一会浅色一会原色，也不容易看到，还以为没有成功"）：
+   忙与"没得按"是**两件事**，混在一起就会把"在做事"画成"这一颗坏了" */
+.ss__rewrite-btn:disabled:not([data-busy='true']) {
   cursor: default;
   opacity: 0.5;
+}
+
+/* ── 重写中那一整颗（见 `StorySheet.tsx` 文件头第 8 条①） ─────────────────────
+   用户实测那一次是 **101 秒**（`events.jsonl` 六条事件，首尾差 101.48 s），
+   而这一颗原来是"按下去就变淡"——那 101 秒里屏幕上唯一的变化就是它变浅了。
+
+   ★ 底色**反着走**：不往白底上退，而是往实心橙上打。理由是按下那一刻手上是什么：
+     悬停态本来就是描边橙 + 橙字，忙的时候接着这一片橙，于是"按下"到"想完"
+     一个颜色都不跳（与 `create-landing.css` 那条同一个推导）。
+   ★ 光晕（`ss-rewrite-ring`）是给"呼吸"兜底的那一重：那一圈从按钮边缘荡出去、
+     只荡一圈、**不是转圈**——转圈转的是"还剩多少"，而那件事没人知道。
+     它用 `box-shadow` 而不多一个元素：这一颗是 flex 里的一格，加兄弟会把
+     「重写会盖掉…」那句话推走 */
+.ss__rewrite-btn[data-busy='true'] {
+  border-color: transparent;
+  background: var(--accent);
+  color: var(--surface);
+  cursor: progress;
+  animation: ss-rewrite-ring 1.5s ease-out infinite;
+}
+
+@keyframes ss-rewrite-ring {
+  from {
+    box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0.42);
+  }
+  to {
+    box-shadow: 0 0 0 11px rgba(var(--accent-rgb), 0);
+  }
+}
+
+/* 静止模式：那一圈光**停在终态**（一圈固定的光晕），底色照旧是橙的——
+   关掉的只是那点动（同 `create-landing.css` 那条判据：要的是少动，不是少信息。
+   静止态丢的只是"我还在动"这一层，而"这一颗正在做事"由实心橙与那圈光说） */
+@media (prefers-reduced-motion: reduce) {
+  .ss__rewrite-btn[data-busy='true'] {
+    animation: none;
+    box-shadow: 0 0 0 5px rgba(var(--accent-rgb), 0.16);
+  }
+}
+
+/* 重写中挤在按钮旁边的那句话（引擎自己的话：`desk.stageLine` / 校验没过那一条）。
+   ★ `--ink-soft` 而不是 `--ink-muted`：它是**这一步现在到哪儿了**的唯一答案
+     （重写一次要一分多钟，而里面还有 1–3 次尝试），不是可有可无的注解 */
+.ss__rewrite-live {
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 .ss__warn {
