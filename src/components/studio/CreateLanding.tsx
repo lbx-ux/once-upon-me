@@ -51,6 +51,11 @@
  *     而且"正在想…"那件事也要换个方式说——现在靠 `data-busy` 的呼吸 + `aria-busy`。
  *   ★ 优化那一颗必须长在**它真正作用的输入框**旁边（工单 07 §一）：
  *     长在主题那一行，用户会以为"挑了恐龙再优化"会变成另一只恐龙。
+ *   ★ 2026-10-18：**骰子换了它的那一份数据**（用户："现在这个随机选取并不是真正的
+ *     随机，只是按顺序从下面 12 个主题里面选取"）。它原来读主题墙那 12 句、按顺序转，
+ *     现在读 `lib/creation/inspirations.ts` 那个 72 条的池子，洗一副牌一张张发。
+ *     位置、长相、可访问名都没动——动的是它抽的是哪一份表，以及**抽到不带主题那句时
+ *     会把主题清空**（墙上没有一格亮着，站回默认形象）。
  *
  * ★ 它**不自己造一套表单**：这一句话交给 `/create?wish=…&theme=…&card=…`，
  *   创作流里那四步（孩子 / 想讲什么 / 角色卡 / 生成）一步都不少。
@@ -108,7 +113,8 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 
-import { nextExample, ofTheme } from '@/lib/creation/example-wishes.ts'
+import { ofTheme } from '@/lib/creation/example-wishes.ts'
+import { drawInspiration, INSPIRATION_POOL } from '@/lib/creation/inspirations.ts'
 import { DEFAULT_FIGURE, figurePath } from '@/lib/figures.ts'
 import { forgetThemes, peekThemes, themeArrival } from '@/lib/theme-handoff.ts'
 import { THEMES, themeCardPath, type ThemeKey } from '@/lib/themes.ts'
@@ -146,7 +152,20 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
   const [theme, setTheme] = useState<ThemeKey | null>(null)
   /* ★ 一条推导，不是一个状态：立绘只跟着主题走（见文件头 5） */
   const figure = theme ?? DEFAULT_FIGURE
-  const [exampleAt, setExampleAt] = useState(0)
+  /**
+   * 「换一句」那副牌（2026-10-18）。
+   *
+   * ★ 两个 ref，不是 state：它们是**发牌机**的内部状态，画面上一个像素都不由它们决定
+   *   （屏幕上变的是 `wish` 与 `theme` 那两条 state）。写成 state 只会多两次重渲染。
+   *   ★ 这也顺手避开了严格模式那条坑：初始化器会被跑两次，而这里只在**点击**里写。
+   *
+   * ★ 为什么不是"每次随便取个下标"：真正的随机**会连着给同一条**，用户看到的是
+   *   "这颗按钮坏了"。发牌保证一轮 72 条之内不重复（`drawInspiration`）。
+   * ★ 在这之前这里是 `exampleAt` 一个计数器，读的是主题墙那 12 句——用户
+   *   "现在这个随机选取并不是真正的随机"说的就是它：连按 12 下必然回到原句。
+   */
+  const deckRef = useRef<number[]>([])
+  const lastRef = useRef(-1)
   /** 哪一格的下拉开着。★ 一个状态而不是两个布尔：两格同时开着是画不出来的 */
   const [open, setOpen] = useState<'card' | 'voice' | null>(null)
   /** 「这一本要怎么做」那个弹窗开着没有（工单 04）。★ 与上面那个 `open` 分开：
@@ -349,8 +368,11 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
   }
 
   /** 填一句现成的话。★ 骰子与封面墙走的是同一个动作，只是选法不同：一个替你挑，一个你自己挑。
-   *  主题一起换，输入卡上方站着的那个孩子**也跟着换**（`figure` 是从 `theme` 推出来的） */
-  const applyWish = (text: string, key: ThemeKey): void => {
+   *  主题一起换，输入卡上方站着的那个孩子**也跟着换**（`figure` 是从 `theme` 推出来的）
+   *  ★ `key` 可以是 `null`（2026-10-18）：灵感池里有一半句子不带主题，点到了就要把主题
+   *    **清成空**——留着上一格的主题，框里的字和站着的孩子就各说各的（那一格还会亮着，
+   *    像是在说"这句话是这张卡的"）。清成空之后走默认形象，与"还没挑过主题"同一条路。 */
+  const applyWish = (text: string, key: ThemeKey | null): void => {
     setWish(text)
     setTheme(key)
   }
@@ -369,10 +391,24 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
     setApplied(false)
   }
 
+  /**
+   * 「换一句」：从灵感池里发一张牌。
+   *
+   * ★ 它读的是**池子**（`INSPIRATION_POOL`，72 条），不是主题墙那 12 句——
+   *   墙上那 12 句是"这一格点了填什么"，一格一句、还要配得上那张插画，
+   *   所以它不可能大起来，也就不可能随机得起来（2026-10-18 用户的判断，
+   *   详见 `lib/creation/inspirations.ts` 文件头）。
+   * ★ 池子里每条**可以**带主题：带上就点亮那一格、立绘跟着换；不带就清空主题，
+   *   站回默认形象。两种都走 `applyWish` 这一个动作。
+   */
   const roll = (): void => {
-    const item = nextExample(exampleAt)
-    setExampleAt(exampleAt + 1)
-    applyWish(item.text, item.theme)
+    const next = drawInspiration(deckRef.current, lastRef.current)
+    deckRef.current = next.deck
+    lastRef.current = next.index
+    // ★ `?? null`：池子里不带主题的写的是**空着**（`theme?: ThemeKey`），
+    //   在这里归一成"没有主题"这一个值，别处（`applyWish` / `startRun`）不必再判两种空
+    const item = INSPIRATION_POOL[next.index] as (typeof INSPIRATION_POOL)[number]
+    applyWish(item.text, item.theme ?? null)
   }
 
   /**
@@ -726,13 +762,16 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
             </button>
             {/* 换一句。★ 同样只留那枚骰子，可访问名靠 `aria-label`。
                 ★ 它原来是一颗圆里三个点、后来补过文字标签（"读起来像随机生成一本书"），
-                  现在文字又撤了——所以 `title` 里必须把话说全，图标语言一个人扛不住 */}
+                  现在文字又撤了——所以 `title` 里必须把话说全，图标语言一个人扛不住。
+                ★ 2026-10-18 `title` 补了半句：这一颗现在还会**顺手换主题**（抽到带主题的
+                  那一半时），而主题一换，输入卡上方的立绘跟着换——不说的话，用户会以为
+                  "按一下骰子孩子怎么变了"是一件自己没做过的事 */}
             <button
               type="button"
               className="cl__roll"
               onClick={roll}
               aria-label="换一句"
-              title="换一句灵感（填进输入框，可以照改）"
+              title="换一句灵感（填进输入框，可以照改；带主题的那句会一起换掉上面的小主角）"
             >
               <svg className="cl__roll-icon" viewBox="0 0 24 24" aria-hidden="true">
                 <rect x="3" y="3" width="18" height="18" rx="5" />
@@ -805,7 +844,13 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
       <ul className="cl__wall">
         {THEMES.map((t) => {
           const wish0 = ofTheme(t.key)
-          const active = theme === t.key && wish === wish0?.text
+          /* ★ 亮着的判据是"这一格是不是当前主题"，**不再**是"框里这句话就是这一格的例句"
+             （2026-10-18 随灵感池一起改）。
+             旧判据在池子下会撒谎：抽到「小恐龙在泥地里踩出的脚印…」这句时主题确实是恐龙
+             （立绘换了、`?theme=` 也会带上），但框里那句话不是墙上那一句，于是墙上**一格都不亮**——
+             而"哪一格是当前主题"正是这一排在说的事。
+             ★ 反过来也顺：用户挑完恐龙又自己改了几个字，主题没有变，那一格就该还亮着。 */
+          const active = theme === t.key
           return (
             <li key={t.key}>
               <button

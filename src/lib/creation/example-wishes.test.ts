@@ -11,7 +11,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { THEME_KEYS, THEMES, themeCardPath } from '../themes.ts'
-import { EXAMPLE_WISHES, missingThemes, nextExample, ofTheme } from './example-wishes.ts'
+import { EXAMPLE_WISHES, missingThemes, ofTheme } from './example-wishes.ts'
 
 describe('示例愿望表', () => {
   it('每一条的 theme 都是真实存在的主题键', () => {
@@ -35,7 +35,7 @@ describe('示例愿望表', () => {
   })
 })
 
-describe('主题墙与"换一句"', () => {
+describe('主题墙', () => {
   it('主题墙一格一条：12 个主题都查得回自己那句', () => {
     // ★ 这条钉的是"墙上的每一格按下去都有反应"。查不回来就是一格点了不填字的死卡
     for (const theme of THEMES) {
@@ -49,13 +49,5 @@ describe('主题墙与"换一句"', () => {
     for (const theme of THEMES) {
       expect(themeCardPath(theme.key)).toBe(`/art-cards/${theme.key}.webp`)
     }
-  })
-
-  it('换一句是循环不是随机：连着按不会撞到同一条，转一圈回到起点', () => {
-    const first = nextExample(0)
-    expect(nextExample(1).text).not.toBe(first.text)
-    expect(nextExample(EXAMPLE_WISHES.length)).toEqual(first)
-    // 负数索引（客户端状态被清过）也要落在表内，而不是 undefined
-    expect(nextExample(-1)).toEqual(EXAMPLE_WISHES[EXAMPLE_WISHES.length - 1])
   })
 })
