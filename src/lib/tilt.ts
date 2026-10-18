@@ -34,7 +34,18 @@ export type TiltConfig = {
   liftPx: number
   /** 命中时的放大。1.015 ≈ 抬起 6px 后应有的透视补偿，再大就会顶到邻居卡。 */
   hoverScale: number
-  /** 暖光斑半径（px）。240 在 560×315 的卡面上是"一角被照亮"，不是"跟了一个手电筒"。 */
+  /**
+   * 暖光斑半径（px）。
+   *
+   * ★ 240 → **150**（2026-10-18，用户："鼠标的那个光圈效果小一点，不要这么亮"）。
+   *   240 在 518 宽的卡面上接近半张卡，读起来是"手电筒打上去"而不是"一角被照亮"；
+   *   150 约等于卡片宽度的三成，光落在光标那一角上，卡片其余部分还是纸。
+   *
+   * ★ 这个数是**这个字段唯一的家**：`.hl__glow` 的渐变读的是 `var(--hl-glow-r)`，
+   *   由 `HighlightsReel` 从 `TILT` 写进 section 的行内样式。
+   *   改之前 CSS 里另写着一份 240px，而这个字段**没有任何消费者**——
+   *   两个手写的数会各自漂移，正是 README 反复警告的那种耦合。
+   */
   glowRadiusPx: number
 }
 
@@ -43,7 +54,7 @@ export const TILT: TiltConfig = {
   artShiftPx: 10,
   liftPx: 6,
   hoverScale: 1.015,
-  glowRadiusPx: 240,
+  glowRadiusPx: 150,
 }
 
 export type TiltState = {

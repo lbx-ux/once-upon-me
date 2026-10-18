@@ -81,7 +81,7 @@ import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 
 import { dragSteps, reelDepth, reelJumped, reelState, wrapActive } from '@/lib/reel'
-import { normalizePointer, tiltFromPointer } from '@/lib/tilt'
+import { TILT, normalizePointer, tiltFromPointer } from '@/lib/tilt'
 import { HIGHLIGHTS, artPath } from './highlights'
 
 /* ------------------------------------------------------------------ 常量 */
@@ -94,8 +94,11 @@ const ART_DURATION = TILT_DURATION + 0.12
  * 自动轮播的间隔。
  *
  * 6500 → 3200 → **2000**（用户两次要求加快）。绕一圈 5 × 2 = 10 秒。
- * 2000ms **读不完任何一条**：正文最长的那条（第 3 条）约 110 个汉字、三到四行，
- * 中文默读按 8–10 字/秒算是 11–14 秒。这个缺口比 6.5s 那一版更大，不是更小 ——
+ * 2000ms **读不完任何一条**：正文最长的那条（第 2 条）**114 个汉字**、三到四行，
+ * 中文默读按 8–10 字/秒算是 11–15 秒。（这个数 2026-10-18 随文案重写复量过：那一版
+ * 最长的是第 3 条约 110 字，现在最长的是第 2 条——五条都在 92–114 字之间，
+ * 第 5 条的字符总数更大只是因为它里面有几个拉丁词。）
+ * 这个缺口比 6.5s 那一版更大，不是更小 ——
  * 它是自动轮播的固有代价，写在这里而不是藏起来，补偿办法是"碰到就停"：
  * 指针一进这一节、键盘一进这一节、标签页一进后台，立刻停住。
  *
@@ -536,6 +539,10 @@ export function HighlightsReel() {
       id="highlights"
       ref={sectionRef}
       aria-labelledby="hl-title"
+      /* 光斑半径由 `TILT` 说了算，写下来给 `.hl__glow` 的渐变用（`var(--hl-glow-r)`）。
+         原来是 CSS 里另写着一份 240px，而 `TILT.glowRadiusPx` 没有任何消费者——
+         两个手写的数会各自漂移。挂在这一层而不是每张卡上：一个值一个家。 */
+      style={{ '--hl-glow-r': `${TILT.glowRadiusPx}px` } as CSSProperties}
       onKeyDown={onKeyDown}
       onPointerEnter={() => setHovered(true)}
       onPointerLeave={() => setHovered(false)}
@@ -575,7 +582,7 @@ export function HighlightsReel() {
           这本书是怎么长出来的
         </h2>
         <p className="hl__sub">
-          刚才一页页翻到的那些，都出自下面这五件事。它们有的已经在这两屏里露过面，有的还在路上。
+          刚才一页页翻到的那些，都出自下面这五件事：书、声音、岔路，还有把它们生出来的那台引擎。
         </p>
       </header>
 

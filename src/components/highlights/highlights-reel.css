@@ -442,7 +442,11 @@
    ★ mix-blend-mode: plus-lighter 而不是 screen：screen 在浅底上几乎看不见，
      plus-lighter 给的是"被光照到"那种加亮。在 #fffdf7 的纸面上它近乎无操作，
      落在水彩上才亮起来 —— 正是想要的：光照在画上，不是照在字上。
-     透明度压到 .34 是因为再高会把插画高光区推出纯白，变成一个小洞。 */
+   ★ 半径与亮度都是**调小过的**（2026-10-18，用户："光圈效果小一点，不要这么亮"）：
+     原来是 240px / .34，在卡面上接近半张卡，像手电筒；现在 150px / .18，
+     光只落在光标那一角。半径**写死在 CSS 里会与 `TILT.glowRadiusPx` 各漂各的**，
+     所以它读 `var(--hl-glow-r)`（由 `HighlightsReel` 从 `TILT` 写下来），
+     括号里那个兜底值只是"变量没写下来时也别没有光"。 */
 .hl__glow {
   position: absolute;
   inset: 0;
@@ -450,10 +454,11 @@
   pointer-events: none;
   opacity: 0;
   background: radial-gradient(
-    240px 240px at calc(var(--hl-gx) * 100%) calc(var(--hl-gy) * 100%),
-    rgba(255, 246, 230, 0.34) 0%,
-    rgba(255, 246, 230, 0.11) 42%,
-    rgba(255, 246, 230, 0) 70%
+    var(--hl-glow-r, 150px) var(--hl-glow-r, 150px) at calc(var(--hl-gx) * 100%)
+      calc(var(--hl-gy) * 100%),
+    rgba(255, 246, 230, 0.18) 0%,
+    rgba(255, 246, 230, 0.06) 45%,
+    rgba(255, 246, 230, 0) 72%
   );
   mix-blend-mode: plus-lighter;
   transition: opacity 0.34s ease;

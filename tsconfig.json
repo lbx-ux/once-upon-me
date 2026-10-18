@@ -6,11 +6,7 @@
     "forceConsistentCasingInFileNames": true,
     "allowImportingTsExtensions": true,
     "target": "ES2017",
-    "lib": [
-      "dom",
-      "dom.iterable",
-      "esnext"
-    ],
+    "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
@@ -28,9 +24,7 @@
       }
     ],
     "paths": {
-      "@/*": [
-        "./src/*"
-      ]
+      "@/*": ["./src/*"]
     }
   },
   "include": [
@@ -45,6 +39,7 @@
     ".next-diag/types/**/*.ts",
     ".next-form/types/**/*.ts",
     ".next-gate/types/**/*.ts",
+    ".next-hl/types/**/*.ts",
     ".next-own/types/**/*.ts",
     ".next-pfbg/types/**/*.ts",
     ".next-session/types/**/*.ts",
@@ -54,9 +49,7 @@
     ".next-verify/types/**/*.ts",
     ".next/types/**/*.ts",
     "next-env.d.ts",
-    ".next-hl/types/**/*.ts"
+    ".next-insp/types/**/*.ts"
   ],
-  "exclude": [
-    "node_modules"
-  ]
+  "exclude": ["node_modules"]
 }
