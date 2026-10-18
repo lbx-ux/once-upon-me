@@ -382,9 +382,18 @@ export default function NewVoicePanel({ onClose }: { onClose: () => void }) {
               </label>
             </div>
             <div className="nv__acts">
+              {/* ★ 2026-10-18 用户："正在生成音频这太单调了，好歹加一个'创作'那优化提示词
+                  那样的呼吸灯样式啊"。原来这一颗忙起来落进 `:disabled`，
+                  而那条把底色换成 `--dot`（18% 的墨）压白字——**忙被画成了坏**，
+                  而且那四个字几乎读不出来。现在忙有自己的 `data-busy`
+                  （实心橙 + 一圈荡出去的光，与 `.cl__optimize` 逐条同款），
+                  `:disabled` 只管"真的不能用"（名字空着）。
+                  ★ `aria-busy`：字面上"正在生成…"会说，但读屏的语义要靠它。 */}
               <button
                 type="button"
                 className="nv__go"
+                data-busy={step === 'creating' ? 'true' : 'false'}
+                aria-busy={step === 'creating' || undefined}
                 onClick={() => void create()}
                 disabled={blocked || step === 'creating'}
               >
