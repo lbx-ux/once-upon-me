@@ -63,12 +63,23 @@ const EXTRA_EXAMPLE = '比如：左手腕内侧有一道浅疤、眉毛比一般
 export function Field({
   label,
   hint,
+  hintTone,
   required,
   tight,
   children,
 }: {
   label: string
   hint?: string
+  /**
+   * 提示那一行用**强调色**（2026-10-18 第 29 刀）。
+   *
+   * ★ 用户："硬锚点弄成橙色，这样用户就知道这个是必填的了"。
+   *   这条提示说的事**就是"必填"**——五条硬锚点空着，`checkAnchors` 会当场报
+   *   「骨相是空的」，「出他的第一张形象」那颗按钮也就出不了图。所以它该与
+   *   `.cf__req`（那个「必填」小字）**同色**：同一条意思，两种写法一个颜色。
+   * ★ 只有硬锚点用得上它：软锚点空着不是问题（`normalizeAnchors` 丢空值之后卡照样合法）。
+   */
+  hintTone?: 'accent'
   required?: boolean
   /**
    * ★ 提示与标题**同行**（2026-10-15，用户："怎么这么长啊"）。
@@ -89,7 +100,14 @@ export function Field({
   children: ReactNode
 }) {
   const hintNode = hint ? (
-    <span className={tight ? 'cf__field-hint cf__field-hint--inline' : 'cf__field-hint'}>
+    <span
+      className={[
+        tight ? 'cf__field-hint cf__field-hint--inline' : 'cf__field-hint',
+        hintTone === 'accent' ? 'cf__field-hint--accent' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+    >
       {hint}
     </span>
   ) : null
@@ -321,6 +339,10 @@ export function AnchorFields({
           key={slot}
           label={ANCHOR_LABELS[slot]}
           hint={ANCHOR_STRENGTH[slot] === 'hard' ? '硬锚点' : '软锚点'}
+          /* ★ 硬锚点那颗标注是**橙色**的（2026-10-18 第 29 刀，用户："硬锚点弄成橙色，
+             这样用户就知道这个是必填的了"）。判据就在 `ANCHOR_STRENGTH` 上，不另立一张表：
+             硬 = 空着会拦住出图（`checkAnchors` 只对硬锚点报「…是空的」）。 */
+          hintTone={ANCHOR_STRENGTH[slot] === 'hard' ? 'accent' : undefined}
           tight={tight}
         >
           <input

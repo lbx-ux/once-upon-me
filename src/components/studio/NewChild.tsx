@@ -23,6 +23,14 @@ import {
 } from '@/lib/creation/state.ts'
 import { megaOf, photoFormProblems } from '@/lib/photo-rules.ts'
 import { AnchorFields, ChildFields } from '@/components/creation/fields.tsx'
+// ★ 等待与判据那两张纸（第 28 刀）。三样都是**多个屏幕共用的一份**：
+//   纸壳与三步在 `AiWaitDialog` / `WaitSteps`，说什么话在 `wait-copy.ts`，
+//   那句"还在办"的节奏在 `lib/use-rotating-line.ts`
+import AiWaitDialog from '@/components/studio/AiWaitDialog.tsx'
+import ProblemsDialog from '@/components/studio/ProblemsDialog.tsx'
+import WaitSteps from '@/components/studio/WaitSteps.tsx'
+import { waitCopyOf, type WaitJob } from '@/components/studio/wait-copy.ts'
+import { useRotatingLine } from '@/lib/use-rotating-line.ts'
 
 /**
  * NewChild —— 「新建一个小主角」（工单 03 第二刀的那一屏）
@@ -99,9 +107,15 @@ import { AnchorFields, ChildFields } from '@/components/creation/fields.tsx'
  * | 次日（用户："照片上传完之后，应该有一个预览的照片"） | 左栏那格上传框里**画照片本身**（`useLocalShot` 的本地地址），`＋` 只在没选时站着 | 上一刀把话删到只剩一行文件名，可那一行字**认不出选的是哪张**——省字省到把"看到了什么"也省掉了，这一刀补回来的是**图**，不是话 |
  * | 次日（用户划掉那句话："这句话不要，改为分析锚点"） | 同意那句话 → **「同意用这张照片分析外貌锚点、画他的第一张形象」** | 原来那句说的是"交出去处理这一次"，没回答**这次拿它干什么**；而这个勾的第一个后果就是跑 `analyzePhoto`。★ 两件事都写上：它同时是出图那条请求的门，只写"分析锚点"会让家长以为照片不会被用来画 |
  * | 次日（用户划掉整个同意框："这个改为一个按钮『分析锚点』…没有上传按钮为白色"） | 同意勾那一行 → **一颗「分析锚点」按钮**（`.nc__analyze`）：没照片白底、有照片橙底；**选完照片不再自动读**，读由这一按发起 | 用户四次划的都是这一格；而"读锚点"本来是一件**用户想主动发起**的事，它之前被绑在"勾同意"上——勾一下既表示同意又顺手跑了分析，两件事挤在一个控件里 |
- * | 同日（用户："这里锚点里面的字都是灰色的…能分析的地方就变成黑色字体" / "分析锚点这个过程应该可视化一些" / "画线的那句话不要了"） | 八条锚点的**初始值清空**（示例文字下沉成灰色占位）；读的等待从一行字变成**三步 + 已等几秒**；读数那三句里的"我把那几格清空了…你补一下"删掉 | 灰＝还没定、黑＝已经有锚点，这一条分界同时把"示例值被当成锚点交上去"这个旧账销掉（照片那条路原来要专门清一次空）。等待那一段是 45 秒，见 `useElapsedSeconds`——它是**三步**不是进度条，因为没有真实进度可读 |
+ * | 同日（用户："这里锚点里面的字都是灰色的…能分析的地方就变成黑色字体" / "分析锚点这个过程应该可视化一些" / "画线的那句话不要了"） | 八条锚点的**初始值清空**（示例文字下沉成灰色占位）；读的等待从一行字变成**三步 + 已等几秒**；读数那三句里的"我把那几格清空了…你补一下"删掉 | 灰＝还没定、黑＝已经有锚点，这一条分界同时把"示例值被当成锚点交上去"这个旧账销掉（照片那条路原来要专门清一次空）。等待那一段是 45 秒，那三步**不是进度条**，因为没有真实进度可读——推导今天在 `lib/use-rotating-line.ts` 文件头（第 28 刀搬过去的） |
  * | 同日（用户："画圈的这个话删除" / "画人物的时候没有反馈，应该也弄一个进度"） | 读照片那一段末尾那句"没有进度条可显示…"删掉；**出图**那几十秒也给了三步（右上角，与按钮同住） | 用户在那一句上画了圈。★ 删的是**那句话**不是那条判断："为什么不给百分比"的理由留在注释里。出图那条路同样是**两次真请求**（存档案 → 出图），所以照抄一套三步是诚实的，不是凑数 |
  * | 同日（用户："这个等待的过程不要写成已等几秒，应该写成，正在加急处理中…轮着播放" / "这一段话就不要说了，换成锚点信息和基本信息"） | 两处等待里的**秒数换成轮着播的四句话**（`useRotatingLine`）；结果那一屏的「我们拿你那张照片做了什么」整格换成**他是谁 + 八条锚点**（`.nc__sheet`） | 秒数是这一屏上唯一的真读数，换成语气句是有代价的——所以那几句话立了一条纪律：**只说"还在办"，不说"办到哪儿了"**（注释里写着哪几句不许说）。被划掉的那格有两件东西各有去处，见文件头第 4 条 |
+ * | 2026-10-18 第 28 刀（用户："当用户输入好信息之后，出现了什么问题，应该出一个弹窗来提示用户，现在这样子有点不明显" / "现在这个 ai 分析锚点和制作人物的 ai 制作过程好不明显，用户有时候都没发现你在制作"） | 右上角那列 **12.5px 的小字**（判据 `.nc__problems` 与错误 `.nc__error`）→ **一张纸**（`ProblemsDialog`，屏幕正中）；两处等待的三步 → 也是**一张纸**（`AiWaitDialog`），而**收起那纸之后三步画回原地**（所以 `WaitSteps` 有两个家，字一模一样） | 位置是那列小字真正的硬伤：它跟着按钮住在**标题行右上角**（第七刀挪的），而用户填完名字/照片/八条锚点之后视口多半停在**左下**——按完按钮视线根本不在那一角。★ 而"这一屏此刻唯一在发生的事"值得占屏幕正中那几十秒（读照片 ~45 s、出图 ~24 s）。★ 判据**一个字都没改**（还是那三套：`childProblems` / `checkAnchors` / `photoFormProblems`），改的只是它**在哪儿说** |
+ *
+ * ★ 这一刀之后这一屏**自己不再画任何判据**（`tried` 那个 state 跟着删了）：
+ *   点那颗按钮 → 判据不通过就弹一张清单；通过就去干活、弹等待那张纸；
+ *   干完活没成就弹第三张（失败那张）。三张纸都不是这一屏写的（各是一份共用组件），
+ *   所以"同一个产品里两张纸长得不一样"这件事不会从这一屏长出来。
  *
  * ★ 顺带修了一个**同一屏自相矛盾**：`fields.tsx` 的占位文字原来是「小宇」/「yǔ」，
  *   看着像已经填好的值，于是"名字格里写着小宇、下面却说你还没填名字"
@@ -144,66 +158,28 @@ function trimPeriod(text: string): string {
 }
 
 /**
-/**
- * 等待时轮着播的几句话（2026-10-16 第 22 刀，用户："这个等待的过程不要写成已等几秒，
- * 应该写成，正在加急处理中，然后你在想几句这样的话，轮着播放"）。
+ * 等待时轮着播的那几句话，与播的节奏**都不在这一屏里**（第 28 刀搬走的两样）：
  *
- * ★ 它替掉的是**秒数**（第 20 刀加的"已等 N 秒"）。换掉的是一条**真的**读数，
- *   换成几句话——这件事值得写清楚，因为它是这一屏上唯一一处"不报实情"的地方：
- *   秒数说的是事实（确实等了这么久），而「正在加急处理中」是一句**语气**。
- *   所以这几句有一条纪律：**只说"还在办"，不说"办到哪儿了"**。
- *   - 可以说：加急、在画、快好了——它们不承诺任何具体的进度或时刻；
- *   - 不许说：「已经画好 80%」「还剩 10 秒」「正在检查五官」——那几句要么是编的进度，
- *     要么是在讲模型内部的状态，而我们**看不到**它（这个请求一次性回包，见下面那段）。
- * ★ 播的节奏：每句 8 秒，走完一轮从头来（`% lines.length`）。45 秒的读数大约走
- *   一轮半，24 秒的出图走三轮——不会快到像在闪，也不会慢到像卡住。
- * ★ 它进不了读屏：外面那层 `role="status"` 会在开始时念一次三步，
- *   而这句每 8 秒换一次，不 `aria-hidden` 就是每 8 秒打断一次用户。
+ * | 搬到哪儿 | 搬走的是什么 |
+ * | --- | --- |
+ * | `components/studio/wait-copy.ts` | 四件活各说什么（标题 / 三步 / 那几句 / 那句"收起之后它还在跑"） |
+ * | `lib/use-rotating-line.ts` | 每句 8 秒这个节奏，以及"为什么只能播话、不给百分比"的推导 |
+ *
+ * ★ 搬的理由是**同一句话现在有两个读者**：这一屏原地那一行，以及屏幕正中那张纸
+ *   （弹窗被收起之后原地那一行才画出来，两处必须**一模一样**）。
+ *   那几句的纪律（只说"还在办"，不说"办到哪儿了"）也一起搬走了，
+ *   并且有了一条机器版：`wait-copy.test.ts` 断言那几句里不出现数字与百分号。
  */
-const ROTATE_MS = 8000
-
-/** 读照片那几秒（`POST /api/cards/analyze-photo`，实测约 45 秒） */
-const READ_LINES = [
-  '正在加急处理中',
-  '正在一格一格地看这张照片',
-  '正在把看到的东西记下来',
-  '快好了，再等一小会儿',
-] as const
-
-/** 出图那几十秒（`POST /api/cards` / `/api/cards/photo`，实测约 24 秒） */
-const DRAW_LINES = [
-  '正在加急处理中',
-  '正在铺底色',
-  '正在一点点上色',
-  '快好了，再等一小会儿',
-] as const
 
 /**
- * 轮着播一句。
+ * `useRotatingLine` 在"没有活在跑"的时候也得拿到一个数组。
  *
- * ★ 为什么会走到"只能播话"这一步：这两个请求都是**一次性回包**（不是流式），
- *   在它返回之前浏览器这边收不到任何中间消息——不知道模型读到第几格了、
- *   也不知道它在想还是在写。所以这一屏上**不许**出现百分比进度条：
- *   那会是一条按时间编出来的假进度，而这个项目里假的东西比没有更糟（README §五）。
- * ★ `active` 变 false 时回到第一句：下一次点按钮要重新从「正在加急处理中」开始，
- *   而不是接着上一轮的中间。
+ * ★ 写成模块常量而不是就地 `?? []`：后者**每次渲染都是一个新数组**，
+ *   而那个 hook 的 `useEffect` 把 `lines` 放在依赖里——于是每一轮渲染都会
+ *   拆掉再挂一个定时器。`active` 为 false 时它什么也不做，所以症状是"看不见的浪费"，
+ *   而那种东西没人会去量。一个模块常量把这个可能直接去掉。
  */
-function useRotatingLine(lines: readonly string[], active: boolean): string {
-  const [index, setIndex] = useState(0)
-
-  useEffect(() => {
-    if (!active) {
-      setIndex(0)
-      return
-    }
-    const timer = setInterval(() => {
-      setIndex((current) => (current + 1) % lines.length)
-    }, ROTATE_MS)
-    return () => clearInterval(timer)
-  }, [active, lines])
-
-  return lines[index] ?? lines[0] ?? ''
-}
+const NO_LINES: readonly string[] = []
 
 /**
  * 选好的那张照片本身（2026-10-16，用户："照片上传完之后，应该有一个预览的照片"）。
@@ -262,26 +238,59 @@ export default function NewChild() {
   const shot = useLocalShot(photo)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  /** 点过一次"出他的第一张形象"。★ 判据**只在这一刻之后**才显示（见头部那一段注释） */
-  const [tried, setTried] = useState(false)
+  /**
+   * 按了按钮、但判据不通过 → 那张清单开着。
+   *
+   * ★ 它替掉了原来的 `tried`（"点过一次"那个布尔量）。那时判据是**印在按钮底下**
+   *   的一列小字，得先记着"他点过了"才知道要不要印；现在它是一张**纸**，
+   *   "开着"本身就是那个状态——关掉即散，下一次按按钮重新算一遍判据
+   *   （所以"改好了没有"永远由引擎那份判据回答，不是由"他点过知道了"回答）。
+   */
+  const [problemsOpen, setProblemsOpen] = useState(false)
+  /**
+   * 等待那张纸被**收起**了（收起 ≠ 取消，见 `AiWaitDialog.tsx` 文件头第 2 条）。
+   *
+   * ★ 这个布尔量的意思是"进度现在住在**原地**（右上角/左栏），不在屏幕正中"——
+   *   不是"没有进度了"。收起之后三步照旧画着，那一行才是它的家。
+   * ★ 每次开新的活都复位（`startWait`）：不复位的话第二次点按钮就不弹纸了。
+   */
+  const [waitHidden, setWaitHidden] = useState(false)
   const [result, setResult] = useState<Result | null>(null)
   /** 正在读那张照片 */
   const [reading, setReading] = useState(false)
   const [readNote, setReadNote] = useState<ReadNote | null>(null)
-  /** 读照片那几秒轮着播的那一句（见 `useRotatingLine`） */
-  const waitLine = useRotatingLine(READ_LINES, reading)
   /**
    * 出图那一路走到哪一步了（2026-10-16 第 21 刀）。
    * ★ `profile` = 正在 `POST /api/children`；`image` = 档案已经存下，正在出图。
    *   只有两个值——它**不是**一个状态机，只是"第一个请求回来了没有"这一个事实。
    */
   const [stage, setStage] = useState<'profile' | 'image'>('profile')
-  /** 出图那几十秒轮着播的那一句。★ 只在真正出图那一步开始播（存档案那一下不该算进来） */
-  const drawLine = useRotatingLine(DRAW_LINES, busy && stage === 'image')
 
   const anchors = state.card.anchors
   const patchChild = (patch: Partial<CreationState['child']>) =>
     setState((current) => ({ ...current, child: { ...current.child, ...patch } }))
+
+  /**
+   * 现在有没有一件"要等"的活在跑，是哪一件。
+   *
+   * ★ 两件**不可能同时在飞**——两边那颗按钮都把对方算进 `disabled`（第 28 刀补的，
+   *   见下面两处 `disabled`）。原来不是这样：出图那几十秒里「分析锚点」照样能按，
+   *   于是两个请求同时在飞、各自花钱，而**读回来的八条锚点会盖在正在出的那张图上**
+   *   ——那一版形象按的是旧锚点，屏幕上却是一份新锚点。这个洞是加这一张纸时
+   *   顺手看见的（纸只能写一件事，"同时有两件"本来就不该存在）。
+   */
+  const waitJob: WaitJob | null = reading ? 'analyze' : busy ? 'draw' : null
+  const waitCopy = waitJob
+    ? waitCopyOf(waitJob, { stage, photoSize: photo ? megaOf(photo.size) : undefined })
+    : null
+  /**
+   * 那句话轮着播的那一份。
+   *
+   * ★ `active` 里那个 `waitHidden`：纸在屏幕正中的时候，原地那一行**不画**
+   *   （同一时刻屏幕上只该有一列三步——两列会变成两个 `role="status"`，
+   *   读屏把同一句话念两遍），所以原地那份从收起的那一刻起从第一句重新开始。
+   */
+  const waitLine = useRotatingLine(waitCopy?.lines ?? NO_LINES, waitCopy !== null && waitHidden)
 
   /**
    * ★ **有没有照片就是那条路本身**（2026-10-15）：原来是一个 `mode` 状态 + 两张入口卡，
@@ -310,7 +319,16 @@ export default function NewChild() {
       })
     : []
   // ★ 没有 `ready` 了：按钮不再靠它锁死（锁死就没法解释自己为什么点不动），
-  //   判据改成"点过之后当场说"（`tried` + `problems`）
+  //   判据改成"点过之后弹一张纸说"（第 28 刀；在那之前是右上角一列小字）
+
+  /**
+   * 开一件"要等"的活：把等待那张纸**重新摆回屏幕正中**（上一次可能被收起了）。
+   * ★ 只有这一处动作，两件活都调它——分开写就会出现"一件复位了、另一件没有"，
+   *   那种坏在第二次点按钮时才露出来（纸不弹了），而那时谁也想不起来是这儿。
+   */
+  function startWait(): void {
+    setWaitHidden(false)
+  }
 
   /**
    * 读一遍照片，把八条锚点填好（新接口 `/api/cards/analyze-photo`）。
@@ -329,6 +347,9 @@ export default function NewChild() {
   async function analyzePhoto(file: File): Promise<void> {
     setReading(true)
     setReadNote(null)
+    // ★ 上一轮可能被收起过：这一轮要重新把纸摆到屏幕正中（否则第二遍读的时候
+    //   用户只看到按钮变成「正在读…」，那正是这一刀要治的那个"没发现你在制作"）
+    startWait()
     try {
       const form = new FormData()
       form.set('photo', file)
@@ -417,6 +438,8 @@ export default function NewChild() {
     setError(null)
     // ★ 每按一次都从第一步起（第 21 刀）：上一轮停在哪一步不能带到这一轮
     setStage('profile')
+    // ★ 与 `analyzePhoto` 同一个动作：把等待那张纸重新摆到屏幕正中（见 `startWait`）
+    startWait()
     try {
       // ① 先建档案。childId 由**服务端**生成——它是路径的一段，不该由客户端给
       const profileResponse = await fetch('/api/children', {
@@ -638,72 +661,50 @@ export default function NewChild() {
           <p className="nc__lede">填一次，之后每一本书都用他——同一张角色卡可以被很多本书引用。</p>
         </div>
 
-        {/* ── 右上角：出图那颗按钮 + 它的判据（2026-10-15 第七刀）──────────────
+        {/* ── 右上角：出图那颗按钮（2026-10-15 第七刀）────────────────────────
             ★ 用户："把这个生成放到右上角，花圈的那几句话不要了"。
               跟着删掉的是**常驻**的那串判据与按钮下那句说明（"会用你填的模型画一张
               标准像…"）——它们原来在页脚一直列着，而这一屏默认就是空表单，
               于是每次进来都先被念一遍"名字还没填、读音还没确认"。
             ★ 但"按钮为什么点不动"不能没人说：原来靠 `disabled` 一声不吭地锁住，
-              锁死之后连点都点不了，用户只会以为页面坏了。现在按钮**不再锁死**
-              （只有出图那几秒锁），判据改成**点过之后才出现**——
-              没点之前这一块一个字都没有，点了之后当场说清缺什么。
-            ★ 位置也说明了一件事：这几句话是**这颗按钮的**判据，不是整页的公告。 */}
+              锁死之后连点都点不了，用户只会以为页面坏了。按钮**不再锁死**
+              （只有干活那几十秒锁），判据改成**点了之后弹一张纸**。
+            ★ 2026-10-18 第 28 刀：那串判据与错误**从这一块搬走了**（原来是点过之后
+              印在这儿的一列 12.5px 小字）。用户的原话是「出现了什么问题，应该出一个
+              弹窗来提示用户，现在这样子有点不明显」——位置就是它真正的硬伤：
+              它住在**标题行右上角**，而用户填完名字/照片/八条锚点之后视口多半停在
+              左下，按完按钮视线根本不在这一角。★ 于是这一块现在只剩**按钮自己**，
+              三张纸（判据/等待/失败）在屏幕正中，见下面的 `Dialog` 那一段。 */}
         <div className="nc__head-act">
           <button
             type="button"
             className="nc__btn nc__btn--primary"
-            disabled={busy}
+            /* ★ 读照片那几十秒里也不许按（第 28 刀）：「出他的第一张形象」原来只挡
+               `busy`，而读照片那 45 秒里它是能按的——两个请求同时在飞、各自花钱，
+               而**正在读回来的八条锚点会盖在已经发出去的那份图上**。 */
+            disabled={busy || reading}
             onClick={() => {
-              setTried(true)
-              if (problems.length > 0) return
+              // ★ 判据不通过就弹清单，一个请求都不发（这是"点过之后才说"那条第七刀的
+              //   约定，只是说的**地方**换成了屏幕正中那张纸）
+              if (problems.length > 0) {
+                setProblemsOpen(true)
+                return
+              }
               void submit()
             }}
           >
             {busy ? '正在画…' : '出他的第一张形象'}
           </button>
-          {/* ── 出图那几十秒（2026-10-16 第 21 刀，用户："画人物的时候没有反馈，
-                 应该也弄一个进度"）──────────────────────────────────────────
-              ★ 与读照片那一处**同一套零件**（`.nc__steps` / `nc__step` / `nc__step-say`）：
-                同一屏上两段等待不该长成两种样子。位置跟着按钮走——它在这一屏的右上角，
-                判据与错误也都住在这里，所以这一颗按钮的"正在干什么"也归这儿。
-              ★ 三步对应**两次真的请求**加一次跳转：`POST /api/children`（存档案）→
-                `POST /api/cards`（或 `/cards/photo`，出图）→ 换成结果那一屏。
-                哪一步是"现在"由 `stage` 说了算——第一个请求通常一百毫秒就回来了，
-                但它是**真的**一步（它失败的话这一屏要停在它上面），所以照样画出来。
-              ★ 仍然**没有百分比**：出图那条请求同样是一次性回包，中间读不到进度。
-                上面那行解释为什么没有进度条的那句话被用户划掉了（"这个话删除"），
-                于是这里一个字都不写——理由留在这一段注释里，屏幕上是三步 + 秒数。 */}
-          {busy ? (
-            <ol className="nc__steps" role="status">
-              <li
-                className="nc__step"
-                data-now={stage === 'profile' ? 'true' : undefined}
-                data-done={stage === 'image' ? 'true' : undefined}
-              >
-                {stage === 'image' ? '档案存好了' : '正在存他的档案'}
-              </li>
-              <li className="nc__step" data-now={stage === 'image' ? 'true' : undefined}>
-                {stage === 'image' ? '正在画他的第一张形象' : '画他的第一张形象'}
-                {stage === 'image' ? (
-                  <span className="nc__step-say" aria-hidden="true">
-                    {drawLine}
-                  </span>
-                ) : null}
-              </li>
-              <li className="nc__step">画好了给你看</li>
-            </ol>
-          ) : null}
-          {tried && problems.length > 0 ? (
-            <ul className="nc__problems" role="status">
-              {problems.map((problem) => (
-                <li key={problem}>{problem}</li>
-              ))}
-            </ul>
-          ) : null}
-          {error ? (
-            <p className="nc__error" role="alert">
-              {error}
-            </p>
+          {/* ── 出图那几十秒（2026-10-16 第 21 刀；第 28 刀换成一张纸）──────────
+              ★ 原来这里是**按钮底下的一列三步**（`.nc__steps`）。第 28 刀把它搬进
+                屏幕正中那张纸（`AiWaitDialog`），而**纸被收起之后**它画回这儿——
+                所以真正要读的是"那三步是 `wait-copy.ts` 的一份文案 + `WaitSteps`
+                这一个实现"，不是这十几行。
+              ★ `waitHidden` 那半个条件是**屏幕整洁**的事，不是功能的事：纸在屏幕正中
+                的时候原地这一列不画（同一时刻屏幕上只该有一列三步，两列会变成
+                两个 `role="status"`，读屏把同一句话念两遍）。 */}
+          {waitJob === 'draw' && waitHidden && waitCopy ? (
+            <WaitSteps steps={waitCopy.steps} say={waitLine} />
           ) : null}
         </div>
       </header>
@@ -780,12 +781,16 @@ export default function NewChild() {
               ★ **不做成 disabled**：第七刀吃过一次亏（锁死的按钮解释不了自己为什么
                 点不动），所以没照片时它照样能按，按了当场说"先选一张照片"。
               ★ 读的时候禁用（`reading`）：那是 busy，与"缺东西"不是同一件事。
+              ★ 2026-10-18 第 28 刀又加了 `busy`：出图那几十秒里这一颗**原来能按**，
+                于是两个请求同时在飞、各自花钱，而读回来的八条锚点会盖在已经发出去的
+                那份图上（那一版形象按的是旧锚点，屏幕上却是一份新锚点）。
+                两件"要等"的活从这一刀起**互斥**——那张等待的纸一次只说一件事。
               ★ 这一按就是**同意**：`consent: 'true'` 由它写出去（见头部第 2 条）。 */}
           <button
             type="button"
             className="nc__btn nc__analyze"
             data-ready={usePhoto ? 'true' : 'false'}
-            disabled={reading}
+            disabled={reading || busy}
             onClick={() => {
               if (!photo) {
                 setReadNote({
@@ -803,36 +808,21 @@ export default function NewChild() {
             {reading ? '正在读…' : '分析锚点'}
           </button>
 
-          {/* ── 读照片那几秒：三步 + 已等几秒（2026-10-16 第 20 刀，用户："分析锚点这个
-                 过程应该可视化一些，分析到哪一步了"）─────────────────────────────
-              ★ 原来这里是**一行静止的字**（"正在读这张照片…"）。实测一次要 **45 秒**
-                （`scripts/e2e-analyze-photo.mts`：45.4 s，模型先产 2400+ token 的思考链
-                再写正文），一行不动的字挂 45 秒，用户只会以为它卡死了。
-              ★ 三步里**只有两步是事件**：照片选好了（`photo` 在手）、请求在飞（`reading`）。
-                第三步是把读到的填进右栏——那是**接下来会发生的事**，写出来是因为
-                用户此刻最想知道的正是"等这么久，等的是什么"。
-              ★ **没有百分比**：见 `useElapsedSeconds` 上面那段——这个请求是一次性回包，
-                中间没有任何真实进度可读。按时间编一条进度条，比不显示更糟。
-                ★ 第 21 刀：这里原来还写过一句「这一步没有进度条可显示——模型先想完，
-                  再一次性写出结果，通常 30–60 秒。」，用户把它划掉了（"画圈的这个话删除"）。
-                  **删的是那句话，不是那条判断**：屏幕上从此不提"有没有进度条"这件事，
-                  而"为什么不给百分比"的理由留在这段注释里，下一个人照样看得见。
-              ★ 秒数那一格 `aria-hidden`：它每秒都变，进了读屏会把整句念一遍又一遍。
-                外面那层 `role="status"` 负责在开始读的时候念一次。 */}
-          {reading ? (
-            <div className="nc__reading" role="status">
-              <ol className="nc__steps">
-                <li className="nc__step" data-done="true">
-                  照片已选好{photo ? `（${megaOf(photo.size)}）` : ''}
-                </li>
-                <li className="nc__step" data-now="true">
-                  模型正在读这张照片
-                  <span className="nc__step-say" aria-hidden="true">
-                    {waitLine}
-                  </span>
-                </li>
-                <li className="nc__step">把读到的填进右边那几格</li>
-              </ol>
+          {/* ── 读照片那几十秒（2026-10-16 第 20 刀；第 28 刀换成一张纸）─────────
+              ★ 用户："分析锚点这个过程应该可视化一些，分析到哪一步了"。实测一次要
+                **45 秒**（`scripts/e2e-analyze-photo.mts`：45.4 s，模型先产 2400+ token
+                的思考链再写正文），一行不动的字挂 45 秒，用户只会以为它卡死了。
+              ★ 第 28 刀之后，这几十秒正常是**屏幕正中那张纸**在说（`AiWaitDialog`）；
+                这一块只在**纸被收起**之后画出来——那时它得在原地继续说，
+                否则屏幕上就没有任何东西在说"还在读"了。三步与那句话都是同一份文案
+                （`wait-copy.ts`），不是两份长得像的东西。
+              ★ 仍然**没有百分比**：这个请求一次性回包，中间没有任何真实进度可读
+                （推导在 `lib/use-rotating-line.ts` 文件头）。★ 第 21 刀删过一句
+                「这一步没有进度条可显示…」（用户："画圈的这个话删除"）——删的是那句话，
+                不是那条判断：屏幕上一个字都不提进度条的事，理由留在注释里。 */}
+          {waitJob === 'analyze' && waitHidden && waitCopy ? (
+            <div className="nc__reading">
+              <WaitSteps steps={waitCopy.steps} say={waitLine} />
             </div>
           ) : null}
           {!reading && readNote ? (
@@ -861,8 +851,16 @@ export default function NewChild() {
                 ——预填值本来就摆在格子里，"照着改"是看一眼就知道的事。
                 ★ **留下的是有照片那一句**：它说的不是"该怎么用"，而是"这几格是哪来的"
                 （读出来的、读不出来的留空了）——那是**屏幕上推不出来**的信息，
-                删了它，家长看到几个空框只会以为坏了。 */}
-            {usePhoto ? (
+                删了它，家长看到几个空框只会以为坏了。
+                ★ 2026-10-18 第 29 刀：判据从 `usePhoto` 改成 **`readNote?.tone === 'ok'`**
+                （用户："我上传照片之后，还没有开始分析锚点，系统就给出了照片里没有的
+                （半身照的头身比、大头照的常服）我留空了，这些东西是等系统分析好之后
+                才写的吧"）。他是对的：这句话说的是**一次读的结果**（读到了几格、哪几格
+                照片里没有），而 `usePhoto` 只说明"选了一张照片"——那时一个字都还没读，
+                那句话是在替一件没发生的事说话。
+                ★ 判据取"读成功过"而不是"按过按钮"：读失败（`tone === 'bad'`）时那句
+                「下面几格是按你那张照片读的」是假的，读失败自己那句已经说了发生什么。 */}
+            {readNote?.tone === 'ok' ? (
               <p className="nc__note">
                 下面几格是按你那张照片读的，<strong>读不准的直接改</strong>；照片里没有的
                 {/*
@@ -894,6 +892,52 @@ export default function NewChild() {
           按钮本身也在那儿。原来这里还有一句"会用你填的模型画一张标准像，十几秒；
           不满意可以在形象页上提建议重画，锚点不变。"——用户划掉了，**不搬**。
           （"可以在形象页上提建议重画"这条**功能**照旧在，只是不在这屏念一遍。） */}
+
+      {/* ── 三张纸（2026-10-18 第 28 刀）──────────────────────────────────────
+          ★ 它们写在这一屏的**末尾**（而不是按钮底下）：`Dialog` 是 `position: fixed`
+            贴在屏幕正中的，文档里摆在哪儿不影响它落在哪儿。摆在末尾是为了让
+            "按钮那一块"只剩按钮本身——那块地方从第七刀起已经被减过两轮了。
+          ★ 三张纸**互斥**，判据分别是：清单（按了但过不去）、等待（正在干活）、
+            失败（干完了没成）。同一时刻最多只有一张：前两张由 `problemsOpen` 与
+            `waitJob` 决定（按清单那颗按钮时一个请求都不发，所以它俩不会重叠），
+            第三张只在等待结束之后才可能开。
+
+      ── ① 判据那张清单 ────────────────────────────────────────────────────── */}
+      {problemsOpen ? (
+        <ProblemsDialog
+          title="先补这几处"
+          /* ★ 说清"补完之后干什么"：清单本身只是"你还差什么"，
+             不说下一步的话，家长补完还得自己想起来刚才要按哪颗按钮 */
+          lede="补完再按一次「出他的第一张形象」。"
+          items={problems}
+          tone="fix"
+          onClose={() => setProblemsOpen(false)}
+        />
+      ) : null}
+
+      {/* ── ② 正在干活那张纸（收起之后三步回到原地，见上面那两处 `waitHidden`）── */}
+      {waitJob && waitCopy && !waitHidden ? (
+        <AiWaitDialog
+          job={waitJob}
+          facts={{ stage, photoSize: photo ? megaOf(photo.size) : undefined }}
+          onHide={() => setWaitHidden(true)}
+        />
+      ) : null}
+
+      {/* ── ③ 干完了没成那张纸 ─────────────────────────────────────────────────
+          ★ 它替掉的是右上角那行 13px 的红字（`.nc__error`）。失败是"等出来的"，
+            而等的那几十秒里用户早就不在按钮旁边了——所以它要自己找上门来。
+          ★ `error` 只由 `submit` 写（读照片那条路的结果与失败都留在左栏原地：
+            "读到了几条、哪几格这张照片里读不出来"说的是**左边这一栏**的事，
+            把一句"结果长什么样"塞进必须点掉的弹窗，只会给正常的结果加一次点击）。 */}
+      {error ? (
+        <ProblemsDialog
+          title="这一步没成"
+          items={[error]}
+          tone="failed"
+          onClose={() => setError(null)}
+        />
+      ) : null}
     </section>
   )
 }

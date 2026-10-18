@@ -178,6 +178,40 @@
   color: var(--danger);
 }
 
+/* 弹窗里那张**清单**（"还差这几处"）。
+   ★ 与 `.dlg__hint`（一段说明）的分工：`.dlg__hint` 说的是"这张纸要你干什么"，
+   `.dlg__list` 说的是"你有哪几件事要办"——逐条、可数、有先后。
+   ★ 颜色是 `--ink`（不是 `--ink-muted`）：清单上每一条都是**要做的事**，
+   而"要做的事"用标注色（灰）写出来，读起来像备注。 */
+.dlg__list {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.dlg__list li {
+  display: flex;
+  /* 与 `.ws__step` 同一条：`baseline` 而不是 `center`——长句折成两行时，
+     `center` 会把圆点压到两行**中间**，看起来像它标的是第二行 */
+  align-items: baseline;
+  gap: 9px;
+}
+
+.dlg__list li::before {
+  content: '';
+  flex: none;
+  align-self: baseline;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
 /* 段落里的那颗按钮（"点这里去配"这种）。长得像链接，但它**是** `<button>`——
    键盘与读屏都该当按钮对待（这条原来写在 `.cd__link` 的注释里，那一处删了，规矩搬过来） */
 .dlg__link {

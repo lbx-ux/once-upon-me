@@ -2,7 +2,7 @@
 
 import NextLink from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import {
   AGE_BAND_LABELS,
@@ -17,6 +17,11 @@ import { AnchorFields, ChildFields } from '@/components/creation/fields.tsx'
 import { DEFAULT_ANCHORS } from '@/lib/creation/default-anchors.ts'
 import { toCardBody, type ChildForm } from '@/lib/creation/state.ts'
 import type { CardRevisionView } from '@/lib/children-list.ts'
+// ★ 第 28 刀：这一屏那两件"要等"的活（重画 / 出第一张）各有一张纸——
+//   正在干活的那张，以及"干完了没成"那张。两张都是**别处也在用的一份**，
+//   不是这一屏自己写的（"同一个产品里两张纸长得不一样"就是这么长出来的）
+import AiWaitDialog from '@/components/studio/AiWaitDialog.tsx'
+import ProblemsDialog from '@/components/studio/ProblemsDialog.tsx'
 
 /**
  * ChildDetail —— 一个孩子的形象页：看、提建议再画一版、切回旧版、改基础信息、删掉他（工单 03）
@@ -58,6 +63,19 @@ import type { CardRevisionView } from '@/lib/children-list.ts'
  * 6. `error` / `notice` **挂在右栏顶上，不挂在某一格里**。它们是四个动作共用的那一条，
  *    而其中三个动作（切回旧版 / 改档案 / 删掉他）跟"有没有形象"没关系——
  *    写在「想改哪里」那张卡里面的话，没有形象的孩子**永远看不到失败提示**。
+ *    ★ 2026-10-18 第 28 刀之后这条**只对"当场就有回音"的动作成立**：切回旧版与改档案
+ *      点下去一两秒就知道成没成，用户人还在那颗按钮旁边，所以它们照旧说在 `.cd__error`。
+ *      **等出来才知道成败的那两件**（重画一版 / 出第一张）改说在**弹窗**里——那十几秒
+ *      用户早就没盯着按钮了，一行小字追不上他。
+ * 7. **那两件"要等"的活从这一刀起有一张纸**（`AiWaitDialog`）。它们原来在界面上的
+ *    全部反馈就是那颗按钮变成「正在画…」——用户的原话是「ai 制作过程好不明显，
+ *    用户有时候都没发现你在制作」。
+ *    ★ 收起那张纸**不是取消**（请求已经在飞、钱已经在花），纸上写着这一句，
+ *      底栏那颗也叫「收起」不叫「取消」。
+ *    ★ 一个**刻意留下的不对称**，记在明处：这一屏**没有**"收起之后进度回原地"那一列
+ *      （`/character/new` 有）——那两件活各只有**一次请求**，`wait-copy.ts` 那条判据
+ *      不给它们编三步（编出来的三步就是编进度）。于是收起之后这一屏的信号只剩
+ *      那颗按钮自己的字。真正的进度回原地要等工作流能报中间态，不是这一刀能补的。
  */
 
 export type ChildDetailProps = {
@@ -102,6 +120,73 @@ type Busy =
   /** 给一个还没有形象的孩子出**第一张**（工单 06） */
   | { kind: 'first' }
 
+/**
+ * 「写成功了，但服务端那份清单还没换上来」——这一屏**必须说出来**的中间态。
+ *
+ * ★ 2026-10-18 第 29 刀。用户报的是「当用户修改图片的时候，修改完成后第二版没有出现，
+ *   当我重新刷新界面的时候才出现」。查下来不是"没刷新"，是**刷新要等几秒**：
+ *   `router.refresh()` 会重新跑一遍服务端组件（读盘 + 鉴权 + 渲染），
+ *   本机 dev 实测**约 3 秒**才把新的一版送进 props（`churn`：另一个会话的 HMR
+ *   与现场编译会让它更久，最长一次见到十几秒）。
+ *
+ *   | 时刻 | 屏幕上 |
+ *   | --- | --- |
+ *   | +0.5 … +2.5 s | 那行 notice 已经说「现在用的是第 2 版」，而历史里**还是**「第 1 版 现在用它」 |
+ *   | **+3.0 s** | 历史才跟上（第 2 版 / 第 1 版 用它） |
+ *
+ *   也就是说：**写完之后有三秒钟，这一屏在说假话**。用户正是在那三秒里看图的
+ *   ——他看到的是"第 2 版没出来"，于是手动刷新一次（那一刻恰好已经换好了）。
+ *
+ * ★ 判据不是"等固定几秒"，是**等那件事真的出现在 props 里**：`arrived()` 拿
+ *   "这一版在不在清单里 / 指针挪没挪过去 / 档案名字对不对"去问服务端那份数据。
+ *   在这之前，那行字说的是「正在把它换上来」，不再说"已经好了"。
+ * ★ 兜底：**8 秒**还没换上来就整页重来一次（用户手动做的就是这件事）。
+ *   8 是这个数里唯一可以商量的：它要明显大于实测的 3 秒（不然会白刷一次），
+ *   又要短到"用户还没开始怀疑页面坏了"。刷新之后屏幕上就是新的那一版，
+ *   代价是那行 notice 与滚动位置没了——比"看不见刚做出来的东西"轻。
+ * ★ 它**不替 `router.refresh()` 干活**，只是在它落地之前别撒谎。
+ */
+type Arriving =
+  | { kind: 'revision'; revision: number }
+  | { kind: 'current'; revision: number }
+  | { kind: 'profile'; name: string; ageBand: string }
+
+/**
+ * 等多久就整页重来。
+ *
+ * ★ 实测那次换上来是 **3.0 秒**（本机 dev），8 是它的两倍半：要明显大于常见值
+ *   （不然会白刷一次，而那一下会丢掉那行 notice 与滚动位置），
+ *   又要短到"用户还没开始怀疑页面坏了"。
+ */
+const ARRIVING_GIVE_UP_MS = 8000
+
+/** 换上来没有？——问的是**服务端那一份**（props），不是我们自己记的那点东西 */
+function arrived(
+  waiting: Arriving,
+  props: { revisions: CardRevisionView[]; profile: ChildRecord },
+): boolean {
+  switch (waiting.kind) {
+    case 'revision':
+      return props.revisions.some((item) => item.revision === waiting.revision)
+    case 'current':
+      return props.revisions.some((item) => item.revision === waiting.revision && item.isCurrent)
+    case 'profile':
+      return props.profile.name === waiting.name && props.profile.ageBand === waiting.ageBand
+  }
+}
+
+/** 还没换上来时那一行字。★ 三条都**不说"已经好了"**（那时它还不对） */
+function arrivingLine(waiting: Arriving): string {
+  switch (waiting.kind) {
+    case 'revision':
+      return `第 ${waiting.revision} 版画好了——正在把它换上来…`
+    case 'current':
+      return '指针动了——正在把这一版换上来…'
+    case 'profile':
+      return '档案改好了——正在换上来…'
+  }
+}
+
 export default function ChildDetail(props: ChildDetailProps) {
   const { profile, isDemo, demoId, canEdit, revisions, anchors } = props
   const router = useRouter()
@@ -145,6 +230,46 @@ export default function ChildDetail(props: ChildDetailProps) {
   const [busy, setBusy] = useState<Busy>({ kind: 'idle' })
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  /**
+   * 那两件"要等"的活（重画 / 出第一张）：
+   *   - `waitHidden`：等待那张纸被**收起**了（收起 ≠ 取消，见文件头第 7 条）；
+   *   - `waitFail`：等完了但**没成**。★ 它与上面那个 `error` 分开不是啰嗦：
+   *     失败**在哪儿说**由"用户那几秒在不在按钮旁边"决定（文件头第 6 条），
+   *     而这两件事的性质不一样，所以它们本来就是两条通道。
+   *     `job` 带着是为了给那张纸一个对的标题（重画 / 出第一张）。
+   */
+  const [waitHidden, setWaitHidden] = useState(false)
+  const [waitFail, setWaitFail] = useState<{ job: 'revise' | 'first'; message: string } | null>(
+    null,
+  )
+  /** 写成功了、服务端那份清单还没换上来（见 `Arriving` 那一段） */
+  const [arriving, setArriving] = useState<Arriving | null>(null)
+
+  /**
+   * 换上来就撤掉那个中间态；**8 秒还没换上来就整页重来一次**（见 `Arriving` 那段）。
+   * ★ 依赖里带 `revisions` / `profile`：服务端那份数据一到，这个 effect 重跑，
+   *   第一句就把 `arriving` 清掉——那行字于是从「正在把它换上来…」换成正式那句。
+   */
+  useEffect(() => {
+    if (!arriving) return
+    if (arrived(arriving, { revisions, profile })) {
+      setArriving(null)
+      return
+    }
+    const timer = setTimeout(() => {
+      window.location.reload()
+    }, ARRIVING_GIVE_UP_MS)
+    return () => clearTimeout(timer)
+  }, [arriving, revisions, profile])
+
+  /** 现在有没有一件"要等"的活在跑，是哪一件（`Busy` 那两个之外都不算"要等"的活） */
+  const waitJob = busy.kind === 'revise' ? 'revise' : busy.kind === 'first' ? 'first' : null
+
+  /** 开一件"要等"的活：把纸**重新摆回屏幕正中**，并把上一轮的失败收起来 */
+  function startWait(): void {
+    setWaitHidden(false)
+    setWaitFail(null)
+  }
 
   /**
    * 「改基础信息」那一份草稿。★ `null` = 没在改。
@@ -175,6 +300,8 @@ export default function ChildDetail(props: ChildDetailProps) {
     setBusy({ kind: 'first' })
     setError(null)
     setNotice(null)
+    setArriving(null)
+    startWait()
     try {
       const response = await fetch('/api/cards', {
         method: 'POST',
@@ -197,14 +324,20 @@ export default function ChildDetail(props: ChildDetailProps) {
       })
       const payload = (await response.json()) as { message?: string; revision?: number }
       if (!response.ok) {
-        setError(payload.message ?? '这一张没画出来')
+        // ★ 说在弹窗里，不说在右栏顶上那行小字：这几十秒用户早就不在按钮旁边了
+        setWaitFail({ job: 'first', message: payload.message ?? '这一张没画出来。' })
         return
       }
       setViewing(payload.revision ?? 1)
       setNotice('第一张形象画好了。以后做书都用它，不满意可以提建议再画一版。')
+      // ★ 这一版要等它**真的出现在 props 里**才算换上来（见 `Arriving` 那段）
+      setArriving({ kind: 'revision', revision: payload.revision ?? 1 })
       router.refresh()
     } catch {
-      setError('网络断了，这一张没画出来（可能已经计费，去平台账单看一眼）。')
+      setWaitFail({
+        job: 'first',
+        message: '网络断了，这一张没画出来（可能已经计费，去平台账单看一眼）。',
+      })
     } finally {
       setBusy({ kind: 'idle' })
     }
@@ -214,6 +347,8 @@ export default function ChildDetail(props: ChildDetailProps) {
     setBusy({ kind: 'revise' })
     setError(null)
     setNotice(null)
+    setArriving(null)
+    startWait()
     try {
       const response = await fetch('/api/cards/revise', {
         method: 'POST',
@@ -227,15 +362,21 @@ export default function ChildDetail(props: ChildDetailProps) {
       })
       const payload = (await response.json()) as { message?: string; revision?: number }
       if (!response.ok) {
-        setError(payload.message ?? '这一版没画出来')
+        setWaitFail({ job: 'revise', message: payload.message ?? '这一版没画出来。' })
         return
       }
       setSuggestion('')
       setViewing(payload.revision ?? null)
       setNotice(`第 ${payload.revision ?? '?'} 版画好了。往下看历史，上一版还在。`)
+      if (typeof payload.revision === 'number') {
+        setArriving({ kind: 'revision', revision: payload.revision })
+      }
       router.refresh()
     } catch {
-      setError('网络断了，这一版没画出来（可能已经计费，去平台账单看一眼）。')
+      setWaitFail({
+        job: 'revise',
+        message: '网络断了，这一版没画出来（可能已经计费，去平台账单看一眼）。',
+      })
     } finally {
       setBusy({ kind: 'idle' })
     }
@@ -246,6 +387,7 @@ export default function ChildDetail(props: ChildDetailProps) {
     setBusy({ kind: 'switch' })
     setError(null)
     setNotice(null)
+    setArriving(null)
     try {
       const response = await fetch('/api/cards/latest', {
         method: 'POST',
@@ -259,6 +401,7 @@ export default function ChildDetail(props: ChildDetailProps) {
         return
       }
       setNotice(`现在用的是第 ${revision} 版。以后做书都用它；已经做出来的书不受影响。`)
+      setArriving({ kind: 'current', revision })
       router.refresh()
     } catch {
       setError('网络断了，指针没动。')
@@ -295,6 +438,7 @@ export default function ChildDetail(props: ChildDetailProps) {
     setBusy({ kind: 'save' })
     setError(null)
     setNotice(null)
+    setArriving(null)
     try {
       const response = await fetch(`/api/children/${encodeURIComponent(profile.childId)}`, {
         method: 'PATCH',
@@ -318,6 +462,7 @@ export default function ChildDetail(props: ChildDetailProps) {
       }
       setDraft(null)
       setNotice('档案改好了。以后做的书按新的来；已经做出来的那些不变。')
+      setArriving({ kind: 'profile', name: draft.name, ageBand: draft.ageBand })
       router.refresh()
     } catch {
       setError('网络断了，档案没改。')
@@ -484,7 +629,14 @@ export default function ChildDetail(props: ChildDetailProps) {
               {error}
             </p>
           ) : null}
-          {notice ? <p className="cd__notice">{notice}</p> : null}
+          {/* ★ 还没换上来时说的是「正在把它换上来…」，不是那句"已经好了"
+              （见 `Arriving` 那一段：写完到服务端那份清单进 props 之间有实测 3 秒，
+              那三秒里说"已经好了"就是这一屏在说假话） */}
+          {arriving ? (
+            <p className="cd__notice">{arrivingLine(arriving)}</p>
+          ) : notice ? (
+            <p className="cd__notice">{notice}</p>
+          ) : null}
           {canEdit && current ? (
             <div className="cd__card">
               <h2 className="cd__h2">想改哪里？</h2>
@@ -602,6 +754,32 @@ export default function ChildDetail(props: ChildDetailProps) {
                   没配模型时点下去会吃服务端那句实话（右栏顶上那条 `.cd__error`）。 */}
         </div>
       </div>
+
+      {/* ── 两张纸（2026-10-18 第 28 刀）────────────────────────────────────────
+          ★ 写在这一屏的**末尾**：`Dialog` 是 `position: fixed` 贴在屏幕正中的，
+            文档里摆在哪儿都一样。摆在末尾是为了让上面那两块（左栏、右栏）读起来
+            还是"这一屏有什么"，而不是被两个覆盖层打断。
+          ★ 两张纸**不会同时在屏幕上**：`waitJob` 只在活跑着时为真，而 `waitFail`
+            只在活跑完（`busy` 回 idle）之后才可能被写上。 */}
+      {waitJob && !waitHidden ? (
+        <AiWaitDialog job={waitJob} onHide={() => setWaitHidden(true)} />
+      ) : null}
+      {waitFail ? (
+        <ProblemsDialog
+          /* ★ 标题说的是**哪件事没成**，不说"出错了"：用户上一眼看到的正是那颗按钮 */
+          title={waitFail.job === 'revise' ? '重画这一版没成' : '出这一张没成'}
+          lede={
+            waitFail.job === 'revise'
+              ? /* 这一句是**可以说的实话**，不是安慰：失败那几条路一条都没写新版本
+                   （`/api/cards/revise` 的最后一条就是这个——"没有采纳这一版"）。 */
+                '上一版还在，改改那句话再试一次就行。'
+              : undefined
+          }
+          items={[waitFail.message]}
+          tone="failed"
+          onClose={() => setWaitFail(null)}
+        />
+      ) : null}
 
       {/* ★ 删除（工单 03 第三刀起在这里，2026-10-16 搬走了）：
               用户把这一节划掉，理由是"删除的时候就在当前界面出现一个弹窗，询问是否删除，
