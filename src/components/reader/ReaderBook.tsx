@@ -26,6 +26,14 @@
  *           （-25%）才让封底落在正中——首页只有开头一个合着态。
  *
  * ---------------------------------------------------------------------------
+ * ★ 2026-10-18 晚：这一屏**只剩底图与书**（与书单那台同一次改动，用户：
+ *   「把书籍四周的仿真书效果删掉吧，只有背景就行」）。删掉的是：桌上的暖光
+ *   `.reader__light`、书底下的两层接触影、书页内侧的明暗 `.reader__shade`。
+ *   ★ 上面第 13 行那句"纸感靠 shade = sin(θ)"只对**首页第二屏**成立了 ——
+ *     `flip.ts` 照旧交出 `shade`，这一屏不再渲染它（翻页看不到纸张厚度是取舍）。
+ *   ★ 这一台**没有**染色层可删：它当初就没做（没有离线色表），所以删的是三层。
+ *
+ * ---------------------------------------------------------------------------
  * 三条刻意的约定，每条对应一次会真发生的事
  *
  * 1. **键盘只在容器上接**（`onKeyDown` + `tabIndex`），不在 `window` 上。
@@ -48,12 +56,14 @@
  * 这种分裂"。两台阅读器的坏处是具体的——`use-narration.ts` 的文件头为
  * "两份抄件迟早漂成两个脾气"付过一次学费。
  *
- * 所以这一屏多出来的东西只有三样：
+ * 所以这一屏多出来的东西只有四样：
  *  1. **阅读顺序是那条路**（`storyPath`），不是页号——这一条整块在 `reader-model.ts` 里，
  *     连"为什么不能平铺"都写在那儿；
  *  2. **选择点那一屏**：画面停住、两颗大按钮（图 + 字 + 语音双通道）；
  *  3. 没选之前 `›` 被挡住（`maxLeafOf`），因为"不选也能往下翻"会让共读版
- *     退化成独读版加一页。
+ *     退化成独读版加一页；
+ *  4. **上次选了哪一支记得住**（工单 07，`lib/reading-path.ts`）：存的是那一个字，
+ *     不是整条路——第二天翻开同一本书，按下态还在、往下翻走的是那一支。
  *
  * 而 `flip.ts` 的几何、面表、叶数、挂图窗口、朗读那一套**一个字都没改**——
  * 它们本来就是"一屏一页"的机器，共读版换掉的只是"喂给它哪些页"。
@@ -72,8 +82,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { flipState } from '@/components/book/flip.ts'
+import { loadPick, savePick } from '@/lib/reading-path.ts'
 import { useReadingLog } from '@/lib/use-reading-log.ts'
-import { useTurnMode } from '@/lib/use-reading-prefs.ts'
+import { useReaderPaper, useTurnMode } from '@/lib/use-reading-prefs.ts'
 import {
   choiceScreenOf,
   leafCountOf,
@@ -115,11 +126,22 @@ export default function ReaderBook({ bookId, title, coverUrl, story, source }: R
    *   而那种错闸门抓不到——所以它得是一条能被断言的关系，不是散在 JSX 里的写法。
    */
   /* ── 路径：共读版多出来的那一样 ────────────────────────────────────────────
-   * `pick` 是"孩子选了哪一支"。**只活在内存里**——落盘（`localStorage`）是 ticket 07，
-   * 而且它落的是**这一个值**（不是整条路径：路径由树推得出来，存两份就是两个真相）。
+   * `pick` 是"孩子选了哪一支"。★ 它**落盘**（工单 07）：同一本书第二天再翻开，
+   * 上次选的那一支还在——按下态还在，往下翻走的也是那一支。
+   * 落的是**这一个值**（不是整条路径：路径由树推得出来，存两份就是两个真相），
+   * 家是 `lib/reading-path.ts`（`localStorage`，与阅读记录、阅读偏好同一族）。
    * 独读版没有选择点，`pick` 永远是 null，下面那一路就是恒等式。
+   *
+   * ★ **初值一律 null，挂载之后才读盘**。这一条是必须的：服务端渲染那一趟
+   *   读不到 `localStorage`，首屏 HTML 只能是"没选过"；把初值写成"读得到就读"的
+   *   样子，客户端第一次渲染就与那份 HTML 不一致（hydration 报错）。
+   *   推理与代价与 `use-reading-prefs.ts` 文件头那一条相同，而这里的代价更小：
+   *   选择点在好几屏之后，读盘那一瞬的替换孩子根本看不见。
    */
   const [pick, setPick] = useState<Pick>(null)
+  useEffect(() => {
+    setPick(loadPick(bookId))
+  }, [bookId])
   const path = useMemo(() => storyPath(story, pick), [story, pick])
   const pages = useMemo(() => pathPages(path), [path])
   const leafCount = leafCountOf(pages)
@@ -136,6 +158,8 @@ export default function ReaderBook({ bookId, title, coverUrl, story, source }: R
    */
 
   const { turnMode } = useTurnMode()
+  /** §桌面那一层铺哪张底图。与书单那台**同一个偏好**（两台是同一张桌子） */
+  const { paper } = useReaderPaper()
   /**
    * 补间**落定后**的那一屏：`0` = 封面，`leafCount` = 封底。
    * ★ 取 `Math.round(q)` 而不是 `readout.page`：后者在封面与封底都给 `null`，
@@ -253,22 +277,26 @@ export default function ReaderBook({ bookId, title, coverUrl, story, source }: R
   /**
    * 孩子按下了某一颗按钮。
    *
-   * 三件事按顺序：**落下按下态 → 翻到那一支的第一页 → （`pick` 一变，整条路跟着变）**。
+   * 三件事按顺序：**落下按下态 → 记住这一支 → 翻到那一支的第一页
+   * （`pick` 一变，整条路跟着变）**。
    *
    * ★ 翻页走 `setQTarget` 而不是 `turn(1)`：`turn` 每次都会 `takeOver()`（人翻页 = 人接管），
    *   而在选择点上按按钮**本来就不是"人翻页"**——它是这一屏该做的事。
    *   走 `turn` 的话，按完按钮自动朗读会被莫名其妙地关掉。
    * ★ 按下态与路径是**同一个 state 的两个投影**（`pick`）：先落下再翻页，
    *   那一帧里按下态就在了，所以看不到"翻过去之后才亮起来"的闪。
+   * ★ `savePick` 是"孩子选了哪一支"**唯一的写盘处**（工单 07）——所以那个值只有一个
+   *   来源。改选走的也是这里（覆盖），没有第二条路会去写它。
    */
   const pickVia = useCallback(
     (via: 'a' | 'b') => {
       takeOver()
       setPick(via)
+      savePick(bookId, via)
       // 翻到那一支的第一页。`pick` 一变，`path` 就长了一截，所以 `current + 1` 是新路里的下一页
       setQTarget((current) => current + 1)
     },
-    [takeOver],
+    [bookId, takeOver],
   )
 
   /**
@@ -403,12 +431,23 @@ export default function ReaderBook({ bookId, title, coverUrl, story, source }: R
       data-source={source}
       aria-label={`${title} · 阅读器`}
     >
-      {/* §桌面那层点阵（`reader-book.css`）。挂在整个 `.reader` 上 ——
-          所以它够不到上面那行「← 回…」（那在 `.reader-page` 里），
-          竖直方向靠一条锚在舞台高度上的遮罩收在书附近，止于底栏那几行字之前。
-          与 `booklist-reader.css` 那台是同一层，只是这一屏不做染色（理由在 CSS 里）。
+      {/* §桌面那层底图（`reader-book.css`）。`fixed; inset: 0` —— 铺的是**整块视口**
+          （与书单那台同一个改法、同一个理由）。
+          ★ 上面那行「← 回…」在 `.reader-page` 里，够不到这个 div，所以它靠自己
+            `position: relative` 站到底图上面（`globals.css`）。
+          与书单那台是同一层、**同一个偏好**（用户挑哪张两台一起换），
+          只是这一屏不做染色（理由在 CSS 里）。
           纯装饰，对辅助技术整块隐藏。 */}
-      <div className="reader__ambient" aria-hidden="true" />
+      <div
+        className="reader__desk"
+        data-paper={paper.key}
+        style={
+          paper.url
+            ? ({ ['--reader-paper' as string]: `url(${paper.url})` } as React.CSSProperties)
+            : undefined
+        }
+        aria-hidden="true"
+      />
 
       {/* ── 舞台 + 选择点 ────────────────────────────────────────────────────
           这两个共用一层定位盒，理由只有一条：**选择点要浮在书上、但不能进舞台**。
@@ -435,11 +474,6 @@ export default function ReaderBook({ bookId, title, coverUrl, story, source }: R
           onTouchEnd={onTouchEnd}
           data-testid="reader-stage"
         >
-          {/* 落在桌上那团光。★ 必须在 `.reader__book` **之前** ——
-              书是定位元素又带 transform，层序由 DOM 序决定，写在后面就成了"光盖在书上"。
-              `inset` 取负值让它比书大一圈：正好贴边就成了给书画描边。 */}
-          <div className="reader__light" aria-hidden="true" />
-
           {/* 舞台宽 = 2 × 页宽（3:4 的一页）。--book-x 是首页那套，只是多了一个末尾的合着态 */}
           <div className="reader__book" style={{ ['--book-x' as string]: bookX }}>
             {Array.from({ length: leafCount }, (_, leaf) => {
@@ -474,11 +508,6 @@ export default function ReaderBook({ bookId, title, coverUrl, story, source }: R
                       coverUrl={coverUrl}
                     />
                   )}
-                  <i
-                    className="reader__shade"
-                    style={{ opacity: state.shade }}
-                    aria-hidden="true"
-                  />
                 </div>
               )
             })}

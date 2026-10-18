@@ -1,5 +1,5 @@
 /**
- * chk-reader-desk.mjs —— 量阅读器那张「桌面」层（点阵 / 暖光 / 随页染色）
+ * chk-reader-desk.mjs —— 量阅读器那层底图（「桌面」）
  *
  * ```bash
  * node scripts/chk-reader-desk.mjs http://127.0.0.1:3341 .out/reader-desk.png
@@ -8,41 +8,79 @@
  * ```
  *
  * ★ 为什么直连 CDP、不进预览面板：**那个面板把 rAF 与 transition 一起冻住**
- *   （`preview-pane-hidden-freezes-raf-and-transitions` 那条记过）。这一层要验的
- *   恰好是"染色是**慢慢**映上去的"与"静止模式下它一步到位"，两条都是时间轴上的事。
+ *   （`preview-pane-hidden-freezes-raf-and-transitions` 那条记过），量几何会读到过渡起点。
  *   无头 Chrome 有真帧。同一条理由写在 `chk-shared-reader.mjs` 头上。
  *
- * ── 五条判据，每条都只有真做才会不同 ─────────────────────────────────────────
+ * ── 四条断言，每条都只有真做才会不同 ─────────────────────────────────────────
  *
- * | # | 量什么                                   | 错了会怎样                                   |
- * | - | ---------------------------------------- | -------------------------------------------- |
- * | 1 | 遮罩在每一行字的上沿**再往上 4px** 处为 0 | 点阵铺到文案上（`--ink-muted` 4.99:1 会被吃掉） |
- * | 2 | 翻页后染色面的 opacity 在 t≈120ms **在中间** | 淡入被做成了"一跳"（一下子 0→.16）           |
- * | 3 | 落定后：新面 .16、其余 0                 | 交叉淡入没关掉旧面（两层叠着染，色会重）      |
- * | 4 | reduced 下**同一帧**新面就已是 .16       | 静止模式被做成"干脆不染色"（少了一层，不是不动） |
- * | 5 | 封底那一屏 9 张面全为 0                  | 合上的书还在往桌上投影                        |
+ * | # | 量什么                                                     | 错了会怎样                                                                        |
+ * | - | ---------------------------------------------------------- | --------------------------------------------------------------------------------- |
+ * | 1 | 底图那一层的 rect 就**是整块视口**（四边各 ≤1px）           | 又收回一条"横幅"（`absolute; inset: 0` 只盖 `.blr` 那 830px，上下各露一条 `--bg`） |
+ * | 2 | 每一行字**真被压着的那些像素**对这行字色 ≥ 4.5:1（逐档底图） | 图铺到字上、字读不清（`--ink-muted` 在木桌那张的说明行只有 2.15:1）               |
+ * | 3 | **设置里那一档真的到了这一屏**（逐档写偏好再重载）          | 偏好写了没人读（界面能选、底下没接上）                                            |
+ * | 4 | 底图**之外**那行「← 回灵感书单」真的画在图的**上面**        | 那行字整个被图盖住（2026-10-18 晚**真的发生过**一次，见下）                        |
  *
- * ★ 判据 2/3/4/5 是**有前提的**：它们量的那一层只存在于书单那台。独读版
- *   `/reader/[bookId]` 装的是用户自己创作的书，没有离线取样出来的色表，
- *   按设计就**只吃点阵与暖光**（见 `booklist-reader.css` §桌面 那张表的下半段）。
- *   所以脚本先看 `.blr__tint-face` 在不在：不在就**明说"跳过"**，
- *   既不报 ✗（那是把设计当故障），也不拿空数组去 `.every` 凑一条空过的 ✓
- *   （`[].every(...)` 恒真，而下标取值会读成 `undefined` 报一条假失败）。
- *   跳过的条数在末行单独计数，不进分子也不进分母。
+ * ★ 判据 4 是补上的一次真实失手：改 `fixed; inset: 0` 那一轮给 `.reader-page__back`
+ *   加了 `position: relative`，以为"定位就在静态内容之上" —— 可**定位元素之间是按树序
+ *   画的**，`.blr__desk` 在 `<nav>` 之后，于是那行字被图整个盖住。
+ *   ★ 当时没验出来，是因为探针判的是"`elementsFromPoint` 的栈顶是不是那个 <a>"，
+ *     而底图身上有 `pointer-events: none`：**命中测试会把它整个跳过**，
+ *     那条判据恒真。所以这一条的判据落在**像素**上 —— 数这行字自己矩形里的墨，
+ *     只有它真被画出来才数得到。判据的选法见 `ui-probe-clicks-land-before-hydration`。
+ *   ★ 这一行的颜色（判据 2 也量它）与它有没有被画出来是**两件事**：判据 2 量的是
+ *     "它脚下那些像素"（把图藏掉之后仍然成立），盖住了照样绿 —— 两件都要量。
  *
- * ★ 判据 1 读的是**浏览器算出来的遮罩停点**（`getComputedStyle().maskImage`），
- *   不是脚本里重抄一遍的数 —— 与 `check-scrim.mts` 那条纪律同源：
- *   一份写在量具里的数，改 CSS 的人不会想到来改它，于是量出来的是一份早就没有的设计。
- *   解析不出来就**当场报错**，不许退回到内置默认值。
+ * ★ 判据 3 是这一轮**唯一**能证伪"设置那条链接通了"的地方：`localStorage` 里写什么
+ *   和屏幕上铺什么之间隔着 hydration、隔着 `useReaderPaper`、隔着 CSS 变量，
+ *   中间任何一处断了，界面上都只是"选了没反应"。判据取的是**图文件名**
+ *   （只有真换过才会变），不是"元素在不在"——SSR 的 HTML 里那个 div 本来就在。
+ *   ★ 判据 2 就搭在这一条的循环里：它要**逐档底图**各量一次"压在它上面的字还读不读得清"，
+ *     而这一圈正好逐档重载。判据 4 也搭在这一圈里（它要"字还在"的那一张截图）。
  *
- * ★ 判据 2 是这支脚本唯一不可替代的一条。只看"元素在不在""最后是不是 .16"，
- *   一个 `transition: none` 的实现会全绿 —— 而那正是把"慢慢映上去"做没了的那种错。
+ * ── 2026-10-18 晚**删掉**的五条：染色与明暗 ──────────────────────────────────
+ *
+ * 那五条量的是 `.blr__tint` / `.blr__tint-face`（随页染色，连同 `booklistTints.ts`
+ * 那张离线色表）与 `.blr__shade`（书页内侧的明暗）。用户当晚说「把书籍四周的仿真书
+ * 效果删掉吧，只有背景就行」，并在"删到哪一层"那一问里选了**连书页明暗也删** ——
+ * 于是这两层从两台阅读器里**删掉**了，量它们的判据跟着一起删：不留一个跑不绿、
+ * 也没人打算跑绿的量具（CLAUDE.md「不糊弄」）。
+ * ★ 顺带带走的还有"跳过"那套机件（`skipNote` / `skips`）：它当初唯一的存在理由是
+ *   独读版按设计没有染色层。现在两台都没有、也都**不该有**，三条判据在两台上都跑，
+ *   于是"跳过"这个第三态没有存在的必要 —— 留着它反而会让"没量"重新变得体面。
+ *
+ * ── 判据 1/2 在 2026-10-18 第三轮被**换过一次** ─────────────────────────────
+ *
+ * 换之前是一条几何证明：底图挂在整个 `.blr` 上，竖直遮罩在每一行字的上沿
+ * **再往上 4px** 处必须 α = 0 —— 证的是"一行字都不压在图上"。
+ * 用户看了那一版说「背景铺平整个屏幕呀」，于是遮罩整条删掉、底图改成
+ * `fixed; inset: 0`，**那条证明跟着失效**（它证的正是这一版要拆掉的东西）。新的两条是：
+ *
+ * · 判据 1 量"铺满"这句话本身：底图层的 rect 与视口相等。
+ *   ★ 量的是**结果**（盖住了多大），不是手段（`position: fixed`）——手段换了而结果对，
+ *     这一条不该红；结果没达到，手段再对也没用。
+ * · 判据 2 换成**光度证明**：把每一行字隐掉（`color: transparent`，布局一个字不动）
+ *   截一张屏，用 sharp 量那一横条里**最暗的 1%** 对这些字自己的颜色还剩多少对比度。
+ *   ★ 这不是把门槛放松了，是换了一条**更严也更近**的：几何那条的结论是"那里是纯
+ *     `--bg`"（于是必然过线，其实什么都没验到）；这条量的是**那几个字真被哪些像素压着**。
+ *   ★ 采样取整行那一横条的最暗 1%，比"字真正压着的那几个像素"**更严**（把字左右两侧
+ *     的底也算进来了）。偏严的那一头不许红，这是刻意的。
+ *   ★ 第四轮（删掉暖光与染色那一晚）**复量过一次**：那两层原先是**往上提亮**的，
+ *     删掉之后字脚下只会更暗，所以判据 2 当场按七档底图 × 三个视口重跑了一遍，
+ *     新读数见 README §五。
+ *
+ * ★ 两条判据的取值都**从浏览器读**（rect / `getComputedStyle().color`），脚本里不重抄
+ *   一份数 —— 与 `check-scrim.mts` 那条纪律同源：一份写在量具里的数，改 CSS 的人不会
+ *   想到来改它，于是量出来的是一份早就没有的设计。解析不出来/取不到就**当场报错**，
+ *   不许退回到内置默认值。（原来那段"逐段读遮罩停点"的写法跟着遮罩一起删了：
+ *   留一个没人读的量具，下一个人会以为它在看着什么事。）
  */
 
 import { spawn } from 'node:child_process'
 import { writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve } from 'node:path'
+
+import sharp from 'sharp'
 
 const args = process.argv.slice(2)
 const positional = args.filter((item) => !item.startsWith('--'))
@@ -63,7 +101,7 @@ const BOOK = flag('book', 'dino')
  *   Git Bash（MSYS）会把以 `/` 开头的参数**改写成 Windows 路径**，
  *   于是 `--path=/reader/x` 到了脚本里已经不是那条路由了，
  *   而症状很闷——`Page.navigate` 不报错，页面停在一张 `about:blank` 上，
- *   探针只会说"这一屏上没有点阵层"。拼 URL 的活在脚本里做，外面只给 id。
+ *   探针只会说"这一屏上没有底图层"。拼 URL 的活在脚本里做，外面只给 id。
  */
 const PATH = flag('reader', null) ? `/reader/${flag('reader')}` : `/booklist/${BOOK}`
 const PORT = Number(flag('port', '9351'))
@@ -79,25 +117,14 @@ const PROFILE = resolve(dirname(fileURLToPath(import.meta.url)), '..', '.out', '
  */
 const VW = Number(flag('w', '1440'))
 const VH = Number(flag('h', '900'))
+/** 截图时铺哪一张底图。★ 判据 3 会把盘上那档改来改去（跑完停在最后一档），拍之前要显式写回来 */
+const SHOT_PAPER = flag('paper', 'paper')
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const results = []
-const skips = []
 const check = (label, ok, detail = '') => {
   results.push({ label, ok })
   console.log(`${ok ? '✓' : '✗'} ${label}${detail ? ` —— ${detail}` : ''}`)
-}
-/**
- * ★ 「跳过」是**第三种结论**，不是"通过"也不是"失败"。
- *   这一屏按设计就没有染色层（独读版那台装的是用户自己创作的书，
- *   没有离线取样出来的色表），所以关于染色的每一条判据在这里都**无从谈起**：
- *   报 ✗ 是把设计当故障，报 ✓ 是一条什么都没验的空过
- *   （`[].every(...)` 恒真那种）。说清"跳过了哪几条、为什么"才是诚实的写法。
- *   计分时它既不进分子也不进分母。
- */
-const skipNote = (label, why, count = 1) => {
-  for (let i = 0; i < count; i += 1) skips.push(label)
-  console.log(`· 跳过 ${label} —— ${why}`)
 }
 
 const chrome = spawn(CHROME, [
@@ -168,61 +195,86 @@ await send('Emulation.setDeviceMetricsOverride', {
   mobile: false,
 })
 
+/**
+ * 等这一屏**真的画出来**再量。
+ *
+ * ★ 要等的是什么：dev server 冷编译那一趟会先吐一份"CSS 还没到"的 HTML ——
+ *   症状是底图层变成文档流里一个 359×0 的小方块、翻页钮还没 hydrate。
+ *   那不是代码坏了，但量出来会是一屏吓人的假数（390×844 那一档撞到过一次：
+ *   判据 1 报"层 359×0 @ (8, 53)"、紧接着翻页报"没 hydrate"）。
+ *   判据要的是**终态**，那就等终态：DOM 到齐 + 浏览器真的拿它排过版（底图层有高度）
+ *   + React 挂上去了。等到就往下走，等不到才是真的坏了。
+ * ★ 这里**刻意不去判 `position: fixed`**：那是手段，不是判据要的结果。
+ *   拿手段当闸门的话，谁把实现换成别的写法，这一条会先卡住、
+ *   报出来的却是一句"页面没画好"——把真因盖掉了。
+ */
+const ready = async (tries = 40) => {
+  for (let i = 0; i < tries; i += 1) {
+    const state = await evaluate(`(() => {
+      const desk = document.querySelector('.blr__desk, .reader__desk')
+      const stage = document.querySelector('.blr__stage, .reader__stage')
+      if (!desk || !stage) return 'no-dom'
+      if (desk.getBoundingClientRect().height <= 1) return 'no-layout'
+      if (!Object.keys(stage).some((k) => k.startsWith('__reactProps$'))) return 'no-hydrate'
+      return 'ok'
+    })()`)
+    if (state === 'ok') return i * 250
+    await sleep(250)
+  }
+  throw new Error('这一屏一直没画好（DOM / 排版 / hydrate 有一样没到）')
+}
+
 const go = async (url) => {
   await send('Page.navigate', { url })
   await sleep(1200)
+  return ready()
 }
 
-/* ── 页里用的小工具：一次拿齐"字行的几何 + 遮罩停点" ─────────────────────────── */
+/* ── 页里用的小工具：一次拿齐"底图层的几何 + 压在/它上面的那几行字在哪" ─────── */
 
 const DESK_PROBE = `(() => {
   const round = (n) => Math.round(n * 100) / 100
-  /** 遮罩的三个停点（浏览器算出来的真值）。两处都要：书单那台与独读版那台 */
-  const stopsOf = (el) => {
-    const raw = getComputedStyle(el).maskImage || getComputedStyle(el).webkitMaskImage
-    const nums = [...String(raw).matchAll(/(-?[\\d.]+)px/g)].map((m) => Number(m[1]))
-    if (nums.length < 3) return null
-    return nums.slice(0, 3)
+  const box = (el) => {
+    const b = el.getBoundingClientRect()
+    return { top: round(b.top), left: round(b.left), width: round(b.width), height: round(b.height) }
   }
-  /** linear-gradient(#000 0, #000 A, transparent B) 在 y 处的 α（CSS 规范：线性插值） */
-  const alphaAt = (stops, y) => {
-    const [, a, b] = stops
-    if (y <= a) return 1
-    if (y >= b) return 0
-    return 1 - (y - a) / (b - a)
-  }
-  const boxes = [...document.querySelectorAll('.blr__bar, .blr__progress, .blr__meta, .reader__bar, .reader__progress, .reader__meta')]
-  const ambient = document.querySelector('.blr__ambient, .reader__ambient')
-  if (!ambient) return { error: '这一屏上没有点阵层' }
-  const stops = stopsOf(ambient)
-  if (!stops) return { error: '遮罩解析不出来（不是三停点的 linear-gradient）' }
-  const ambientTop = ambient.getBoundingClientRect().top
-  const rows = boxes.map((el) => {
-    const r = el.getBoundingClientRect()
-    // 局部坐标：遮罩是挂在点阵层自己身上的
-    const topLocal = r.top - ambientTop
-    return {
-      sel: el.className.split(' ')[0],
-      top: round(r.top),
-      // ★ 余量 4px：点粒子本身有 ~1.5px 直径，贴着 0 不算安全
-      alphaAtText: round(alphaAt(stops, topLocal - 4)),
-    }
-  })
-  const faces = [...document.querySelectorAll('.blr__tint-face')]
+  const desk = document.querySelector('.blr__desk, .reader__desk')
+  if (!desk) return { error: '这一屏上没有底图层' }
+  /**
+   * 压在底图上的那几行字在哪。
+   * ★ 这里只取位置用来**打印**——2026-10-18 第三轮之前的判据 1 是"遮罩在这一行
+   *   上沿再往上 4px 处必须 α = 0"，读的是浏览器算出来的遮罩停点；遮罩删掉之后
+   *   那段解析（逐段读「颜色 + 位置」+ 分段插值）跟着一起删了。
+   *   真正的判据 2 换成截图量真实像素，取材在 TEXT_PROBE。
+   */
+  const rows = [...document.querySelectorAll(
+    '.blr__readout, .blr__total, .blr__meta, .reader__readout, .reader__total, .reader__meta',
+  )].map((el) => ({
+    sel: el.className.split(' ')[0],
+    top: round(el.getBoundingClientRect().top),
+  }))
   return {
-    ambientTop: round(ambientTop),
-    stops,
+    paper: desk.getAttribute('data-paper'),
+    paint: getComputedStyle(desk).backgroundImage,
+    deskBox: box(desk),
+    /**
+     * 判据 1 的尺子 = **布局视口**（documentElement.client*），不是 inner*。
+     * ★ fixed 的 inset: 0 大小由布局视口定，而 innerWidth **把滚动条算在里面**：
+     *   有滚动条时用 inner* 当尺子，会把"盖满了"报成"差 15px"。
+     *   两个数都报出来，滚动条在不在日志里一眼看得见。
+     * ★ 这段注释里不许出现反引号：整段是模板字符串（见 TEXT_PROBE 上面那条）。
+     */
+    viewport: {
+      w: innerWidth,
+      h: innerHeight,
+      clientW: document.documentElement.clientWidth,
+      clientH: document.documentElement.clientHeight,
+      scrollW: document.documentElement.scrollWidth,
+      scrollH: document.documentElement.scrollHeight,
+    },
     rows,
-    faceCount: faces.length,
-    onIndex: faces.findIndex((f) => f.hasAttribute('data-on')),
-    ops: faces.map((f) => round(Number(getComputedStyle(f).opacity))),
-    tintOf: faces.map((f) => f.style.getPropertyValue('--t1')),
-    readout: (document.querySelector('.blr__readout, .reader__readout') || {}).textContent?.trim(),
   }
 })()`
-
-const frame = () =>
-  evaluate('new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(1))))')
 
 const turnNext = () =>
   evaluate(`(() => {
@@ -235,154 +287,379 @@ const turnNext = () =>
     return 'ok'
   })()`)
 
-/* ── 判据 1：点阵不落在任何一行字上 ─────────────────────────────────────────── */
+/* ── 判据 2 的取材：压在底图上的每一行字（含它自己的颜色） ───────────────────── */
+
+/**
+ * ★ 两段都塞在 `evaluate()` 里当模板字符串，所以**注释里不能出现反引号**：
+ *   多一个反引号会把表达式截断，而 V8 报的错指向的位置不是真错处（踩过一次）。
+ *
+ * `TEXT_PROBE` 做两件事：把这一屏上压在底图上的每一行字连同颜色报上来，
+ * 然后**把这一带的字全隐掉**——只改 `color`，布局一个字不动。
+ * ★ 隐掉的范围要比"被量的那几行"**更宽**：翻页钮上的「›」、朗读钮上的「▶ 朗读」
+ *   也是这一带的字，留着的话采样会把"字自己那几个深色像素"当成底色，
+ *   量出来是一条**假红**（判据说读不清，其实是字把自己的像素算进去了）。
+ *   只隐颜色、不隐按钮自己的白底：那圈白是**底**的一部分，不能动。
+ * ★ 等底图解码完再量：冷启动时那一屏可能还在拉图，量到的会是上一帧的纯色底。
+ */
+const TEXT_PROBE = `(async () => {
+  const desk = document.querySelector('.blr__desk, .reader__desk')
+  if (!desk) return { error: '这一屏上没有底图层' }
+  const url = (/url\\("?([^")]+)"?\\)/.exec(getComputedStyle(desk).backgroundImage) || [])[1]
+  if (url) {
+    await new Promise((done) => {
+      const im = new Image()
+      im.onload = done
+      im.onerror = done
+      im.src = url
+    })
+  }
+  const SEL = '.blr__readout, .blr__total, .blr__meta, .reader-page__back a, .reader__readout, .reader__total, .reader__meta'
+  const rows = [...document.querySelectorAll(SEL)]
+    .filter((el) => (el.textContent || '').trim().length > 0)
+    .map((el) => {
+      const b = el.getBoundingClientRect()
+      return {
+        // ★ 底图**之外**那一行单独给个名字：判据 4 要靠它把这一行挑出来。
+        //   它的 className 是空的（<a> 在 <nav> 里），不标一下日志里只会留一个 A。
+        sel: el.matches('.reader-page__back a')
+          ? 'back-link'
+          : el.className.split(' ')[0] || el.tagName,
+        text: (el.textContent || '').trim().slice(0, 18),
+        color: getComputedStyle(el).color,
+        left: Math.round(b.left),
+        top: Math.round(b.top),
+        right: Math.round(b.right),
+        bottom: Math.round(b.bottom),
+      }
+    })
+  let hidden = 0
+  for (const area of document.querySelectorAll('.blr__bar, .blr__meta, .reader__bar, .reader__meta, .reader-page__back')) {
+    for (const el of [area, ...area.querySelectorAll('*')]) {
+      el.style.color = 'transparent'
+      hidden += 1
+    }
+  }
+  return { rows, hidden }
+})()`
+
+/** 量完把字还回去（下一次 `go()` 本来会重载，但末段那张截图不该顶着一屏隐字的屏） */
+const UNHIDE_PROBE = `(() => {
+  let n = 0
+  for (const el of document.querySelectorAll('[style]')) {
+    if (el.style.color === 'transparent') {
+      el.style.removeProperty('color')
+      n += 1
+    }
+  }
+  return n
+})()`
+
+/* ── 判据 2 的量法：截图 → 逐行取那一横条 → 最暗 1% 对这行字色的对比度 ──────── */
+
+/** WCAG 相对明度与对比度：与 `check-scrim.mts` / `check-reader-paper.mts` 同一套算法 */
+const lin = (v) => {
+  const c = v / 255
+  return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+}
+const relativeLum = ({ r, g, b }) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
+const contrastOf = (a, b) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)
+
+/** `rgb(r, g, b)` → 三个数。★ 解析不出来/这行字是半透明的就抛，不许猜一个往下量 */
+const parseRgb = (text) => {
+  const hit = /rgba?\(([^)]+)\)/.exec(String(text))
+  if (!hit) throw new Error(`字色解析不出来：${text}`)
+  const [r, g, b, a] = hit[1].split(',').map((v) => Number(v.trim()))
+  if (a !== undefined && a < 1) throw new Error(`这一行字是半透明的（α=${a}）：${text}`)
+  return { r, g, b }
+}
+
+/**
+ * 一张截图 + 一行字的框 → 那一横条里最暗的 1% 对这行字色的对比度。
+ * ★ 取**最暗的 1%**，不取"最暗的那一个像素"（那可能是一个压缩噪声点），
+ *   也不取中位（那会把"这几个字正好压在一道木纹上"这件事平均掉）。两个数都报。
+ * ★ 框可能与视口相交（窄屏那一档行可能落到屏幕外）：这里夹到截图边界内，
+ *   夹不动（整行都在屏幕外）就返回 null，由调用处**明说跳过**，不静默当成通过。
+ */
+async function measureRow(shot, size, row) {
+  const left = Math.max(0, Math.min(row.left, size.width - 1))
+  const top = Math.max(0, Math.min(row.top, size.height - 1))
+  const width = Math.min(row.right, size.width) - left
+  const height = Math.min(row.bottom, size.height) - top
+  if (width < 8 || height < 4) return null
+  const { data, info } = await sharp(shot)
+    .extract({ left, top, width, height })
+    .removeAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true })
+  const lums = new Float64Array(info.width * info.height)
+  for (let i = 0, px = 0; i < data.length; i += info.channels, px += 1) {
+    lums[px] = relativeLum({ r: data[i], g: data[i + 1], b: data[i + 2] })
+  }
+  lums.sort()
+  const at = (q) => lums[Math.min(lums.length - 1, Math.round((lums.length - 1) * q))]
+  const fg = relativeLum(parseRgb(row.color))
+  return {
+    dark: contrastOf(fg, at(0.01)),
+    median: contrastOf(fg, at(0.5)),
+    px: info.width * info.height,
+  }
+}
+
+/* ── 判据 4 的量法：这一行字**自己那个矩形**里有没有墨 ──────────────────────── */
+
+/**
+ * ★ 与 `measureRow` 的取材正好**相反**，这是关键：
+ *   · 判据 2 把字隐掉，量的是"这行字脚下压着什么像素"（对比度）；
+ *   · 判据 4 要字**在**，量的是"这行字到底画出来了没有"（层序）。
+ *   被底图盖住时，判据 2 照样绿（它把字藏了，量到的是纸），只有判据 4 会红。
+ * ★ 取这一格里**最暗的那个像素**，不是最暗的 1%：这一格里字的占比本来就小，
+ *   百分位会把墨稀释掉；被盖住时最暗的也还是纸，区分度够。
+ * ★ 160 这个阈值是**实测**卡出来的，不是估的：这行字是 `--ink-soft`（#1c1b22，
+ *   灰阶 ≈ 28），底图最亮的那张纸上灰阶 ≈ 228–236（`.out/back-pixels/*.png`）。
+ *   两边各留 60 以上的余量，且只在"最暗 ≤ 80"这条上再收一道 —— 两条都要过。
+ */
+async function measureInk(shot, size, row) {
+  const left = Math.max(0, Math.min(row.left, size.width - 1))
+  const top = Math.max(0, Math.min(row.top, size.height - 1))
+  const width = Math.min(row.right, size.width) - left
+  const height = Math.min(row.bottom, size.height) - top
+  if (width < 8 || height < 4) return null
+  const { data } = await sharp(shot)
+    .extract({ left, top, width, height })
+    .greyscale()
+    .raw()
+    .toBuffer({ resolveWithObject: true })
+  let minLuma = 255
+  let darkPx = 0
+  for (const v of data) {
+    if (v < minLuma) minLuma = v
+    if (v < 160) darkPx += 1
+  }
+  return { minLuma, darkPx }
+}
+
+/* ── 判据 1：底图铺满整块视口 ───────────────────────────────────────────────── */
 
 // ★ 整段包在 try 里，为的是**出错也把自己那个 Chrome 关掉**。第一版没有这一条，
 //   探针一抛异常就留一个无头 Chrome 占着调试端口与 profile 目录；下一次跑会
-//   **连到那一个旧进程**、量到上一次那个页面 —— 报出来的"这一屏上没有点阵层"，
+//   **连到那一个旧进程**、量到上一次那个页面 —— 报出来的"这一屏上没有底图层"，
 //   连上的其实是上一次 404 的页。连跑几次就积成一堆。
 try {
   await go(`${BASE}${PATH}`)
   const first = await evaluate(DESK_PROBE)
   if (first.error) throw new Error(first.error)
 
+  const box = first.deskBox
+  const vp = first.viewport
+  const scrolls =
+    vp.scrollW > vp.clientW || vp.scrollH > vp.clientH
+      ? `（内容 ${vp.scrollW}×${vp.scrollH}，能滚；滚动条吃掉 ${vp.w - vp.clientW}×${vp.h - vp.clientH}）`
+      : ''
   console.log(
-    `\n遮罩停点（浏览器算出来的）：${first.stops.join(' / ')} px，点阵层顶边 y=${first.ambientTop}`,
+    `\n底图层：${first.paper} —— ${first.paint}` +
+      `\n  这一层盖住 ${box.width}×${box.height} @ (${box.left}, ${box.top})；` +
+      `布局视口 ${vp.clientW}×${vp.clientH}（inner ${vp.w}×${vp.h}）${scrolls}`,
   )
-  for (const row of first.rows)
-    console.log(`  ${row.sel.padEnd(18)} 顶边 y=${row.top}  该处遮罩 α=${row.alphaAtText}`)
+  for (const row of first.rows) console.log(`  ${row.sel.padEnd(18)} 顶边 y=${row.top}`)
 
-  const worst = Math.max(...first.rows.map((r) => r.alphaAtText))
+  const near = (v, edge) => Math.abs(v - edge) <= 1
+  // ★ 判据取的是**结果**（这一层盖住了多大），不是手段（`position: fixed`）：
+  //   手段换成别的而结果对，这一条不该红；结果没达到，手段再对也没用。
+  //   `absolute; inset: 0` 挂在 `.blr` 上时量出来是"这一节有多高"（1440×900 下 830），
+  //   与视口差多少随视口变 —— 所以这里必须拿视口当尺子，不能写一个固定高度。
+  //   ★ 尺子用**布局视口**（client*）而不是 inner*：`fixed; inset: 0` 的大小本来就由
+  //     布局视口定，而 inner* 把滚动条算在里面 —— 有滚动条时拿它当尺子，
+  //     会把"盖满了"读成"差 15px"（390×844 那一档踩到过；`.blr` 上那条
+  //     `overflow-x: clip` 就是那次量的产物，2026-10-18 晚随暖光一起删了）。
   check(
-    '点阵的遮罩止于每一行字之前（含 4px 余量）',
-    worst === 0,
-    `最大 α=${worst}（0 = 一颗都不落在字上）`,
+    '底图铺满整块视口（不是一个收在书附近的条）',
+    near(box.top, 0) &&
+      near(box.left, 0) &&
+      near(box.width, vp.clientW) &&
+      near(box.height, vp.clientH),
+    `层 ${box.width}×${box.height} @ (${box.left}, ${box.top})，` +
+      `布局视口 ${vp.clientW}×${vp.clientH}${scrolls}`,
   )
 
-  /* ── 判据 2/3：翻页时染色是"慢慢映上去"的 ──────────────────────────────────── */
+  /* ── 判据 3：设置里那一档真的到了这一屏，外加判据 2 ────────────────────────── */
 
-  if (first.faceCount === 0) {
-    // ★ 这一屏**本来就没有染色层**，不是"染色坏了"。独读版那台装的是用户自己创作的书，
-    //   没有离线取样出来的色表（见 `booklist-reader.css` §桌面 那张表的下半段），
-    //   所以它**只吃**点阵与暖光。
-    //   报成 ✗ 是错的（把设计当故障），报成 ✓ 更错（一条什么都没验的空过）。
-    //   说清"跳过了什么、为什么"才是这一条该有的样子。
-    skipNote(
-      '染色那三条（淡入 / 落定 / 换色）',
-      '这一屏按设计就没有染色层（独读版没有离线色表，只吃点阵与暖光）',
-      3,
-    )
-  } else {
-    const before = first.onIndex
-    const turned = await turnNext()
-    if (turned !== 'ok') throw new Error(`翻页没点成：${turned}`)
-
-    // 三次采样，每次先跨两帧 —— 否则读到的是同一帧
-    await frame()
-    const t0 = await evaluate(DESK_PROBE)
-    await sleep(120)
-    await frame()
-    const t1 = await evaluate(DESK_PROBE)
-    await sleep(1200)
-    await frame()
-    const t2 = await evaluate(DESK_PROBE)
-
-    const fmt = (s) => `on=${s.onIndex} ops=[${s.ops.join(', ')}]`
-    console.log(`\n翻页后三次采样：\n  t≈0    ${fmt(t0)}\n  t≈120  ${fmt(t1)}\n  t≈1320 ${fmt(t2)}`)
-
-    // 中间那一帧：新那一张在往上走、旧那一张在往下走，两边都该在 (0, .16) 里
-    const mid = t1.ops[t1.onIndex] ?? 0
-    const midOld = before >= 0 ? (t1.ops[before] ?? 0) : 0
-    check(
-      '染色是淡进去的，不是一跳（t≈120ms 时它在半路上）',
-      mid > 0.005 && mid < 0.155 && (before < 0 || midOld > 0.005),
-      `新面 ${mid}、旧面 ${midOld}（一跳的实现这里是 0 与 0.16）`,
-    )
-
-    check(
-      '落定后只有当前那一页染着、其余全灭',
-      t2.ops[t2.onIndex] === 0.16 && t2.ops.filter((o) => o > 0).length === 1,
-      `on=${t2.onIndex}，>0 的面有 ${t2.ops.filter((o) => o > 0).length} 张`,
-    )
-
-    check(
-      '染的是这一页自己的色（换页就换色）',
-      t2.tintOf[t2.onIndex] !== first.tintOf[before],
-      `${first.tintOf[before]} → ${t2.tintOf[t2.onIndex]}`,
-    )
-  }
-
-  /* ── 判据 5：封底那一屏染色淡干净 ───────────────────────────────────────────── */
-
-  if (first.faceCount === 0) {
-    skipNote('封底那一屏不染色', '同上：这一屏没有染色层可淡')
-  } else {
+  /**
+   * ★ 这一条是这一轮**唯一**能证伪"设置那条链接通了"的地方。
+   *   `localStorage` 里写什么，与屏幕上铺什么之间隔着三处：hydration、
+   *   `useReaderPaper`、以及那个 CSS 变量。任何一处断了，界面上都只是"选了没反应"
+   *   —— 而那正是最难发现的一种坏（选项亮着、读的人没接上）。
+   * ★ 判据取**图文件名**：它只有真把偏好读进来、真换了 CSS 变量才会变。
+   *   不取"元素在不在"——SSR 的 HTML 里那个 div 本来就在（`ui-probe-clicks-*` 那条记过）。
+   * ★ 「纯色」那一档的判据是反的：`background-image` 必须是 `none`。
+   *   探针必须在**同一处**跑完，所以这里逐档写盘 + 重载。
+   * ★ 判据 2 搭在这里跑：它要**逐档底图**各量一次"压在它上面的字还读不读得清"，
+   *   而这一圈正好逐档重载。顺序是：写盘 → 重载 → 看铺的是哪张 → **隐字截图量对比度**。
+   */
+  const rowsPicked = []
+  const perPaper = []
+  const notMeasured = []
+  /** 判据 4 的读数：每一档底图下，「← 回灵感书单」那行字自己矩形里的墨 */
+  const backInk = []
+  for (const key of ['paper', 'wood', 'linen', 'mist', 'clay', 'chalk', 'plain']) {
     await evaluate(`(() => {
-    const stage = document.querySelector('.blr__stage, .reader__stage')
-    stage.focus()
-    return 1
-  })()`)
-    // End 键由组件自己接（容器级 onKeyDown），一路跳到最后那一屏
-    for (let i = 0; i < 3; i += 1) {
-      await evaluate(`(() => {
-      const stage = document.querySelector('.blr__stage, .reader__stage')
-      stage.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }))
+      window.localStorage.setItem('xiaozhujue.reader.paper', ${JSON.stringify(key)})
       return 1
     })()`)
-      await sleep(400)
+    await go(`${BASE}${PATH}`)
+    /**
+     * ★ 等这一档**真的铺上去**再判。理由是这一条判的东西本身：
+     *   SSR 渲染的是**默认**那一档，客户端挂载之后才读 `localStorage` 换成用户挑的
+     *   （`useReaderPaper` 文件头那条取舍："选过非默认的人会先看到默认那张再换"）。
+     *   所以"重载后立刻读一次"读到的可能是**默认**，那不是"偏好没接上"，
+     *   是这一条链本来就有一小段延迟 —— 立刻读会把它误判成 ✗（第一次跑就撞到过一次：
+     *   1920×1080 下报 6/7，而每一行的图都对着）。
+     *   于是改成**等**：最多 6s，一边等一边读，记下等了多久。等不到才是真的没接上。
+     */
+    const want = key === 'plain' ? 'none' : `${key}.webp`
+    let seen = null
+    let waited = 0
+    for (let i = 0; i < 30; i += 1) {
+      seen = await evaluate(`(() => {
+        const el = document.querySelector('.blr__desk, .reader__desk')
+        if (!el) return null
+        return { paper: el.getAttribute('data-paper'), paint: getComputedStyle(el).backgroundImage }
+      })()`)
+      if (!seen) break
+      if (seen.paint.includes(want)) break
+      waited += 200
+      await sleep(200)
     }
-    await sleep(1200)
-    await frame()
-    const end = await evaluate(DESK_PROBE)
-    check(
-      '封底那一屏不染色（合上的书不往桌上投影）',
-      end.ops.every((o) => o === 0),
-      `读作「${end.readout}」，${end.faceCount} 张面的 opacity = [${end.ops.join(', ')}]`,
+    if (!seen) throw new Error('这一屏上没有底图层')
+    rowsPicked.push({
+      key,
+      ...seen,
+      waited,
+      ok: seen.paint.includes(want),
+    })
+
+    // ── 判据 2：这一档底图下，压在它上面的每一行字 ────────────────────────────
+    // ★ 这一张要在**隐字之前**拍：判据 4 量的是"那行字自己画出来了没有"，
+    //   字被藏起来的那张上当然数不到墨 —— 两张各有用处，缺一张就有一条判据是瞎的。
+    const shotWithText = await send('Page.captureScreenshot', { format: 'png' })
+    const text = await evaluate(TEXT_PROBE)
+    if (text.error) throw new Error(text.error)
+    const shot = await send('Page.captureScreenshot', { format: 'png' })
+    await evaluate(UNHIDE_PROBE)
+    const png = Buffer.from(shot.result.data, 'base64')
+    const size = await sharp(png).metadata()
+    const measured = []
+    for (const row of text.rows) {
+      const m = await measureRow(png, size, row)
+      // ★ 整行落在视口外（窄屏那一档可能得滚屏才看得见）→ **明说没量到**：
+      //   既不报 ✓（那是一条什么都没验的空过），也不报 ✗（把"没量"当成"不行"）
+      if (!m) notMeasured.push(`${key}/${row.sel}`)
+      else measured.push({ ...row, ...m })
+    }
+    perPaper.push({ key, measured })
+
+    // ── 判据 4：底图**之外**那行字有没有被图盖住 ─────────────────────────────
+    const backRow = text.rows.find((row) => row.sel === 'back-link')
+    // 这一行是这一页唯一一行不在 `.blr` / `.reader` 里的字（探针枚举过）：
+    // 找不到它不是"这一档没事"，是这一屏 / 这个选择器坏了 —— 当场说，不静默通过。
+    if (!backRow) throw new Error('没找到「← 回灵感书单」那一行 —— 判据 4 没东西可量')
+    const ink = await measureInk(Buffer.from(shotWithText.result.data, 'base64'), size, backRow)
+    backInk.push({ key, text: backRow.text, ...(ink ?? {}) })
+  }
+  for (const row of rowsPicked) {
+    console.log(
+      `  ${row.ok ? '·' : '✗'} 选「${row.paper}」→ ${row.paint.slice(0, 64)}` +
+        (row.waited > 0 ? `（等了 ${row.waited}ms 才铺上）` : ''),
     )
   }
+  check(
+    '设置里挑的那一档就是这一屏铺的那张（逐档写偏好再重载）',
+    rowsPicked.every((row) => row.ok),
+    `${rowsPicked.filter((r) => r.ok).length}/${rowsPicked.length} 档对得上（「纯色」那一档应当没有图）`,
+  )
 
-  /* ── 判据 4：静止模式下不播补间，但**染色还在** ────────────────────────────── */
+  /**
+   * ★ 判据 2 的读数逐行打出来，**不折叠成一句**：判的是"最暗的 1%"，
+   *   一行不过就是一行不过，而"哪一张图的哪一行"正是下一个人要的那条信息。
+   * ★ 门槛 4.5:1 是 WCAG 正文级 AA —— 这几行字最大的 14px、最小的 12px，
+   *   都在"小字"那一档，没有一条能按 3:1 算。
+   */
+  console.log(`\n判据 2：每一行字压在底图上的**真实像素**（最暗 1%）对这几行字色的对比度`)
+  for (const { key, measured } of perPaper) {
+    for (const row of measured) {
+      console.log(
+        `  ${key.padEnd(6)} ${row.sel.padEnd(18)} ${row.color.padEnd(18)} ` +
+          `最暗 1% ${row.dark.toFixed(2)}:1 · 中位 ${row.median.toFixed(2)}:1 ` +
+          `${row.dark >= 4.5 ? '✓' : '✗'} 「${row.text}」`,
+      )
+    }
+  }
+  if (notMeasured.length) console.log(`  · 没量到（整行在视口外）：${notMeasured.join('、')}`)
 
-  await send('Emulation.setEmulatedMedia', {
-    features: [{ name: 'prefers-reduced-motion', value: 'reduce' }],
-  })
-  await go(`${BASE}${PATH}`)
-  await evaluate(`document.querySelector('.blr__stage, .reader__stage').focus()`)
-  const rTurn = await turnNext()
-  if (rTurn !== 'ok') throw new Error(`静止模式下翻页没点成：${rTurn}`)
-  // ★ 同一帧就读：补间被关掉的话，这一帧它就该已经在终值上
-  await frame()
-  const reduced = await evaluate(DESK_PROBE)
-  if (reduced.faceCount === 0) {
-    // ★ 别拿空数组去 `.every` / 下标取值 —— 那种 ✓ 是"一条什么都没验的通过"，
-    //   而下标取值会读成 `undefined`、反过来报一条假失败。两种都不行。
-    skipNote('静止模式下染色直接落在目标上', '同上：这一屏没有染色层')
-  } else {
-    check(
-      '静止模式下染色不播补间，直接落在目标上（而不是干脆不染色）',
-      reduced.ops[reduced.onIndex] === 0.16,
-      `on=${reduced.onIndex}，同一帧的 opacity = ${reduced.ops[reduced.onIndex]}`,
+  const allRows = perPaper.flatMap((p) => p.measured.map((r) => ({ key: p.key, ...r })))
+  const badRows = allRows.filter((r) => r.dark < 4.5)
+  check(
+    '每一档底图下，压在它上面的字都还过 4.5:1（逐档量真实像素）',
+    allRows.length > 0 && badRows.length === 0,
+    allRows.length === 0
+      ? '一行字都没量到 —— 那这一条什么都没验'
+      : badRows.length === 0
+        ? `${allRows.length} 行全过（最差 ${Math.min(...allRows.map((r) => r.dark)).toFixed(2)}:1）`
+        : `${badRows.length} 行不过：` +
+          badRows.map((r) => `${r.key}/${r.sel} ${r.dark.toFixed(2)}:1`).join('、'),
+  )
+
+  /* ── 判据 4：底图之外那行字真的画在图上面 ──────────────────────────────────── */
+
+  /**
+   * ★ 逐档打出来，理由与判据 2 一样：判的是"这一档底图下算不算数"，
+   *   而"哪一档盖住了"正是下一个人要的那条信息。
+   * ★ 门槛两条一起过：最暗的像素 ≤ 80（这行字的墨是灰阶 ≈ 28，纸是 ≈ 228–236）、
+   *   且比纸暗的像素 ≥ 40（一行七个字加一个箭头，实测 300 上下；被盖住时是 0）。
+   */
+  console.log(`\n判据 4：底图之外那行字「← 回灵感书单」自己矩形里的墨`)
+  for (const row of backInk) {
+    const ok = row.minLuma !== undefined && row.minLuma <= 80 && row.darkPx >= 40
+    console.log(
+      `  ${row.key.padEnd(6)} 最暗 ${String(row.minLuma ?? '—').padStart(3)} · ` +
+        `比纸暗的像素 ${String(row.darkPx ?? '—').padStart(4)} ${ok ? '✓' : '✗'} 「${row.text ?? ''}」`,
     )
   }
-  await send('Emulation.setEmulatedMedia', { features: [] })
+  const inked = backInk.filter((row) => row.minLuma !== undefined)
+  const covered = inked.filter((row) => !(row.minLuma <= 80 && row.darkPx >= 40))
+  check(
+    '「← 回灵感书单」那行字真的画在底图上面（逐档数它自己矩形里的墨）',
+    inked.length > 0 && covered.length === 0,
+    inked.length === 0
+      ? '一行都没量到 —— 那这一条什么都没验'
+      : covered.length === 0
+        ? `${inked.length} 档全数到墨（最暗 ${Math.min(...inked.map((r) => r.minLuma))}，` +
+          `最少 ${Math.min(...inked.map((r) => r.darkPx))} 个暗像素）`
+        : `${covered.length} 档被盖住：` +
+          covered.map((r) => `${r.key} 最暗 ${r.minLuma} / ${r.darkPx} 个暗像素`).join('、'),
+  )
 
   /* ── 截图 ──────────────────────────────────────────────────────────────────── */
 
   if (SHOT) {
-    await send('Emulation.setEmulatedMedia', { features: [] })
+    // ★ 判据 3 跑完时盘上留着最后一档（`plain`），截图不能顺手拿它当默认：
+    //   显式写回要拍的那一档（`--paper=<key>`，缺省就是默认那张）
+    await evaluate(`(() => {
+      window.localStorage.setItem('xiaozhujue.reader.paper', ${JSON.stringify(SHOT_PAPER)})
+      return 1
+    })()`)
     await go(`${BASE}${PATH}`)
-    // 翻一页，落在有正文的那一屏（封面那屏看不出染色换没换）
+    // 翻一页，落在有正文的那一屏：封面那屏只有封面图，
+    // "底图铺满整屏、字压在它上面还读得清"这件事在那屏上看不出来
     await evaluate(`document.querySelector('.blr__stage, .reader__stage').focus()`)
     await turnNext()
     await sleep(1600)
     const shot = await send('Page.captureScreenshot', { format: 'png' })
     await writeFile(SHOT, Buffer.from(shot.result.data, 'base64'))
-    console.log(`\n截图：${SHOT}`)
+    console.log(`\n截图（底图 = ${SHOT_PAPER}）：${SHOT}`)
   }
 
   const bad = results.filter((r) => !r.ok)
-  const skipped = skips.length ? `，另跳过 ${skips.length} 条（这一屏按设计就没有染色层）` : ''
-  console.log(`\n${results.length - bad.length}/${results.length} 条过${skipped}`)
+  console.log(`\n${results.length - bad.length}/${results.length} 条过`)
   ws.close()
   chrome.kill()
   process.exit(bad.length === 0 ? 0 : 1)

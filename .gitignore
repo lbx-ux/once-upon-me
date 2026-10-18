@@ -79,7 +79,11 @@ next-env.d.ts
 #   要在没登录的情况下读得到），可那一层正是"随部署上线的演示书"。
 #   一本手工拼出来的书躺在那里，读仓库的人分不出它是生成的还是手写的，
 #   所以这里按名字忽略：**跑完验收要拆，忘了拆也提交不上去**。
+#   ★ 两本都要列（2026-10-18 补上 `-missing` 那一本）：原来只有 `-verify` 一条，
+#     而 `mk-shared-fixture.mjs --missing` 造的是**另一本**——
+#     于是那一本会以"未跟踪"的样子挂在 `git status` 上，等着被谁顺手 `git add .` 进去。
 /public/demo/books/xzj-shared-verify/
+/public/demo/books/xzj-shared-missing/
 .idea/
 
 # Python 辅助脚本（scripts/*.py）跑一次就生成的字节码缓存：

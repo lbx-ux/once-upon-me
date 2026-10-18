@@ -27,6 +27,8 @@
 @import '../components/studio/character-wall.css';
 @import '../components/studio/child-detail.css';
 @import '../components/studio/new-child.css';
+@import '../components/studio/wait-steps.css';
+@import '../components/studio/ai-wait-dialog.css';
 @import '../components/studio/studio.css';
 @import '../components/studio/voice-picker.css';
 @import '../components/studio/new-voice-panel.css';
@@ -250,6 +252,12 @@
        并补了一句"我的意思是，中间一直是白色的"。
        于是那一颗的选中态**只有这一圈**——底与字都不动，全站的
        `.cf__chip[data-active]`（accent 边 + accent 底 + accent 字）那三件套它不走。
+     ★ ★ 2026-10-18 那一行拆了（形态搬进 `/home` 点「开始创作」之后的弹窗），
+       而那两颗在新家**没有再走这一圈**：白色的面板里已经不需要"中间一直是白的"
+       这层照顾，它跟着那一屏的既有语言走（`.gsd__chip` 那三件套）。
+       所以这一颗的起因已经不在界面上了，**只剩声音卡那一个消费者**
+       （`voice-picker.css`，见下）。令牌留着——它还在用，而且"按下的那圈可以是
+       另一支蓝"这件事仍然是一条**记在令牌表里的决定**，不是谁临时写的十六进制。
      ★ 为什么不直接改 `--accent`：强调色在这个项目里的差事是"让一个可点的东西
        跳出来"，全站十几处都在用；而这一颗要表达的是"**这一颗是按下的**"，
        不是"这一颗可以点"。一个令牌改不动另一件事，所以另开一颗，
@@ -262,10 +270,9 @@
   --select: #2f86cf;
   /* `--select` 的 rgb 形式，供 `rgba(var(--select-rgb), α)` 用。
      ★ 与 `--accent-rgb` / `--beam-rgb` 同一条约定：**换色时两个一起改**，
-       否则"选中"那一圈会留在旧色上（这一颗 2026-10-16 才补，起因见下）。
-     ★ 它现在有两个消费者，都是**非文字**的用法：`create-landing.css` 的
-       `.cl__form` 选中那一圈，与 `voice-picker.css` 里声音卡的一整套
-       （卡边、选中圈、试听钮的 hover）——那边要"选中的是蓝色"，而蓝色对
+       否则"选中"那一圈会留在旧色上（这一颗 2026-10-16 才补，起因见上）。
+     ★ 它现在**只有一个消费者**，而且是非文字的用法：`voice-picker.css` 里声音卡的
+       一整套（卡边、选中圈、试听钮的 hover）——那边要"选中的是蓝色"，而蓝色对
        `--surface` 只有 3.87:1，够"非文字元素"那条 3:1、**不够正文级 4.5:1**。
        所以那一屏的状态字一律用 `--ink` / `--ink-muted`，蓝只出现在边与圈上。 */
   --select-rgb: 47, 134, 207;
@@ -434,14 +441,38 @@ body {
   min-height: 100vh;
 }
 
+/* ★ 2026-10-18 第三轮：这一行现在压在阅读器那张底图上（`.blr__desk` / `.reader__desk`
+   从 `absolute` 改成了 `fixed; inset: 0`，盖的是**整块视口**）。于是两件事都要办：
+   ① 站到那层图**之上** —— 定位的装饰层按规范画在静态内容之上，而"← 回灵感书单"
+      是这一页唯一一行不在 `.blr` / `.reader` 里的字（探针枚举过：`main` 底下带字、
+      又不属于阅读器根的，只有它一个）。
+      ★ 这一条当晚**第一次没做对**：只给了 `position: relative`，而**定位元素之间
+        是按树序画的** —— `.blr__desk` 在 `<nav>` 之后，于是图照样盖着字，
+        症状是那行字"整个没了"，不是读不清。
+        2026-10-18 晚补上 `z-index: 1`（正的永远晚于 auto）。
+      ★ 当时为什么没验出来：探针拿 `elementsFromPoint` 判"栈顶是不是那个 <a>"，
+        而底图身上有 `pointer-events: none` —— 命中测试会把它**整个跳过**，
+        于是那条判据**恒真**：字被盖着也照样绿。现在的判据落在**像素**上
+        （`scripts/chk-reader-desk.mjs` 判据 4：这行字自己的矩形里有没有真的墨）。
+   ② 颜色上一档：`--ink-muted` 压在六张底图上**没有一张过 4.5:1**（最好的白垩 4.58），
+      `--ink-soft` 最差 6.8。读数与复现见 README §五。
+   ★ 空态那一条（`.reader-page__actions`）**不动**：那一屏没有阅读器、也就没有底图，
+     它仍坐在纯 `--bg` 上，`--ink-muted` 在那里是量过的 5.0:1，够用，不多一个改动。 */
 .reader-page__back {
+  position: relative;
+  /* ★ 与 `position: relative` 是**一对**，缺一条就等于没站上去（理由见 ①）。 */
+  z-index: 1;
   max-width: 1120px;
   margin: 0 auto;
   padding: 20px 20px 0;
   font-size: 14px;
 }
 
-.reader-page__back a,
+.reader-page__back a {
+  color: var(--ink-soft);
+  text-decoration: none;
+}
+
 .reader-page__actions a {
   color: var(--ink-muted);
   text-decoration: none;

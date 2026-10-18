@@ -21,8 +21,6 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { readdirSync, statSync } from 'node:fs'
-import { join } from 'node:path'
 
 import { THEME_KEYS, THEMES } from '@/lib/themes.ts'
 
@@ -36,7 +34,6 @@ import {
   bookOf,
   coverPath,
 } from './booklist.ts'
-import { BOOKLIST_TINTS } from './booklistTints.ts'
 
 /** 一条正文合计多少字（含标点：朗读要连标点一起停） */
 const charCount = (lines: readonly string[]) => lines.join('').length
@@ -147,72 +144,6 @@ describe('资产路径', () => {
       for (let n = 1; n <= SPREADS_PER_BOOK; n++) {
         expect(artPath(theme.key, n)).toBe(`/booklist/${theme.key}/p${n}.webp`)
       }
-    }
-  })
-})
-
-/**
- * 「桌面被当前这一页染一层色」那张色表（`booklistTints.ts`）
- *
- * ★ 为什么为一份**生成物**写测试 —— 它是这一整套里唯一会**静默过期**的东西。
- *   `scripts/sample-tints.py` 的 docstring 自己写着这条账：「手挑的话下一次换图
- *   就没人重挑，于是背景色与页面内容悄悄脱钩」。生成物把这个风险压缩成了
- *   「换了图记得重跑脚本」，但那仍然是一句要靠人记住的话。
- *   这条断言把"记得重跑"变成机器的事：**盘上每一张图都必须在表里有条目**。
- *   后果很具体 —— 加了第 13 本书、或者某本补画了一页而忘了重跑，
- *   `pnpm test` 当场红，而不是几个月后有人说"这本书的背景色怪怪的"。
- *
- * ★ 断言的是**盘上的事实**（`public/booklist/` 里真有什么），不是表自己的自洽性。
- *   表里多出来的条目（图删了、条目还在）由反向那一条管。
- *   `readdirSync` 在这里是允许的：vitest 的 environment 就是 'node'
- *   （见 `vitest.config.ts` 文件头那段），不是 jsdom。
- */
-describe('桌面那张色表', () => {
-  const root = join(process.cwd(), 'public', 'booklist')
-
-  /** `public/booklist/` 下每个主题目录里真正躺着的图（相对站点 URL） */
-  function imagesOnDisk(): string[] {
-    const urls: string[] = []
-    for (const key of readdirSync(root)) {
-      const dir = join(root, key)
-      if (!statSync(dir).isDirectory()) continue
-      for (const file of readdirSync(dir)) {
-        if (file.endsWith('.webp')) urls.push(`/booklist/${key}/${file}`)
-      }
-    }
-    return urls
-  }
-
-  it('盘上每一张图都有条目 —— 忘了重跑取样脚本就红在这里', () => {
-    const missing = imagesOnDisk().filter((url) => !(url in BOOKLIST_TINTS))
-    expect(missing).toEqual([])
-  })
-
-  it('表里没有指向不存在文件的条目（图删了、条目还在）', () => {
-    const onDisk = new Set(imagesOnDisk())
-    const stale = Object.keys(BOOKLIST_TINTS).filter((url) => !onDisk.has(url))
-    expect(stale).toEqual([])
-  })
-
-  it('12 本 ×（封面 + 8 个跨页），一条不多一条不少', () => {
-    expect(Object.keys(BOOKLIST_TINTS)).toHaveLength(THEME_KEYS.length * (SPREADS_PER_BOOK + 1))
-  })
-
-  it('每一条都是三朵十六进制色，且按彩度从高到低（CSS 的固定读法靠这一条）', () => {
-    // ★ 断言的是**脚本真正保证的那一条**：彩度（最大通道 − 最小通道）递减。
-    //   原来想断言"最后一朵最白"，一量才知道那是**取样结果不是保证** ——
-    //   108 张里 30 张的第三朵是支中调色（castle 封面 `#a9805a`）。脚本抬头
-    //   2026-10-18 已按实测改成现在这句说法，这条断言与它对齐。
-    const chans = (hex: string): number[] => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16))
-    const chroma = (hex: string): number => {
-      const [r, g, b] = chans(hex) as [number, number, number]
-      return Math.max(r, g, b) - Math.min(r, g, b)
-    }
-    for (const [url, tints] of Object.entries(BOOKLIST_TINTS)) {
-      expect(tints, url).toHaveLength(3)
-      for (const hex of tints) expect(hex, url).toMatch(/^#[0-9a-f]{6}$/)
-      expect(chroma(tints[0]!), url).toBeGreaterThanOrEqual(chroma(tints[1]!))
-      expect(chroma(tints[1]!), url).toBeGreaterThanOrEqual(chroma(tints[2]!))
     }
   })
 })

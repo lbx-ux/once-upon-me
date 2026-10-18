@@ -96,3 +96,32 @@
   line-height: 1.7;
   color: var(--ink-muted);
 }
+
+/* ── 阅读器背景那一列（2026-10-18 加） ──────────────────────────────────────
+ * 与上面那两条**同一副骨架**（`.prefs__opt` 的框、`:has(input:checked)` 的选中态、
+ * 原生 radio），只多一格缩略图、且行更矮 —— 七行按上面那两条的高度排会顶出弹窗。
+ * ★ 缩略图**不复用底图本身**：那是 1536×1024 的一张（几十上百 KB），
+ *   为了看清这一格不值得。`<key>.thumb.webp` 是那支出图脚本顺手落的小图。 */
+.prefs__opt--paper {
+  align-items: center;
+  padding: 7px 10px;
+  gap: 9px;
+}
+
+/* 那一格图。`--bg` 垫底是给 `plain` 那一档的：它就是"什么都不铺"，
+   所以这一格画出来的正是阅读器里那一层底（页面底色）。 */
+.prefs__swatch {
+  flex: 0 0 auto;
+  width: 66px;
+  height: 44px;
+  border: 1px solid var(--hairline);
+  border-radius: 7px;
+  background-color: var(--bg);
+  background-size: cover;
+  background-position: 50% 50%;
+}
+
+/* 图那一列的名字不必占满：它旁边没有第二行说明，顶到最左反而离图更远 */
+.prefs__opt--paper .prefs__opt-body {
+  gap: 0;
+}

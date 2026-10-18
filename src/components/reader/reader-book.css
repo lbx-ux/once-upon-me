@@ -19,64 +19,62 @@
 .reader {
   position: relative;
   padding: 24px 0 48px;
-  /* 舞台宽**只在这里写一次**：它现在有两个消费者 —— `.reader__stage` 的宽，
-     与下面 `__ambient` 那条遮罩的锚（舞台高 = 宽 × 2/3）。
-     ★ 与 `booklist-reader.css` 上那一对同名变量是**同一组数**，两处必须一起改：
-       两台阅读器的"一本翻开的书"看起来得是同一个大小。 */
+  /* ★ 2026-10-18 晚：这里原来有一条 `overflow-x: clip`（同 `booklist-reader.css` 的
+     `.blr`，挡暖光负 inset 的外溢）。暖光那一层删掉了，补丁跟着删。 */
+  /* 舞台宽**只在这里写一次**。★ 与 `booklist-reader.css` 上那条同名变量是**同一组数**，
+     两处必须一起改：两台阅读器的"一本翻开的书"看起来得是同一个大小。
+     （2026-10-18 第三轮之前它与 `--reader-stage-h` 是一对，那个高度是给底图那条遮罩
+     当锚用的；遮罩取消之后它**跟着删了**。） */
   --reader-stage-w: min(1120px, 96vw, 108vh);
-  --reader-stage-h: calc(var(--reader-stage-w) * 2 / 3);
 }
 
 /* ============================================================================
- * §桌面 —— 点阵与暖光（2026-10-18 加）
+ * §桌面 —— 只剩一张底图（2026-10-18 加；同一天第二轮把点阵换成底图，晚上删到只剩它）
  *
  * 与 `booklist-reader.css` 的 §桌面 是**同一张桌子**，只少了"被当前页染色"那一层：
  * 这一屏装的是用户自己创作的书，没有离线取样出来的色表（那层的色是从盘上
  * 108 张图里用 `scripts/sample-tints.py` 取的生成物），所以这一屏**不做染色**——
  * 宁可少一层，也不要现算一个色：现算要么拖慢翻页，要么读的是跨域画布的空白。
+ * ★ 但**底图两台共用同一个偏好**（`src/lib/reader-paper.ts` 文件头第 4 条）：
+ *   用户挑哪张，两台一起换——它们是同一间屋子里的同一张桌子。
  *
- * ★ 那两处注释（三层为什么只活在留白里、遮罩为什么锚在舞台高度上而不是百分比）
- *   写在 `booklist-reader.css` 的同类规则上，这里不重抄 —— 那边的推导对这两条
- *   逐字成立（两屏的版面结构是同一个：书 + 底栏 + 进度 + 一行说明）。
- *   这里只有两个数不同：`.reader` 的上内边距是 24px（那边 20px），
- *   于是遮罩里那个 calc 也跟着不同。**改任何一边的上下留白都要重推那一对停点。**
+ * ── 同一天晚（第四轮）：书周围那几层**全删** ────────────────────────────────
+ *
+ * 用户看了铺满整屏的那一版，说「把书籍四周的仿真书效果删掉吧，只有背景就行」，
+ * 并选了**连书页明暗也删**那一档。于是这一屏也只剩底图：
+ *
+ *   · `.reader__light`（桌上那团暖光）、`.reader__face` 上那条接触影、
+ *     `.reader__shade`（书页内侧的明暗与弯折）—— 三处全去。
+ *   · 这一屏**从来没有**染色层，所以它这里没有第四样可删。
+ *   · `.reader` 上那条 `overflow-x: clip` 跟着删 —— 它当初挡的正是暖光负 inset 的
+ *     外溢（390×844 上 `scrollWidth = 444`），东西没了，补丁跟着走。
+ *   · 于是 `book/flip.ts` 照旧交出来的 `shade`（纸感 = sin θ）这一屏**不再渲染**：
+ *     翻页看起来就是"图在换"，没有纸张的厚度与弯折。首页第二屏仍在用，那边没动。
+ *
+ * ★ 那几处推导（点阵退役那两次读数、第三轮为什么铺满整屏、为什么 `fixed` 的前提是
+ *   祖先上没有 transform / filter / contain、以及"压在图上的字要上一档墨"那条
+ *   光度证明）写在 `booklist-reader.css` 的同类规则上，这里不重抄 ——
+ *   那边的推导对这几条逐字成立（两屏的版面结构是同一个：书 + 底栏 + 进度 + 一行说明）。
+ *   ★ 第四轮那一段的读数也是从那台复量的（`.reader` 这一侧同一次跑过），
+ *     见 README §五。
  * ========================================================================== */
 
-.reader__ambient {
-  position: absolute;
+/* 底图：与书单那台同一批资产（`public/reader-papers/`），由组件按偏好塞进来。
+   ★ `fixed; inset: 0`：盖的是整块视口，不是 `.reader`——理由与祖先那几条前提
+     写在 `booklist-reader.css` 的 `.blr__desk` 上。 */
+.reader__desk {
+  position: fixed;
   inset: 0;
   pointer-events: none;
-  background-image: radial-gradient(circle, var(--dot) 0.75px, transparent 0.95px);
-  background-position: 2px 2px;
-  background-size: var(--dot-size) var(--dot-size);
-  opacity: 0.5;
-  mask-image: linear-gradient(
-    to bottom,
-    #000 0,
-    #000 calc(24px + var(--reader-stage-h) * 0.9),
-    transparent calc(24px + var(--reader-stage-h) + 12px)
-  );
-  -webkit-mask-image: linear-gradient(
-    to bottom,
-    #000 0,
-    #000 calc(24px + var(--reader-stage-h) * 0.9),
-    transparent calc(24px + var(--reader-stage-h) + 12px)
-  );
+  background-image: var(--reader-paper, none);
+  background-size: cover;
+  background-position: 50% 50%;
+  background-repeat: no-repeat;
 }
 
-/* 落在桌上那团光。与 `.storybook__light` / `.blr__light` 同一组数 —— 一个字的差别都不该有 */
-.reader__light {
-  position: absolute;
-  inset: -16% -20%;
-  pointer-events: none;
-  background:
-    radial-gradient(52% 44% at 50% 47%, rgba(255, 251, 243, 0.9) 0%, rgba(255, 251, 243, 0) 62%),
-    radial-gradient(
-      66% 56% at 50% 50%,
-      rgba(var(--accent-rgb), 0.055) 0%,
-      rgba(var(--accent-rgb), 0) 70%
-    );
-}
+/* ★ 2026-10-18 晚删掉的 `.reader__light`（桌上那团暖光，与 `.storybook__light` /
+   `.blr__light` 同一组数）就在这里。它上过一屏，后来用户说书四周的仿真效果全不要。
+   理由与读数见 `booklist-reader.css` §桌面 的第四轮，**别照抄旧提交把它加回来**。 */
 
 .reader__stage {
   /* 舞台就是一整本书翻开的样子：宽 = 2 × 页宽 */
@@ -120,7 +118,9 @@
   overflow: hidden;
   backface-visibility: hidden;
   border-radius: 2px;
-  box-shadow: 0 2px 7px rgba(19, 19, 28, 0.1);
+  /* ★ 2026-10-18 晚删掉的接触影（`0 2px 7px rgba(19,19,28,.1)`）就在这里。
+     它让书"放在桌上"而不是"贴在灰墙上"；用户要"只有背景"，于是连影一起删 ——
+     书与底图之间**不再有任何暗线或阴**。数值在 git 里，理由见 §桌面 第四轮。 */
   /* 纸色：图铺不满时露出来的那一层，不是白 */
   background-color: #fbf7ef;
   /* ★ 这四行**只有封面用**（封面图直接挂在 `__face` 上，内页在图挂 `__half` 上）。
@@ -163,16 +163,10 @@
   background-position: 100% 0;
 }
 
-/* 纸感：shade = sin(θ)，平放 0、立起 1（flip.ts 把两个端点钉死）。
-   ★ 这一层是 `__leaf` 的子元素，**一叶一层**，所以两面共用同一个方向：
-   叶的转轴在左中，正反两面在叶的局部坐标里都是"左边靠书脊"，
-   一条 to-right 的渐变对两面都对（首页是一面一层，那里才需要镜像）。 */
-.reader__shade {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(to right, rgba(30, 22, 12, 0.32), rgba(30, 22, 12, 0) 54%);
-}
+/* ★ 2026-10-18 晚删掉的 `.reader__shade`（纸感：shade = sin(θ)，平放 0、立起 1）就在这里。
+   它原来是 `__leaf` 的子元素、**一叶一层**，一条 to-right 的渐变对正反两面都对。
+   删掉之后翻页看不出纸张的厚度与弯折 —— 这是用户点过头的取舍，不是漏渲染。
+   `book/flip.ts` 照旧交出 `shade`，首页第二屏还在用（那边一面一层，要镜像）。
 
 /* ── 正文：叠在**左半**的下角 ─────────────────────────────────────────────
  * ★ 这个位置不是排版偏好：出图时那条构图约束写的就是"主体偏右或居中，
@@ -297,8 +291,8 @@
 /* ── 页码与进度 ─────────────────────────────────────────────────────────── */
 
 .reader__bar {
-  /* 同 `booklist-reader.css`：这一条是给 §桌面那层点阵让位的 ——
-     绝对定位的装饰层永远画在静态内容之上，不加这条这三行字会被点阵盖住。 */
+  /* 同 `booklist-reader.css`：这一条是给 §桌面那层底图让位的（层序，不是观感）——
+     定位的装饰层永远画在静态内容之上，不加这条这三行字会被底图盖住。 */
   position: relative;
   display: flex;
   align-items: center;
@@ -331,8 +325,10 @@
   text-align: center;
 }
 
+/* ★ 压在 §桌面那张图上，所以与书单那台同样上了一档墨（`--ink-muted` → `--ink-soft`）：
+   `--ink-muted` 在六张图上一张都过不了 4.5:1。读数与量法见 README §五。 */
 .reader__total {
-  color: var(--ink-muted);
+  color: var(--ink-soft);
 }
 
 /**
@@ -372,14 +368,15 @@
   outline-offset: 2px;
 }
 
-/* "这本书为什么没有朗读"那句。比书号那行**更醒目一点**：它是需要被读到的话 */
+/* "这本书为什么没有朗读"那句。比书号那行**更醒目一点**：它是需要被读到的话。
+   ★ 两行都比上一版上了一档（说明行 → `--ink-soft`、这一句 → `--ink`），
+     两个档之间的差没变——理由见 `booklist-reader.css` 的 `.blr__meta`。 */
 .reader__meta--note {
-  color: var(--ink-soft);
+  color: var(--ink);
 }
 
 .reader__progress {
-  /* 同 `booklist-reader.css`：这一条是给 §桌面那层点阵让位的 ——
-     绝对定位的装饰层永远画在静态内容之上，不加这条这三行字会被点阵盖住。 */
+  /* 同 `booklist-reader.css`：这一条是给 §桌面那层底图让位的（层序，不是观感） */
   position: relative;
   width: min(320px, 60vw);
   height: 2px;
@@ -396,13 +393,13 @@
 }
 
 .reader__meta {
-  /* 同 `booklist-reader.css`：这一条是给 §桌面那层点阵让位的 ——
-     绝对定位的装饰层永远画在静态内容之上，不加这条这三行字会被点阵盖住。 */
+  /* 同 `booklist-reader.css`：这一条是给 §桌面那层底图让位的（层序，不是观感） */
   position: relative;
   margin: 16px 0 0;
   text-align: center;
   font-size: 12px;
-  color: var(--ink-muted);
+  /* ★ 压在图上，所以上了一档墨（理由与读数在 `.blr__meta` 上） */
+  color: var(--ink-soft);
 }
 
 /* ── 选择点：借首页那族的皮，位置与底色由这一屏自己定（2026-10-18） ───────────
@@ -534,7 +531,7 @@
    所以这一档只调排版，不动页模型。 */
 @media (max-width: 640px) {
   /* ★ 改的是**变量**，不是 `.reader__stage` 的 width ——舞台宽现在有两个消费者
-     （它自己，与 `__ambient` 那条遮罩的锚），只改 width 会让遮罩按旧数算。 */
+     （它自己，与 `__desk` 那条遮罩的锚），只改 width 会让遮罩按旧数算。 */
   .reader {
     --reader-stage-w: 92vw;
   }
