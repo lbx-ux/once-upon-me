@@ -20,6 +20,19 @@ import type { NextConfig } from 'next'
  *     并顺手重排该文件，于是 `pnpm format:check` 会报 tsconfig.json；格式化一次即可，
  *     之后 Next 不会再动它。
  */
+/**
+ * 构建并发：默认**不动**（本机 24 核，串行只会白白拖慢日常构建）；
+ * 服务器上由 `scripts/deploy-web.sh` 给 `NEXT_BUILD_CPUS=1`。
+ *
+ * ★ 为什么需要这个开关 —— 2026-10-19 实测，代价是一次整机锁死：
+ *   `next build` 默认按 CPU 数开 worker（那台服务器 2 vCPU → 2 个），而它只有
+ *   **1613 MB** 内存，还要跟 MySQL 与 Java 分；堆上限又给到 1 GB。三者一叠，
+ *   整机进入换页死亡螺旋：`available` 594 → **157 MB**，接着 **ssh 连握手都排不上队**，
+ *   nginx / Java / MySQL 一起对外超时，那次部署卡在构建上 27 分钟没动过。
+ *   串行（1 个 worker）配小堆（见部署脚本里的 `--max-old-space-size`）之后能建完。
+ */
+const buildCpus = Number(process.env.NEXT_BUILD_CPUS ?? '')
+
 const nextConfig: NextConfig = {
   distDir: process.env.NEXT_DIST_DIR ?? '.next',
   /**
@@ -54,6 +67,9 @@ const nextConfig: NextConfig = {
    */
   experimental: {
     staleTimes: { dynamic: 30 },
+    // ★ 只在服务器上给这个值（部署脚本设 NEXT_BUILD_CPUS=1）；本机不设 = 保持默认并发。
+    //   取值要像样：NaN / 0 / 负数一律当没给，别把 cpus: NaN 递给 Next。
+    ...(Number.isFinite(buildCpus) && buildCpus > 0 ? { cpus: buildCpus } : {}),
   },
 }
 

@@ -49,6 +49,14 @@
 #    而光"服务活着"证明不了新代码上去了 —— 所以 `--expect=TEXT` 会在**新构建**里
 #    搜那句话，搜不到就判失败并自动回滚（见 `--expect`）。
 #
+# 7. **构建期间停服 + 串行 + 小堆**。那台机器 1613 MB，"构建期间站点照常服务"在它上面
+#    **做不到** —— 2026-10-19 不做的时候它进了换页死亡螺旋：available 594 → 157 MB，
+#    **ssh 连握手都排不上队**，nginx / Java / MySQL 一起对外超时，部署卡在构建上 27 分钟
+#    （最后是人去控制台强制重启的）。所以：构建前停 web 进程让出内存、
+#    `NEXT_BUILD_CPUS=1` 串行静态生成、`--max-old-space-size=512` 小堆（`XZJ_BUILD_HEAP` 可调）。
+#    ★ 代价说得明明白白：构建期间站点**不可用**，时长就是构建那几分钟。
+#      不受控地锁死整机比"诚实地停几分钟"糟得多 —— 前者连 ssh 都进不去，只能去控制台。
+#
 set -euo pipefail
 
 HOST="${XZJ_HOST:-root@123.56.148.105}"
@@ -308,11 +316,31 @@ deploy() {
     say "指纹没变 → 跳过 install"
   fi
 
+  # ★ 构建期间先把 web 那个进程停掉。★ 这一条是 2026-10-19 用一次整机锁死换来的：
+  #   那台机器只有 1613 MB，"构建期间站点照常服务"在这里**做不到** ——
+  #   实测不做的时候：available 594 → 157 MB，ssh 连握手都排不上队，
+  #   nginx / Java / MySQL 一起对外超时，部署卡在构建上 27 分钟没动。
+  #   宁可诚实地停几分钟，也不要不受控地锁死整机（锁死时更糟：那是整个机器不可用）。
+  local was_running=0
+  if [ "$(rsh "systemctl is-active $SERVICE" || true)" = "active" ]; then
+    was_running=1
+    say "先停掉 $SERVICE，把内存让给构建（这台机器上做不到零停机构建）"
+    rsh "systemctl stop $SERVICE"
+  fi
+
   say "构建到 .next-new（不碰正在服务的 .next）"
   local t0 t1
   t0=$(date +%s)
-  rsh "sudo -u xzj env HOME=/var/cache/xiaozhujue bash -lc 'cd $APP_DIR && NODE_OPTIONS=--max-old-space-size=1024 NEXT_DIST_DIR=.next-new pnpm build'" \
-    || { rsh "rm -rf $APP_DIR/.next-new"; die "构建失败（正在服务的那一份没动过）"; }
+  # ★ 上一次半途而废的产物不许混进来（`next build` 会往已存在的目录里写）
+  rsh "rm -rf $APP_DIR/.next-new"
+  # ★ 两个救命参数，理由写在 next.config.ts 与本节上面：
+  #   NEXT_BUILD_CPUS=1 —— 串行静态生成（默认按 CPU 数开 worker，那台机器是 2 个）
+  #   --max-old-space-size=512 —— 堆小、GC 勤、峰值 RSS 低：宁慢不炸
+  if ! rsh "sudo -u xzj env HOME=/var/cache/xiaozhujue bash -lc 'cd $APP_DIR && NEXT_BUILD_CPUS=1 NODE_OPTIONS=--max-old-space-size=${XZJ_BUILD_HEAP:-512} NEXT_DIST_DIR=.next-new pnpm build'"; then
+    rsh "rm -rf $APP_DIR/.next-new"
+    if [ "$was_running" = "1" ]; then rsh "systemctl start $SERVICE"; fi
+    die "构建失败（正在服务的那一份没动过）"
+  fi
   t1=$(date +%s)
   say "构建耗时 $((t1 - t0)) 秒"
 
