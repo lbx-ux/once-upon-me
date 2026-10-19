@@ -173,6 +173,10 @@ export function toneOf(event: EngineEvent): FrameTone {
       return event.fatal ? 'bad' : 'warn'
     case 'retry':
       return 'warn'
+    case 'tool':
+      // 工具没跑成是提醒，不是红：`tool-loop.ts` 会把错误原文喂回给模型让它自己改，
+      // 所以它**不是**"这一轮坏了"。红是留给 `fatal` 的那些。
+      return event.ok ? 'info' : 'warn'
     case 'consistency':
       return event.verdict === 'fail' ? 'warn' : 'info'
     case 'book-ready':
@@ -340,6 +344,17 @@ export function deskOf(events: readonly EngineEvent[]): DeskState {
         // ★ 检索与规划期的 `retry` 同一条处置：**它是"编故事那一格里的一件事"**，
         //   所以进 `desk.planning`（"正在编故事"那一行底下），不占阶段轨的格子。
         //   给它一格节点的坏法见下面判断 2 那段：一个只亮一次的节点是骗人的。
+        desk.planning = describeEvent(event)
+        break
+      }
+
+      case 'tool': {
+        // ★ 工具调用（2026-10-19，`.scratch/mcp` 工单 06）与 `retrieved` **同一条处置**：
+        //   它也是"编故事那一格里的一件事"（没有页号，说的正是"这一版故事是怎么写出来的"），
+        //   所以进 `desk.planning`，阶段轨一格都不加。
+        //   ★ 与 `retrieved` 唯一的不同是它**可以来好几条**（模型查了两三次），
+        //     所以它是**覆盖**而不是追加——与这张桌子上别的东西同一条规矩：
+        //     那一行同时只说最近发生的一件事，堆成一行行会把它撑成一块日志墙。
         desk.planning = describeEvent(event)
         break
       }

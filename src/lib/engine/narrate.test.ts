@@ -18,33 +18,41 @@ import { describe, expect, it } from 'vitest'
 import { narrateAll, narrateNode, narrationTextOf, nextTakeNo } from './narrate.ts'
 import { createMemoryStore } from './providers/stores.ts'
 import type { EngineEventPayload } from './events.ts'
-import type { StoryNode } from './domain.ts'
+import type { Mood, StoryNode } from './domain.ts'
 import type { VoiceSynthesizer } from './providers/types.ts'
 
-function node(pageNo: number, body: string[]): StoryNode {
+function node(pageNo: number, body: string[], mood: Mood = 'calm'): StoryNode {
   return {
     nodeId: `n${pageNo}`,
     pageNo,
     scene: `第 ${pageNo} 页`,
     body,
     imagePrompt: 'x',
-    mood: 'calm',
+    mood,
     next: [],
     pathFromRoot: [`n${pageNo}`],
   }
 }
 
-/** 只会吐固定字节的假 TTS，记下每次合成了什么文本；`failOnText` 命中就抛 */
-function fakeVoice(failOnText?: string) {
+/**
+ * 只会吐固定字节的假 TTS，记下每次合成了什么文本与什么语气；`failOnText` 命中就抛。
+ *
+ * ★ `supportsMood` 是个**参数**：默认 `true`（多数判据只关心"mood 有没有传下来"），
+ *   要测"换了个不认情绪标签的模型"时传 `false`。
+ */
+function fakeVoice(failOnText?: string, supportsMood = true) {
   const texts: string[] = []
+  const moods: (Mood | undefined)[] = []
   const voice: VoiceSynthesizer = {
     id: 'fake-voice',
     modelId: 'fake-voice',
+    supportsMood,
     async clone() {
       return { voiceId: 'v-fake' }
     },
     async synthesize(req) {
       texts.push(req.text)
+      moods.push(req.mood)
       if (failOnText !== undefined && req.text === failOnText) {
         throw new Error('上游 500')
       }
@@ -54,7 +62,7 @@ function fakeVoice(failOnText?: string) {
       return { released: true }
     },
   }
-  return { voice, texts }
+  return { voice, texts, moods }
 }
 
 async function run(nodes: StoryNode[], voice: VoiceSynthesizer) {
@@ -331,5 +339,75 @@ describe('nextTakeNo', () => {
     expect(nextTakeNo(undefined)).toBe(1)
     // 这个名字不是我们这一套（手放进去的、或别的来源）——不猜，从 1 起
     expect(nextTakeNo('books/b/narration.mp3')).toBe(1)
+  })
+})
+
+/**
+ * 情绪（2026-10-19 接上）：`node.mood` 要走到底，而且**要进去重键**。
+ *
+ * 这一组是"接上了没有"在引擎这一层的全部凭据。适配器怎么把它翻成厂商标签
+ * （`qwen-speech.test.ts`）与"翻出来的声音对不对"（试听）是另外两件事。
+ */
+describe('narrateAll · 情绪', () => {
+  it('★ 每一页的 mood 都传到了合成那一步（四段共用这一页的 mood）', async () => {
+    const { voice, moods } = fakeVoice()
+    await run([node(1, ['天黑了。'], 'tense'), node(2, ['月亮出来了。'], 'tender')], voice)
+    expect(moods).toEqual(['tense', 'tender'])
+  })
+
+  it('★ 同一段文字换个 mood = 另一份录音（去重键带了 mood）', async () => {
+    // ★ 这条是接情绪标签**逼出来**的改动：不带 mood 的话第二页会复用第一页那份录音，
+    //   于是"叠句换了语气"这件事被静默吃掉，而盘上看起来一切正常
+    const { voice, texts, moods } = fakeVoice()
+    const { result } = await run(
+      [node(1, ['晚安。'], 'tender'), node(2, ['晚安。'], 'calm')],
+      voice,
+    )
+
+    expect(texts).toEqual(['晚安。', '晚安。'])
+    expect(moods).toEqual(['tender', 'calm'])
+    expect(result.narrations).toHaveLength(2)
+    expect(result.narrations[1]?.asset.path).not.toBe(result.narrations[0]?.asset.path)
+  })
+
+  it('同一段文字 + 同一个 mood 仍然复用一份（mood 没有把去重整个废掉）', async () => {
+    const { voice, texts } = fakeVoice()
+    const { result } = await run(
+      [node(1, ['晚安。'], 'tender'), node(2, ['晚安。'], 'tender')],
+      voice,
+    )
+    expect(texts).toEqual(['晚安。'])
+    expect(result.narrations[1]?.asset.path).toBe(result.narrations[0]?.asset.path)
+  })
+
+  it('★ 模型不认情绪标签时补一条非致命事件（否则"整本平调"没人说得清）', async () => {
+    const { voice } = fakeVoice(undefined, false)
+    const { events } = await run(
+      [node(1, ['天黑了。'], 'wonder'), node(2, ['天亮了。'], 'joy')],
+      voice,
+    )
+
+    const notices = events.filter((e) => e.kind === 'error' && e.code === 'mood-tags-unsupported')
+    // ★ **只发一条**：18 页发 18 条同样的话，真正的错误会被淹掉
+    expect(notices).toHaveLength(1)
+    expect(notices[0]).toMatchObject({ fatal: false })
+    expect(notices[0]?.kind === 'error' && notices[0].message).toMatch(/平调/)
+  })
+
+  it('全是 calm 的书不说那句话（本来就不发标签，那条提示会变成噪音）', async () => {
+    const { voice } = fakeVoice(undefined, false)
+    const { events } = await run(
+      [node(1, ['天黑了。'], 'calm'), node(2, ['天亮了。'], 'calm')],
+      voice,
+    )
+    expect(events.filter((e) => e.kind === 'error' && e.code === 'mood-tags-unsupported')).toEqual(
+      [],
+    )
+  })
+
+  it('模型认标签时一句废话都不说', async () => {
+    const { voice } = fakeVoice()
+    const { events } = await run([node(1, ['天黑了。'], 'joy')], voice)
+    expect(events.filter((e) => e.kind === 'error')).toEqual([])
   })
 })

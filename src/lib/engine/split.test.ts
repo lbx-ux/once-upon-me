@@ -74,11 +74,11 @@ function fakeText(): { text: TextGenerator; prompts: () => string[] } {
       id: 'fake-text',
       modelId: 'fake-text',
       async complete(req) {
-        prompts.push(req.user)
+        prompts.push(req.user ?? '')
         return respond()
       },
       async stream(req, _budget, onDelta) {
-        prompts.push(req.user)
+        prompts.push(req.user ?? '')
         const response = respond()
         // `streamed: false` 是**离线回放的写法**（见 types.ts 那段），
         // 但这里是假生成器：它确实一次给全，所以也照实报 false

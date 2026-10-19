@@ -6,10 +6,13 @@
  *
  * ★ 四条不显然的规则：
  *
- * 1. **去重键是 `(voiceId, textHash)`，不是页码**。共读版的故事树里主干页会被多个
+ * 1. **去重键是 `(voiceId, mood, textHash)`，不是页码**。共读版的故事树里主干页会被多个
  *    分支共用，同一段正文合成两次是白花钱；`domain.ts` 的 `Narration` 注释早就把
  *    这个键写死了。复用的那几页 `asset` 指向**同一个文件**（`reused: true`），
  *    所以磁盘上不会有 `page-7-a1.mp3`——这不是漏了，是它们本来就是一份录音。
+ *    ★ mood 那一节是 2026-10-19 加的：接上情绪标签之后，**同一段文字换个语气
+ *    就是另一份录音**（叠句在多页之间语气不同是正常的），拿文本哈希当键会让
+ *    第二页**静默复用**第一页的平调录音。
  * 2. **正文用 `body.join('')` 拼接，不加空格**。这不是随手写的：实测那句
  *    "哗啦啦，大雨落下来。地上变成亮晶晶的河。"（两句直接相连）合成出来约 2.5 秒，
  *    这个数是按 `join('')` 量的。改成 `join(' ')` 会插进一个未经测量的停顿，
@@ -19,10 +22,13 @@
  *    书照样装订，但"这一页没声音"是可查的，不是静默的。
  *    （这条对应 app-restructure spec 里"要么整本书都能响"那个判据：
  *    接线之前先要看清整本到底响不响。）
- * 4. **不传 `mood` 也不传 `pronunciation`**。两者在适配器里都还没接，
- *    传进去会直接报错（见 qwen-speech.ts 文件头第 5 条）。**这是有意的**：
- *    情绪标签与读音纠正都是"没测过就不许装作有"的能力，
- *    宁可让它们缺席，也不要让每一页读成同一个调子还无人知道。
+ * 4. **`mood` 走到了合成，`pronunciation` 仍然没接**。情绪标签 2026-10-19 接上了：
+ *    `node.mood` 一路传到 `synthesize`，由适配器翻成厂商的控制类标签
+ *    （`qwen-speech.ts` 的 `MOOD_TAGS`，实测记录在 `docs/known-tradeoffs.md`）。
+ *    这一层**不认识任何标签串**——它只搬运 `Mood` 这个与供应商无关的领域词。
+ *    ★ 同一段文字**换个 mood 就是另一份录音**，所以去重键多了 mood 这一节（规则 1）。
+ *    `pronunciation`（读音纠正）仍然缺席：它要 SSML 的音素控制，**没测过**，
+ *    放进适配器会直接报错。宁可让这一样缺席，也不要让"名字念错了"无人知道。
  *
  * ★ 2026-10-16（工单 01）：循环体抽成了导出的 `narrateNode`，`narrateAll` 改成循环调它。
  *   两个理由：**单页重配**要能只合成一页；而"这一页正在配音"这句话原来**说不出来**——
@@ -35,7 +41,7 @@ import { digest } from './digest.ts'
 import { asEngineError } from './errors.ts'
 import { extensionOf } from './providers/stores.ts'
 import { NARRATION_PART_LABELS } from './domain.ts'
-import type { Narration, NarrationPart, StoryNode } from './domain.ts'
+import type { Mood, Narration, NarrationPart, StoryNode } from './domain.ts'
 import type { EngineEventPayload } from './events.ts'
 import type { AssetStore, VoiceSynthesizer } from './providers/types.ts'
 
@@ -48,7 +54,7 @@ export type NarrateOptions = {
   bookId: string
   emit: (payload: EngineEventPayload) => void
   /**
-   * 本轮已经合成过的录音，键 = `${voiceId}:${textHash}`（规则 1）。
+   * 本轮已经合成过的录音，键 = `${voiceId}:${mood}:${textHash}`（规则 1）。
    * ★ 由调用方建、由这一层读写：去重表只有这一份实现，`narrateAll` 与单页重配共用它。
    *   不传 = 每一次都重新合成。
    */
@@ -84,11 +90,20 @@ const PART_SUFFIX: Record<NarrationPart, string> = {
   'option-b': '-opt-b',
 }
 
-/** 一段要合成的东西：哪一页、哪一段、念什么 */
+/** 一段要合成的东西：哪一页、哪一段、念什么、用什么语气 */
 export type NarrationTarget = {
   pageNo: number
   part: NarrationPart
   text: string
+  /**
+   * 这一段的语气，取自**这一页的** `node.mood`（四段共用一页的一个词）。
+   *
+   * ★ 为什么四段共用而不是给引导提问/两个选项各配一套：`mood` 在 `domain.ts` 里定义的
+   *   就是"这一页的情绪"，而多一张"哪一段该用什么语气"的表就是多一处会漂的真相。
+   *   `tense` 页的引导提问（家长念的那一句）会不会因此显得怪，**是没量过的事**——
+   *   真撞上了再加第二张表，不预先拍。
+   */
+  mood: Mood
 }
 
 /**
@@ -104,15 +119,15 @@ export type NarrationTarget = {
  */
 export function targetsOfNode(node: StoryNode): NarrationTarget[] {
   const targets: NarrationTarget[] = [
-    { pageNo: node.pageNo, part: 'body', text: narrationTextOf(node) },
+    { pageNo: node.pageNo, part: 'body', text: narrationTextOf(node), mood: node.mood },
   ]
   const choice = node.choice
   if (choice) {
     const [a, b] = choice.options
     targets.push(
-      { pageNo: node.pageNo, part: 'prompt', text: choice.prompt },
-      { pageNo: node.pageNo, part: 'option-a', text: a.spoken },
-      { pageNo: node.pageNo, part: 'option-b', text: b.spoken },
+      { pageNo: node.pageNo, part: 'prompt', text: choice.prompt, mood: node.mood },
+      { pageNo: node.pageNo, part: 'option-a', text: a.spoken, mood: node.mood },
+      { pageNo: node.pageNo, part: 'option-b', text: b.spoken, mood: node.mood },
     )
   }
   return targets
@@ -149,7 +164,8 @@ export async function narrateTarget(
   opts: NarrateOptions,
 ): Promise<{ narration: Narration; reused: boolean }> {
   const textHash = digest(target.text)
-  const key = `${opts.voiceId}:${textHash}`
+  // 规则 1：键里带 mood —— 同一段文字换个语气是**另一份录音**，不带它就会静默复用平调那份
+  const key = `${opts.voiceId}:${target.mood}:${textHash}`
 
   // 规则 1：同一份录音只落一次盘，多处共用同一个 asset。
   // ★ 复用的那一份带着**它第一次落盘时的 part**，所以这里要把 `part` 覆写成本次的那一个——
@@ -171,7 +187,11 @@ export async function narrateTarget(
 
   opts.emit({ kind: 'stage', stage: 'narrating', phase: 'begin', pageNo: target.pageNo })
   try {
-    const response = await opts.voice.synthesize({ voiceId: opts.voiceId, text: target.text })
+    const response = await opts.voice.synthesize({
+      voiceId: opts.voiceId,
+      text: target.text,
+      mood: target.mood,
+    })
     const asset = await opts.store.put({
       path: `books/${opts.bookId}/page-${target.pageNo}${PART_SUFFIX[target.part]}-a${opts.takeNo ?? 1}${extensionOf(response.mime)}`,
       bytes: response.bytes,
@@ -211,7 +231,10 @@ export async function narrateNode(
   node: StoryNode,
   opts: NarrateOptions,
 ): Promise<{ narration: Narration; reused: boolean }> {
-  return narrateTarget({ pageNo: node.pageNo, part: 'body', text: narrationTextOf(node) }, opts)
+  return narrateTarget(
+    { pageNo: node.pageNo, part: 'body', text: narrationTextOf(node), mood: node.mood },
+    opts,
+  )
 }
 
 export async function narrateAll(
@@ -220,10 +243,28 @@ export async function narrateAll(
 ): Promise<NarrateResult> {
   const narrations: Narration[] = []
   const errors: { pageNo: number; message: string }[] = []
-  /** key = `${voiceId}:${textHash}` → 已经落盘的那份录音（跨页去重，见规则 1） */
+  /** key = `${voiceId}:${mood}:${textHash}` → 已经落盘的那份录音（跨页去重，见规则 1） */
   const done = new Map<string, Narration>()
 
   opts.emit({ kind: 'stage', stage: 'narrating', phase: 'begin' })
+
+  // ★ 换了一个不认情绪标签的模型时，**不能让这件事静默发生**：症状恰好是当初那个 bug 的样子
+  //   ——"每一页都读成同一个调子"，而界面上没有任何东西说得清为什么。
+  //   所以补一条非致命事件（与"这一页没配上音"同一条用法：book 照装订，但这句话可查）。
+  //   只在真的会丢东西时发：全是 `calm` 的书本来就不发标签，那一条会变成噪音。
+  if (!opts.voice.supportsMood && nodes.some((node) => node.mood !== 'calm')) {
+    opts.emit({
+      kind: 'error',
+      stage: 'narrating',
+      code: 'mood-tags-unsupported',
+      message:
+        `这个语音模型（${opts.voice.modelId}）不支持情绪标签，所以这一本的朗读是**平调**的——` +
+        '原文照念，但没有语气起伏。要听出语气请换 qwen-audio-3.1-tts-flash / ' +
+        'qwen-audio-3.0-tts-plus / qwen-audio-3.0-tts-flash 之一再重配。' +
+        '（配音照样会跑完，书照样装订，只是没有语气。）',
+      fatal: false,
+    })
+  }
 
   for (const node of nodes) {
     for (const target of targetsOfNode(node)) {

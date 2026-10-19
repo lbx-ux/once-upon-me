@@ -129,6 +129,7 @@ function capturingVoice() {
   const voice: VoiceSynthesizer = {
     id: 'fake-voice',
     modelId: 'fake-voice',
+    supportsMood: true,
     async clone() {
       return { voiceId: 'v-clone' }
     },

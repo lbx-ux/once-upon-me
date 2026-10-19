@@ -97,6 +97,7 @@ import {
   queryTextOf,
 } from '../src/lib/rag/load.ts'
 import { retrieveBoth, type RetrieveHit } from '../src/lib/rag/retrieve.ts'
+import { planToolsOf } from '../src/lib/plan-tools.ts'
 import { arg, readEnv } from './env.mts'
 
 /* ─────────────────────────── 固定输入（写死，换批要写明） ─────────────────────────── */
@@ -251,6 +252,12 @@ type BookRecord = {
   dupWithHistory?: number
   /** 同一个量的 4 字版本（**描述量**，字短了巧合就多，只用来交叉看一眼） */
   dupWithHistory4?: number
+  /**
+   * 这一轮模型调了几次工具（2026-10-19 加的第三臂 `tools`）。
+   * ★ `off` / `lexical` 两臂**没有这个字段**（不是 0）：它们的请求里根本没有工具，
+   *   写个 0 会让"没给工具"与"给了但一次没调"看起来一样——而这两件事完全不同。
+   */
+  toolCalls?: number
   /** 这一本是这一主题的第几次重复（配对用） */
   repeatIndex: number
   /**
@@ -300,6 +307,12 @@ type Report = {
   sweep: SweepRow[]
   distribution: ThemeScores[]
   arms: Record<Arm, BookRecord[]>
+  /**
+   * 这一轮**实际跑了哪几条臂**。
+   * ★ 有 `--arms=` 这个口子之后，"报告里有几条臂"就不再等于"跑了几条"——
+   *   不记下来的话，一份只跑了 `off` 的报告看上去和一份跑全了的报告一模一样。
+   */
+  ranArms: Arm[]
   /** ②创作史：每主题那一本旧书（`--history=live` 时是本流水线产出的） */
   history: { theme: string; title: string; sentences: number }[]
   /** ②创作史是怎么来的：`live` = 本流水线产出（可测），`fixture` = 手写的那三本 */
@@ -520,6 +533,15 @@ async function main(): Promise<void> {
           cellNarrowed === undefined ? DEFAULT_NARROWED_MIN_SCORE : Number(cellNarrowed),
       }
     })
+  /**
+   * 只跑哪几条臂（逗号分隔）。空 = 三条都跑。
+   * ★ 它是**补跑与调试**用的口子，而报告里会记下这一轮实际跑了哪几条——
+   *   只跑一条却拿它当三臂结论，是这一栏最容易犯的错（`--arms` 的存在让那件事变得容易）。
+   */
+  const armsWanted = arg('arms', '')
+    .split(',')
+    .map((one) => one.trim())
+    .filter(Boolean)
   const backoffMs = Number(arg('backoffMs', '30000'))
   const retries = Number(arg('retries', '3'))
   /**
@@ -783,18 +805,34 @@ async function main(): Promise<void> {
     historyMode,
     historyCalls,
     rateLimitHits: 0,
+    ranArms: [],
   }
 
+  /**
+   * 三臂（2026-10-19 加第三臂，`.scratch/mcp` 工单 08）：
+   *
+   * | 臂 | 什么意思 |
+   * | -- | -------- |
+   * | `off` | 不检索。**基线** |
+   * | `lexical` | 动笔之前我们先检索一遍，把结果注进提示词（今天线上那条） |
+   * | `tools` | **把检索当成工具交给模型**，它自己决定查不查、查什么（`planToolsOf`） |
+   *
+   * ★ 后两臂是**同一个问题的两种答案**，所以 `planStory` 里两者互斥、同时给会抛
+   *   （`PlanOptions.tools` 那段）。这一轮量的正是"哪种答案更好"。
+   * ★ `--arms=` 能只跑其中几条（默认三条都跑）：调试与补跑用，
+   *   而**报告里会记下这一轮跑了哪几条**——只跑一条却拿它当三臂结论，是这一栏最容易犯的错。
+   */
   const armList: { arm: Arm; k: number; minScore: number; narrowedMinScore: number }[] = [
     { arm: 'off', k, minScore, narrowedMinScore: DEFAULT_NARROWED_MIN_SCORE },
     { arm: 'lexical', k, minScore, narrowedMinScore: DEFAULT_NARROWED_MIN_SCORE },
+    { arm: 'tools', k, minScore, narrowedMinScore: DEFAULT_NARROWED_MIN_SCORE },
     ...extraCells.map((cell) => ({
       arm: `lexical@k${cell.k}ms${cell.minScore}n${cell.narrowedMinScore}`,
       k: cell.k,
       minScore: cell.minScore,
       narrowedMinScore: cell.narrowedMinScore,
     })),
-  ]
+  ].filter((cell) => armsWanted.length === 0 || armsWanted.includes(cell.arm))
   /** 主题 × 重复：**配对设计的样本单位是主题**，重复是为了压住书级抖动 */
   const runs = batch.flatMap((item) =>
     Array.from({ length: repeats }, (_, repeatIndex) => ({ item, repeatIndex })),
@@ -802,6 +840,7 @@ async function main(): Promise<void> {
 
   for (const cell of armList) {
     const { arm } = cell
+    report.ranArms.push(arm)
     if (arm !== 'off') report.arms[arm] = []
     if (arm !== 'off' && arm !== 'lexical')
       report.cells[arm] = { k: cell.k, minScore: cell.minScore }
@@ -809,7 +848,7 @@ async function main(): Promise<void> {
       `── 臂 ${arm}${arm === 'off' ? '（不检索）' : `（k=${cell.k} minScore=${cell.minScore}）`} ─────────────\n`,
     )
     const retriever =
-      arm !== 'off'
+      arm !== 'off' && arm !== 'tools'
         ? createPlanRetriever({
             store: createMemoryStore(),
             owner: OWNER,
@@ -826,6 +865,31 @@ async function main(): Promise<void> {
       //   比多等两分钟贵得多（`--delayMs=0` 可以关掉，但那要写在报告里）。
       if (index > 0) await sleep(delayMs)
       const request = requestOf(run.item)
+      /**
+       * 第三臂的工具集：**与生产同一处实现**（`src/lib/plan-tools.ts`），
+       * 而且**每本现建**——因为硬过滤（年龄档 / 主题 / 形态）要用**这一本**的值。
+       * ★ 用整批的第一本去建一份共用的话，两臂的差别会从"谁决定怎么用材料"
+       *   退化成"两臂过滤的池子不一样"，而那是一个与被测量无关的差别。
+       * ★ 在这一层手写一遍工具同样不行：W1 那次横评自己搭平行流水线的教训
+       *   （本文件头第 1 条）在这里一字不差地成立。
+       * ★ 语料传的是**注入的那一份**（`seed` / `retrieval.own`），与 `lexical` 臂同一批：
+       *   两臂能比的唯一前提是"材料一样，只是由谁决定怎么用"。
+       */
+      const tools =
+        arm === 'tools'
+          ? planToolsOf({
+              store: createMemoryStore(),
+              owner: OWNER,
+              card: CARD,
+              query: {
+                ageBand: request.child.ageBand,
+                theme: request.theme,
+                form: request.form,
+              },
+              seed,
+              own: retrieval.own,
+            })
+          : null
       const record = await runOne({
         arm,
         request,
@@ -833,6 +897,7 @@ async function main(): Promise<void> {
         text,
         providers,
         retriever,
+        tools,
         maxAttempts,
         historyText: retrieval.historyTexts.get(run.item.theme) ?? [],
         repeatIndex: run.repeatIndex,
@@ -903,6 +968,12 @@ type RunArgs = {
   text: TextGenerator
   providers: ProviderBundle
   retriever: ReturnType<typeof createPlanRetriever> | null
+  /**
+   * 第三臂用的工具（`arm === 'tools'` 时才有）。**与 `retriever` 互斥**——
+   * `planStory` 自己会抛（见它 `PlanOptions.tools` 那段），这里不重复判一遍，
+   * 但两处传进来的东西必须是"二选一"，这是调用方的责任。
+   */
+  tools: readonly ToolDef[] | null
   maxAttempts: number
   /** 同一主题那本旧书的正文（v2 主判据 ③ 的参照集）。`fixture` 模式下没有就是空 */
   historyText: readonly string[]
@@ -928,7 +999,7 @@ function isRateLimited(err: unknown): boolean {
 }
 
 async function runOne(args: RunArgs): Promise<BookRecord> {
-  const { request, retrieval, arm, providers, retriever } = args
+  const { request, retrieval, arm, providers, retriever, tools } = args
   const record: BookRecord = {
     arm,
     theme: request.theme,
@@ -946,16 +1017,22 @@ async function runOne(args: RunArgs): Promise<BookRecord> {
   for (let attempt = 1; attempt <= args.retries; attempt += 1) {
     try {
       const retries: string[] = []
+      /** 这一轮调了几次工具。★ 只数 `tool` 事件，不数 `error`——
+       *  那一条也发，但它是"某次工具没跑成"的附属记录，重复计数会把账算成两倍 */
+      let toolCalls = 0
       const plan = await planBook(request, {
         providers,
         maxAttempts: args.maxAttempts,
         ...(retriever ? { retriever } : {}),
+        ...(tools ? { tools } : {}),
         // ★ 从事件里收重试原因：`planBook` 的返回里没有它们（`StoryPlan` 只有 `attempts`），
         //   而**事件正是引擎发出去的那一份**——比在本脚本里重新解析一遍错误消息可靠。
         onEvent: (event) => {
           if (event.kind === 'retry') retries.push(event.reason)
+          if (event.kind === 'tool') toolCalls += 1
         },
       })
+      if (tools) record.toolCalls = toolCalls
       const bodies = plan.tree.nodes.flatMap((node) => [...node.body])
       const sentences = sentencesOf(bodies)
       const chars = bodies.join('').replace(/\s+/g, '').length
@@ -1084,6 +1161,11 @@ type ArmStats = {
   dupWithHistory: number
   overlapWithExamples: number
   noveltyVsRead: number
+  /**
+   * 平均每本调了几次工具。**`null` = 这一臂根本没有工具**（不是 0）。
+   * 与 `BookRecord.toolCalls` 同一个判据：这两件事写成同一个数就分不出来了。
+   */
+  toolCalls: number | null
 }
 
 function statsOf(records: readonly BookRecord[]): ArmStats {
@@ -1110,6 +1192,9 @@ function statsOf(records: readonly BookRecord[]): ArmStats {
     dupWithHistory: mean(numbers((record) => record.dupWithHistory)),
     overlapWithExamples: mean(numbers((record) => record.overlapWithExamples)),
     noveltyVsRead: mean(numbers((record) => record.noveltyVsRead)),
+    toolCalls: ok.some((record) => record.toolCalls !== undefined)
+      ? mean(numbers((record) => record.toolCalls))
+      : null,
   }
 }
 
@@ -1454,21 +1539,25 @@ function renderReport(report: Report): string {
       : []),
     '## ① 判据本身（v1 口径，**不是 v2 的裁决**）',
     '',
-    `| 臂 | 通过（≤${report.maxAttempts} 次） | 一次过 | 平均重试 | 三次规划不过 | 调用失败 | 限流 |`,
-    '| --- | --- | --- | --- | --- | --- | --- |',
+    `| 臂 | 通过（≤${report.maxAttempts} 次） | 一次过 | 平均重试 | 三次规划不过 | 调用失败 | 限流 | 调用工具 |`,
+    '| --- | --- | --- | --- | --- | --- | --- | --- |',
     ...armKeys.map((key) => {
       const stats = statsOf(report.arms[key] ?? [])
       const cell = report.cells[key]
       const label = cell ? `${key}（k=${cell.k} 阈值=${cell.minScore}）` : key
       return (
         `| ${label} | ${stats.ok}/${stats.judged} | ${stats.firstPass}/${stats.judged} | ` +
-        `${num(stats.avgAttempts, 2)} | ${stats.planInvalid} | ${stats.callFailed} | ${stats.rateLimited} |`
+        `${num(stats.avgAttempts, 2)} | ${stats.planInvalid} | ${stats.callFailed} | ${stats.rateLimited} | ` +
+        `${stats.toolCalls === null ? '—' : num(stats.toolCalls, 1)} |`
       )
     }),
     '',
     '量法：`attempts` 取自 `planBook` 的返回（第几次调用才拿到合法故事表）；',
     '「三次规划不过」= 引擎抛 `schema-validation-failed`（含内容审核那条改不动的情形）；',
     '分母**不含**调用失败与限流——"裁判没到场"不判"选手没跑"。',
+    '★ 「调用工具」那一列只在 `tools` 那一臂上有数（平均每本调了几次）。',
+    '另外两臂是 `—`——**不是 0**："没给工具"与"给了但一次没调"是两件事，',
+    '写成 0 会让它们看起来一样（`BookRecord.toolCalls` 那条注释）。',
     '',
     ...(report.repeat && report.repeat.length > 0
       ? [

@@ -111,7 +111,7 @@ function fakeText(replies: readonly string[]): { text: TextGenerator; prompts: (
       id: 'fake-text',
       modelId: 'fake-text',
       async complete(req) {
-        prompts.push(req.user)
+        prompts.push(req.user ?? '')
         const response: TextResponse = {
           text: replies[Math.min(index, replies.length - 1)] ?? JSON.stringify(STORY),
           modelId: 'fake-text',
@@ -120,7 +120,7 @@ function fakeText(replies: readonly string[]): { text: TextGenerator; prompts: (
         return response
       },
       async stream(req, _budget, onDelta) {
-        prompts.push(req.user)
+        prompts.push(req.user ?? '')
         const response: TextResponse = {
           text: replies[Math.min(index, replies.length - 1)] ?? JSON.stringify(STORY),
           modelId: 'fake-text',

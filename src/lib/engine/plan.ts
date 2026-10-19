@@ -22,6 +22,7 @@ import {
 import { asPlanDraft, planDraftCodec, planJsonSchema, type PlanDraft } from '../schemas/story.ts'
 import { formatFailures, parseWith } from '../schemas/schema.ts'
 import { EngineError } from './errors.ts'
+import { completeWithTools, type ToolDef } from './tool-loop.ts'
 import type { BookForm, RetrievalProvenance, RetrievedChunkRef, StoryTree } from './domain.ts'
 import { branchPagesOf, buildTree, type TreeProblem } from './tree.ts'
 import { reviewProblemText, reviewStory } from './review.ts'
@@ -109,12 +110,41 @@ export type PlanOptions = {
    * 新能力不做默认，因为默认一开，脚本与跑测走的就是一条没量过的路。
    */
   retrieve?: PlanRetriever
+  /**
+   * 让模型**自己决定要不要查**（2026-10-19，`.scratch/mcp` 工单 06）。
+   *
+   * ★ 它与 `retrieve` **互斥**，同时给会当场抛。理由不是实现难，是**它们是同一个问题的
+   *   两种答案**："动笔之前先看以前写过什么"这件事，要么我们把材料先摆好（`retrieve`），
+   *   要么把查找的工具交给模型（`tools`）。两个都给的话，"第三臂比第二臂好在哪"
+   *   这个问题就答不出来了——两臂的差别会退化成"检索了两次 vs 一次"。
+   *   工单 08 的三臂对照（关检索 / 预检索 / 模型自选工具）量的是这件事。
+   * ★ 与 `onDelta` 也互斥：工具循环要的是**完整回包**，而增量与 `tool_calls`
+   *   的分片拼装是两件都不简单的事（`TextRequest.tools` 那段）。
+   */
+  tools?: readonly ToolDef[]
+  /** 工具轮数上限。缺省见 `tool-loop.ts` */
+  maxToolSteps?: number
   emit: (payload: EngineEventPayload) => void
 }
 
 export async function planStory(input: StoryPlanInput, opts: PlanOptions): Promise<PlanOutcome> {
   const maxAttempts = opts.maxAttempts ?? 3
   const failures: string[] = []
+
+  // ★ 两条互斥在这里**当场抛**（见 `PlanOptions.tools` 那段）：静默取一个的话，
+  //   "第三臂"量出来的东西会是一条谁也没定义过的路，而报告上它看起来很正常。
+  if (opts.tools && opts.retrieve) {
+    throw new EngineError(
+      'invalid-request',
+      '`tools` 与 `retrieve` 是同一个问题的两种答案，不能同时给：要么预先检索，要么把工具交给模型',
+    )
+  }
+  if (opts.tools && opts.onDelta) {
+    throw new EngineError(
+      'invalid-request',
+      '`tools` 与 `onDelta` 不能同时给：工具循环要的是完整回包，不是流式增量',
+    )
+  }
 
   // ★ 检索在**重试循环之外**，三次 attempt 共用同一份。
   //   理由是重试要改的是**格式**（文件头第 1 条：格式问题与语义问题分开报），
@@ -143,13 +173,24 @@ export async function planStory(input: StoryPlanInput, opts: PlanOptions): Promi
     // ★ 这里**不写 `opts.text.stream &&`** 那种兜底：`stream` 在接口上是必填的
     //   （见 types.ts 里那段理由），写一个 "有就用、没有就算了" 的判断，
     //   等于把"必填"退回成一个建议——而它一旦真的缺失，症状是"界面上什么都没发生"
-    const response = opts.onDelta
-      ? await opts.text.stream(
-          request,
-          opts.idleTimeoutMs === undefined ? {} : { idleTimeoutMs: opts.idleTimeoutMs },
-          opts.onDelta,
-        )
-      : await opts.text.complete(request)
+    const response = opts.tools
+      ? // ★ 带工具那一档走 `completeWithTools`（2026-10-19，`.scratch/mcp` 工单 06）：
+        //   它把"模型要调工具就先调、把结果喂回去、直到它给最终答复"这件事包起来，
+        //   而**返回的 `text` 仍然是那张故事表**——所以下面这一整段校验、重试、
+        //   审核一个字都不用改。这就是"工具只是规划内部的一步"这句话的具体形状。
+        await completeWithTools(request, {
+          text: opts.text,
+          tools: opts.tools,
+          ...(opts.maxToolSteps === undefined ? {} : { maxSteps: opts.maxToolSteps }),
+          emit: opts.emit,
+        })
+      : opts.onDelta
+        ? await opts.text.stream(
+            request,
+            opts.idleTimeoutMs === undefined ? {} : { idleTimeoutMs: opts.idleTimeoutMs },
+            opts.onDelta,
+          )
+        : await opts.text.complete(request)
 
     const draft = parseWith(planDraftCodec, response.text)
     if (!draft.ok) {

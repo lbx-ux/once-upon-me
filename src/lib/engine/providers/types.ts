@@ -17,7 +17,7 @@
  * 模型 id **一律来自环境变量**，不写死（见 registry.ts）。
  */
 
-import type { AssetRef } from '../domain.ts'
+import type { AssetRef, Mood } from '../domain.ts'
 
 /** 一次调用的公共预算控制。超时**不重试**：异步任务可能已在服务端建单，盲目重试会重复扣费 */
 export type CallBudget = {
@@ -25,13 +25,80 @@ export type CallBudget = {
   signal?: AbortSignal
 }
 
+/* ───────────────────────── 工具调用（Function Calling） ───────────────────────── */
+
+/**
+ * 一个工具的**对外那一份**（给模型看的就是它）。
+ *
+ * ★ 形状跟着 OpenAI 兼容层走（`{name, description, parameters}`），
+ *   与 `src/lib/mcp/protocol.ts` 的 `ToolSpec`（`{name, description, inputSchema}`）
+ *   **是两个东西，不要合并**：那一个是 MCP 协议规定的对外形状（喂**别的 AI**），
+ *   这一个是这一层要发给模型网关的（喂**我们自己的模型**）。
+ *   字段名不同不是笔误，是两份规范各自的规定。
+ * ★ `parameters` 与 handler 里的校验**必须同源**：写了 schema 不校验，
+ *   那张表就是装饰（`.scratch/mcp/issues/03` 的验收项之一）。
+ */
+export type ToolSpec = {
+  name: string
+  description: string
+  parameters: Record<string, unknown>
+}
+
+/**
+ * 模型要求调一次工具。
+ *
+ * ★ `argumentsJson` 是**字符串**，不是对象——这不是懒，是把一种真实的坏法
+ *   摆在名字上：OpenAI 兼容层回的就是一段 JSON 文本，而模型**写坏它是常态**
+ *   （缺引号、多一个逗号）。取名 `arguments` 会诱使调用方直接当对象用，
+ *   于是那段坏 JSON 会在一个想不到的地方炸；叫 `argumentsJson` 就在提醒
+ *   "先解析、解析失败要当成一次正常的失败处理"（`tool-loop.ts` 里就是这么做的）。
+ */
+export type ToolCall = {
+  id: string
+  name: string
+  argumentsJson: string
+}
+
+/**
+ * 带工具那条路上的会话。**只在 `TextRequest.messages` 用了它**——
+ * 不带工具时仍然走 `system` + `user` 那两个字段，逐字节与今天相同。
+ */
+export type ChatMessage =
+  | { role: 'system' | 'user'; content: string }
+  | { role: 'assistant'; content: string | null; toolCalls?: readonly ToolCall[] }
+  | { role: 'tool'; toolCallId: string; content: string }
+
 /* ───────────────────────── 文本（规划 / 校验 / 审核共用） ───────────────────────── */
 
-export type TextRequest = {
-  system: string
-  user: string
+/** 两种形态共有的那些 */
+type TextRequestCommon = {
   /** 期望 JSON 输出时给出 schema 描述；供应商不支持强制约束时它只进 prompt */
   jsonSchema?: unknown
+  /**
+   * 这次调用可以用哪几个工具（2026-10-19，`.scratch/mcp` 工单 06）。
+   * **不传 = 今天那条路**（请求体里一个 `tools` 字段都不出现）。
+   *
+   * ★ 与 `retrieve` / `onDelta` 同一条纪律：新能力不做默认。
+   *   默认一开，脚本与跑测走的就是一条没量过的路。
+   * ★ **与流式互斥**：`stream()` 带 `tools` 会当场抛。理由是实测的形状——
+   *   流式增量与 `tool_calls` 的分片拼装是两件都不简单的事，
+   *   而规划那一步要的是"一次给全"（`plan.ts` 拿的是完整文本）。
+   *   两条都是显式分支，没有"传了但被忽略"那种中间状态
+   *   （与 `ImageGenerator.edit` 那条同一条纪律）。
+   */
+  tools?: readonly ToolSpec[]
+  /**
+   * 工具选择的模式。
+   *
+   * ★ **只有 `'auto'` 与 `'none'` 两个值，而且不许加"强制点名"那一档**：
+   *   2026-10-19 实测（`scripts/probe-tool-calls.mts`，格 B），
+   *   同一个请求体十次里七次回
+   *   `400 · MODEL_TOOL_CHOICE_NOT_SUPPORTED · 请改用 tool_choice=auto`、
+   *   三次回 200。**不可依赖**，所以它不给调用方选。
+   *   缺省 `'auto'`；`'none'` 是给"步数用完了、逼它给最终答复"那一步用的
+   *   （`tool-loop.ts`）——用"不带 tools"也能达到同样效果，但它更显式。
+   */
+  toolChoice?: 'auto' | 'none'
   /**
    * 这一次要的是**纯文本**，别套 `response_format`。
    *
@@ -55,12 +122,42 @@ export type TextRequest = {
   maxTokens?: number
 }
 
+/**
+ * 一次文本调用。**两种形态，只能选一种**：
+ *
+ * ```ts
+ * { system, user }                  // 今天每一条路走的那一种
+ * { messages }                      // 带工具那条路（多轮）走的那一种
+ * ```
+ *
+ * ★ 做成判别联合而不是"都设成可选"：后者会让"两个都没给"变成一个**类型上合法**的调用，
+ *   而它在运行期只会送出一条没有正文的消息——网关回什么全看它心情。
+ *   判别联合把这件事挡在编译期，而且顺带表达了另一条纪律：
+ *   **两者不能同时给**（同时给的话，`payloadOf` 里谁赢取决于那一行的写法，
+ *   而那正是下一个人会改错的地方）。
+ * ★ 第二条分支上 `system?: undefined` 不是装饰：`{system:'x', messages:[…]}` 会当场报错，
+ *   而不是静默地只发 messages。
+ */
+export type TextRequest = TextRequestCommon &
+  (
+    | { system: string; user: string; messages?: undefined }
+    | { messages: readonly ChatMessage[]; system?: undefined; user?: undefined }
+  )
+
 export type TextResponse = {
   text: string
   modelId: string
   /** 供应商回传的真实用量；拿不到就不填，不填一个看起来合理的数 */
   usage?: { promptTokens?: number; completionTokens?: number }
   traceId?: string
+  /**
+   * 模型要求调工具（2026-10-19，工单 06）。**没有这个字段 = 它给了最终答复**。
+   *
+   * ★ 两者**不会同时有意义**：回包里有 `tool_calls` 时 `content` 通常是空串
+   *   （实测就是这么回的），而我们要的是"它调工具"这个决定，不是那段空文本。
+   *   所以 `tool-loop.ts` 的判据是"`toolCalls` 非空就继续跑"，不看 `text`。
+   */
+  toolCalls?: readonly ToolCall[]
 }
 
 /**
@@ -252,15 +349,30 @@ export type CloneRequest = {
 export type SynthesizeRequest = {
   voiceId: string
   text: string
-  /** 情绪标签 → 语气。见 domain.ts 的 MOODS */
-  mood?: string
-  /** 名字读音确认过的实际读法，多音字靠它在合成时不被念错 */
+  /**
+   * 情绪 → 语气。取值见 `domain.ts` 的 `MOODS`；怎么翻成厂商的控制类标签是
+   * **适配器的私事**（见 `qwen-speech.ts` 的 `MOOD_TAGS`）。
+   *
+   * ★ 引擎这一层只负责把 `StoryNode.mood` 传下来，**不认识任何厂商标签串**——
+   *   与 `SYNTH_PATH` 那类东西留在适配器里是同一条道理。
+   */
+  mood?: Mood
+  /** 名字读音确认过的实际读法，多音字靠它在合成时不被念错。★ 目前没有任何适配器接它 */
   pronunciation?: Record<string, string>
 }
 
 export interface VoiceSynthesizer {
   readonly id: string
   readonly modelId: string
+  /**
+   * 这个模型认不认情绪标签。
+   *
+   * ★ 它是一个**只读能力位**，不是调用开关：`synthesize` 收到 `mood` 时，
+   *   认就贴标签，不认就照原样送（**不报错**——那会让换模型的人整本配音全挂）。
+   *   但"不报错"不等于"不说"：调用方（`narrateAll`）拿这一位去补一条人话，
+   *   否则症状就是**当初这个 bug 的样子**——每一页都一个调子，而没人知道为什么。
+   */
+  readonly supportsMood: boolean
   clone(req: CloneRequest, budget?: CallBudget): Promise<{ voiceId: string }>
   synthesize(
     req: SynthesizeRequest,

@@ -12,11 +12,13 @@
 import { EngineError } from '../errors.ts'
 import type {
   CallBudget,
+  ChatMessage,
   StreamBudget,
   TextDelta,
   TextGenerator,
   TextRequest,
   TextResponse,
+  ToolCall,
 } from './types.ts'
 import { findFirst, requestJson, requestSse, traceOf, type HttpDeps } from './http.ts'
 
@@ -70,9 +72,15 @@ export function createOpenAiText(
    *   而这正是 07 §一.1 要钉死的那件事。
    */
   const payloadOf = (req: TextRequest, stream: boolean): Record<string, unknown> => {
-    const messages: unknown[] = []
-    if (req.system) messages.push({ role: 'system', content: req.system })
-    messages.push({ role: 'user', content: req.user })
+    // ★ 两条路**分开**，不是"把 system/user 也塞进 messages"：
+    //   后者会改掉今天每一条路的请求体，而工单 06 的判据 8 是
+    //   "不传 tools 时请求体逐字节等于今天"。`req.messages` 只有带工具那条路会给。
+    const messages: unknown[] = req.messages
+      ? req.messages.map(wireMessage)
+      : [
+          ...(req.system ? [{ role: 'system', content: req.system }] : []),
+          { role: 'user', content: req.user },
+        ]
     return {
       model: modelId,
       messages,
@@ -82,6 +90,33 @@ export function createOpenAiText(
       //   理由与实测的 400 写在 `TextRequest.plainText` 上——不是本节流，是那个参数
       //   本来就不该出现在"把一句话改好"这种调用里
       ...(req.plainText ? {} : jsonShape(jsonMode, req.jsonSchema)),
+      // ★ `tools` 只在真给了的时候出现。`tool_choice` 只发 `auto` / `none`——
+      //   "强制点名"这一档**不可依赖**（实测十次里七次 400，见 `TextRequest.toolChoice`），
+      //   所以这一层不提供它，调用方也就写不出那句请求。
+      ...(req.tools && req.tools.length > 0
+        ? {
+            tools: req.tools.map((one) => ({
+              type: 'function',
+              function: {
+                name: one.name,
+                description: one.description,
+                parameters: one.parameters,
+              },
+            })),
+            ...(req.toolChoice && req.toolChoice !== 'auto' ? { tool_choice: req.toolChoice } : {}),
+            /**
+             * ★ **一轮只许回一个工具调用**（2026-10-19，被三臂对照量出来的）。
+             *
+             * `tool-loop.ts` 的 `maxSteps` 管的是**轮数**，不是**调用次数**——
+             * 一轮里回三个工具调用，账面上是"走了 1 步、调了 3 次"。
+             * 实测就是这么发生的：`--arms=tools` 那一轮平均每本调了 **4.8** 次，
+             * 而轮数上限是 4。**4.8 > 4 只可能是并行调用**，
+             * 也就是说"步数预算"在那条路上根本没有它看起来那么严。
+             * （探针的格 H 已经打过这个参数：`parallel_tool_calls:false` 回 200 且照常调工具。）
+             */
+            parallel_tool_calls: false,
+          }
+        : {}),
       ...(opts.extra ?? {}),
       ...(stream ? { stream: true } : {}),
     }
@@ -119,7 +154,27 @@ export function createOpenAiText(
       //   于是"读不到"变成"读到别人的"——那比读不到更难查。
       const contentValue = message ? message['content'] : findFirst(body, ['content'])
       const text = flattenContent(contentValue)
-      if (text === '') {
+      // ★ 从**同一个 `message` 对象**上读工具调用，理由与上面那段读 content 的注释
+      //   完全相同：不回退到 `findFirst(body, ['tool_calls'])`，
+      //   那会翻到回显的请求体里那份同名键上——"读不到"变成"读到别人的"。
+      const toolCalls = toolCallsOf(message)
+
+      /**
+       * ★★ 空正文**只在它真的该有正文时**才算失败（2026-10-19 修的）。
+       *
+       * 实测的现场：模型决定调工具时，回包是
+       * `finish_reason: 'tool_calls'`、`content: ''`——**那是正常回包**，
+       * 而这一行原来无条件把空正文当失败抛掉，于是"模型要调工具"这件事
+       * 在适配器这一层就被误判成"供应商回了个空壳"。
+       *
+       * 抓到它的地方值得记一笔：`probe-tool-calls.mts` 的 A 格早就打过
+       * 「调了工具 · **正文 0 字**」，而那一行读数当时只被当成"工具调用长这样"，
+       * 没被当成"空正文"。**证明它是个 bug 的是三臂对照的第三臂**：
+       * `tools` 那一臂上有一本直接 `call-failed`，报的正是
+       * 「回包里没有正文（content=string(0)，finish_reason=tool_calls）」。
+       * ——"探针报了一个数"与"那个数意味着什么"之间隔着一整个下游，这一条就是那一步。
+       */
+      if (text === '' && toolCalls.length === 0) {
         throw new EngineError('provider-call-failed', explainEmptyContent(body, message), {
           traceId: traceOf(body) || undefined,
           detail: body,
@@ -130,6 +185,7 @@ export function createOpenAiText(
         modelId: String(findFirst(body, ['model']) ?? modelId),
         usage: usageOf(body),
         traceId: traceOf(body) || undefined,
+        ...(toolCalls.length > 0 ? { toolCalls } : {}),
       }
     },
 
@@ -159,6 +215,15 @@ export function createOpenAiText(
       onDelta: (delta: TextDelta) => void,
     ): Promise<TextResponse> {
       requireKey()
+      // ★ 带工具与流式**互斥**，当场抛（见 `TextRequest.tools` 那段）：
+      //   静默忽略 `tools` 的话，调用方以为自己拿到的是工具那一路的结果，
+      //   而实际上模型连工具都没看见——两边的差别要到很久以后才看得出来。
+      if (req.tools && req.tools.length > 0) {
+        throw new EngineError(
+          'invalid-request',
+          'stream() 不支持 tools：带工具那一档走 complete()（工具循环要的是完整回包，不是增量）',
+        )
+      }
       let text = ''
       let reasoningLength = 0
       let seenModel = modelId
@@ -253,6 +318,74 @@ function deltaObject(chunk: unknown): Record<string, unknown> | null {
 }
 
 /**
+ * 一条 `ChatMessage` → 请求体里那一行。
+ *
+ * ★ 单独一个函数而不是在 `payloadOf` 里内联：**这里错一个字段名，坏法是静默的**
+ *   （网关多半只会回一句 400 说"消息格式不对"，而不说是哪一条）。
+ *   三处是按 OpenAI 的线格式写的，别按我们内部的名字猜：
+ *   `tool_calls[].function.arguments` 是**字符串**、`role:'tool'` 那条带的是
+ *   `tool_call_id`（下划线，不是 camelCase）、而 assistant 那条在调工具时
+ *   `content` 可以是 `null`。
+ */
+function wireMessage(message: ChatMessage): Record<string, unknown> {
+  switch (message.role) {
+    case 'system':
+    case 'user':
+      return { role: message.role, content: message.content }
+    case 'assistant':
+      return {
+        role: 'assistant',
+        content: message.content,
+        ...(message.toolCalls && message.toolCalls.length > 0
+          ? {
+              tool_calls: message.toolCalls.map((call) => ({
+                id: call.id,
+                type: 'function',
+                function: { name: call.name, arguments: call.argumentsJson },
+              })),
+            }
+          : {}),
+      }
+    case 'tool':
+      return { role: 'tool', tool_call_id: message.toolCallId, content: message.content }
+  }
+}
+
+/**
+ * 回包里的 `tool_calls`。**只从已经定位到的那个 `message` 上读**，
+ * 不做深度搜索——理由与 `complete()` 里读 `content` 的那段完全相同。
+ *
+ * ★ 缺 `id` / 缺 `name` 的那些**丢掉**：留着它们的话，下一轮回填时
+ *   `tool_call_id` 会是一个空串，而网关对"回一个不存在的 tool_call_id"
+ *   的反应通常是整条请求 400——一次本来只是"某个字段缺了"的小事，
+ *   会被放大成"这一轮全废"。
+ */
+function toolCallsOf(message: Record<string, unknown> | null): ToolCall[] {
+  const raw = message?.['tool_calls']
+  if (!Array.isArray(raw)) return []
+  const calls: ToolCall[] = []
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue
+    const record = item as Record<string, unknown>
+    const fn = record['function']
+    const fnRecord =
+      fn && typeof fn === 'object' && !Array.isArray(fn) ? (fn as Record<string, unknown>) : {}
+    const id = typeof record['id'] === 'string' ? record['id'] : ''
+    const name = typeof fnRecord['name'] === 'string' ? fnRecord['name'] : ''
+    if (id === '' || name === '') continue
+    const args = fnRecord['arguments']
+    calls.push({
+      id,
+      name,
+      // 有的网关把 arguments 直接回成一个对象（不合规但确实有）。这里照实转成字符串，
+      // 让 `tool-loop.ts` 那一处解析是**唯一**一处——两处解析就会有两种坏法。
+      argumentsJson: typeof args === 'string' ? args : JSON.stringify(args ?? {}),
+    })
+  }
+  return calls
+}
+
+/**
  * JSON 约束的三档，**默认 `object`**，这是实测决定的：
  *
  * - `none` 什么都不加，靠 prompt 里的 schema 文本 + 我们自己的校验（判据 1 测的就是这条路的通过率）
@@ -341,6 +474,12 @@ function explainEmptyContent(body: unknown, message: Record<string, unknown> | n
       : '**键不存在**'
     : '找不到 message'
   const detail = `content=${contentShape}，finish_reason=${finishReason || '—'}，reasoning_content=${reasoningLength} 字符`
+  // ★ `finish_reason: 'tool_calls'` 且正文为空**已经不算失败了**（调用处那段注释）——
+  //   走到这里说明连 `tool_calls` 也没有，那才是真的"回了个空壳"。
+  //   这一句仍然留着，是为了让排障的人一眼看出"这一家连工具调用都没回"。
+  if (finishReason === 'tool_calls') {
+    return `这家说 finish_reason=tool_calls，但回包里既没有正文也没有 tool_calls（${detail}）`
+  }
   if (finishReason === 'length' || reasoningLength > 0) {
     return `这家在 max_tokens 之内没写出正文（${detail}）。正文预算被思考吃掉了——调大 maxTokens 或换一家`
   }

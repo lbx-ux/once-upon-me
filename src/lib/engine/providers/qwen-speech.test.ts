@@ -19,6 +19,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { createQwenSpeech } from './qwen-speech.ts'
 import { EngineError } from '../errors.ts'
+import type { Mood } from '../domain.ts'
 
 const DEPS = { baseUrl: 'https://example.invalid/api/v1', apiKey: 'test-key-not-a-secret' }
 const MODEL = 'qwen-audio-3.0-tts-flash'
@@ -87,12 +88,18 @@ describe('qwen-speech · 发请求之前的拦截', () => {
     ).resolves.toBeTruthy()
   })
 
-  it('★ 带 mood（情绪）→ 报错，理由写清"标签没实测过"', async () => {
-    forbidNetwork()
+  it('★ 带 mood（情绪）= 标签贴在正文最前面，不是报错（2026-10-19 接上）', async () => {
+    const calls: Call[] = []
+    stubFetch(
+      [
+        jsonResponse({ output: { audio: { url: 'https://cdn.invalid/a.mp3' } } }),
+        audioResponse([1]),
+      ],
+      calls,
+    )
     const speech = createQwenSpeech(DEPS, MODEL)
-    await expect(() =>
-      speech.synthesize({ voiceId: 'v', text: '天黑了', mood: 'calm' }),
-    ).rejects.toThrow(/情绪标签/)
+    await speech.synthesize({ voiceId: 'v', text: '天黑了', mood: 'tender' })
+    expect((calls[0]?.body as { input: { text: string } }).input.text).toBe('[empathetic]天黑了')
   })
 
   it('没 key → provider-not-configured，而不是发出一个 401', async () => {
@@ -197,5 +204,89 @@ describe('qwen-speech · 请求体与下载', () => {
     })) as unknown as typeof fetch
     const speech = createQwenSpeech(DEPS, MODEL)
     await expect(() => speech.release('v-1')).rejects.toThrowError(EngineError)
+  })
+})
+
+/**
+ * 情绪标签（2026-10-19 接上）。
+ *
+ * ★ 这一组断言的是**真实请求体里的 `input.text`**，不是"我们以为贴上去的标签"——
+ *   与上面那两组的理由一样：只有抄下来的 payload 才算证据。
+ * ★ `calm` 那一档是**判据**不是省略：它必须**逐字节等于原文**。
+ *   "平稳叙述就是这个音色的默认状态"这件事在代码里只有这一个凭据。
+ */
+describe('qwen-speech · 情绪标签', () => {
+  const textOf = (body: unknown) => (body as { input: { text: string } }).input.text
+
+  /** 合一次，把真实请求体里的 text 拿回来 */
+  async function spokenWith(mood: Mood | undefined, model = MODEL) {
+    const calls: Call[] = []
+    stubFetch(
+      [
+        jsonResponse({ output: { audio: { url: 'https://cdn.invalid/a.mp3' } } }),
+        audioResponse([1]),
+      ],
+      calls,
+    )
+    const speech = createQwenSpeech(DEPS, model)
+    await speech.synthesize({ voiceId: 'v', text: '天黑了', ...(mood ? { mood } : {}) })
+    return { text: textOf(calls[0]?.body), supportsMood: speech.supportsMood }
+  }
+
+  it('六个 mood 各贴各的标签；calm 逐字节就是原文', async () => {
+    expect((await spokenWith('wonder')).text).toBe('[amazed]天黑了')
+    expect((await spokenWith('joy')).text).toBe('[excited]天黑了')
+    expect((await spokenWith('tense')).text).toBe('[trembling]天黑了')
+    expect((await spokenWith('tender')).text).toBe('[empathetic]天黑了')
+    // proud 与 joy 同档：词表里没有更贴"自豪"的（见 MOOD_TAGS 注释），这是认下来的重合
+    expect((await spokenWith('proud')).text).toBe('[excited]天黑了')
+    // ★ calm 不发标签。它必须**一个字都不多**，否则"默认音色"这句话就没有凭据了
+    expect((await spokenWith('calm')).text).toBe('天黑了')
+  })
+
+  it('不传 mood → 原文照送（老调用方逐字节不受影响）', async () => {
+    expect((await spokenWith(undefined)).text).toBe('天黑了')
+  })
+
+  it('★ 词表之外的 mood 一律**不发标签**（发了就是让厂商乱来）', async () => {
+    // 模型写的 JSON 可以带任何字符串；tree.ts 会兜底成 calm，但这一层不该依赖那一层
+    const calls: Call[] = []
+    stubFetch(
+      [
+        jsonResponse({ output: { audio: { url: 'https://cdn.invalid/a.mp3' } } }),
+        audioResponse([1]),
+      ],
+      calls,
+    )
+    const speech = createQwenSpeech(DEPS, MODEL)
+    await speech.synthesize({
+      voiceId: 'v',
+      text: '天黑了',
+      mood: 'ecstatic' as unknown as Mood,
+    })
+    expect(textOf(calls[0]?.body)).toBe('天黑了')
+  })
+
+  it('★ 不在名单上的模型：一个方括号都不发，且 supportsMood 为 false', async () => {
+    const { text, supportsMood } = await spokenWith('joy', 'cosyvoice-v2-other')
+    expect(text).toBe('天黑了')
+    expect(text).not.toContain('[')
+    expect(supportsMood).toBe(false)
+  })
+
+  it('名单上的三个模型都认；大小写/前后缀不同的名字不认（精确匹配）', async () => {
+    for (const model of [
+      'qwen-audio-3.1-tts-flash',
+      'qwen-audio-3.0-tts-plus',
+      'qwen-audio-3.0-tts-flash',
+    ]) {
+      const { supportsMood, text } = await spokenWith('joy', model)
+      expect(supportsMood, model).toBe(true)
+      expect(text, model).toBe('[excited]天黑了')
+    }
+    // ★ 前缀匹配是**故意不做的**：认错了厂商不是忽略标签，而是把它当控制符乱来
+    for (const model of ['QWEN-AUDIO-3.0-TTS-FLASH', 'qwen-audio-3.0-tts-flash-preview']) {
+      expect((await spokenWith('joy', model)).supportsMood, model).toBe(false)
+    }
   })
 })

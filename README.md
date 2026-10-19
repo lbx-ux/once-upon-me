@@ -174,8 +174,13 @@ once-upon-me/
 │  ├─ scenes/                    三幕背景场景图（1365×768 WebP，合计 103.5 KB）
 │  └─ brand/
 │     └─ mark.webp               首屏品牌标记（560×560，23.8 KB）
+├─ mcp/
+│  ├─ server.mts                 ★ MCP server（stdio）——**薄壳**：读命令行、拼上下文、把 stdin 的行喂给 dispatch
+│  └─ README.md                  两种客户端的注册写法 + 一次真会话的复现步骤 + 「它是本机操作员的工具」
 ├─ scripts/
 │  ├─ make-webp.py               源图 → WebP，五档预设（hero / book-spread / book-cover / book-icon / theme-card）
+│  ├─ mcp-session.mts            ★ 起一个真的 MCP 会话跑 14 条判据（含与 engine-run 的等价对照）
+│  ├─ probe-tool-calls.mts       ★ 探针：这条网关上 tools / tool_choice 到底能不能用（八格）
 │  ├─ make-favicon.py            品牌标记 → src/app/icon.ico 的 favicon 脚本
 │  ├─ check-scrim.mts            ★ 工作台那层纸光够不够厚：读 CSS、按 WCAG 出十带表
 │  ├─ make-reader-paper.mts      阅读器那六张底图：调引擎出图 → 对照表 → 落 public/
@@ -242,9 +247,17 @@ once-upon-me/
       ├─ cards-list.ts           「有哪些角色卡」的唯一实现（API / 角色墙 / 主页胶囊共用）
       ├─ kid-names.ts            演示孩子的名字从哪来（读不到就退回 childId，不编名字）
       ├─ engine/                 ★ 生成引擎（W1 定稿，见下「引擎层」）
+      ├─ mcp/                    ★ MCP 那一层：protocol.ts（JSON-RPC，纯函数）+ tools.ts（七条工具）
+      ├─ plan-tools.ts           ★ 编故事那一步模型能调的四件工具（检索 / 书架 / 自检 / 角色段）
+      ├─ stub-fixture.ts         ★ 固定替身：不花钱不联网跑完一本书（engine-run 与 MCP 共用一份）
       ├─ schemas/                结构化输出的校验器 + 契约（自写，一份定义两用）
       └─ prompts/                分阶段提示词，带版本号
 ```
+
+★ 有一条**分层上的新边界**要说清：`src/lib/mcp/` 与 `src/lib/plan-tools.ts` 是**服务端**的
+（它们读盘、跑引擎），而 `mcp/server.mts` 只是一层**薄壳**——因为 `.mts` 不进
+`pnpm typecheck`（`tsconfig.json` 的 include 只写到 `.ts`），逻辑留在 `src/lib/` 里
+才既过闸门又跑测试（理由与代价记在 [docs/known-tradeoffs.md](docs/known-tradeoffs.md)）。
 
 ### 分层约定
 
@@ -453,6 +466,8 @@ working directory 是项目目录（`server/`），所以 `-f server/pom.xml` �
 | `pnpm test:watch`   | Vitest watch 模式                                                                                                           |
 | `pnpm format`       | Prettier 格式化                                                                                                             |
 | `pnpm format:check` | 只检查不写入（CI 用）                                                                                                       |
+| `pnpm mcp`          | 起 MCP server（stdio）——**要 `--user=<userId>`，见 [`mcp/README.md`](mcp/README.md)**                                       |
+| `pnpm mcp:session`  | ★ 起一个真的 MCP 会话跑一遍判据（14 条），落 `.out/mcp-session/`                                                            |
 
 引擎与跑测的脚本不进 `package.json`（它们是 node 直接跑的 `.mts`，不是 npm 生命周期）：
 
@@ -463,6 +478,7 @@ working directory 是项目目录（`server/`），所以 `-f server/pom.xml` �
 | `node scripts/engine-run.mts --mode=offline`            | 用录好的 manifest 回放（ADR-0003 的断网演示路径）                                                                                                                                                                                                                                                                                                                                                               |
 | `node scripts/w1-image-bakeoff.mts --models=a,b`        | 图像横评：同一角色 5 页 × N 候选，产出盲评包与横评表                                                                                                                                                                                                                                                                                                                                                            |
 | `node scripts/w1-text-bakeoff.mts --models=a,b`         | 大模型横评：同一批主题 × 10 本的 Schema 通过率与重试次数                                                                                                                                                                                                                                                                                                                                                        |
+| `node scripts/probe-tool-calls.mts`                     | ★ 探针：这条网关上 `tools` / `tool_choice` 到底能不能用（八格，判读表在文件头）                                                                                                                                                                                                                                                                                                                                 |
 | `node scripts/make-probe-library.mts --out=DIR`         | 造一个**隔离资产根**（9 本 `probe-01…09`）给会写盘、会删文件的探针用                                                                                                                                                                                                                                                                                                                                            |
 | `node scripts/export-demo-cards.mts --from=DIR --apply` | ★ 把示例角色卡导出成随仓库发布的 `public/demo/cards/`（默认只打印计划）                                                                                                                                                                                                                                                                                                                                         |
 | `node scripts/e2e-demo-cards.mts`                       | ★ 示例卡对每个人都有、**别人的东西拿不到**（打本机一台 dev server）                                                                                                                                                                                                                                                                                                                                             |

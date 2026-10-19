@@ -379,6 +379,43 @@ describe('审核没过：编故事那一段的事，不占格子', () => {
     expect(desk.notes).toEqual([])
     expect(desk.frames).toEqual([])
   })
+
+  it('★ 工具调用进「编故事」那一行，**不占阶段轨的格子**（与 `retrieved` 同一条处置）', () => {
+    const desk = deskOf(
+      stream([
+        { kind: 'stage', stage: 'planning', phase: 'begin' },
+        {
+          kind: 'tool',
+          stage: 'planning',
+          name: 'search_past_stories',
+          ok: true,
+          ms: 1200,
+        },
+      ]),
+    )
+    // 人话来自 `describeEvent`，这里只钉住"它落在哪一格"
+    expect(desk.planning).toBe('查了一下「search_past_stories」（1.2 秒）')
+    // 阶段轨没有多出节点——一个只亮一次的节点是骗人的（`retrieving` 那段注释）
+    expect(desk.frames).toEqual([])
+    expect(desk.notes).toEqual([])
+  })
+
+  it('工具没跑成：进同一行，且**不是**红（模型会自己改，它不是"这一轮坏了"）', () => {
+    const desk = deskOf(
+      stream([
+        {
+          kind: 'tool',
+          stage: 'planning',
+          name: 'read_shelf',
+          ok: false,
+          ms: 30,
+          note: '盘读不出来',
+        },
+      ]),
+    )
+    expect(desk.planning).toContain('盘读不出来')
+    expect(desk.notes).toEqual([])
+  })
 })
 
 describe('页码来得不如预期时：不丢、不乱序、不凭空造', () => {

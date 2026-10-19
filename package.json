@@ -15,7 +15,9 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check:colors": "node scripts/check-color-tokens.mts",
-    "check:scrim": "node scripts/check-scrim.mts"
+    "check:scrim": "node scripts/check-scrim.mts",
+    "mcp": "node mcp/server.mts",
+    "mcp:session": "node scripts/mcp-session.mts"
   },
   "dependencies": {
     "gsap": "^3.15.0",

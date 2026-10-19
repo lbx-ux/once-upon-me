@@ -52,6 +52,7 @@ import { linearOrder } from './tree.ts'
 import { createEventFactory, type EngineEvent, type EngineEventPayload } from './events.ts'
 import { EngineError } from './errors.ts'
 import { planStory, type PlanRetriever } from './plan.ts'
+import type { ToolDef } from './tool-loop.ts'
 import { reviewProblemText, reviewStory } from './review.ts'
 import { illustrateAll, illustrateCover, illustrateNode } from './illustrate.ts'
 import { narrateAll, narrateTarget, nextTakeNo, targetsOfNode } from './narrate.ts'
@@ -215,6 +216,19 @@ export type RunDeps = {
    *   `node scripts/engine-run.mts --mode=stub` 照样跑得完一本书。
    */
   retriever?: PlanRetriever
+  /**
+   * 让**我们自己的模型**去调工具（2026-10-19，`.scratch/mcp` 工单 06）。
+   * **不传就是今天那条路。**
+   *
+   * ★ 它落在 `RunDeps` 而不是只挂在 `PlanDeps` 上，与 `retriever` 同一条理由：
+   *   `runBook` 里也包含编故事那一步，而脚本/横评走的是 `runBook`——
+   *   挂在 `PlanDeps` 上的话，那两条路就传不进来，"脚本走的那条路 == 产品走的那条路"
+   *   这条纪律当场破。②（逐页画）不读它，多带一个没人读的字段好过两套依赖。
+   * ★ 与 `retriever` 互斥，理由见 `plan.ts` 的 `PlanOptions.tools`。
+   */
+  tools?: readonly ToolDef[]
+  /** 工具轮数上限。缺省见 `tool-loop.ts` */
+  maxToolSteps?: number
 }
 
 /**
@@ -306,6 +320,8 @@ export async function planBook(request: BookRequest, deps: PlanDeps): Promise<St
     form: request.form,
     // ★ 不传就是这一轮不检索（`PlanOptions.retrieve` 那条注释）
     ...(deps.retriever ? { retrieve: deps.retriever } : {}),
+    ...(deps.tools ? { tools: deps.tools } : {}),
+    ...(deps.maxToolSteps === undefined ? {} : { maxToolSteps: deps.maxToolSteps }),
     emit: forward,
   })
 

@@ -299,3 +299,194 @@ describe('stream · 超时', () => {
     await expect(text.stream(REQUEST, undefined, () => {})).rejects.toThrow(/reasoning_content=4/)
   })
 })
+
+/* ───────────────────────── 工具调用那一档（2026-10-19，`.scratch/mcp` 工单 06） ───────────────────────── */
+
+/**
+ * ★ 这一组是**被三臂对照跑出来的**，不是想出来的。
+ *
+ * 实测的坏法：模型决定调工具时，回包是
+ * `finish_reason: 'tool_calls'`、`content: ''`——**那是正常回包**，
+ * 而 `complete()` 原来无条件把空正文当失败抛掉，于是"模型要调工具"
+ * 在适配器这一层被误判成"供应商回了个空壳"。
+ *
+ * 抓到它的路径值得记：`probe-tool-calls.mts` 的 A 格早就打过「调了工具 · **正文 0 字**」，
+ * 而那一行读数当时只被读成"工具调用长这样"；把两件事连起来的是
+ * `scripts/rag-bakeoff.mts --arms=tools` 那一臂上**唯一一本** `call-failed`。
+ * ——「探针报了一个数」与「那个数意味着什么」之间隔着一整个下游。
+ */
+
+/** 一次 `complete()`：喂一份固定的回包，返回结果或抛出来的错 */
+async function completeOnce(body: unknown): Promise<{ text: string; toolCalls?: unknown }> {
+  const text = createOpenAiText(
+    {
+      baseUrl: 'https://example.invalid/v1',
+      apiKey: 'k',
+      fetchImpl: async () =>
+        new Response(JSON.stringify(body), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+    },
+    'm-1',
+  )
+  const response = await text.complete({ system: 's', user: 'u' })
+  return {
+    text: response.text,
+    ...(response.toolCalls ? { toolCalls: response.toolCalls } : {}),
+  }
+}
+
+describe('★ 空正文 + tool_calls = 正常回包，不是"回了个空壳"', () => {
+  it('finish_reason=tool_calls 且正文为空时**不抛**，并把工具调用带出来', async () => {
+    const result = await completeOnce({
+      model: 'm-1',
+      choices: [
+        {
+          finish_reason: 'tool_calls',
+          message: {
+            role: 'assistant',
+            content: '',
+            tool_calls: [
+              {
+                id: 'call-1',
+                type: 'function',
+                function: { name: 'read_shelf', arguments: '{"k":3}' },
+              },
+            ],
+          },
+        },
+      ],
+    })
+    expect(result.text).toBe('')
+    expect(result.toolCalls).toEqual([
+      { id: 'call-1', name: 'read_shelf', argumentsJson: '{"k":3}' },
+    ])
+  })
+
+  it('★ 但空正文**没有** tool_calls 时仍然抛（原来的判据不许松）', async () => {
+    await expect(
+      completeOnce({
+        model: 'm-1',
+        choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: '' } }],
+      }),
+    ).rejects.toThrow(/没有正文/)
+  })
+
+  it('坏的那条被丢掉，好的那条留着（回填一个空 tool_call_id 会让下一轮整条 400）', async () => {
+    const result = await completeOnce({
+      model: 'm-1',
+      choices: [
+        {
+          finish_reason: 'tool_calls',
+          message: {
+            content: '',
+            tool_calls: [
+              // 缺 id
+              { type: 'function', function: { name: 'read_shelf', arguments: '{}' } },
+              // 缺 name
+              { id: 'call-bad', type: 'function', function: { arguments: '{}' } },
+              // 这条是好的
+              {
+                id: 'call-good',
+                type: 'function',
+                function: { name: 'check_draft', arguments: '{}' },
+              },
+            ],
+          },
+        },
+      ],
+    })
+    expect(result.toolCalls).toEqual([
+      { id: 'call-good', name: 'check_draft', argumentsJson: '{}' },
+    ])
+  })
+
+  it('★ 全都坏掉时仍然抛——那时**既没有正文，也没有可用的工具调用**，循环没法往下走', async () => {
+    await expect(
+      completeOnce({
+        model: 'm-1',
+        choices: [
+          {
+            finish_reason: 'tool_calls',
+            message: {
+              content: '',
+              tool_calls: [{ type: 'function', function: { name: 'read_shelf', arguments: '{}' } }],
+            },
+          },
+        ],
+      }),
+    ).rejects.toThrow(/tool_calls/)
+  })
+
+  it('`arguments` 被网关回成对象时也收（不合规但确实有），统一成字符串只有一处解析', async () => {
+    const result = await completeOnce({
+      model: 'm-1',
+      choices: [
+        {
+          finish_reason: 'tool_calls',
+          message: {
+            content: '',
+            tool_calls: [
+              { id: 'c9', type: 'function', function: { name: 'read_shelf', arguments: { k: 3 } } },
+            ],
+          },
+        },
+      ],
+    })
+    expect(result.toolCalls).toEqual([{ id: 'c9', name: 'read_shelf', argumentsJson: '{"k":3}' }])
+  })
+})
+
+/* ───────────────────────── 请求体里的 tools（工单 06） ───────────────────────── */
+
+describe('★ 带工具时的请求体', () => {
+  it('一轮只许回一个工具调用（`parallel_tool_calls:false`）', async () => {
+    let sent: Record<string, unknown> = {}
+    const text = createOpenAiText(
+      {
+        baseUrl: 'https://example.invalid/v1',
+        apiKey: 'k',
+        fetchImpl: async (_url, init) => {
+          sent = JSON.parse(String((init as RequestInit).body)) as Record<string, unknown>
+          return new Response(
+            JSON.stringify({ choices: [{ message: { content: '好', role: 'assistant' } }] }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        },
+      },
+      'm-1',
+    )
+    await text.complete({
+      system: 's',
+      user: 'u',
+      tools: [{ name: 'read_shelf', description: '看书架', parameters: { type: 'object' } }],
+    })
+    expect(sent['parallel_tool_calls']).toBe(false)
+    expect(Array.isArray(sent['tools'])).toBe(true)
+    // ★ 只发 auto：强制点名那一档实测不可依赖（十次里七次 400），所以适配器不提供它
+    expect(sent['tool_choice']).toBeUndefined()
+  })
+
+  it('★ 不带工具时请求体里一个 tools 字段都没有（判据 8）', async () => {
+    let sent: Record<string, unknown> = {}
+    const text = createOpenAiText(
+      {
+        baseUrl: 'https://example.invalid/v1',
+        apiKey: 'k',
+        fetchImpl: async (_url, init) => {
+          sent = JSON.parse(String((init as RequestInit).body)) as Record<string, unknown>
+          return new Response(
+            JSON.stringify({ choices: [{ message: { content: '好', role: 'assistant' } }] }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        },
+      },
+      'm-1',
+    )
+    await text.complete({ system: 's', user: 'u' })
+    expect(sent).not.toHaveProperty('tools')
+    expect(sent).not.toHaveProperty('parallel_tool_calls')
+    expect(sent).not.toHaveProperty('tool_choice')
+  })
+})

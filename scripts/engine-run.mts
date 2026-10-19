@@ -31,20 +31,22 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 
 import { promptFragmentOf } from '../src/lib/engine/character-card/card.ts'
-import { createCardStore } from '../src/lib/engine/character-card/store.ts'
 import { createPlanRetriever } from '../src/lib/rag/load.ts'
-import { digest } from '../src/lib/engine/digest.ts'
 import { describeEvent } from '../src/lib/engine/events.ts'
 import { runBook } from '../src/lib/engine/index.ts'
 import { createProviders } from '../src/lib/engine/providers/registry.ts'
 import { createFsStore } from '../src/lib/engine/providers/stores.ts'
 import { emptyManifest, recordImage, recordText } from '../src/lib/engine/providers/replay.ts'
+import {
+  ensureStubCard,
+  loadStubPlanJson,
+  stubFormIsSupported,
+  stubProviders,
+  stubReferenceDigest,
+  STUB_CHILD,
+} from '../src/lib/stub-fixture.ts'
 import type { BookForm } from '../src/lib/engine/domain.ts'
-import type {
-  ImageGenerator,
-  ProviderBundle,
-  TextGenerator,
-} from '../src/lib/engine/providers/types.ts'
+import type { ProviderBundle } from '../src/lib/engine/providers/types.ts'
 
 type Args = Record<string, string>
 
@@ -74,43 +76,15 @@ async function loadEnv(): Promise<Record<string, string | undefined>> {
   }
 }
 
-const DEMO_IMAGES = [
-  'public/book/spread-1.webp',
-  'public/book/spread-2.webp',
-  'public/book/spread-3.webp',
-  'public/book/spread-4a.webp',
-  'public/book/spread-4b.webp',
-]
-
-/** 固定替身：按顺序发成图、按顺序发表。它**不**是引擎的一部分，只活在这个脚本里 */
-function stubProviders(planJson: string): { text: TextGenerator; image: ImageGenerator } {
-  let imageCursor = 0
-  return {
-    text: {
-      id: 'stub-text',
-      modelId: 'stub-plan@v1',
-      async complete() {
-        return { text: planJson, modelId: 'stub-plan@v1' }
-      },
-    },
-    image: {
-      id: 'stub-image',
-      modelId: 'pregenerated-demo-art',
-      supportedRatios: ['1:1'],
-      supportsReference: false,
-      async generate() {
-        const path = DEMO_IMAGES[imageCursor % DEMO_IMAGES.length] as string
-        imageCursor += 1
-        return {
-          bytes: new Uint8Array(await readFile(path)),
-          mime: 'image/webp',
-          modelId: 'pregenerated-demo-art',
-          costCny: 0,
-        }
-      },
-    },
-  }
-}
+/**
+ * 固定替身与那几张成图**搬去 `src/lib/stub-fixture.ts` 了**（2026-10-19）。
+ *
+ * ★ 为什么搬：MCP server 的 `--mode=stub` 要用**同一份**——判据是
+ *   「走 MCP 那条路与这一条是同一本书、同一串事件」（`.scratch/mcp/spec.md` 判据 2）。
+ *   留在两个文件里的话，那条判据比的是两份"恰好一样"的代码，而不是同一条路径。
+ * ★ 它**仍然不是引擎的一部分**：`createProviders` 那一套一个字都不认它，
+ *   引擎目录里也没有它（放在 `src/lib/` 根上就是为了让这件事看得见）。
+ */
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2))
@@ -124,52 +98,29 @@ async function main(): Promise<void> {
   process.stdout.write(`引擎验收 · mode=${mode} form=${form} out=${outDir}\n\n`)
 
   const store = await createFsStore(outDir)
-  const cardStore = createCardStore(store)
 
-  // 角色卡：参考图用演示绘本封面（小宇），锚点取自 docs/demo-book-art-prompts.md 的既定描述
-  const referenceBytes = new Uint8Array(await readFile('public/book/cover.webp'))
-  const referenceDigest = digest(referenceBytes)
-  const built = await cardStore.create({
-    cardId: 'xiaolu-r1',
+  // 角色卡：参考图用演示绘本封面（小宇），锚点取自 docs/demo-book-art-prompts.md 的既定描述。
+  // ★ 造法与 MCP server 的 `--mode=stub` 是**同一个函数**（`ensureStubCard`）——
+  //   "两条路产出同一本书"这条判据，只有在造卡这一步也同源时才成立。
+  const card = await ensureStubCard(store, {
     childId,
-    anchors: [
-      { slot: 'bone', value: '圆脸、颊部饱满、下颌线软' },
-      { slot: 'eyes', value: '深棕圆眼、眼距略宽、睫毛短' },
-      { slot: 'hair', value: '黑发偏软，左上方永远翘着一撮' },
-      { slot: 'build', value: '头身比约 1:4，四肢圆润' },
-      { slot: 'skin', value: '暖黄偏深的肤色，膝盖总有晒黑的印' },
-      { slot: 'wardrobe', value: '芥黄短袖 + 深蓝短裤 + 一双红雨鞋' },
-    ],
-    style: {
-      key: 'warm-handdrawn',
-      promptFragment: '温暖手绘水彩绘本插画，柔和侧向暖光，纸张纹理可见',
-      ratio: '3:2',
-    },
-    referenceBytes,
-    referenceMime: 'image/webp',
-    modelId:
-      mode === 'live'
-        ? ((await loadEnv())['IMAGE_MODEL'] ?? 'unconfigured')
-        : 'character-card@stub',
-    promptVersion: 'character-card@v1',
+    ...(mode === 'live' ? { modelId: (await loadEnv())['IMAGE_MODEL'] ?? 'unconfigured' } : {}),
     now: 1_760_000_000_000,
   })
-  const card = built.card
   process.stdout.write(
-    `角色卡 ${card.cardId} r${card.revision} 参考图指纹=${referenceDigest} 锚点 ${card.anchors.length} 条\n` +
+    `角色卡 ${card.cardId} r${card.revision} 参考图指纹=${await stubReferenceDigest()} 锚点 ${card.anchors.length} 条\n` +
       `  派生的角色段（每一页 prompt 的开头，由卡唯一决定）：\n    ${promptFragmentOf(card)}\n\n`,
   )
 
   let voiceId: string | undefined
   let providers: ProviderBundle
   if (mode === 'stub') {
-    if (form !== 'shared') {
+    if (!stubFormIsSupported(form)) {
       throw new Error(
         'stub 模式的固定剧本是首页第二屏那本《小宇的云》（共读版），要跑独读版请用 --mode=live',
       )
     }
-    const planJson = await readFile('scripts/fixtures/demo-plan.json', 'utf8')
-    const stub = stubProviders(planJson)
+    const stub = stubProviders(await loadStubPlanJson())
     providers = {
       mode: 'offline',
       text: stub.text,
@@ -238,14 +189,9 @@ async function main(): Promise<void> {
   const eventsRaw: unknown[] = []
   const book = await runBook(
     {
-      child: {
-        childId,
-        name: '小宇',
-        nameReading: 'yǔ',
-        ageBand: '4-6',
-        lookTags: ['圆脸', '短发'],
-        interestTags: ['云', '恐龙', '船'],
-      },
+      // ★ 与 MCP 那一侧同一个常数（`STUB_CHILD`），只有 childId 可以被 `--child=` 换掉。
+      //   两边各写一份孩子的话，"同一本书"这条判据会连着孩子的标签一起漂。
+      child: { ...STUB_CHILD, childId },
       card,
       theme,
       form,

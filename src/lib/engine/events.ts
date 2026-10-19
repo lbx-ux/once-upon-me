@@ -116,6 +116,23 @@ export type EngineEventPayload = (
       topScore: number | null
     }
   | {
+      /**
+       * 模型调了一次工具（2026-10-19，`.scratch/mcp` 工单 06）。
+       *
+       * ★ 它落在「编故事」那一格里，与 `retrieved` 同一条处置（见 `frames.ts`）——
+       *   它是**规划内部的一步**，不是与规划并列的阶段，所以阶段轨一格都不加。
+       * ★ `ok` 是"这一次调用**有没有跑成**"，不是"模型满不满意"：
+       *   工具抛错时 `ok:false`，而那**不终止整条循环**（错误原文喂回去，模型自己改）
+       *   ——所以它必须出现在过程里，否则"模型在改"与"什么都没发生"分不出来。
+       */
+      kind: 'tool'
+      name: string
+      ok: boolean
+      ms: number
+      /** 出错时的一句话（给人看的）。**成功时不给**，不给一个"OK"占位 */
+      note?: string
+    }
+  | {
       kind: 'narration'
       voiceId: string
       assetPath: string
@@ -179,6 +196,10 @@ export function isDisplayable(event: EngineEvent): boolean {
     case 'narration':
     case 'retry':
     case 'retrieved':
+    // ★ 工具调用占行（2026-10-19）：它是"模型这一轮去查了什么"，
+    //   而家长看了**会改变对进度的理解**——`isDisplayable` 的判据就是这一句。
+    //   与通过的核对不同：那一条不占行是因为它 20 页要刷 20 条一模一样的话。
+    case 'tool':
     case 'error':
     case 'book-ready':
       return true
@@ -242,6 +263,12 @@ export function describeEvent(event: EngineEvent): string {
               : '没过，要改一版'
       return `${page}${what}${verdict}`
     }
+    case 'tool':
+      // ★ 一句人话，与日志/MCP 返回同源（文件头那条）。两个分支都要说得出"是哪一步"：
+      //   `name` 是工具名，`note` 只在失败时有。
+      return event.ok
+        ? `查了一下「${event.name}」（${(event.ms / 1000).toFixed(1)} 秒）`
+        : `查「${event.name}」没成：${event.note ?? '没说原因'}（模型会自己改，接着往下编）`
     case 'retrieved': {
       // ★ 这一句要**说得清"空"是什么**：`[]` 是合法结果（"这次没有可参考的"），
       //   不是失败。写成"检索失败"或干脆不显示，都会让家长以为出了故障，
