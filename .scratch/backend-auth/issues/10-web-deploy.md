@@ -208,3 +208,21 @@
   · 遗留：这台机器上**做不到零停机构建**（构建期间站点与接口都不可用，约 70 秒），
   已写进 `docs/known-tradeoffs.md`。想彻底摆脱，得把构建挪出服务器
   （WSL2 本机构建后上传 `.next`，或升到 2C4G）。
+
+- 2026-10-19 22:10（**上线当晚的第一次翻车：两个半场的契约**）：用户手机/浏览器登录，
+  页面报「服务端回的登录态不是我们认识的形状，请刷新一次试试」。
+  查下来是**前后端版本不同步**：前端（当天构建）的 `parseUser` 要求
+  `UserView.allowed` 这一位（后端 10-18 把 `permissions` 四个布尔收成一位），
+  而服务器上跑的 jar 还是 **10-17** 构建的，只回 `permissions`。
+  · 修法：`bash server/deploy.sh`（本机 `mvn package` → scp jar → 重启 → 带重试的冒烟；
+  换之前先 `cp -a app.jar app.jar.bak-202610192221`）。实测 jar 44 M、第 6 次问（约 18 秒）
+  回 `health=200`。
+  · 判据（外网实测）：`POST /api/auth/login-password`（演示账号）回来的那份里有
+  `"allowed":true`；带 cookie 再问 `/api/auth/me` 也齐了 ——
+  `allowed:true` + `configured:{text,image,vision,speech}` + `speechModel`。
+  · ★ 这件事值得单独记的教训：**三道闸门、构建、`--expect` 判据、冒烟全绿，
+  坏的却是两半之间那一句** —— 前端与后端由两个脚本分别部署，它们的契约没有任何东西在看。
+  已给 `scripts/deploy-web.sh` 末尾加了 `check_contract()`（真打一次演示账号登录，
+  断言有 `allowed`；失败时直说"多半是另一半没跟着部署"）。
+  · 仍留一条缝（写进 known-tradeoffs 了）：只部署后端时没人拦 —— 那条判据目前长在前端
+  那个脚本上，`server/deploy.sh` 仍然只问 `/api/health`。

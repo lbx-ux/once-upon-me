@@ -385,8 +385,41 @@ deploy() {
     say "（没给 --expect，只验了服务活着。要判别真假请带上 --expect='你刚改的那句话'）"
   fi
 
+  # ★ 最后再看一眼它跟后端还对不对得上（见 check_contract 上面那段：这条判据管的是
+  #   "两半之间"，而前面那些判据各管各的一半）。
+  if ! check_contract; then
+    die "部署本身做完了（站点是活的），但前后端契约这条判据没过 —— 见上面那句提示"
+  fi
+
   say "完了。外面那一侧要人看一次：手机打开 http://${HOST##*@}/"
   rsh "systemctl is-active $SERVICE; echo '--- 最近日志 ---'; journalctl -u $SERVICE -n 5 --no-pager"
+}
+
+# ══════════════════════════════════════════════════════════════════════════
+# 前后端之间的契约 —— **没有任何别的东西在看它**，所以在这里看一次。
+#
+# ★ 2026-10-19 上线当晚就是栽在这上面：前端是新的（`parseUser` 要求
+#   `UserView.allowed` 这一位，10-18 从四个布尔收成一位），后端还是 10-17 的 jar
+#   （只回 `permissions`）。于是**登录页直接报**「服务端回的登录态不是我们认识的形状」——
+#   而三道闸门、构建、`--expect` 判据、冒烟**全绿**：它们各自都对，坏的是两半之间的那一句。
+#
+# ★ 判据：真打一次登录（走 BFF，就是浏览器那条路），断言回来的那份里有 `allowed`。
+#   用公开的演示账号（README §一 就写着它，而且它**不是管理员**）。
+#   代价：一次成功的登录（不消耗"连错五次锁十分钟"那本账），以及给演示账号留一张票。
+# ══════════════════════════════════════════════════════════════════════════
+check_contract() {
+  say "判据：前端认不认得后端回的登录态（真打一次演示账号登录）"
+  local body
+  body="$(rsh "curl -s -m 20 -X POST 'http://127.0.0.1:$PORT/api/auth/login-password' -H 'Content-Type: application/json' -d '{\"account\":\"123456\",\"password\":\"123456\"}'" || true)"
+  if printf '%s' "$body" | grep -q '"allowed"'; then
+    say "命中 ✓（登录态里有 allowed，前端那份 parseUser 认得出）"
+    return 0
+  fi
+  say "✗ 登录态里没有 allowed —— 前端会报「服务端回的登录态不是我们认识的形状」。回来的东西："
+  printf '%s' "$body" | head -c 300
+  echo
+  say "多半是**另一半没跟着部署**：试试 bash server/deploy.sh（后端），然后再跑一次这个脚本"
+  return 1
 }
 
 rollback() {
