@@ -400,11 +400,30 @@ go_live() {
   say "★ 这一步就是「上前端」本身：启用 nginx site + web unit"
   # ★ 先把占位页撤掉（`--test-page` 那一份）：它自己也 listen 80，
   #   留着会让"打到 80 的请求归谁"变成一件要读两份 conf 才说得清的事。
+  # ★ **改完链接必须 `reload`** —— 2026-10-19 在这里栽过一次：nginx 本来就在跑
+  #   （占位页那一阶段起来的），而 `systemctl enable --now nginx` 对**已在运行**的
+  #   nginx 什么都不做，于是它继续用内存里那份旧配置：`/` 回的是占位页、
+  #   `/login` 回 404。链接换对了，进程却没看见。
   rsh "rm -f /etc/nginx/sites-enabled/xiaozhujue-placeholder
        ln -sfn /etc/nginx/sites-available/xiaozhujue /etc/nginx/sites-enabled/xiaozhujue
-       nginx -t && systemctl enable --now nginx && systemctl enable --now $SERVICE"
+       nginx -t && systemctl enable --now nginx && systemctl reload nginx && systemctl enable --now $SERVICE"
   sleep 3
-  rsh "curl -s -m 8 -o /dev/null -w '本机打 80: %{http_code}\n' 127.0.0.1/; systemctl is-active nginx $SERVICE"
+
+  # ★ 判据必须能判别：**占位页也回 200**，所以只看状态码等于没判 ——
+  #   上面那次翻车就是"本机打 80: 200"当场通过，而那一屏其实是占位页。
+  #   所以这里搜一句只有真站点才有的文案（首页那个「开始创作」）。
+  local page
+  page="$(rsh "curl -s -m 10 127.0.0.1/" || true)"
+  if printf '%s' "$page" | grep -q '开始创作'; then
+    say "首页判据命中（页面里有「开始创作」）"
+  else
+    say "✗ 首页里没有「开始创作」——它多半还是占位页、或者前端没起来。前 160 字节："
+    printf '%s' "$page" | head -c 160
+    echo
+    die "go-live 判据没过：配置已换、进程可能是活的，但内容不对"
+  fi
+
+  rsh "systemctl is-active nginx $SERVICE"
   say "外面那一侧（手机/另一台机器）：http://${HOST##*@}/ —— 出得来首页才算成"
 }
 
