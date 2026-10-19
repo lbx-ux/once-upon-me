@@ -59,9 +59,55 @@ export type Provenance = {
   suggestion?: string
 }
 
+/* ───────────────────────────── 检索的出处 ───────────────────────────── */
+
+/**
+ * 一条被取到的旧文本（2026-10-19，`.scratch/rag`）。
+ *
+ * ★ 只留**够用来回答"这本书为什么长这样"**的四个字段：哪一条、什么出处、多相关、
+ *   是当正例还是当反例。**不留正文本身**——它在语料里查得到，
+ *   而把它抄进 provenance 等于把 12 本样书的片段散进每一本书的清单里。
+ */
+export type RetrievedChunkRef = {
+  /** `library/cloud#s2` 或 `u/12/books/bk_x#p7`。★ owner 前缀在这里也看得见 */
+  chunkId: string
+  /** 给人的出处：`样书《…》第 3 跨页 · 风来了` */
+  source: string
+  score: number
+  /** 正例（照着节奏写）/ 反例（他读过了，避开） */
+  polarity: 'example' | 'avoid'
+}
+
+/**
+ * 「这一版故事是看着哪些旧文本写出来的」。
+ *
+ * ★ `corpusVersion` 是 `null` 与不是 `null` 是**两件事**：
+ *   `null` = 这一轮**没检索成**（索引读不到、检索抛错），书照常编出来了；
+ *   有值 = 检索确实跑了，用的是那一版语料。
+ *   两者都不许被写成"检索过了但没取到"——后者是 `hits: []`，它是有信息量的
+ *   （新主题、头一本书），而前者是"这一步没发生"。
+ */
+export type RetrievalProvenance = {
+  corpusVersion: string | null
+  /** 取到几条正例 / 反例（= `hits` 里两类的条数，放在这里免得读的人自己数） */
+  examples: number
+  avoids: number
+  /** 最高分。`null` = 一条都没取到 */
+  topScore: number | null
+  hits: readonly RetrievedChunkRef[]
+}
+
 /* ───────────────────────────── 孩子与角色卡 ───────────────────────────── */
 
-/** 适龄档：决定词汇量、句长、故事复杂度（checklist #3 的验收就靠它分档） */
+/**
+ * 适龄档：决定词汇量、句长、故事复杂度（`AGE_RULES` 按它分档）。
+ *
+ * ★ 2026-10-19 改口径：这里原来写着「checklist #3 的验收就靠它分档」——
+ *   那句话把**分档**说成了检索。检索落地之后是另一条路（`rag/`：bigram + BM25 取旧文本），
+ *   两条路的落点也不同：这一档进**提示词的语言规则**，检索进**范例那一段**。
+ *   ★ 但它与检索**有一处真关系**，值得记在这里：语料的年龄档过滤
+ *   （`rag/retrieve.ts` 的 `bandAdmits`）用的就是它——`example` 那一侧收同档与相邻一档。
+ */
 export const AGE_BANDS = ['4-', '4-6', '6-8', '8+'] as const
 export type AgeBand = (typeof AGE_BANDS)[number]
 
@@ -395,10 +441,11 @@ export type ChoiceOption = {
  *   1. **每枚都要能当任一侧的选项**——不要"上/下""左/右"这类方向词。
  *      一条岔路是"恐龙背 vs 船肚子"，不是"左边 vs 右边"。
  *   2. **一枚一个物件**：不画场景、不画人物。它在按钮里只有 **56px** 见方
- *      （`.book-choice__icon`，`storybook-flip.css`；2026-10-18 从代码量出来的，
+ *      （`.book-choice__icon`，`reader/reader-book.css`；2026-10-18 从代码量出来的，
+ *      那一族 2026-10-19 随首页第二屏搬进了阅读器），
  *      这里原来写的是 96–120px —— 那是更早一版按钮的尺寸，按它去挑细节会挑多了）。
  *   3. **与绘本同一支笔**（水彩 + 彩铅收形）。emoji 是扁平 clip-art，
- *      与水彩是两套画法——这正是"不许只放 emoji"的判据（README §五 那句话的第二次应用）。
+ *      与水彩是两套画法——这正是"不许只放 emoji"的判据（docs/known-tradeoffs.md 那句话的第二次应用）。
  *
  * ★ 排在前面的是"孩子最常想去的那些地方与东西"：车船飞行器、动物、天体、家与路。
  *   加一枚就是多一张图要出，**不要为了凑整齐往里塞同义词**（`ship` 与 `boat` 是一件事）。

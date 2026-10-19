@@ -415,7 +415,7 @@
   font-weight: 600;
 }
 
-/* 主按钮 = 首页那颗墨色药丸（`hero-orbit.css` §5 的 `.btn`）：
+/* 主按钮 = 首页那颗墨色药丸（`hero/hero-orbit.css` 的 `.btn`）：
    `--ink` / 52px / radius 999 / 白字 / hover 抬起 2px。
    ★ 稿子本来就写对了，一个字没改——同一个动作在两屏长两个样子，
    是"两个网站"最省力的证据（同 `create-landing.css` 文件头第 1 条）

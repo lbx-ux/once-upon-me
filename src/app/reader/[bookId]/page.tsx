@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import ReaderBook from '@/components/reader/ReaderBook'
+import RotateHint from '@/components/reader/RotateHint'
 import { createUserStore } from '@/lib/asset-scope'
 import { currentUserId } from '@/lib/auth/session'
 import { resolveBook } from '@/lib/book-source'
@@ -84,8 +85,24 @@ export default async function ReaderPage({ params }: { params: Promise<{ bookId:
   return (
     <main className="reader-page">
       <nav className="reader-page__back">
-        <Link href="/home">← 再做一本</Link>
+        {/* ★ 2026-10-19 拆成两段（`reader-page__back-arrow` + `-text`）：
+            手机横屏那一档只留那颗箭头（横屏时书几乎占满高，一条带字的长药丸会压到
+            书面上 —— 见 `globals.css` 的 §手机横屏）。桌面与竖屏渲染出来的仍是
+            「← 再做一本」这一行，一个字都没变。
+            两段的读法：箭头 `aria-hidden`（名字由后面那段给），横屏下那段进 `sr-only`
+            —— 于是在辅助技术里这条链接**永远**叫「再做一本」，不会变成「左箭头」。 */}
+        <Link href="/home">
+          <span className="reader-page__back-arrow" aria-hidden="true">
+            ←
+          </span>
+          <span className="reader-page__back-text">再做一本</span>
+        </Link>
       </nav>
+      {/* 竖屏手机进这一屏时那层「把手机横过来」（2026-10-19 移动端适配）。
+          ★ 挂在**页面这一层**而不是 `ReaderBook` 里：它管的是"这块屏幕要不要提示"，
+            与书是哪一本、是独读还是共读都无关 —— 两台阅读器共用同一层提示，
+            写进组件就要写两遍，而两遍迟早会漂成两句话。 */}
+      <RotateHint />
       <ReaderBook
         bookId={bookId}
         title={resolved.book.tree.title}

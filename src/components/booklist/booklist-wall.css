@@ -109,7 +109,8 @@
   font-size: 34px;
   line-height: 1;
   opacity: 0.42;
-  /* emoji 兜底与书里那套同一个处理（`book/demoBook.ts` 的选择点图标）：图没到位时
+  /* emoji 兜底与书里那套同一个处理（当时是 `book/demoBook.ts` 的选择点图标，
+     那一屏已下架；今天同一族的实现在 `reader/reader-book.css`）：图没到位时
      按下去看得见东西，而不是一个空框 */
 }
 
@@ -176,7 +177,7 @@
 }
 
 /* ★ 静止终态：不是"不播动画"，是**没有位移**。悬停抬起在触屏上本来就不存在，
-   而 `prefers-reduced-motion` 下连这 4px 也不要（README §五 那条硬要求） */
+   而 `prefers-reduced-motion` 下连这 4px 也不要（docs/known-tradeoffs.md 那条硬要求） */
 @media (prefers-reduced-motion: reduce), (hover: none) {
   .blw__card {
     transition: none;

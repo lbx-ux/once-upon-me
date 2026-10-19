@@ -3,7 +3,7 @@
 > 用途：工作台 `/home` 那一屏，输入卡上方站着的那个孩子（`src/components/studio/CreateLanding.tsx`
 > 的 `.cl__figure`）。**它只跟随主题墙**——点哪张封面就站哪个孩子，没有第二个来源
 > （曾经有过"侧栏底部换人头像 + 手选覆盖主题"那一套，2026-10-15 按用户要求整块拆掉，
-> 理由见 README §五）。
+> 理由见 docs/known-tradeoffs.md）。
 > 产物：`public/figures/{key}.webp`（2:3 / 256px 宽 / 透明底 WebP）。
 > 转换脚本：先 [`scripts/cutout.py`](../scripts/cutout.py) 去底，再
 > [`scripts/make-webp.py`](../scripts/make-webp.py) `--preset figure` 缩档。
@@ -380,7 +380,7 @@ python -I scripts/make-webp.py .out/figures-rgba public/figures --preset figure
 | 裁切   | 会居中裁到 2:3。出图时主体四周那 8% 空白就是留给这一刀的                                                                                    |
 | 接入   | `src/lib/figures.ts` 的 `figurePath(key)`——文件名只由主题 `key` 决定，与 `artPath()` / `themeCardPath()` 同一条约定，**对不上就是一张裂图** |
 
-★ 不走 `/api/assets?w=`：静态 `public/` 走不到那条通路（Next 直接发盘上的字节，查询串它看不懂，挂 `?w=` 会静悄悄回原图，README §五「缩略档」那条）。所以预生成。
+★ 不走 `/api/assets?w=`：静态 `public/` 走不到那条通路（Next 直接发盘上的字节，查询串它看不懂，挂 `?w=` 会静悄悄回原图，docs/known-tradeoffs.md「缩略档」那条）。所以预生成。
 
 ★ 256px 这一档现在只有**一个**消费者：卡片上方那个 120–168px 高的立绘（2× 屏够）。侧栏那 44px 头像随切换器一起拆了，所以**第二档不用开了**——为 44px 再出一份小图是"同一个东西两份画"（`chip-icon` 那一档被删掉的理由记在 `make-webp.py` 的文件头）。
 

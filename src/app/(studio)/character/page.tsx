@@ -34,7 +34,7 @@ export default async function CharacterPage() {
   //   （`public/demo/cards/…`，Next 直接发，不需要鉴权——`/api/assets` 对匿名仍然 401）。
   //   ★ 那条界线一个字没动：**别人的孩子仍然要登录才看得到**，因为访客那一支的根
   //   由 `demoAssetRoot()` 钉死在 `public/demo/`，它根本不认识 `.out/web`。
-  //   ★ 这段改动的来由与代价记在 README §五（原来是"访客看到空墙"那一条）。
+  //   ★ 这段改动的来由与代价记在 docs/known-tradeoffs.md（原来是"访客看到空墙"那一条）。
   const userId = await currentUserId()
   if (!userId) return <CharacterWall items={await listDemoWallItems()} />
 

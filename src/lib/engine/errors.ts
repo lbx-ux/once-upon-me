@@ -46,6 +46,18 @@ export type EngineErrorCode =
    *  而真正缺的是一个勾。工单 02 §五 记过同一类事故（照片的问题给了锚点的指示）。 */
   | 'invalid-request'
   | 'tree-invalid'
+  /**
+   * 内容审核没让这一版出去（`engine/review.ts` 的 `block`，2026-10-19）。
+   *
+   * ★ 与 `tree-invalid` / `schema-validation-failed` 分开：那两个是"这份输出**写得不合规矩**"
+   *   （结构问题，换个模型或重试多半能过），这一个是"**内容不能给孩子看**"。
+   *   两者的下一步完全不同：前者是"再点一次"，后者是"**换一个说法**"——
+   *   界面上那句文案得说得清"拦的是内容，不是格式"，否则家长会一直点重试，
+   *   而重试解决不了"他想要的那个故事本身越了线"。
+   *   ★ 它**可以**重试（`isRetryable` 缺省为真）：换一个说法再试是对的，
+   *     只是别把这句话说成"格式不对"。
+   */
+  | 'review-blocked'
   | 'aborted'
 
 export class EngineError extends Error {

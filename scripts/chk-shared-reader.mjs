@@ -50,6 +50,26 @@ const flag = (name, fallback) => {
 const BASE = (positional[0] ?? 'http://127.0.0.1:3000').replace(/\/+$/, '')
 const SHOT = positional[1] ?? null
 const BOOK = flag('book', 'xzj-shared-verify')
+
+/**
+ * 视口（2026-10-19 移动端适配加的 `--w/--h`）。
+ *
+ * ★ 原来这一支**固定**在 1440×900：选择点那块控件的 `bottom` 是
+ *   `clamp(20px, 12%, 96px)`，而那个 `12%` 的基准是**书的定位盒**——书一变，
+ *   控件的位置就跟着变。手机横屏（844×390）书从 1120 宽压到 492 宽、改按高定尺寸，
+ *   那一档专门在 `reader-book.css` §手机横屏 里覆盖了 `bottom`，
+ *   所以"控件一行正文都没压住"这条判据必须在**那个视口下**再跑一遍。
+ *   ★ 只跑 1440×900 的话，横屏那条覆盖写错了也照样全绿——这个脚本是唯一
+ *     量得着它的地方（`chk-mobile.mjs` 量的是不溢 / 铺满 / 提示 / 滑动 / 触控目标，
+ *     不看正文与控件的重叠）。
+ *
+ * ★ 用法：`node scripts/chk-shared-reader.mjs http://127.0.0.1:3363 --w=844 --h=390`
+ *   窄视口连触屏一起开（`mobile: true` 只换 UA 与视口，**不开触屏**）。
+ *   这一支里点按钮走的是 `element.click()`，触屏对它不是必须的 —— 但开着才说明
+ *   "这一趟量的是手机那一档的版面"，而不是窗口恰好那么窄。
+ */
+const VW = Number(flag('w', '1440'))
+const VH = Number(flag('h', '900'))
 /** 缺图那一本：同一棵树，第 5 页的图没出成（见 `mk-shared-fixture.mjs --missing`） */
 const MISSING_BOOK = flag('missing-book', 'xzj-shared-missing')
 const PORT = Number(flag('port', '9347'))
@@ -81,7 +101,7 @@ const chrome = spawn(CHROME, [
   // 朗读那一按要真的去取音频：无头 Chrome 里"没人点过"的判断容易把播放拦掉
   '--autoplay-policy=no-user-gesture-required',
   `--user-data-dir=${PROFILE}`,
-  '--window-size=1440,900',
+  `--window-size=${VW},${VH}`,
   'about:blank',
 ])
 
@@ -163,6 +183,17 @@ const reloads = []
 await send('Network.enable')
 await send('Runtime.enable')
 await send('Log.enable')
+
+/* 视口（见文件头 `--w/--h` 那一段）：量的就是 `VW/VH`，`setDeviceMetricsOverride` 在下面 */
+await send('Emulation.setDeviceMetricsOverride', {
+  width: VW,
+  height: VH,
+  deviceScaleFactor: 1,
+  mobile: VW <= 900,
+})
+if (VW <= 900)
+  await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 })
+
 ws.addEventListener('message', (event) => {
   const msg = JSON.parse(event.data)
   if (msg.method === 'Network.requestWillBeSent') {

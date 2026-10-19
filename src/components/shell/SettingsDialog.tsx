@@ -29,7 +29,7 @@
  *     ★ 2026-10-18：「帮助」那一格自己也按这条判断走了——整格拆掉）。
  *   · 「这个选择只存在这台设备的这个浏览器里」——删掉之后界面上**没有任何地方**再说
  *     这件事了。它没有变成假的（`lib/reading-prefs.ts` 与 `lib/reader-paper.ts` 仍然
- *     只写 `localStorage`，换设备还是要重选），但**看不见了**：这一条留在 README §五
+ *     只写 `localStorage`，换设备还是要重选），但**看不见了**：这一条留在 docs/known-tradeoffs.md
  *     与那两个文件的文件头里，是给接手的人看的，不是给用户看的。
  *     ★ 底图那一节**不把这句话加回来**：那不是"补上漏掉的说明"，
  *       是把用户亲手圈掉的东西换个地方再写一遍。
@@ -41,11 +41,12 @@
 
 import Dialog from '@/components/dialog/Dialog.tsx'
 import { READER_PAPERS } from '@/lib/reader-paper.ts'
-import { useReaderPaper, useTurnMode } from '@/lib/use-reading-prefs.ts'
+import { useReaderPaper, useRotateHint, useTurnMode } from '@/lib/use-reading-prefs.ts'
 
 export default function SettingsDialog({ onClose }: { onClose: () => void }) {
   const { turnMode, setTurnMode } = useTurnMode()
   const { paper, setPaper } = useReaderPaper()
+  const { rotateHint, setRotateHint } = useRotateHint()
 
   return (
     <Dialog
@@ -98,6 +99,55 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
               <span className="prefs__opt-note">
                 在阅读器里按一次「自动朗读」，之后一页页自己念、念完自己翻；你翻页它就停下。
               </span>
+            </span>
+          </label>
+        </fieldset>
+      </section>
+
+      {/* ── 第三节：手机横屏提示（2026-10-19 移动端适配） ─────────────────────
+          ★ 这一节存在的**唯一理由**是让那层提示可关**也可再打开**：
+            阅读器里那颗「仍然竖着看」是单向的（它只写 `off`），
+            而一个只能关不能开的开关是个陷阱。所以改回来的入口在这里，
+            与另外两条阅读偏好排在同一张纸上 —— 阅读器里那两句说明行
+            （"想自己翻，到工作台左下角的「设置」里选…"）指的正是这一处。
+
+          ★ 桌面上这一节**照样显示**，不做"手机上才出现"的分支：偏好是这台设备的，
+            而人在桌面浏览器里也可能把窗口拉窄、或者用触屏笔记本。少一个分支，
+            就少一处"为什么我这儿没有这一项"。 */}
+      <section className="prefs">
+        <h3 className="prefs__title">手机横屏提示</h3>
+        <p className="prefs__lead">在手机上竖着翻开一本书时，要不要提示你把手机横过来。</p>
+
+        <fieldset className="prefs__opts">
+          <legend className="sr-only">手机横屏提示</legend>
+
+          <label className="prefs__opt">
+            <input
+              type="radio"
+              name="reader-rotate-hint"
+              value="ask"
+              checked={rotateHint === 'ask'}
+              onChange={() => setRotateHint('ask')}
+            />
+            <span className="prefs__opt-body">
+              <span className="prefs__opt-name">提示我横过来</span>
+              <span className="prefs__opt-note">
+                竖屏翻开书时压一层提示；横过来之后书按屏幕高铺满，一页大得多。
+              </span>
+            </span>
+          </label>
+
+          <label className="prefs__opt">
+            <input
+              type="radio"
+              name="reader-rotate-hint"
+              value="off"
+              checked={rotateHint === 'off'}
+              onChange={() => setRotateHint('off')}
+            />
+            <span className="prefs__opt-body">
+              <span className="prefs__opt-name">不提示</span>
+              <span className="prefs__opt-note">直接看竖屏那一版。</span>
             </span>
           </label>
         </fieldset>

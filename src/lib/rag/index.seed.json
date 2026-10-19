@@ -1,0 +1,966 @@
+{
+  "corpusVersion": "adfab4685031",
+  "builtAt": 1792392610543,
+  "chunks": [
+    {
+      "id": "library/dino#s1",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "dino",
+      "form": "*",
+      "text": "走进林子\n清早，小果顺着一条小路走进林子。\n蕨叶比她高得多，叶尖上挂着露水。\n林子里很安静，只听见她自己的脚步。",
+      "source": "样书《小果的恐龙朋友》第 1 跨页 · 走进林子"
+    },
+    {
+      "id": "library/dino#s2",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "dino",
+      "form": "*",
+      "text": "好大一只\n林子中间，站着一只好大的动物。\n它正低头吃蕨叶，一只脚就有她半个身子高。\n「你好呀。」小果抬起头说。",
+      "source": "样书《小果的恐龙朋友》第 2 跨页 · 好大一只"
+    },
+    {
+      "id": "library/dino#s3",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "dino",
+      "form": "*",
+      "text": "一样高\n它把长长的脖子，慢慢慢慢地弯下来。\n弯到眼睛和小果的眼睛一样高。\n小果仰着头，看见它睫毛上沾着一粒灰。",
+      "source": "样书《小果的恐龙朋友》第 3 跨页 · 一样高"
+    },
+    {
+      "id": "library/dino#s4",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "dino",
+      "form": "*",
+      "text": "它不走开\n它低下头，朝她摊开的手掌轻轻喷了口气。\n小果的刘海被吹起来一点点，她笑了。\n它身上有一股晒过太阳的味道。",
+      "source": "样书《小果的恐龙朋友》第 4 跨页 · 它不走开"
+    },
+    {
+      "id": "library/dino#s5",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "dino",
+      "form": "*",
+      "text": "一朵小白花\n蕨叶底下，冒出来一朵很小很小的五瓣白花。\n花瓣上有一粒露水，是整片林子里最亮的地方。\n小果蹲下来看，两只手放在膝盖上。",
+      "source": "样书《小果的恐龙朋友》第 5 跨页 · 一朵小白花"
+    },
+    {
+      "id": "library/dino#s6",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "dino",
+      "form": "*",
+      "text": "软软的桥\n长颈龙把脖子弯成一座软软的桥。\n小果踩着它往上走，脚底下陷下去一点点。\n她回头笑：「我在上面啦。」",
+      "source": "样书《小果的恐龙朋友》第 6 跨页 · 软软的桥"
+    },
+    {
+      "id": "library/dino#s7",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "dino",
+      "form": "*",
+      "text": "上面有雾\n从那么高的地方往下看，整片林子都变小了。\n低处的雾一片一片，光柱从雾里穿过去。\n小果坐得稳稳的，两只手撑着它的肩膀。",
+      "source": "样书《小果的恐龙朋友》第 7 跨页 · 上面有雾"
+    },
+    {
+      "id": "library/dino#s8",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "dino",
+      "form": "*",
+      "text": "明天还来\n它们一起看着那朵小白花，谁也没有动。\n又有一两片蕨叶，慢慢慢慢地落下来。\n小果想：明天还来。",
+      "source": "样书《小果的恐龙朋友》第 8 跨页 · 明天还来"
+    },
+    {
+      "id": "library/paint#s1",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "paint",
+      "form": "*",
+      "text": "下午的光\n下午的光从窗户斜进来，落在地板上。\n小树趴在那一块光里画画，蜡笔散了一地。\n旧铁皮盒里还装着半盒。",
+      "source": "样书《小树画的我们》第 1 跨页 · 下午的光"
+    },
+    {
+      "id": "library/paint#s2",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "paint",
+      "form": "*",
+      "text": "一个太阳\n他先画了一个太阳，圆得有点歪。\n太阳的光，是一圈往外散的短线。\n他数了数：一共有十二根。",
+      "source": "样书《小树画的我们》第 2 跨页 · 一个太阳"
+    },
+    {
+      "id": "library/paint#s3",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "paint",
+      "form": "*",
+      "text": "一栋房子\n他又画了一栋房子，门开得大大的。\n窗户是两个方块，屋顶上还有个烟囱。\n「谁都能进去。」他说。",
+      "source": "样书《小树画的我们》第 3 跨页 · 一栋房子"
+    },
+    {
+      "id": "library/paint#s4",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "paint",
+      "form": "*",
+      "text": "三个小人\n然后他又画了三个小人，手拉着手。\n一个高，一个矮一点，中间那个最矮。\n他把他们的手画得特别长。",
+      "source": "样书《小树画的我们》第 4 跨页 · 三个小人"
+    },
+    {
+      "id": "library/paint#s5",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "paint",
+      "form": "*",
+      "text": "是爸爸和妈妈\n一个是爸爸，一个是妈妈，中间那个是他自己。\n他在三个人脚下画了一条线，那是地面。\n「这样他们就不会掉了。」",
+      "source": "样书《小树画的我们》第 5 跨页 · 是爸爸和妈妈"
+    },
+    {
+      "id": "library/paint#s6",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "paint",
+      "form": "*",
+      "text": "红色用完了\n红色蜡笔用完了，纸上只剩一小截。\n他在旧铁皮盒里翻出半截，接着画。\n盒子里还有一股饼干的味道。",
+      "source": "样书《小树画的我们》第 6 跨页 · 红色用完了"
+    },
+    {
+      "id": "library/paint#s7",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "paint",
+      "form": "*",
+      "text": "一条笑线\n他给每个人都画上一条弯弯的笑线。\n爸爸的、妈妈的，一个也不漏。\n最后他在自己脸上，画得最大。",
+      "source": "样书《小树画的我们》第 7 跨页 · 一条笑线"
+    },
+    {
+      "id": "library/paint#s8",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "paint",
+      "form": "*",
+      "text": "这是我们\n画完了，小树把纸举起来给妈妈看。\n「这是我们。」他说。\n妈妈把画贴在了冰箱门上，用一颗磁扣。",
+      "source": "样书《小树画的我们》第 8 跨页 · 这是我们"
+    },
+    {
+      "id": "library/rocket#s1",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "rocket",
+      "form": "*",
+      "text": "一个大纸箱\n客厅里多了一个大纸箱，是冰箱留下的。\n它比小满还高，她绕着它走了两圈。\n妈妈问：「这个能不能归我？」",
+      "source": "样书《小满的纸箱火箭》第 1 跨页 · 一个大纸箱"
+    },
+    {
+      "id": "library/rocket#s2",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "rocket",
+      "form": "*",
+      "text": "先画窗户\n小满用蜡笔在箱子上画了两个圆窗户。\n一个画在左边，一个画在右边。\n窗户外面，她画了几颗星星。",
+      "source": "样书《小满的纸箱火箭》第 2 跨页 · 先画窗户"
+    },
+    {
+      "id": "library/rocket#s3",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "rocket",
+      "form": "*",
+      "text": "头盔\n她给自己做了一顶纸箱头盔，戴得端端正正。\n头盔有点大，把她的眉毛盖住了。\n她往上一推，正好。",
+      "source": "样书《小满的纸箱火箭》第 3 跨页 · 头盔"
+    },
+    {
+      "id": "library/rocket#s4",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "rocket",
+      "form": "*",
+      "text": "三，二，一\n她坐进箱子里，两只手举得高高的。\n猫蹲在沙发边，尾巴一晃一晃地看着她。\n「三，二，一。」",
+      "source": "样书《小满的纸箱火箭》第 4 跨页 · 三，二，一"
+    },
+    {
+      "id": "library/rocket#s5",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "rocket",
+      "form": "*",
+      "text": "环形山\n地毯上的花纹，一圈一圈，变成了环形山。\n火箭升起来，地板在下面越来越小。\n她扶着箱子边，往外看。",
+      "source": "样书《小满的纸箱火箭》第 5 跨页 · 环形山"
+    },
+    {
+      "id": "library/rocket#s6",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "rocket",
+      "form": "*",
+      "text": "猫在看\n猫也跟着「升空」了，趴在箱子边上看。\n它的胡须一动一动，像在数星星。\n小满伸手摸了摸它的头。",
+      "source": "样书《小满的纸箱火箭》第 6 跨页 · 猫在看"
+    },
+    {
+      "id": "library/rocket#s7",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "rocket",
+      "form": "*",
+      "text": "飞过书和森林\n书架从旁边过去，像一栋高高的楼。\n盆栽是一片绿色的森林，叶子比她还高。\n她在窗户上敲了两下，算是打招呼。",
+      "source": "样书《小满的纸箱火箭》第 7 跨页 · 飞过书和森林"
+    },
+    {
+      "id": "library/rocket#s8",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "rocket",
+      "form": "*",
+      "text": "到家了\n「小满，吃饭啦。」妈妈在厨房喊。\n火箭稳稳地落回客厅的地毯上。\n她把头盔摘下来，放回箱子旁边。",
+      "source": "样书《小满的纸箱火箭》第 8 跨页 · 到家了"
+    },
+    {
+      "id": "library/bird#s1",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "bird",
+      "form": "*",
+      "text": "一动不动\n大树底下，豆豆盘着腿坐在草地上。\n他一动不动，连手指头也没有动一下。\n风把树叶吹得沙沙响。",
+      "source": "样书《豆豆手心里的小鸟》第 1 跨页 · 一动不动"
+    },
+    {
+      "id": "library/bird#s2",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "bird",
+      "form": "*",
+      "text": "一只小鸟\n一只小鸟落在草地上，离他只有两步远。\n它还不太会飞，翅膀一开一合。\n豆豆屏住了呼吸，一动也不动。",
+      "source": "样书《豆豆手心里的小鸟》第 2 跨页 · 一只小鸟"
+    },
+    {
+      "id": "library/bird#s3",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "bird",
+      "form": "*",
+      "text": "摊开手掌\n豆豆慢慢把手掌摊平，放在膝盖上。\n掌心里放了几粒米，白白的一小撮。\n他没有伸手，也没有出声。",
+      "source": "样书《豆豆手心里的小鸟》第 3 跨页 · 摊开手掌"
+    },
+    {
+      "id": "library/bird#s4",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "bird",
+      "form": "*",
+      "text": "靠近一点\n小鸟跳近一点，又退回去；\n再近一点，又退回去。\n它歪着头，看了看豆豆的眼睛，还有那几粒米。",
+      "source": "样书《豆豆手心里的小鸟》第 4 跨页 · 靠近一点"
+    },
+    {
+      "id": "library/bird#s5",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "bird",
+      "form": "*",
+      "text": "等一下\n豆豆就等着，一动不动地等着。\n太阳从树叶的缝里漏下来，落在他手背上。\n小鸟又往前跳了一下。",
+      "source": "样书《豆豆手心里的小鸟》第 5 跨页 · 等一下"
+    },
+    {
+      "id": "library/bird#s6",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "bird",
+      "form": "*",
+      "text": "啄了一下\n小鸟跳到他手心里，轻轻啄了一下。\n有点痒，像被一根草挠了挠。\n豆豆没敢笑，怕把它吓跑了。",
+      "source": "样书《豆豆手心里的小鸟》第 6 跨页 · 啄了一下"
+    },
+    {
+      "id": "library/bird#s7",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "bird",
+      "form": "*",
+      "text": "妈妈在看着\n低枝上，鸟妈妈安安静静地看着。\n它没有叫，只是把翅膀收拢了一点点。\n豆豆也朝它点了点头。",
+      "source": "样书《豆豆手心里的小鸟》第 7 跨页 · 妈妈在看着"
+    },
+    {
+      "id": "library/bird#s8",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "bird",
+      "form": "*",
+      "text": "飞走了\n小鸟吃饱了，扑棱棱飞回树上。\n它落在鸟妈妈旁边，抖了抖身上的羽毛。\n豆豆把手掌一直摊到最后。",
+      "source": "样书《豆豆手心里的小鸟》第 8 跨页 · 飞走了"
+    },
+    {
+      "id": "library/star#s1",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "star",
+      "form": "*",
+      "text": "搬躺椅\n天还没黑，爸爸把两把躺椅搬到院子里。\n一把大的，一把小的，摆在一块儿。\n小禾先爬上去试了试。",
+      "source": "样书《等星星亮起来》第 1 跨页 · 搬躺椅"
+    },
+    {
+      "id": "library/star#s2",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "star",
+      "form": "*",
+      "text": "一条毯子\n两个人裹进同一条格子毯，只露出脑袋。\n毯子有点扎，可是很暖。\n院子里的风，把树叶吹得很轻。",
+      "source": "样书《等星星亮起来》第 2 跨页 · 一条毯子"
+    },
+    {
+      "id": "library/star#s3",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "star",
+      "form": "*",
+      "text": "星星呢\n「爸爸，星星什么时候才出来呀？」\n「再等等。」爸爸说，「快了。」\n小禾把脑袋靠在毯子边上。",
+      "source": "样书《等星星亮起来》第 3 跨页 · 星星呢"
+    },
+    {
+      "id": "library/star#s4",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "star",
+      "form": "*",
+      "text": "在路上\n爸爸说：「路灯亮起来的时候，它就在路上了。」\n话说完没多久，远处的路灯一盏一盏亮了。\n小禾数到第三盏，就数不清了。",
+      "source": "样书《等星星亮起来》第 4 跨页 · 在路上"
+    },
+    {
+      "id": "library/star#s5",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "star",
+      "form": "*",
+      "text": "第一颗\n天还没有全黑，最上面那一颗就亮了起来。\n很小，很亮，像有人在那里点了一下。\n「找到了！」小禾小声说。",
+      "source": "样书《等星星亮起来》第 5 跨页 · 第一颗"
+    },
+    {
+      "id": "library/star#s6",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "star",
+      "form": "*",
+      "text": "指给他看\n小禾伸出手指头，一颗一颗指给爸爸看。\n第二颗在旁边，第三颗更远一点。\n爸爸「嗯」一声，跟着她的手指看。",
+      "source": "样书《等星星亮起来》第 6 跨页 · 指给他看"
+    },
+    {
+      "id": "library/star#s7",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "star",
+      "form": "*",
+      "text": "越来越多\n第二颗，第三颗，越来越多了。\n热饮冒着白白的气，暖着两个人的手。\n毯子下面，爸爸的脚碰了碰她的脚。",
+      "source": "样书《等星星亮起来》第 7 跨页 · 越来越多"
+    },
+    {
+      "id": "library/star#s8",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "star",
+      "form": "*",
+      "text": "数不清了\n数到后来，怎么数也数不清了。\n小禾就靠在爸爸身上，一起看着天上。\n天上的星星，比院子里的灯还多。",
+      "source": "样书《等星星亮起来》第 8 跨页 · 数不清了"
+    },
+    {
+      "id": "library/moon#s1",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "moon",
+      "form": "*",
+      "text": "钻进被窝\n洗好澡，囡囡钻进被窝，只露出一个脑袋。\n被子晒过，闻起来有太阳的味道。\n她拍拍枕头，等着妈妈进来。",
+      "source": "样书《囡囡的月亮灯》第 1 跨页 · 钻进被窝"
+    },
+    {
+      "id": "library/moon#s2",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "moon",
+      "form": "*",
+      "text": "读哪一本\n「妈妈，今天读哪一本呀？」\n妈妈从床头拿起一本，坐在床边的小凳上。\n书页翻过去，沙的一声。",
+      "source": "样书《囡囡的月亮灯》第 2 跨页 · 读哪一本"
+    },
+    {
+      "id": "library/moon#s3",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "moon",
+      "form": "*",
+      "text": "书里的月亮\n书里画着一轮月亮，又圆又亮，挂在山坡上。\n囡囡伸出一根手指，摸了摸纸上的月亮。\n纸是滑滑的，一点也不烫。",
+      "source": "样书《囡囡的月亮灯》第 3 跨页 · 书里的月亮"
+    },
+    {
+      "id": "library/moon#s4",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "moon",
+      "form": "*",
+      "text": "墙上的光\n床头的小夜灯，在墙上照出一块月亮形状的光。\n囡囡把玩偶熊举起来，让月亮落在它头上。\n「它也有一顶月亮帽子。」",
+      "source": "样书《囡囡的月亮灯》第 4 跨页 · 墙上的光"
+    },
+    {
+      "id": "library/moon#s5",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "moon",
+      "form": "*",
+      "text": "搂紧一点\n囡囡把那只旧玩偶熊往怀里搂紧了一点。\n熊的一只耳朵已经磨得发白。\n妈妈说：它陪你睡了好多年啦。",
+      "source": "样书《囡囡的月亮灯》第 5 跨页 · 搂紧一点"
+    },
+    {
+      "id": "library/moon#s6",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "moon",
+      "form": "*",
+      "text": "月亮回家了\n妈妈轻轻地念：「月亮，回家啦。」\n声音越来越轻，像风从窗帘边走过。\n囡囡的眼睛，慢慢慢慢地合上。",
+      "source": "样书《囡囡的月亮灯》第 6 跨页 · 月亮回家了"
+    },
+    {
+      "id": "library/moon#s7",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "moon",
+      "form": "*",
+      "text": "眼睛慢了\n囡囡还想再听一页，可是眼睛不听话了。\n她含含糊糊地说：「再……一页。」\n妈妈「嗯」了一声，又翻了一页。",
+      "source": "样书《囡囡的月亮灯》第 7 跨页 · 眼睛慢了"
+    },
+    {
+      "id": "library/moon#s8",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "moon",
+      "form": "*",
+      "text": "晚安\n妈妈关上大灯，只留床头那一盏小的。\n那块月亮形状的光，还安安稳稳地贴在墙上。\n「晚安。」",
+      "source": "样书《囡囡的月亮灯》第 8 跨页 · 晚安"
+    },
+    {
+      "id": "library/whale#s1",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "whale",
+      "form": "*",
+      "text": "橙色的救生衣\n小海穿着橙色的救生衣，坐在小白船上。\n救生衣有点大，妈妈把带子系紧了两格。\n桨放在他脚边，海水蓝蓝的。",
+      "source": "样书《小海和那条大鱼》第 1 跨页 · 橙色的救生衣"
+    },
+    {
+      "id": "library/whale#s2",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "whale",
+      "form": "*",
+      "text": "海很平\n今天的大海很平很平，像一块铺开的蓝布。\n船底下有细细的水声，哗，哗。\n小海把一只手伸进水里，凉凉的。",
+      "source": "样书《小海和那条大鱼》第 2 跨页 · 海很平"
+    },
+    {
+      "id": "library/whale#s3",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "whale",
+      "form": "*",
+      "text": "鼓起来一块\n远远的水面上，忽然鼓起来小小的一块。\n水从中间分开，像有人从下面顶了一下。\n小海把身体往前倾了倾。",
+      "source": "样书《小海和那条大鱼》第 3 跨页 · 鼓起来一块"
+    },
+    {
+      "id": "library/whale#s4",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "whale",
+      "form": "*",
+      "text": "大家伙\n一条好大的鱼浮上来，喷出一大片白白的水雾。\n它的背是青灰色的，眼睛比小海的拳头还大。\n它看了他一眼，慢慢地没有走。",
+      "source": "样书《小海和那条大鱼》第 4 跨页 · 大家伙"
+    },
+    {
+      "id": "library/whale#s5",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "whale",
+      "form": "*",
+      "text": "一道小彩虹\n那片水雾里，挂着一道很小很小的彩虹。\n红、黄、绿，一眼就能数清。\n小海张着嘴，轻轻地「哇」了一声。",
+      "source": "样书《小海和那条大鱼》第 5 跨页 · 一道小彩虹"
+    },
+    {
+      "id": "library/whale#s6",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "whale",
+      "form": "*",
+      "text": "一起笑\n小海一只手扶着船舷，张着嘴笑了起来。\n大鱼也把尾巴露出水面，晃了两下。\n它喷的那片雾，落下来是小水珠。",
+      "source": "样书《小海和那条大鱼》第 6 跨页 · 一起笑"
+    },
+    {
+      "id": "library/whale#s7",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "whale",
+      "form": "*",
+      "text": "慢慢地游过去\n大鱼慢慢游过去，尾巴轻轻拍了一下水。\n它游得不快，像故意陪着这只小船。\n水面上留下一长条浅浅的痕。",
+      "source": "样书《小海和那条大鱼》第 7 跨页 · 慢慢地游过去"
+    },
+    {
+      "id": "library/whale#s8",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "whale",
+      "form": "*",
+      "text": "又稳住了\n小船晃了晃，又稳稳地停住了。\n几只海鸟从头顶飞过去，翅膀一开一合。\n小海朝着大鱼，挥了挥手。",
+      "source": "样书《小海和那条大鱼》第 8 跨页 · 又稳住了"
+    },
+    {
+      "id": "library/castle#s1",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "castle",
+      "form": "*",
+      "text": "各挖各的\n阿布和小南一人一个坑，各挖各的。\n谁也没说话，只有铲子刮沙子的声音。\n阿布那边堆了一座塔。",
+      "source": "样书《我们一起的沙堡》第 1 跨页 · 各挖各的"
+    },
+    {
+      "id": "library/castle#s2",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "castle",
+      "form": "*",
+      "text": "塌了\n阿布堆的那座塔，堆到一半就塌下来。\n沙子顺着坡滑下去，塔尖没了。\n他愣愣地坐着，铲子插在沙里。",
+      "source": "样书《我们一起的沙堡》第 2 跨页 · 塌了"
+    },
+    {
+      "id": "library/castle#s3",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "castle",
+      "form": "*",
+      "text": "一起来\n小南也蹲下来：「我们一起堆一座吧。」\n她把水桶倒过来，拍出一个圆圆的底。\n阿布把铲子拔出来，挪了过去。",
+      "source": "样书《我们一起的沙堡》第 3 跨页 · 一起来"
+    },
+    {
+      "id": "library/castle#s4",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "castle",
+      "form": "*",
+      "text": "塔立起来了\n四只手一起，塔就一层一层地立了起来。\n你拍一下，我拍一下，谁也没有抢。\n塔尖上，他们放了一枚贝壳。",
+      "source": "样书《我们一起的沙堡》第 4 跨页 · 塔立起来了"
+    },
+    {
+      "id": "library/castle#s5",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "castle",
+      "form": "*",
+      "text": "护城河\n他们绕着城堡，挖了一圈深深的护城河。\n挖出来的沙子，堆在城堡四周当城墙。\n小南通到水里去提了半桶海水。",
+      "source": "样书《我们一起的沙堡》第 5 跨页 · 护城河"
+    },
+    {
+      "id": "library/castle#s6",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "castle",
+      "form": "*",
+      "text": "一面小旗\n一块花手帕系在小棍上，成了一面小旗。\n小南把它插在最高的那座塔上。\n风一吹，手帕鼓起来一下。",
+      "source": "样书《我们一起的沙堡》第 6 跨页 · 一面小旗"
+    },
+    {
+      "id": "library/castle#s7",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "castle",
+      "form": "*",
+      "text": "潮水来了\n潮水慢慢推上来，护城河一下子灌满了水。\n城墙上的沙，一点一点被舔掉了。\n两个人靠在一起，看它慢慢化。",
+      "source": "样书《我们一起的沙堡》第 7 跨页 · 潮水来了"
+    },
+    {
+      "id": "library/castle#s8",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "castle",
+      "form": "*",
+      "text": "让它慢慢化\n阿布说：「我们明天再堆一个更大的。」\n小南点点头，把手从沙上松开。\n城堡慢慢地化，两双脚印留在旁边。",
+      "source": "样书《我们一起的沙堡》第 8 跨页 · 让它慢慢化"
+    },
+    {
+      "id": "library/cloud#s1",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "cloud",
+      "form": "*",
+      "text": "躺在垫子上\n正午，小飞躺在野餐垫上，手枕在脑后。\n小狗趴在旁边，把下巴搁在他的胳膊上。\n远处草坡上，有一排树。",
+      "source": "样书《小飞看见的那朵云》第 1 跨页 · 躺在垫子上"
+    },
+    {
+      "id": "library/cloud#s2",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "cloud",
+      "form": "*",
+      "text": "云在变\n天上有一朵云，正在慢慢地变着形状。\n小飞眯起眼睛看，眼睛眯成一条线。\n风从草坡那头吹过来。",
+      "source": "样书《小飞看见的那朵云》第 2 跨页 · 云在变"
+    },
+    {
+      "id": "library/cloud#s3",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "cloud",
+      "form": "*",
+      "text": "像一只乌龟\n「看，像一只大乌龟。」小飞说。\n小狗也抬起头，跟着看了一会儿。\n那团云越鼓越高，像一只背着山的乌龟。",
+      "source": "样书《小飞看见的那朵云》第 3 跨页 · 像一只乌龟"
+    },
+    {
+      "id": "library/cloud#s4",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "cloud",
+      "form": "*",
+      "text": "风来了\n风轻轻地吹了一下，乌龟的背就散开了。\n云的边上一层一层，像撕开的棉花。\n小飞「哦」了一声。",
+      "source": "样书《小飞看见的那朵云》第 4 跨页 · 风来了"
+    },
+    {
+      "id": "library/cloud#s5",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "cloud",
+      "form": "*",
+      "text": "又像船\n散开的云又聚成一条船，鼓着一面白帆。\n船头翘起来，正朝着他们这边。\n小飞说：「我们要不要上去？」",
+      "source": "样书《小飞看见的那朵云》第 5 跨页 · 又像船"
+    },
+    {
+      "id": "library/cloud#s6",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "cloud",
+      "form": "*",
+      "text": "像被子\n「还像一床被子。」小飞打了个哈欠。\n小狗打了个更长的哈欠，露出两颗小牙。\n云的被子晒得白白的。",
+      "source": "样书《小飞看见的那朵云》第 6 跨页 · 像被子"
+    },
+    {
+      "id": "library/cloud#s7",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "cloud",
+      "form": "*",
+      "text": "一朵也没了\n过了一会儿再抬头，天上一朵云都没有了。\n天蓝得很干净，连一丝边都没有。\n小狗翻了个身，把肚子朝天。",
+      "source": "样书《小飞看见的那朵云》第 7 跨页 · 一朵也没了"
+    },
+    {
+      "id": "library/cloud#s8",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "cloud",
+      "form": "*",
+      "text": "又来一朵\n小飞咬了一口青苹果，脆脆的。\n再往上看的时候，天上又来了一朵。\n这一朵，比刚才那朵小一点。",
+      "source": "样书《小飞看见的那朵云》第 8 跨页 · 又来一朵"
+    },
+    {
+      "id": "library/flower#s1",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "flower",
+      "form": "*",
+      "text": "埋一颗种子\n奶奶把一颗小小的种子，埋进陶土盆里。\n土是松松的，用手指一按就是一个小坑。\n小苗蹲在旁边，看得认真。",
+      "source": "样书《奶奶的花盆》第 1 跨页 · 埋一颗种子"
+    },
+    {
+      "id": "library/flower#s2",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "flower",
+      "form": "*",
+      "text": "每天浇水\n小苗每天来浇一次水，一次只浇一点点。\n喷水壶很沉，他要两只手才提得动。\n壶嘴里出来的水，细细的。",
+      "source": "样书《奶奶的花盆》第 2 跨页 · 每天浇水"
+    },
+    {
+      "id": "library/flower#s3",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "flower",
+      "form": "*",
+      "text": "土还是土\n一天，两天，三天，盆里还是安安静静的一盆土。\n没有绿，也没有一点点动静。\n小苗把脸凑近去看。",
+      "source": "样书《奶奶的花盆》第 3 跨页 · 土还是土"
+    },
+    {
+      "id": "library/flower#s4",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "flower",
+      "form": "*",
+      "text": "它睡着了？\n小苗小声问：「奶奶，它是不是睡着了？」\n奶奶把手上的土拍干净，笑了笑。\n「它在下面忙着呢。」",
+      "source": "样书《奶奶的花盆》第 4 跨页 · 它睡着了？"
+    },
+    {
+      "id": "library/flower#s5",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "flower",
+      "form": "*",
+      "text": "下面忙着呢\n「先长根，再长叶，急不来的。」\n奶奶说，根要在土里绕好几圈。\n小苗听完，又给它浇了一点点水。",
+      "source": "样书《奶奶的花盆》第 5 跨页 · 下面忙着呢"
+    },
+    {
+      "id": "library/flower#s6",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "flower",
+      "form": "*",
+      "text": "一个绿点\n今天早上，土里冒出来一个小小的绿点。\n两片叶子卷在一起，还没有打开。\n「奶奶！快来看！」",
+      "source": "样书《奶奶的花盆》第 6 跨页 · 一个绿点"
+    },
+    {
+      "id": "library/flower#s7",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "flower",
+      "form": "*",
+      "text": "一起蹲下来\n奶奶和小苗一起蹲下来看，谁也没出声。\n阳光落在那一小块新绿上，亮亮的。\n风一吹，它晃了一下。",
+      "source": "样书《奶奶的花盆》第 7 跨页 · 一起蹲下来"
+    },
+    {
+      "id": "library/flower#s8",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "flower",
+      "form": "*",
+      "text": "扶着手背\n奶奶的手扶着小苗的手背，一起浇水。\n最后一点水，慢慢地渗进土里。\n「我们一起等它开花。」",
+      "source": "样书《奶奶的花盆》第 8 跨页 · 扶着手背"
+    },
+    {
+      "id": "library/turtle#s1",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "turtle",
+      "form": "*",
+      "text": "岸边的石头上\n午后的池塘边，小石头蹲在岸上的石头上。\n石头被太阳晒得暖暖的，膝盖并得紧紧的。\n池塘里有浮萍，绿绿的一片。",
+      "source": "样书《慢慢来》第 1 跨页 · 岸边的石头上"
+    },
+    {
+      "id": "library/turtle#s2",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "turtle",
+      "form": "*",
+      "text": "一只乌龟\n一只乌龟，正慢吞吞地爬过岸边的石板。\n它的壳上有几块深浅不一样的斑。\n小石头连眼睛都不敢眨。",
+      "source": "样书《慢慢来》第 2 跨页 · 一只乌龟"
+    },
+    {
+      "id": "library/turtle#s3",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "turtle",
+      "form": "*",
+      "text": "学着它\n小石头也跟着它，把动作放得很慢很慢。\n乌龟怎么转头，他就怎么转头。\n两个都慢慢慢慢，谁也不着急。",
+      "source": "样书《慢慢来》第 3 跨页 · 学着它"
+    },
+    {
+      "id": "library/turtle#s4",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "turtle",
+      "form": "*",
+      "text": "走三步\n乌龟走三步，小石头就在心里数上三步。\n一步，两步，三步，停一停。\n它停下来的时候，他也停下来。",
+      "source": "样书《慢慢来》第 4 跨页 · 走三步"
+    },
+    {
+      "id": "library/turtle#s5",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "turtle",
+      "form": "*",
+      "text": "一只蜻蜓\n一只蜻蜓停在草叶尖上，翅膀也一动不动。\n它也在等，等什么事情慢慢发生。\n池塘的水面上，浮萍挪了一点点。",
+      "source": "样书《慢慢来》第 5 跨页 · 一只蜻蜓"
+    },
+    {
+      "id": "library/turtle#s6",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "turtle",
+      "form": "*",
+      "text": "到水边了\n乌龟终于爬到了水边，在那里停了一下。\n它把脖子伸出来，闻了闻水的味道。\n小石头把呼吸放得很轻。",
+      "source": "样书《慢慢来》第 6 跨页 · 到水边了"
+    },
+    {
+      "id": "library/turtle#s7",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "turtle",
+      "form": "*",
+      "text": "圈圈\n它滑进水里，只留下几圈慢慢散开的水纹。\n水面又平了，像什么也没有发生过。\n小石头想：它一定游得很快。",
+      "source": "样书《慢慢来》第 7 跨页 · 圈圈"
+    },
+    {
+      "id": "library/turtle#s8",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "turtle",
+      "form": "*",
+      "text": "慢慢回家\n小石头慢慢地笑，慢慢地站起来。\n裤子后面沾了一点沙子，拍两下就掉下去了。\n慢慢来，也很好。",
+      "source": "样书《慢慢来》第 8 跨页 · 慢慢回家"
+    },
+    {
+      "id": "library/balloon#s1",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "balloon",
+      "form": "*",
+      "text": "每人一只\n公园的草地上，每个孩子手里都有一只气球。\n红的、黄的、绿的，一根线一只。\n小灯手里那只，是红的。",
+      "source": "样书《分你一个》第 1 跨页 · 每人一只"
+    },
+    {
+      "id": "library/balloon#s2",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "balloon",
+      "form": "*",
+      "text": "只有她空着手\n只有一个小妹妹空着两只手，站在旁边看。\n她不说话，只把两只手背在身后。\n她看起来比小灯矮一个头。",
+      "source": "样书《分你一个》第 2 跨页 · 只有她空着手"
+    },
+    {
+      "id": "library/balloon#s3",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "balloon",
+      "form": "*",
+      "text": "低头看看\n小灯低头，看了看自己手里那只红气球。\n线在他手指上绕了两圈，缠得有点紧。\n他把线解开来。",
+      "source": "样书《分你一个》第 3 跨页 · 低头看看"
+    },
+    {
+      "id": "library/balloon#s4",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "balloon",
+      "form": "*",
+      "text": "走了三步\n他朝着小妹妹走过去，一步一步地走。\n第一步有点慢，第三步快了一点。\n他站到她面前，停了下来。",
+      "source": "样书《分你一个》第 4 跨页 · 走了三步"
+    },
+    {
+      "id": "library/balloon#s5",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "balloon",
+      "form": "*",
+      "text": "给你\n「这个给你。」小灯把气球线递了过去。\n小妹妹抬起头，先看了看他，又看了看气球。\n她的两只手，慢慢从背后拿了出来。",
+      "source": "样书《分你一个》第 5 跨页 · 给你"
+    },
+    {
+      "id": "library/balloon#s6",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "balloon",
+      "form": "*",
+      "text": "飘了一点\n小妹妹抓住线，气球轻轻地往上飘了一点。\n她笑了，笑得眼睛弯起来。\n小灯站在旁边，也跟着笑了。",
+      "source": "样书《分你一个》第 6 跨页 · 飘了一点"
+    },
+    {
+      "id": "library/balloon#s7",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "balloon",
+      "form": "*",
+      "text": "凑在一起\n别的小朋友也围了过来，气球凑在一起。\n七只气球挤在一块，谁也没有松手。\n有个孩子说：「我们的最高。」",
+      "source": "样书《分你一个》第 7 跨页 · 凑在一起"
+    },
+    {
+      "id": "library/balloon#s8",
+      "kind": "spread",
+      "owner": "library",
+      "ageBand": "4-6",
+      "theme": "balloon",
+      "form": "*",
+      "text": "一片彩色的天\n大家一起抬头看，脖子都仰得酸了。\n那几只气球飘在绿树上面，像一小片彩色的天。\n小灯想：红的已经在别人手里了。",
+      "source": "样书《分你一个》第 8 跨页 · 一片彩色的天"
+    }
+  ]
+}

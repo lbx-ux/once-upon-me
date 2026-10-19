@@ -33,5 +33,10 @@ app:
   sms:
     # ★ 本地默认**假发**（接口照做、频控照做，只是不真的调阿里云）：开发时一次几毛钱
     #   也是钱，而且"没配 AccessKey 时启动就崩"会让任何人 clone 下来先卡在第一步。
-    #   接口的响应里会如实说这是开发模式，不假装发过了
-    enabled: false
+    #   接口的响应里会如实说这是开发模式，不假装发过了。
+    # ★ 2026-10-19：这一行改成读 `APP_SMS_ENABLED`，于是"本机要不要真发"只由
+    #   `.env.local` 一处说了算（那把钥匙本来也只在那里）。默认值仍是 false：
+    #   上面那两条理由都还在——新 clone 没有 .env.local，或者有但没写这一行。
+    # ★ 两件事要同时在：开关从这里来、钥匙从进程环境来（`run-local.mjs` 读 .env.local）。
+    #   `StartupChecks` 在 enabled=true 而钥匙缺的时候**直接抛异常**，所以"半开"不存在。
+    enabled: ${APP_SMS_ENABLED:false}

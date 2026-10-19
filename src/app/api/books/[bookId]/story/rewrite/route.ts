@@ -33,6 +33,7 @@ import { userFailureOf } from '@/lib/provider-messages.ts'
 import { readStory, storyRequestOf, writeStory, type StoryDraft } from '@/lib/story-draft.ts'
 import { serverEnv } from '@/lib/settings/server-env.ts'
 import { createUserStore, userSliceRoot } from '@/lib/asset-scope.ts'
+import { createPlanRetriever, ownerOf } from '@/lib/rag/load.ts'
 import { requireCapability } from '@/lib/auth/session.ts'
 
 export const runtime = 'nodejs'
@@ -143,7 +144,13 @@ export async function POST(
       }
 
       try {
-        const plan = await planBook(request, { providers, onEvent, reviseNote: note })
+        // ★ 重写一版**也要检索**，而且这一条路上它更有用：
+        //   家长说"结局改成她带着全班一起飞"时，检索那一栏里的反例正是"他读过的落点"，
+        //   而范例是他自己以前那几本的句子——续写这一件事本来就该看着旧稿写。
+        //   （与"开一本"那条一样：建这个函数不读盘，失败由引擎发事件）
+        const retriever = createPlanRetriever({ store, owner: ownerOf(guard.session.userId) })
+
+        const plan = await planBook(request, { providers, onEvent, reviseNote: note, retriever })
         await chain
         const next: StoryDraft = {
           ...draft,
@@ -152,6 +159,9 @@ export async function POST(
             modelId: plan.modelId,
             promptVersion: plan.promptVersion,
             attempts: plan.attempts,
+            // ★ 重写一版会把上一版的出处**整个换掉**：这个字段说的是"盘上这一版
+            //   是看着什么写的"，不是"这一路上一共看过什么"（与 `attempts` 同一条口径）
+            ...(plan.retrieval ? { retrieval: plan.retrieval } : {}),
           },
           planMs: plan.elapsedMs,
           // ★ `createdAt` 不动；`editedAt` 清掉（见文件头第 3、4 条）

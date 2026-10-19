@@ -38,7 +38,7 @@
  *
  * 1. **键盘只在容器上接**（`onKeyDown` + `tabIndex`），不在 `window` 上。
  *    首页那个已知 bug 就是 `window` 上无条件接键——书滚出屏幕照样翻页。
- *    新页面不许复制那个形状（README §五）。
+ *    新页面不许复制那个形状（docs/known-tradeoffs.md）。
  * 2. **图片按窗口挂载**：只给离当前跨页（opening）不超过一页的面挂 `background-image`。
  *    一张出图是 1536×1024 的 PNG（三兆多），20 页全挂上就是几十兆——那不是"慢一点"，
  *    是首屏根本进不去（#12 的 LCP）。
@@ -99,6 +99,7 @@ import {
   type ReaderFace,
 } from './reader-model.ts'
 import { useNarration } from './use-narration.ts'
+import { useSwipeTurn } from './use-swipe-turn.ts'
 import type { ResolvedStory, StoryChoiceView } from '@/lib/book-source.ts'
 
 /** 每帧朝目标插值的系数。比首页第二屏的 0.12 略快：这一屏是"点一下就翻" */
@@ -221,13 +222,46 @@ export default function ReaderBook({ bookId, title, coverUrl, story, source }: R
     return () => media.removeEventListener('change', onChange)
   }, [])
 
-  /* ── 补间：朝 qTarget 插值。reduced 下直接跳（不是"不翻页"，是"不播动画"） ── */
-
   /** 当前显示到的那一叶。★ 补间读它，不读 state：把副作用写进 setState 的更新函数里，
    *  严格模式下会起两条 rAF 链，而清理函数只知道其中一条——实测那会变成"翻页越来越快" */
   const qRef = useRef(0)
 
+  /**
+   * 手指拖动期间**直接写** q（2026-10-19 移动端适配）。
+   * ★ 这是跟手的全部机制：补间那条链是"朝 `qTarget` 插值"，而拖动要的是"手到哪儿
+   *   画面到哪儿"，所以拖动期间绕开它、直接写；松手再把它交回去（见 `use-swipe-turn.ts`
+   *   文件头末尾那条契约）。两个写者同时写同一个 q 就是画面抖。
+   */
+  const writeQ = useCallback((value: number) => {
+    qRef.current = value
+    setQ(value)
+  }, [])
+
+  /* ── 手指跟手翻页 ──────────────────────────────────────────────────────────
+   * 整套在 `use-swipe-turn.ts` 里，与书单那台**共用同一份** —— 理由写在那儿的
+   * 文件头："会漂成两个脾气的是行为，不是长相"。这一层只交三样它算不出来的东西：
+   * 舞台（量宽度的基准）、上界（`maxTarget`，见 `reader-model.ts`）、
+   * 以及"人已经在翻页了，朗读停下"。
+   */
+  const swipe = useSwipeTurn({
+    stageRef,
+    qRef,
+    write: writeQ,
+    // ★ 直接递 `setQTarget`：它的身份是稳定的（与 `goTo` 那条同一个理由）
+    settle: setQTarget,
+    maxTarget,
+    onTakeOver: takeOver,
+  })
+  const { dragging } = swipe
+
+  /* ── 补间：朝 qTarget 插值。reduced 下直接跳（不是"不翻页"，是"不播动画"） ── */
+
   useEffect(() => {
+    /* ★ 手指正按着的时候**不起这条链**（见上面那条契约）：它和拖动都在写 q。
+       拖动一开始 `dragging` 变真，这个 effect 重跑 → 清理函数把旧的那条 rAF 掐掉；
+       松手后 `dragging` 变回假，effect 再跑一遍，带着新的 `qTarget` 从**当前**的 q
+       平滑收尾 —— 所以落定那一下仍然是补间，不是硬切。 */
+    if (dragging) return
     if (reduced) {
       qRef.current = qTarget
       setQ(qTarget)
@@ -250,7 +284,7 @@ export default function ReaderBook({ bookId, title, coverUrl, story, source }: R
     }
     raf = requestAnimationFrame(frame)
     return () => cancelAnimationFrame(raf)
-  }, [qTarget, reduced])
+  }, [qTarget, reduced, dragging])
 
   const turn = useCallback(
     (delta: number) => {
@@ -325,23 +359,10 @@ export default function ReaderBook({ bookId, title, coverUrl, story, source }: R
     [turn, maxTarget],
   )
 
-  /* ── 触摸滑动 ──────────────────────────────────────────────────────── */
-
-  const touchStart = useRef<{ x: number; y: number } | null>(null)
-  const onTouchStart = (event: React.TouchEvent): void => {
-    const touch = event.touches[0]
-    if (touch) touchStart.current = { x: touch.clientX, y: touch.clientY }
-  }
-  const onTouchEnd = (event: React.TouchEvent): void => {
-    const start = touchStart.current
-    touchStart.current = null
-    const touch = event.changedTouches[0]
-    if (!start || !touch) return
-    const dx = touch.clientX - start.x
-    const dy = touch.clientY - start.y
-    // 横向位移要明显大于纵向，否则会把"上下滚动"读成翻页
-    if (Math.abs(dx) > 44 && Math.abs(dx) > Math.abs(dy) * 1.5) turn(dx < 0 ? 1 : -1)
-  }
+  /* ── 触摸滑动 ────────────────────────────────────────────────────────
+   * 2026-10-19：这一段原来住在这里（"划 44px 松手才翻一页"），现在整块搬去
+   * `use-swipe-turn.ts` 并改成**跟手**——两台阅读器共用同一份，理由在那儿的文件头。
+   * 这里不再留半截：翻页手势只有那一个来源。 */
 
   const states = useMemo(() => flipState(q, leafCount), [q, leafCount])
 
@@ -470,8 +491,13 @@ export default function ReaderBook({ bookId, title, coverUrl, story, source }: R
           role="group"
           aria-label="绘本翻页区（方向键或空格翻页）"
           onKeyDown={onKeyDown}
-          onTouchStart={onTouchStart}
-          onTouchEnd={onTouchEnd}
+          /* 手指跟手翻页那四个处理器整块来自 `use-swipe-turn.ts`
+             （`onTouchCancel` 也要接：来电、系统手势打断时不接住的话，
+             画面会停在半翻的那一帧上）。 */
+          onTouchStart={swipe.onTouchStart}
+          onTouchMove={swipe.onTouchMove}
+          onTouchEnd={swipe.onTouchEnd}
+          onTouchCancel={swipe.onTouchCancel}
           data-testid="reader-stage"
         >
           {/* 舞台宽 = 2 × 页宽（3:4 的一页）。--book-x 是首页那套，只是多了一个末尾的合着态 */}
@@ -583,8 +609,12 @@ export default function ReaderBook({ bookId, title, coverUrl, story, source }: R
         onError={narration.onError}
       />
 
-      {/* 书号留在页面上：演示与排障都要能一眼说出"这是哪一本" */}
-      <p className="reader__meta">
+      {/* 书号留在页面上：演示与排障都要能一眼说出"这是哪一本"。
+          ★ 手机横屏那一档把它收进 `sr-only`（`reader-book.css` §手机横屏）：
+            那是**排障用**的一行，而横屏下每一像素的高度都是书在用。
+            下面那两句 `--note` 不动 —— 它们是**有实义**的说明（朗读怎么了、
+            自动朗读开着），该占的地方照占。 */}
+      <p className="reader__meta reader__meta--origin">
         {bookId} · {source === 'demo' ? '预生成演示书（不需要网络）' : '这一轮生成的'}
       </p>
       {narrationNote && <p className="reader__meta reader__meta--note">{narrationNote}</p>}
@@ -688,7 +718,7 @@ function FaceView({
  * 五条判断，每条都对着一个具体的坏法：
  *
  * 1. **两颗按钮是那朵云自己的小画，不是系统 emoji**——emoji 是扁平高饱和的 clip-art，
- *    与水彩是两套画法（README §五 那条判据的第三次应用）。图标没到位时 emoji 是**兜底**：
+ *    与水彩是两套画法（docs/known-tradeoffs.md 那条判据的第三次应用）。图标没到位时 emoji 是**兜底**：
  *    `alt=""` 的 `<img>` 在 404 时什么都不画，所以兜底会正好露出来，不留碎图标。
  * 2. **`settled` 到了才浮出来**：翻页补间还没停就把控件亮起来，孩子会看着两颗按钮
  *    在转着的纸上飘（朗读也是同一条规矩，见 `use-narration.ts` 规则 3）。

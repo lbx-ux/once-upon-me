@@ -197,4 +197,71 @@ describe('storyInputOf / storyRequestOf', () => {
     expect(asStoryDraft(raw, 'from-dir')?.bookId).toBe('from-dir')
     expect(asStoryDraft({ ...raw, bookId: 'written' }, 'from-dir')?.bookId).toBe('written')
   })
+
+  /* ─────────── 检索的出处（2026-10-19，.scratch/rag 工单 04）─────────── */
+
+  it('★ 检索的出处**写得出去也读得回来**（不对称是那种"等有人要显示它时才发现"的坏）', () => {
+    const retrieval = {
+      corpusVersion: 'adfab4685031',
+      examples: 1,
+      avoids: 1,
+      topScore: 9.52,
+      hits: [
+        {
+          chunkId: 'library/cloud#s2',
+          source: '样书《小飞看见的那朵云》第 2 跨页 · 云在变',
+          score: 9.52,
+          polarity: 'example',
+        },
+        {
+          chunkId: 'u/1/books/bk_x#p1',
+          source: '《小雨的火箭》第 1 页',
+          score: 4.1,
+          polarity: 'avoid',
+        },
+      ],
+    }
+    const raw = {
+      doc: { title: 'T', nodes: [] },
+      input: { cardId: 'c1', child: {} },
+      provenance: { modelId: 'm', promptVersion: 'story-plan@v4', attempts: 1, retrieval },
+    }
+    expect(asStoryDraft(raw, 'bk')?.provenance.retrieval).toEqual(retrieval)
+  })
+
+  it('★ `corpusVersion: null`（那一轮没检索成）**读得回来**，不被读成"没有检索"', () => {
+    const raw = {
+      doc: { title: 'T', nodes: [] },
+      input: { cardId: 'c1', child: {} },
+      provenance: {
+        modelId: 'm',
+        promptVersion: 'story-plan@v4',
+        attempts: 1,
+        retrieval: { corpusVersion: null, examples: 0, avoids: 0, topScore: null, hits: [] },
+      },
+    }
+    const provenance = asStoryDraft(raw, 'bk')?.provenance
+    expect(provenance && 'retrieval' in provenance).toBe(true)
+    expect(provenance?.retrieval?.corpusVersion).toBeNull()
+  })
+
+  it('形状不对就当没有（历史产物本来就没有这个字段，不许因此读不出整份草稿）', () => {
+    const base = { doc: { title: 'T', nodes: [] }, input: { cardId: 'c1', child: {} } }
+    const broken = [
+      { corpusVersion: 'a', examples: 1, avoids: 0, topScore: 1, hits: [{ chunkId: 'x' }] },
+      { corpusVersion: 'a', examples: 'one', avoids: 0, topScore: 1, hits: [] },
+      {
+        corpusVersion: 'a',
+        examples: 1,
+        avoids: 0,
+        topScore: 1,
+        hits: [{ chunkId: 'x', source: 's', score: 1, polarity: '别的' }],
+      },
+    ]
+    for (const retrieval of broken) {
+      const draft = asStoryDraft({ ...base, provenance: { retrieval } }, 'bk')
+      expect(draft).not.toBeNull()
+      expect(draft?.provenance.retrieval).toBeUndefined()
+    }
+  })
 })

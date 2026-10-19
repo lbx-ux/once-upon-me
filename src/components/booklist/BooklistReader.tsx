@@ -57,6 +57,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { flipState } from '@/components/book/flip.ts'
 import { useNarration } from '@/components/reader/use-narration.ts'
+import { useSwipeTurn } from '@/components/reader/use-swipe-turn.ts'
 import { useReaderPaper, useTurnMode } from '@/lib/use-reading-prefs.ts'
 import { THEMES } from '@/lib/themes.ts'
 
@@ -147,7 +148,36 @@ export default function BooklistReader({ book, coverUrl, art, audio }: BooklistR
 
   /* ── 补间 ─────────────────────────────────────────────────────────────── */
 
+  /**
+   * 手指拖动期间**直接写** q（2026-10-19 移动端适配）。
+   * ★ 跟手的全部机制：补间那条链是"朝 `qTarget` 插值"，而拖动要的是"手到哪儿
+   *   画面到哪儿"，所以拖动期间绕开它直接写；松手再交回去
+   *   （见 `use-swipe-turn.ts` 文件头末尾那条契约）。两个写者同时写 q 就是画面抖。
+   */
+  const writeQ = useCallback((value: number) => {
+    qRef.current = value
+    setQ(value)
+  }, [])
+
+  /* ── 手指跟手翻页 ──────────────────────────────────────────────────────
+   * 整套在 `reader/use-swipe-turn.ts` 里，与 `/reader/<bookId>` 那台**共用同一份**
+   * （理由写在那儿的文件头）。这一层交三样：舞台、上界（这一台就是 `leafCount`）、
+   * 以及"人已经在翻页了，朗读停下"。 */
+  const swipe = useSwipeTurn({
+    stageRef,
+    qRef,
+    write: writeQ,
+    settle: setQTarget,
+    maxTarget: leafCount,
+    onTakeOver: takeOver,
+  })
+  const { dragging } = swipe
+
   useEffect(() => {
+    /* ★ 手指正按着的时候不起这条链（见 `writeQ` 上面那条契约）：
+       拖动一开始 `dragging` 变真 → 这个 effect 重跑、旧 rAF 被掐掉；
+       松手后它再跑一遍，带着新的 `qTarget` 从**当前**的 q 平滑收尾。 */
+    if (dragging) return
     if (reduced) {
       qRef.current = qTarget
       setQ(qTarget)
@@ -170,7 +200,7 @@ export default function BooklistReader({ book, coverUrl, art, audio }: BooklistR
     }
     raf = requestAnimationFrame(frame)
     return () => cancelAnimationFrame(raf)
-  }, [qTarget, reduced])
+  }, [qTarget, reduced, dragging])
 
   const turn = useCallback(
     (delta: number) => {
@@ -203,23 +233,10 @@ export default function BooklistReader({ book, coverUrl, art, audio }: BooklistR
     [turn, leafCount],
   )
 
-  /* ── 触摸滑动 ──────────────────────────────────────────────────────── */
-
-  const touchStart = useRef<{ x: number; y: number } | null>(null)
-  const onTouchStart = (event: React.TouchEvent): void => {
-    const touch = event.touches[0]
-    if (touch) touchStart.current = { x: touch.clientX, y: touch.clientY }
-  }
-  const onTouchEnd = (event: React.TouchEvent): void => {
-    const start = touchStart.current
-    touchStart.current = null
-    const touch = event.changedTouches[0]
-    if (!start || !touch) return
-    const dx = touch.clientX - start.x
-    const dy = touch.clientY - start.y
-    // 横向位移要明显大于纵向，否则会把"上下滚动"读成翻页
-    if (Math.abs(dx) > 44 && Math.abs(dx) > Math.abs(dy) * 1.5) turn(dx < 0 ? 1 : -1)
-  }
+  /* ── 触摸滑动 ────────────────────────────────────────────────────────
+   * 2026-10-19：这一段原来住在这里（"划 44px 松手才翻一页"），现在整块搬去
+   * `reader/use-swipe-turn.ts` 并改成**跟手**——两台阅读器共用同一份，
+   * 理由在那儿的文件头。这里不再留半截。 */
 
   const states = useMemo(() => flipState(q, leafCount), [q, leafCount])
 
@@ -302,8 +319,13 @@ export default function BooklistReader({ book, coverUrl, art, audio }: BooklistR
         role="group"
         aria-label="绘本翻页区（方向键或空格翻页）"
         onKeyDown={onKeyDown}
-        onTouchStart={onTouchStart}
-        onTouchEnd={onTouchEnd}
+        /* 手指跟手翻页那四个处理器整块来自 `reader/use-swipe-turn.ts`
+           （`onTouchCancel` 也要接：来电、系统手势打断时不接住的话，
+           画面会停在半翻的那一帧上）。 */
+        onTouchStart={swipe.onTouchStart}
+        onTouchMove={swipe.onTouchMove}
+        onTouchEnd={swipe.onTouchEnd}
+        onTouchCancel={swipe.onTouchCancel}
         data-testid="booklist-stage"
       >
         {/* 舞台宽 = 2 × 页宽（3:4 的一页），合起来正好 3:2 —— 一张跨页图铺满两页 */}

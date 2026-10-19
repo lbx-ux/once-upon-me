@@ -6,8 +6,8 @@
 @import '../components/dialog/dialog.css';
 @import '../components/scene/scene-backdrop.css';
 @import '../components/hero/hero-orbit.css';
-@import '../components/hero/hero-typewriter.css';
 @import '../components/book/storybook-flip.css';
+@import '../components/hero/hero-typewriter.css';
 @import '../components/booklist/booklist-wall.css';
 @import '../components/booklist/booklist-reader.css';
 @import '../components/highlights/highlights-reel.css';
@@ -17,6 +17,7 @@
 @import '../components/creation/story-sheet.css';
 @import '../components/creation/redraw-dialog.css';
 @import '../components/reader/reader-book.css';
+@import '../components/reader/rotate-hint.css';
 @import '../components/shelf/shelf.css';
 @import '../components/admin/admin.css';
 @import '../components/shell/app-shell.css';
@@ -111,7 +112,8 @@
   /* 卡片投影：刻意比一般浮层更紧、更深。它要表达的是「图片本身浮在页面上」，
      而不是「一张裱在白卡纸上的照片」—— 后者的观感来自「白底 + 大而虚的投影」
      这个组合。12 张封面是水彩风，多张边缘留了大片浅色，投影一虚，浅边就和页面
-     底色连成一片，被读成卡纸边。取舍与实测见 components/hero/hero-orbit.css §4。 */
+     底色连成一片，被读成卡纸边。取舍与实测见 docs/known-tradeoffs.md
+     （当年写在 hero-orbit.css §4；结论对今天那些"图当卡片"的地方照旧成立）。 */
   --card-shadow: 0 18px 44px rgba(19, 19, 28, 0.24);
 
   /* ── 创作流引入的四个令牌（W2）──────────────────────────────────────────
@@ -290,6 +292,7 @@
        `reader-book.css` 一处，全是字面量 `#fbf7ef`。而它与 `--card-paper` 的
        ΔE2000 只有 **3.62**——肉眼分不出，所以那 5 遍既不是"有意区分"，
        也没有人能从数值上说出它俩该不该合并。
+     ★ 令牌本身照旧，它不是某一屏的私产。
      ★ 现在它有了名字：**书页比相纸更白一点**（相纸是暖黄的照片托纸，书页是
        更中性的印书纸），这条差别从此是一句能读懂的话，不再是一个看得见的巧合。
      ★ 对比度（`node scripts/check-scrim.mts` 那支量具同一套算法，2026-10-18 实测）：
@@ -308,8 +311,9 @@
        一张 0.72–0.94 的薄膜上，2.34 的差看不出来，而"薄膜用的是哪张纸"
        从此只有一个答案。 */
   --page-paper-rgb: 251, 247, 239;
-  /* 书页纸的**亮一档**，只给"选中的那一片"用（`storybook-flip.css` 的选择点：
-     `.book-choice__btn[aria-pressed='true']`）。
+  /* 书页纸的**亮一档**，只给"选中的那一片"用（`reader-book.css` 的选择点：
+     `.book-choice__btn[aria-pressed='true']` —— 那一族原本住在首页第二屏那份样式里，
+     2026-10-19 随那一屏一起搬进了阅读器，见那个文件里「选择点」那一节）。
      ★ 为什么它是一颗令牌而不是一个写在组件里的 `#fffdf7`：那个值原本就是写死的，
        而它承担着"这一片是按下的"这件事——三件套里的第一件（另两件是 `--accent`
        描边与左上那枚勾）。**状态色属于令牌表**，因为"改配色时它该不该跟着走"
@@ -492,6 +496,19 @@
        （`--pf-accent` 在蓝底上 4.05:1）。见 `profile-home.css` 里那一条。 */
   --pf-ink-on-wash: #4a4952;
 
+  /* ── 安全区四颗（2026-10-19 移动端适配）────────────────────────────────────
+     ★ 为什么它们是令牌而不是各组件自己写 `env(...)`：`env()` 不是颜色，但它是
+       **一个只该有一个答案的版面常数**——四边各一处，与令牌表其它成员同一条理由
+       （硬约束一：只在这里定义一次）。而且它们必须能在一处被整体覆盖（见下）。
+     ★ 前提在 `app/layout.tsx` 的 `export const viewport`：没有 `viewportFit: 'cover'`，
+       这四个数**恒为 0**。两处是一件事的两半。
+     ★ `0px` 兜底不是装饰：不支持 `env()` 的引擎（老 Safari）读到没有兜底的 `env()`
+       会让**整条声明作废**，而这几颗的消费者是 padding 与 inset。 */
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
+
   color-scheme: light; /* 目前只有浅色一套，先锁掉系统深色的表单控件反色 */
 }
 
@@ -532,6 +549,28 @@
 /* ============================================================================
  * 基础样式
  * ========================================================================== */
+
+/* ----------------------------------------------------------------------------
+ * 断点约定（2026-10-19 移动端适配）
+ *
+ * 全仓原来有 640 / 700 / 720 / 760 / 880 / 900 / 980 / 1100 八个断点，各自为政。
+ * 这一轮**不推翻**它们（动一遍等于把每一屏的版面重排一次，而它们每一档都是量过的），
+ * 只追认**两条**、以后新写的照这两条走：
+ *
+ *   手机竖屏  @media (max-width: 640px)
+ *     640 已经是既成事实（两台阅读器、书单墙、书架、运行视图、个人主页都在用），
+ *     所以"手机"这个档从这里切。**新写断点不要再用 620 / 700 / 720。**
+ *
+ *   手机横屏  @media (orientation: landscape) and (max-height: 560px)
+ *     ★ 判据取的是**高度**不是宽度：手机横过来之后宽度反而变大了（844），
+ *       拿宽度判一定漏。560 这个数把手机（横屏 320–440 高）全收进来，
+ *       而把平板（横屏 768 高）与桌面窗口排除在外。
+ *     ★ 代价说清楚：桌面窗口被拖到 560 以下高也会走进这一档。这是认下的 ——
+ *       那一档是"紧凑排版"，对矮窗口同样是对的（何况矮窗口在横屏手机上占绝大多数）。
+ *
+ * ★ 两条都不含 `(pointer: coarse)`：用指针类型判设备会把"触屏笔记本"整类判错，
+ *   而上面两条判的都是**版面真的不够用**这件事本身。
+ * -------------------------------------------------------------------------- */
 body {
   background: var(--bg);
   color: var(--ink);
@@ -539,21 +578,21 @@ body {
 }
 
 /* ----------------------------------------------------------------------------
- * 页面层：首页的桌面兜底
+ * 页面层：首页
  *
- * HeroOrbit 是桌面 Web 专用组件 —— 它内部没有任何断点，环上的卡片数与半轴都按
- * 宽屏调过，缩到手机宽度只会糊成一团（理由见 HeroOrbit.tsx 顶部注释）。
- * 组件文档明确要求「消费方在页面层给一个 min-width 兜底」，
- * 低于 1280px 就横向滚动。
+ * ★ 2026-10-19 移动端适配：**这里原来有一条 `.home-hero { min-width: 1280px }`**，
+ *   它把手机上的首屏变成一条要左右拖的宽页（环缩到 375px 宽只剩一团糊）。
+ *   那一版的原话是「HeroOrbit 是桌面 Web 专用组件，缩到手机宽度只会糊成一团，
+ *   所以低于 1280px 就横向滚动」—— 于是这条兜底连着它的理由一起退休。
+ *   `.home-hero` 这个类名留在 `page.tsx` 上不再有配套规则：它是这一节
+ *   与工作台那几屏的对照标记，`chk-mobile.mjs` 里也拿它当"这是首页"的靶子。
  *
- * 刻意写在首页容器上、而不是 body 上：一条全局的 body { min-width }
- * 会把之后所有页面一起锁死在桌面宽度，兜底不该变成全站规则。
- *
- * 这个类通过 HeroOrbit 的 className 属性落在它的根元素 .hero-experience 上。
+ * ★ 那个环在手机上由 `hero-orbit.css` §6 整块 `display: none` 收掉 ——
+ *   所以"环不好缩"这件事**没有变成一条页面级的横向滚动**，而是变成了
+ *   "手机那一档不演环"。这条判断里剩下的一半仍然要守：
+ *   **兜底不该变成全站规则** —— `/create` `/reader/*` 与工作台那一圈
+ *   从来就只看自己那几条断点。
  * -------------------------------------------------------------------------- */
-.home-hero {
-  min-width: 1280px;
-}
 
 /* ----------------------------------------------------------------------------
  * 页面层：`/create` 那一块**没有页面级规则了**（工单 06）
@@ -583,6 +622,11 @@ body {
  * -------------------------------------------------------------------------- */
 .reader-page {
   min-height: 100vh;
+  /* ★ 2026-10-19：成对写 `dvh`（照 `shell/studio-backdrop.css` 那条既有写法）。
+     手机上地址栏收起/展开时 `vh` 是**不动的那个数** —— 竖屏阅读时页面还要能滚，
+     所以定的是 min-height；而横屏那一档把这个值当**定高**用（`height: 100dvh`），
+     写错就是"书底下永远缺一条滚动条那么高"。 */
+  min-height: 100dvh;
 }
 
 /* ★ 2026-10-18 第三轮：这一行现在压在阅读器那张底图上（`.blr__desk` / `.reader__desk`
@@ -599,7 +643,7 @@ body {
         于是那条判据**恒真**：字被盖着也照样绿。现在的判据落在**像素**上
         （`scripts/chk-reader-desk.mjs` 判据 4：这行字自己的矩形里有没有真的墨）。
    ② 颜色上一档：`--ink-muted` 压在六张底图上**没有一张过 4.5:1**（最好的白垩 4.58），
-      `--ink-soft` 最差 6.8。读数与复现见 README §五。
+      `--ink-soft` 最差 6.8。读数与复现见 docs/known-tradeoffs.md。
    ★ 空态那一条（`.reader-page__actions`）**不动**：那一屏没有阅读器、也就没有底图，
      它仍坐在纯 `--bg` 上，`--ink-muted` 在那里是量过的 5.0:1，够用，不多一个改动。 */
 .reader-page__back {
@@ -615,6 +659,79 @@ body {
 .reader-page__back a {
   color: var(--ink-soft);
   text-decoration: none;
+}
+
+/* ★ 2026-10-19 加了这两个 span（理由在页面那边）：箭头的右边距替掉原来那个空格。
+   桌面与竖屏渲染出来与拆之前**逐字一样**。 */
+.reader-page__back-arrow {
+  margin-right: 0.4em;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * 页面层：手机横屏那一档（2026-10-19 移动端适配）
+ *
+ * 这一屏在横屏下**只是书**。两条规则都落在这里而不是阅读器那一层：`reader-page`
+ * 是两台阅读器共用的壳，而"书外面的世界长什么样"本来就归页面层
+ * （与服务端那条分工一致：组件画书，页面画书之外的东西）。
+ *
+ * ★ 为什么不是"什么都不做"：竖屏那一版是**一条长页**（导航 + 书 + 底栏 + 说明），
+ *   横屏把书撑到视口高之后，那条长页的其它部分会把书挤出屏幕。
+ *   所以横屏要的不只是"书变大"，还有"页面这一层收紧"。
+ * ═══════════════════════════════════════════════════════════════════════════ */
+@media (orientation: landscape) and (max-height: 560px) {
+  /* 「← 回去」从文档流里出来，变成左上角一颗**圆钮**。
+     ★ 为什么不做成一条带字的药丸：横屏时书占掉 84% 的高、两侧只剩约 90–175px 的
+       空（`568×320` 那档只有 89px），而「← 回灵感书单」那颗药丸量出来 104px ——
+       它会压到书面上。圆钮是 44px，每一档都落在空里。
+     ★ 仍然 `position: fixed` 而不是 absolute：页面在横屏下不滚，
+       两者视觉上一样，但 fixed 不受 `.reader-page` 的 `overflow: hidden` 影响
+       （那个属性切得到 absolute 的祖先盒子，切不到视口定位的东西）。
+     ★ `z-index: 2`：底图那一层（`.reader__desk` / `.blr__desk`）是 `fixed` 的
+       定位元素、按树序画在静态内容之上，而这颗钮比它们更靠前 —— 这一条当年漏过
+       一次（那行字整个被图盖住，量法与补法记在 `.reader-page__back` 上面的注释里）。 */
+  .reader-page__back {
+    position: fixed;
+    top: calc(6px + var(--safe-t));
+    left: calc(8px + var(--safe-l));
+    z-index: 2;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .reader-page__back a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--ink-soft);
+    font-size: 17px;
+    line-height: 1;
+    box-shadow: var(--sheet-shadow);
+  }
+
+  /* 名字收进 `sr-only`（**不是** `display: none`）：钮上只剩箭头，而这条链接
+     在辅助技术里仍然叫「回灵感书单」。用 `display: none` 的话它会变成一个
+     没有名字的链接 —— 那比看得见的信息少一档更糟。 */
+  .reader-page__back-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  /* 箭头那一份右边距在圆钮里是多余的（它本来替的是"← 回…"之间那个空格） */
+  .reader-page__back-arrow {
+    margin-right: 0;
+  }
 }
 
 .reader-page__actions a {

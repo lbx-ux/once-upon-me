@@ -48,7 +48,7 @@ export type Capability = 'text' | 'image' | 'vision' | 'speech'
  * 四项能力。★ 它现在**只有一个读者**：`configured`（站里配没配那一项密钥）。
  *
  * ★ 2026-10-18：它原来还表示"站长给了这个人哪几项"，而那一半收成了一位
- * （{@code AuthUser.allowed}）——见 README §五与 ADR-0010。所以这个类型**不是**在说
+ * （{@code AuthUser.allowed}）——见 docs/known-tradeoffs.md与 ADR-0010。所以这个类型**不是**在说
  * "这个人有什么"，别再拿它装人。
  */
 export type Permissions = Record<Capability, boolean>
@@ -333,7 +333,7 @@ function failureJson(status: number, code: string, message: string): NextRespons
  * 而 `lax` 仍然允许从外站"点进来"那种导航（登录完跳回来那一步要靠它）。
  * ★ `secure` 现在**不能开**：这一轮是 `http://` 的 IP 访问（用户选的），
  * 加了它就等于"登录成功但 cookie 存不下来"。等有了域名与 HTTPS 再打开——
- * 这一条写在 README §五 的取舍里，标记了一个明确的"以后要改这里"。
+ * 这一条写在 docs/known-tradeoffs.md 的取舍里，标记了一个明确的"以后要改这里"。
  */
 export function sessionCookie(token: string): {
   name: string

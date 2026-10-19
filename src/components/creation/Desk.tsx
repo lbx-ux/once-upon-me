@@ -46,9 +46,9 @@
  *    这一段是**整条流水线上最长的一段没有任何产出的时间**（`plan-ready` 之前
  *    屏幕上一条事件都没有，连一个空画框都摆不出来），而它原来只是一行灰字。
  *    现在它有三样东西：一句话在**轮着换**（`plan-lines.ts`，说的是这件活在做什么）、
- *    一个**橙色的**标题（这一屏上"正在忙"的那一支色）、以及**真的失败过一次时**
- *    那句原话（`desk.planning` ——"第 2 次重写：故事结构不对"）。
- *    ★ 三样都是真的：轮播那几句不承诺时刻（有测试），重写那句来自事件。
+ *    一个**橙色的**标题（这一屏上"正在忙"的那一支色）、以及**这一段里最近那句实话**
+ *    （`desk.planning` ——"第 2 次重写：故事结构不对"、或"翻到了 2 段可以照着写的"）。
+ *    ★ 三样都是真的：轮播那几句不承诺时刻（有测试），那一句来自事件。
  *      这一屏**仍然没有**百分比、秒数、"还剩多久"（第 1 条的末尾那句一个字没改）。
  */
 
@@ -86,7 +86,7 @@ function Figure({ frame }: { frame: Frame }) {
           而单看一格只是一个记号 */}
       {frame.via && <span className="dk__band" aria-hidden="true" />}
       {url && !broken ? (
-        // 原生 <img>：图经 /api/assets 出来，next/image 要另配 loader（README §五）
+        // 原生 <img>：图经 /api/assets 出来，next/image 要另配 loader（docs/known-tradeoffs.md）
         // eslint-disable-next-line @next/next/no-img-element
         <img
           className="dk__art"
@@ -264,13 +264,14 @@ export default function Desk({ desk, actions, published = false, live = false }:
               {desk.stageLine}
             </p>
           )}
-          {/* ★ 编故事那一段**真的失败过一次**时说的那句原话（`desk.planning`）。
-              它只说"正在重写"以及**为什么**——第几次、什么事——不留历史，
-              下一版写成了它就消失（`plan-ready` 那一处清）。
+          {/* ★「编故事」那一段里最近的一句实话（`desk.planning`）。
+              两个来源：真的重写过（"第 2 次重写：故事结构不对"）、
+              或者检索完了（"翻到了 2 段可以照着写的"）。**它不留历史**，
+              这一版写成了它就消失（`plan-ready` 那一处清）。
               ★ 用 `role="status"`：它是一条会自己出现的进展，不是一处错误，
                 也不该抢读屏的焦点（真正的硬失败仍然走上面那个 `role="alert"`）。 */}
           {planning && desk.planning && (
-            <p className="dk__plan-retry" role="status">
+            <p className="dk__plan-note" role="status">
               {desk.planning}
             </p>
           )}

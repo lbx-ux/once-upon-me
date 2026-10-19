@@ -3,6 +3,11 @@
   "compilerOptions": {
     "noUncheckedIndexedAccess": true
   },
-  "include": ["src/lib/engine/**/*.ts", "src/lib/schemas/**/*.ts", "src/lib/prompts/**/*.ts"],
+  "include": [
+    "src/lib/engine/**/*.ts",
+    "src/lib/schemas/**/*.ts",
+    "src/lib/prompts/**/*.ts",
+    "src/lib/rag/**/*.ts"
+  ],
   "exclude": []
 }

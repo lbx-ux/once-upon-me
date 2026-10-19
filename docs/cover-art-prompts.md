@@ -274,7 +274,7 @@ python -I scripts/make-webp.py public/art public/art-cards --preset theme-card
 
 取路径走 `src/lib/themes.ts` 的 `themeCardPath(key)`。
 **不走 `/api/assets?w=`**：静态 `public/` 走不到那条通路（Next 直接发盘上的字节，
-查询串它看不懂，挂 `?w=` 会静悄悄回原图，见 README §五「缩略档」那条）。所以预生成。
+查询串它看不懂，挂 `?w=` 会静悄悄回原图，见 docs/known-tradeoffs.md「缩略档」那条）。所以预生成。
 
 ★ 图上墙时**不加 `loading="lazy"`**：墙的第一行在 900px 高的窗口里就落在首屏，
 对首屏内的图用 lazy 实测会让 12 张里 11 张不加载（工单 03 的 Comments）。

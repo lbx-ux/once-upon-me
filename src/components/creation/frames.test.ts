@@ -279,6 +279,108 @@ describe('编故事那一段失败过一次', () => {
   })
 })
 
+/**
+ * ★ 2026-10-19（`.scratch/rag` 工单 04）：检索那两条事件在画桌上落在哪儿。
+ *
+ * 判据只有一条：**它们不占格子**。阶段轨那 4 格说的是"这本书做到哪一步了"，
+ * 而检索是"编故事"内部的一步（只发生一次）——所以它进 `desk.planning`，
+ * 与规划期的 `retry` 同一个位置（那一处的注释写了这条判断的来龙去脉）。
+ */
+describe('检索那一步：不占格子，说的是人话', () => {
+  it('`stage: retrieving` 更新顶上那一行，不碰任何一格', () => {
+    const desk = deskOf(stream([{ kind: 'stage', stage: 'retrieving', phase: 'begin' }]))
+    expect(desk.stageLine).toBe('正在翻以前写过的故事…')
+    expect(desk.frames).toEqual([])
+    expect(desk.notes).toEqual([])
+  })
+
+  it('★ 取到了：进 `desk.planning`（"正在编故事"那一行底下），不进 notes', () => {
+    const desk = deskOf(
+      stream([
+        { kind: 'stage', stage: 'retrieving', phase: 'begin' },
+        {
+          kind: 'retrieved',
+          stage: 'retrieving',
+          corpusVersion: 'adfab4685031',
+          examples: 2,
+          avoids: 1,
+          topScore: 9.52,
+        },
+      ]),
+    )
+    expect(desk.planning).toBe('翻到了 2 段可以照着写的、1 段他读过的（这本避开）')
+    expect(desk.notes).toEqual([])
+  })
+
+  it('★ 空结果是合法结果，屏幕上也要这么说（不是"检索失败"）', () => {
+    const empty = deskOf(
+      stream([
+        {
+          kind: 'retrieved',
+          stage: 'retrieving',
+          corpusVersion: 'adfab4685031',
+          examples: 0,
+          avoids: 0,
+          topScore: null,
+        },
+      ]),
+    )
+    expect(empty.planning).toBe('以前的故事里没有相近的（这次没有可参考的）')
+  })
+
+  it('★ 没检索成（`corpusVersion: null`）说的是另一句话——两件事不许混', () => {
+    const failed = deskOf(
+      stream([
+        {
+          kind: 'retrieved',
+          stage: 'retrieving',
+          corpusVersion: null,
+          examples: 0,
+          avoids: 0,
+          topScore: null,
+        },
+      ]),
+    )
+    expect(failed.planning).toBe('这次没翻成以前的故事（照常往下编）')
+  })
+})
+
+/**
+ * ★ 2026-10-19（`.scratch/rag` 工单 05）：**编故事那一段的内容审核**。
+ *
+ * 位置与规划期的 `retry` 是同一个（都是"编故事那一格里的一件事"），
+ * 但它说的是**另一种失败**：不是格式不对，是"这一版不能给孩子看"。
+ * 分开的理由写在 `errors.ts` 的 `review-blocked` 那条：
+ * 前者"再点一次"，后者"换一个说法"——合成一句，家长会一直点重试。
+ */
+describe('审核没过：编故事那一段的事，不占格子', () => {
+  it('`stage: planning` 的 review 进 `desk.planning`，并且带着条款与命中的词', () => {
+    const desk = deskOf(
+      stream([
+        {
+          kind: 'review',
+          stage: 'planning',
+          check: 'safety',
+          verdict: 'flag',
+          reason: '第 1 页：恐怖（R-01）——出现了「血」',
+        },
+      ]),
+    )
+    expect(desk.planning).toBe('第 1 页：恐怖（R-01）——出现了「血」')
+    expect(desk.notes).toEqual([])
+    expect(desk.frames).toEqual([])
+  })
+
+  it('通过的审核一个字都不说（`isDisplayable` 已经这么定了，这里不再判一遍）', () => {
+    const desk = deskOf(
+      stream([{ kind: 'review', stage: 'auditing', check: 'safety', verdict: 'pass' }]),
+    )
+    expect(desk.planning).toBeNull()
+    expect(desk.notes).toEqual([])
+    expect(desk.frames).toEqual([])
+  })
+})
+
 describe('页码来得不如预期时：不丢、不乱序、不凭空造', () => {
   it('★ illustration 早于 plan-ready：那张图不丢，格子仍按页码排', () => {
     // 现实中不会这么发。但"顺序不如预期"时**丢数据**比"多一格"坏得多：

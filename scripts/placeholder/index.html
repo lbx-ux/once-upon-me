@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>小主角 · 服务器连通性测试</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100dvh;
+        display: grid;
+        place-items: center;
+        padding: 1.5rem;
+        font:
+          16px/1.7 system-ui,
+          -apple-system,
+          'Noto Sans SC',
+          'Microsoft YaHei',
+          sans-serif;
+        color: #1b2430;
+        background: radial-gradient(120% 120% at 50% 0%, #dfeaff 0%, #f6f9ff 55%, #fdf7ef 100%);
+      }
+      main {
+        width: min(92vw, 34rem);
+        padding: 2rem 1.75rem;
+        background: #fff;
+        border: 1px solid #e6ecf7;
+        border-radius: 1.25rem;
+        box-shadow: 0 20px 60px -30px rgb(20 40 80 / 45%);
+      }
+      .ok {
+        display: inline-flex;
+        gap: 0.5rem;
+        align-items: center;
+        padding: 0.35rem 0.7rem;
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #0b6b3a;
+        background: #e7f7ee;
+        border: 1px solid #bfe8d1;
+        border-radius: 999px;
+      }
+      h1 {
+        margin: 0.9rem 0 0.25rem;
+        font-size: 1.35rem;
+      }
+      .sub {
+        margin: 0 0 1.25rem;
+        font-size: 0.9rem;
+        color: #5b6b80;
+      }
+      dl {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 0.35rem 1rem;
+        margin: 1.25rem 0 0;
+        font-size: 0.9rem;
+      }
+      dt {
+        color: #5b6b80;
+        white-space: nowrap;
+      }
+      dd {
+        margin: 0;
+        font-variant-numeric: tabular-nums;
+        word-break: break-all;
+      }
+      footer {
+        margin-top: 1.5rem;
+        padding-top: 1rem;
+        font-size: 0.8rem;
+        line-height: 1.7;
+        color: #7a8798;
+        border-top: 1px solid #eef2f9;
+      }
+      @media (prefers-color-scheme: dark) {
+        body {
+          color: #e8eef7;
+          background: radial-gradient(120% 120% at 50% 0%, #1a2740 0%, #131a26 60%, #1d1a16 100%);
+        }
+        main {
+          background: #1c2433;
+          border-color: #2b3648;
+          box-shadow: 0 20px 60px -30px rgb(0 0 0 / 70%);
+        }
+        .sub,
+        dt,
+        footer {
+          color: #9fb0c6;
+        }
+        .ok {
+          color: #8ee0b0;
+          background: #143020;
+          border-color: #245c3c;
+        }
+        footer {
+          border-top-color: #2b3648;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <span class="ok">● 已经连上这台服务器</span>
+      <h1>小主角 · 占位页</h1>
+      <p class="sub">
+        这一页是 <strong>Nginx 直接发的静态文件</strong>：看到它就说明「公网 → 80 端口 →
+        这台机器」这条路是通的。它与前端（Next）毫无关系 —— 那一半还没上线。
+      </p>
+      <dl>
+        <dt>你这边的 IP</dt>
+        <dd id="ip">查询中…</dd>
+        <dt>服务器时间</dt>
+        <dd id="now">—</dd>
+        <dt>浏览器</dt>
+        <dd id="ua">—</dd>
+      </dl>
+      <footer>
+        看到这一页 = 云安全组放行了 80、Nginx 活着。<br />
+        看不到 = 先看阿里云安全组的<strong>入方向</strong>规则里有没有 80。<br />
+        <span id="hint"></span>
+      </footer>
+    </main>
+    <script>
+      const show = (id, text) => {
+        document.getElementById(id).textContent = text
+      }
+      show('now', new Date().toLocaleString('zh-CN'))
+      show('ua', navigator.userAgent)
+      fetch('/whoami', { cache: 'no-store' })
+        .then((r) => r.text())
+        .then((t) => show('ip', t.trim()))
+        .catch(() => show('ip', '（/whoami 没答上来，Nginx 那条 location 有问题）'))
+    </script>
+  </body>
+</html>

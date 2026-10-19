@@ -64,6 +64,7 @@ import { coverUrlOf as coverUrlIn, runtimeAssetUrl } from '@/lib/book-source.ts'
 import { listBooks, noCovers, SHELF_COVER_WIDTH } from '@/lib/library.ts'
 import { applyOrder, loadOrder, pruneOrder, saveOrder } from '@/lib/shelf-order.ts'
 import { createUserStore, userSliceRoot } from '@/lib/asset-scope.ts'
+import { createPlanRetriever, ownerOf } from '@/lib/rag/load.ts'
 import { requireCapability } from '@/lib/auth/session.ts'
 import { serverEnv } from '@/lib/settings/server-env.ts'
 
@@ -306,7 +307,12 @@ export async function POST(req: NextRequest): Promise<Response> {
       }
 
       try {
-        const plan = await planBook(request, { providers, onEvent })
+        // ★ 检索（2026-10-19，`.scratch/rag`）。建这个函数**不读盘**——语料是惰性的，
+        //   读不到会抛在 `plan.ts` 的 `retrieveOnce` 里，由它发事件（那里有事件工厂）。
+        //   所以这一行不需要 try/catch：它挡不住任何东西，只会把失败变成静默。
+        const retriever = createPlanRetriever({ store, owner: ownerOf(guard.session.userId) })
+
+        const plan = await planBook(request, { providers, onEvent, retriever })
         await chain
         // ★ 先写盘、再发收尾帧（文件头最后那一段）
         await writeStory(store, {
@@ -317,6 +323,9 @@ export async function POST(req: NextRequest): Promise<Response> {
             modelId: plan.modelId,
             promptVersion: plan.promptVersion,
             attempts: plan.attempts,
+            // ★ 检索的出处（2026-10-19）：家长问"这本书为什么像书单里那本"时，
+            //   答案在这里。没开检索的那一轮**没有这个字段**（不是给个空的）
+            ...(plan.retrieval ? { retrieval: plan.retrieval } : {}),
           },
           planMs: plan.elapsedMs,
           createdAt: startedAt,

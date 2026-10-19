@@ -259,6 +259,13 @@ export default function AdminScreen({
         </p>
       ) : null}
 
+      {/* ★ 2026-10-19：这里原来有一行手机专用的提示（「← 左右滑动看全表 →」）。
+          用户要求删掉，**web 与移动端都不写**。删的理由比"用户不想要"更硬：
+          它是一句**替表格解释自己**的话 —— 表格右边缘切在屏幕边上、还能横着滚，
+          本来就该由表格自己读出来（真滑一下就有回弹与滚动条），
+          而不是在它上面再压一行小字。`admin.css` 里那两条 `.adm__scrollhint`
+          一并删了，别留一段没人用的样式（理由同 `.pf__section` 那条）。 */}
+
       <div className="adm__tablewrap">
         <table className="adm__table">
           <thead>

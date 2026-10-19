@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 
 import BooklistReader from '@/components/booklist/BooklistReader.tsx'
+import RotateHint from '@/components/reader/RotateHint.tsx'
 import { bookOf } from '@/components/booklist/booklist.ts'
 import { readBooklistAssets } from '@/lib/booklist-assets.ts'
 
@@ -58,8 +59,18 @@ export default async function BooklistBookPage({ params }: { params: Promise<{ k
   return (
     <main className="reader-page">
       <nav className="reader-page__back">
-        <Link href="/booklist">← 回灵感书单</Link>
+        {/* 拆成箭头 + 名字两段，理由与 `/reader/[bookId]` 那一处逐字相同
+            （手机横屏只留箭头，见 `globals.css` 的 §手机横屏） */}
+        <Link href="/booklist">
+          <span className="reader-page__back-arrow" aria-hidden="true">
+            ←
+          </span>
+          <span className="reader-page__back-text">回灵感书单</span>
+        </Link>
       </nav>
+      {/* 竖屏手机那层「把手机横过来」。与 `/reader/[bookId]` 挂在**同一层**（页面），
+          理由写在那边的注释里：两台阅读器共用同一层提示。 */}
+      <RotateHint />
       <BooklistReader book={book} coverUrl={assets.cover} art={assets.art} audio={assets.audio} />
     </main>
   )

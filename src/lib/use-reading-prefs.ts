@@ -32,6 +32,12 @@ import {
   type ReaderPaperOption,
 } from './reader-paper.ts'
 import { DEFAULT_TURN_MODE, loadTurnMode, saveTurnMode, type TurnMode } from './reading-prefs.ts'
+import {
+  DEFAULT_ROTATE_HINT,
+  loadRotateHint,
+  saveRotateHint,
+  type RotateHintMode,
+} from './rotate-hint.ts'
 
 export function useTurnMode(): {
   turnMode: TurnMode
@@ -75,4 +81,36 @@ export function useReaderPaper(): {
   }, [])
 
   return { paper, setPaper }
+}
+
+/**
+ * 竖屏进阅读器时那层「把手机横过来」还问不问（2026-10-19）。
+ *
+ * ★ 与上面那两个同一个分法（初值默认、挂载后读一次、选一下写一次）。这里的代价
+ *   比底图那一档还小：读盘那一瞬的差别是"提示在不在"，而它在竖屏下是**一层压着
+ *   大量内容的遮罩** —— 早一帧出现反而更像这一屏本来就有它，所以照旧这么办，
+ *   不为它破例去读 cookie。
+ *
+ * ★ 与另外两份**不同**的是：这一份的 `setter` 有两个调用方，而且方向不同 ——
+ *   阅读器里那颗「仍然竖着看」只写 `off`，设置里那两颗两个方向都能写。
+ *   所以这里给的是**通用的 `setRotateHint(mode)`**，不是 `dismissRotateHint()`：
+ *   一个只能关不能开的开关是陷阱，而那个"开"的入口必须真的存在
+ *   （`SettingsDialog` 那一节就是它）。
+ */
+export function useRotateHint(): {
+  rotateHint: RotateHintMode
+  setRotateHint: (mode: RotateHintMode) => void
+} {
+  const [rotateHint, apply] = useState<RotateHintMode>(DEFAULT_ROTATE_HINT)
+
+  useEffect(() => {
+    apply(loadRotateHint())
+  }, [])
+
+  const setRotateHint = useCallback((mode: RotateHintMode): void => {
+    apply(mode)
+    saveRotateHint(mode)
+  }, [])
+
+  return { rotateHint, setRotateHint }
 }

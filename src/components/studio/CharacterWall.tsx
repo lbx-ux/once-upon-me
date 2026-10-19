@@ -162,7 +162,7 @@ export default function CharacterWall({ items }: CharacterWallProps) {
                   <div className="cw__show">
                     {/* 相纸那一层：白边 + 虚线内框，图压在框里。
                         ★ 走原生 <img>：图在资产根里、经 /api/assets 出来，
-                        next/image 要另配 loader，而它是 README §五「刻意未做」那一条。
+                        next/image 要另配 loader，而它是 docs/known-tradeoffs.md「刻意未做」那一条。
                         ★ 地址取 `card.faceUrl`（768 档那一张）：**这个数由取数层决定，不在这一屏拼**
                           ——运行期的卡走 `/api/assets`，而示例卡走 `public/demo/cards/…` 的
                           静态地址（未登录的访客也拿得到，见 `lib/cards-list.ts` 的 `faceUrl`）。

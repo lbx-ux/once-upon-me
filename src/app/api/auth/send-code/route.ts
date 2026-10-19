@@ -15,7 +15,7 @@
 
 import { NextResponse } from 'next/server'
 
-import { backendFetch } from '@/lib/auth/backend.ts'
+import { backendFetch, clientIpFrom } from '@/lib/auth/backend.ts'
 import { badJson, failureResponse, jsonBody } from '@/lib/auth/bff.ts'
 
 // ★ 段配置必须是**字面量**：成员表达式 Next 读不了，而它只在 `pnpm build` 那一刻才报（判据见 lib/route-config.test.ts）
@@ -28,7 +28,14 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   const result = await backendFetch<{ ok: boolean; devMode: boolean; hint: string | null }>(
     '/api/auth/sms/send',
-    { method: 'POST', body: { account: body.account } },
+    {
+      method: 'POST',
+      body: { account: body.account },
+      // ★ 客户端 IP 必须跟着走：Java 那边的频控有一层是"按 IP"，而它只能从
+      //   这个头里知道 IP 是谁（回环那一跳上 getRemoteAddr 永远是 127.0.0.1）。
+      //   不带它的后果是**全站共用一格**：第 6 个人就发不出验证码。
+      clientIp: clientIpFrom(request),
+    },
   )
   if (!result.ok) return failureResponse(result)
 

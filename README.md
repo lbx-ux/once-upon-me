@@ -4,6 +4,12 @@
 
 参赛作品：**2026 第九届传智杯 · AI WEB 网页开发挑战赛** | 赛道主题「智启未来：AI 驱动的 Web 应用创新挑战」｜选题方向：**多模态 AI 创意平台**
 
+**在线演示**：[http://123.56.148.105](http://123.56.148.105) ｜ 演示账号 **`123456`** / 口令 **`123456`**（6 位短账号，在登录页切到「密码登录」那一档再填）
+
+> 演示站跑在 **IP + HTTP** 上（域名备案要 1–3 周，赶不上提交），所以**口令在公网是明文传输的**。
+> 请只当演示环境用，不要在上面填任何真实手机号或密码；库里的内容是演示数据，随时可能被清空重建。
+> 想在自己机器上跑，见 [§三 安装运行指南](#三安装运行指南)。
+
 ---
 
 ## 一、项目介绍
@@ -11,6 +17,29 @@
 ### 一句话定义
 
 以自己孩子为主角、用父母的声音朗读、可以反复探索的定制绘本。
+
+### 项目截图
+
+四张按**用户真走一遍的顺序**排：先在首页认识它，然后在工作台说一句话，最后看它长出来的那两本书。
+
+**① 首页首屏** —— 12 张绘本封面绕成一个 3D 环，正中是那一句「开始创作」，底下一句「看一本成品」通向灵感书单。
+首页三节：这一屏 + 第二屏那本一页页翻开的《小宇的云》+ 五条项目亮点。
+（★ **手机上是两节**：首屏只剩正中那一摞文案，第二屏不出现 —— 用户 2026-10-19 的口径「只删移动那一档，
+web 端首页和以前一样」，见 `.scratch/home-revision/issues/08`。）
+
+![首页首屏：一屏正中那句「开始创作」](docs/screenshots/01-home-hero.png)
+
+**② 工作台 · 创作输入** —— 一本书的全部输入就是这三样：一句话、一张角色卡、一档声音。「今天想讲一个什么样的故事？」
+
+![工作台：一句话 + 角色卡 + 声音，就是这本书的全部输入](docs/screenshots/02-studio-create.png)
+
+**③ 独读版阅读器**（睡前那一档）—— 一屏一图一句，翻页即读。**刻意不给孩子做选择的机会**：越选越兴奋，睡不着。
+
+![独读版阅读器：一屏一图一句](docs/screenshots/03-reader-solo.png)
+
+**④ 共读版 · 选择点**（白天陪玩那一档）—— 故事在岔口停下、画面留在大图上，两个大按钮各带**图标 + 朗读**双通道（孩子不识字）；选完接着走，两条支各自收尾。这一屏之后**一次生成都不发生**——书是预生成的，阅读顺序就是你选的那条路。
+
+![共读版：恰好一个选择点，两个大按钮，图标 + 朗读](docs/screenshots/04-reader-shared-choice.png)
 
 ### 解决什么问题
 
@@ -29,7 +58,7 @@
 
 ★ 共读版的形状是**恰好一个选择点**（不是产品定义那一版设想的"多几层分支"——
 落地时收窄成一档，理由是钱：两条支不能汇合，每加一层要多付一整条尾巴，
-那笔账在 §五「共读版：一棵树、恰好一个选择点」与 [GLOSSARY](GLOSSARY.md) 的「共读版」条里）。
+那笔账在 [GLOSSARY](GLOSSARY.md) 的「共读版」条里，完整推导见 [docs/known-tradeoffs.md](docs/known-tradeoffs.md) 的「共读版：一棵树、恰好一个选择点」一节）。
 形态由**引擎的一个入参**决定（`form`），不是两套结构、也不是两个入口函数。
 
 ### 社会价值
@@ -38,31 +67,49 @@
 
 ### 当前进度
 
-| 阶段                              | 日期        | 状态                                                                      |
-| --------------------------------- | ----------- | ------------------------------------------------------------------------- |
-| 启动 · 选型与定义                 | 10/11–10/13 | 已完成                                                                    |
-| **W1 · 角色一致性验证（生死线）** | 10/14–10/20 | **图像判据 1 已 go**（10/13，≥3 人盲读）；文本判据 1 出结论；**TTS 未动** |
-| W2 · 独读版全链路                 | 10/21–10/27 | **已完成**（一句话 → 闸门改故事 → 出图配音 → 书架 → 阅读器，一条路走通）  |
-| W3 · 共读版                       | 10/28–11/03 | **已完成**（一棵树、恰好一个选择点、两支各自收尾；阅读顺序 = 那条路）     |
-| W4 · 声音克隆 + 三个校验 Agent    | 11/04–11/10 | 未开始                                                                    |
-| W5 · 打磨与材料                   | 11/11–11/17 | 未开始                                                                    |
-| **省赛作品提交截止**              | **11/18**   | —                                                                         |
+| 阶段                              | 日期        | 状态                                                                                                                                                                                                                                                           |
+| --------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 启动 · 选型与定义                 | 10/11–10/13 | 已完成（组队 / 报名 / 缴费见 [`docs/launch-checklist.md`](docs/launch-checklist.md)，技术选型见 [`docs/tech-selection.md`](docs/tech-selection.md)）                                                                                                           |
+| **W1 · 角色一致性验证（生死线）** | 10/14–10/20 | **已完成**——图像判据 1 已 go（10/13，≥3 人盲读）；文本判据出结论；语音横评也已补做                                                                                                                                                                             |
+| W2 · 独读版全链路                 | 10/21–10/27 | **已完成**：一句话 → 故事闸门 → 出图配音 → 书架 → 阅读器，一条路走通                                                                                                                                                                                           |
+| W3 · 共读版                       | 10/28–11/03 | **已完成**：一棵树、恰好一个选择点、两支各自收尾；阅读顺序 = 那条路                                                                                                                                                                                            |
+| W4 · 声音克隆 + 三个校验 Agent    | 11/04–11/10 | 声音克隆**已完成**（两个默认音色 + 上传父母声音，见 [`src/app/api/voice/clone`](src/app/api/voice/clone/route.ts)）；**一致性已落地**（`illustrate.ts` 逐页比对 + 重画闭环）、**内容审核已落地**（2026-10-19，`engine/review.ts`，两道闸）、**连贯那一个未做** |
+| W5 · 打磨与材料                   | 11/11–11/17 | 进行中——本文件与下面那四张截图就属于这一档                                                                                                                                                                                                                     |
+| **省赛作品提交截止**              | **11/18**   | —                                                                                                                                                                                                                                                              |
 
-启动阶段的四件事都已落地：组队 / 报名 / 缴费（见 [`docs/launch-checklist.md`](docs/launch-checklist.md)）、
-一句话选题定义、技术选型定稿（见 [`docs/tech-selection.md`](docs/tech-selection.md)——
-框架与工程链已拍板；图像与文本有了**默认推荐值**（`qwen-image-2.0` / `qwen3.8-flash`），
-语音**尚未开测**。★ "定稿"这个词已经改口径：**模型与密钥由用户自带**
+**已经能用的**：首页三节（12 张封面的环形轨道 / 一页页翻开的示例绘本 / 五条项目亮点；手机上两节）、**灵感书单那 12 本样书**、
+工作台（主题墙 / 角色卡 / 一句话创作 / 生成过程 / 故事闸门）、**独读版与共读版两台阅读器**、
+**配音（TTS）与声音克隆**、书架与作品归属、管理页（站长换模型 / 接口地址 / api-key，**改完不重启**）；
+**内容审核与检索（RAG）**（2026-10-19）：故事先过一道内容红线（词表档，命中即拦、
+原因具体到条款 id），再在**动笔之前**取几段以前写过的文本进提示词——两段都落在
+`src/lib/` 的纯函数里（`engine/review.ts`、`rag/`），量具是 `scripts/review-cases.mts` 与
+`scripts/rag-bakeoff.mts`；
+以及 `src/lib/engine/` 这一层——引擎、供应商适配层、自写 Schema 校验、带版本号的分阶段提示词。
+它的验收方式是 `node scripts/engine-run.mts --mode=stub`：**不启动浏览器、不联网、不花钱跑完一本书**。
+
+**手机那一档（2026-10-19）**：十三条路由 × 五个手机视口都不横向溢出；
+**看绘本时竖屏弹一层"把手机横过来"（可关掉）**，横过来书按屏幕高铺开
+（844×390 下 507×338，占视口高 **86.7%**，竖屏同一判据只有 29%），**手指跟手翻页**；
+工作台侧栏在窄屏收成底部标签栏；书架那一屏原先挤成一团（书名条被切掉、角标竖成三行），
+现在书大一号、角标整枚换行。**首页在手机上是两节**（不是把桌面那三节缩进去）：
+首屏只剩正中那一摞文案（环整块不演、也不白下那 12 张 2.8 MB 的封面），第二屏那本书整节不出现，
+亮点那五条换成竖排五张全宽卡；主张句折行不再被切。
+**桌面那一版一个像素没动**（1440×900 上 `.hero-experience` 1512 / 书 810×540 /
+`.book__text` 300×182 / `.hl__card` 518×571 / `.hl__viewport` 1425×643，逐项与第二轮记下的基线相等）。
+量法是 `node scripts/chk-mobile.mjs URL`（66 条：手机上还量"那 12 张封面一张都没取"，
+桌面上反向量"三节都在、12 张照常取全"）。
+★ 平台约束：iOS 既不支持 `screen.orientation.lock()`、`requestFullscreen()` 也只对 `<video>` 生效，
+所以**做不成"锁死横屏"**，能做的就是上面那三件——细节与实际读数在
+[`docs/known-tradeoffs.md`](docs/known-tradeoffs.md) 的「手机横屏阅读」那一节。
+
+**还没有的**：**连贯校验**（原「三个校验 Agent」里剩下的那一个——一致性与内容审核都已落地，
+见上面）；域名与 HTTPS（现在只有 IP + HTTP，见开头「在线演示」那条）；
+深色模式（只做了浅色一档；`prefers-reduced-motion` 下的**静止终态**是每一处都有的）。
+
+关于技术选型的口径：框架与工程链已拍板（[`docs/tech-selection.md`](docs/tech-selection.md) §2–§6），
+而图像 / 语音 / 大模型三家**不由我们替用户选死**——产品形态是**用户自己输入模型 + 自己提供 API key**
 （[ADR-0008](docs/adr/0008-model-and-key-provided-by-user.md)），
-我们给的是默认值，不是产品边界——理由与实测论据见该 ADR）。
-
-**本仓库目前有的**：首页三屏（首屏环形轨道 + 第二屏滚动翻页绘本 + 第三屏项目亮点），
-美术素材全部落盘（封面 12 张 1.16 MB / 绘本 8 张 0.46 MB / 第三屏插画 5 张 0.51 MB）；**以及 W1 的引擎层**——`src/lib/engine/` 目录定稿、
-角色卡资产化、供应商适配层、自写 Schema 校验、三条闸门的机械执法，
-验收方式是 `node scripts/engine-run.mts --mode=stub` 不启动浏览器跑完一本书。
-
-**还没有的**：**TTS 一次都没跑**（§8 整节仍是候选名单，按用户口径推迟到需要时），
-所以 §10 的每本总成本算不出分母；创作流的界面（W2）；配音（W4）。
-详见文末「已知取舍」。
+W1 横评交出的是**默认推荐值与兼容性证据**（哪些模型验过、各自会怎么坏），不是产品边界。
 
 > 数字都带出处：图像与文本的实测结论在 [`docs/tech-selection.md`](docs/tech-selection.md) §7 / §9，
 > 每条都写明是用哪个脚本、哪次运行量出来的。
@@ -73,15 +120,15 @@
 
 ### 技术选型
 
-| 层     | 选型                                                           | 理由                                                                                                                                                                                                                                             |
-| ------ | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 框架   | **Next.js 15** + React 19                                      | App Router + Server Components + 流式渲染，能用全栈能力简化后端逻辑，不必另起一个 Node 服务                                                                                                                                                      |
-| 语言   | **TypeScript**（`strict: true`）                               | strict 模式。引擎层要能在 node 里不启动浏览器就跑通整本生成，没类型就没法验证                                                                                                                                                                    |
-| 样式   | **Tailwind CSS v4**                                            | v4 的 `@theme` 让设计令牌同时是 CSS 变量和工具类，一处定义两处可用                                                                                                                                                                               |
-| 包管理 | **pnpm**                                                       | 安装脚本白名单能精确到单个依赖，本地与 CI 行为一致                                                                                                                                                                                               |
-| 规范   | ESLint（`next/core-web-vitals` + `next/typescript`）+ Prettier | 三条闸门（format:check / lint / typecheck）进提交前必过，见 docs/commit-convention.md                                                                                                                                                            |
-| 动效   | **GSAP 3.15**（第三屏 + 工作台的进场）                         | 第三屏那张"被一角托起的纸"要每帧跟随指针，`quickTo` 的补间与自定义属性写入比自己写 rAF 稳。工作台只用来跑**挂载时那两条**进场时间线（`lib/useEnterTimeline.ts` 与 `AppShell` 里侧栏那一条，**只 `from()`，终态归 CSS**）。前两屏**不迁**，见 §五 |
-| 测试   | **Vitest**（`environment: 'node'`）                            | 只测纯函数（轮播索引、指针→倾斜映射、共用数学）。不引 jsdom / Playwright——GSAP 是否真写了 transform 是浏览器事实，用 preview 实测，不用 jsdom 测库的内部行为                                                                                     |
+| 层     | 选型                                                           | 理由                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ------ | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 框架   | **Next.js 15** + React 19                                      | App Router + Server Components + 流式渲染，能用全栈能力简化后端逻辑，不必另起一个 Node 服务                                                                                                                                                                                                                                                                                                                               |
+| 语言   | **TypeScript**（`strict: true`）                               | strict 模式。引擎层要能在 node 里不启动浏览器就跑通整本生成，没类型就没法验证                                                                                                                                                                                                                                                                                                                                             |
+| 样式   | **Tailwind CSS v4**                                            | v4 的 `@theme` 让设计令牌同时是 CSS 变量和工具类，一处定义两处可用                                                                                                                                                                                                                                                                                                                                                        |
+| 包管理 | **pnpm**                                                       | 安装脚本白名单能精确到单个依赖，本地与 CI 行为一致                                                                                                                                                                                                                                                                                                                                                                        |
+| 规范   | ESLint（`next/core-web-vitals` + `next/typescript`）+ Prettier | 三条闸门（format:check / lint / typecheck）进提交前必过，见 docs/commit-convention.md                                                                                                                                                                                                                                                                                                                                     |
+| 动效   | **GSAP 3.15**（亮点那一屏 + 工作台的进场）                     | 亮点那张"被一角托起的纸"要每帧跟随指针，`quickTo` 的补间与自定义属性写入比自己写 rAF 稳。工作台只用来跑**挂载时那两条**进场时间线（`lib/useEnterTimeline.ts` 与 `AppShell` 里侧栏那一条，**只 `from()`，终态归 CSS**）。前两节（环与那本书）的滚动驱动是 `useScrollDriver`，第三屏那 5 张卡片的指针跟随用 GSAP，`SceneBackdrop` 换幕用 `useScrollTick`（边界与理由见 [docs/known-tradeoffs.md](docs/known-tradeoffs.md)） |
+| 测试   | **Vitest**（`environment: 'node'`）                            | 只测纯函数（轮播索引、指针→倾斜映射、共用数学）。不引 jsdom / Playwright——GSAP 是否真写了 transform 是浏览器事实，用 preview 实测，不用 jsdom 测库的内部行为                                                                                                                                                                                                                                                              |
 
 > **技术选型的定稿在 [`docs/tech-selection.md`](docs/tech-selection.md)**，本表是它的摘要。
 > 框架与工程链已拍板（§2–§6）。图像 / 语音 / 大模型三家**不由我们替用户选死**：
@@ -102,12 +149,13 @@ once-upon-me/
 ├─ docs/
 │  ├─ tech-selection.md          ★ 技术选型定稿（§二 那张表的全文与依据）
 │  ├─ launch-checklist.md        启动期：组队 / 报名 / 缴费 / 提交物红线
-│  ├─ adr/                       关键决策：0001 框架 … 0005 选型由实测拍板
+│  ├─ adr/                       关键决策：0001 框架 … 0011 检索的索引就是一个文件（不引向量库）
 │  ├─ cover-art-prompts.md       12 张封面的出图提示词（AI 生成记录）
 │  ├─ demo-book-art-prompts.md   演示绘本 8 张的出图提示词 + 交付与废弃批次记录
-│  ├─ demo-narration-script.md   配音稿与时长预算（首页那 5 段朗读照它录，见 §五）
+│  ├─ demo-narration-script.md   配音稿与时长预算（★ 那 5 段朗读挂在首页第二屏那本书上，
+│  │                              音频在 public/book/，验收脚本 scripts/chk-book-narration.mjs）
 │  ├─ booklist/                  ★ 灵感书单那 12 本样书：README.md 是总纲，每本一篇 <key>.md
-│  ├─ highlights-art-prompts.md  第三屏 5 张卡片的出图提示词 + 验收记录（图已落盘）
+│  ├─ highlights-art-prompts.md  亮点那 5 张卡片的出图提示词 + 验收记录（图已落盘）
 │  ├─ brand-mark-prompt.md       品牌标记的提示词与裁切依据
 │  ├─ commit-convention.md       提交规范（消息格式 / 粒度 / 禁区）
 │  └─ agents/                    工程技能的配置：issue-tracker.md、domain.md
@@ -120,17 +168,17 @@ once-upon-me/
 │  ├─ book/                      演示绘本的 1 封面 + 5 跨页 + 2 枚选择点图标（WebP，合计 0.46 MB）
 │  ├─ booklist/{key}/            ★ 灵感书单那 12 本样书：一本一个目录，9 张图 + 8 段音频
 │  │                             （**分批到达**：还没出图时目录不存在，界面据实显示"画还没到位"）
-│  ├─ highlights/                第三屏 5 张卡片插画（1280×720 WebP，合计 0.51 MB）
+│  ├─ highlights/                亮点那 5 张卡片插画（1280×720 WebP，合计 0.51 MB）
 │  ├─ reader-papers/             两台阅读器那层底图：6 张 3:2 + 6 张缩略图
-│  │                             （WebP，合计 1.23 MB，★ 引擎自己出的图，见 §五）
+│  │                             （WebP，合计 1.23 MB，★ 引擎自己出的图）
 │  ├─ scenes/                    三幕背景场景图（1365×768 WebP，合计 103.5 KB）
 │  └─ brand/
 │     └─ mark.webp               首屏品牌标记（560×560，23.8 KB）
 ├─ scripts/
 │  ├─ make-webp.py               源图 → WebP，五档预设（hero / book-spread / book-cover / book-icon / theme-card）
 │  ├─ make-favicon.py            品牌标记 → src/app/icon.ico 的 favicon 脚本
-│  ├─ check-scrim.mts            ★ 工作台那层纸光够不够厚：读 CSS、按 WCAG 出十带表（见 §五）
-│  ├─ make-reader-paper.mts      阅读器那六张底图：调引擎出图 → 对照表 → 落 public/（见 §五）
+│  ├─ check-scrim.mts            ★ 工作台那层纸光够不够厚：读 CSS、按 WCAG 出十带表
+│  ├─ make-reader-paper.mts      阅读器那六张底图：调引擎出图 → 对照表 → 落 public/
 │  └─ sample-tints.py            跨页图 → 三朵主色，生成 book/spreadTints.ts（染色层用）
 ├─ vitest.config.mts             只跑 src 下的 .test.ts，environment: 'node'
 └─ src/
@@ -138,29 +186,29 @@ once-upon-me/
    │  ├─ icon.ico                favicon（16/32/48 三帧，Next 自动挂载）
    │  ├─ globals.css             ★ 设计令牌唯一来源 + Tailwind 配置 + 页面层样式
    │  ├─ layout.tsx              根布局（zh-CN、metadata）
-   │  └─ page.tsx                首页：三幕背景 + 环形轨道 + 打字机文案 + 滚动翻页绘本 + 亮点轮播
+   │  └─ page.tsx                首页：三幕场景背景 + 12 张封面的环形轨道 + 示例绘本 + 五条项目亮点
    ├─ components/
    │  ├─ BackToTop.tsx            右下角"回到页首"（滚过 0.6 视口才出现，客户端组件）
    │  ├─ back-to-top.css          组件样式
    │  ├─ shell/
    │  │  ├─ AppShell.tsx          工作台外壳：侧栏 + 内容区，四屏共用
    │  │  ├─ app-shell.css         组件样式（侧栏那层纸、当前项那张抽出来的卡、焦点环）
-   │  │  ├─ StudioBackdrop.tsx    工作台背景：与首页第一幕同一片天（★ 两层，见 §五）
+   │  │  ├─ StudioBackdrop.tsx    工作台背景：与首页第一幕同一片天（★ 两层）
    │  │  └─ studio-backdrop.css   组件样式（★ 十带对比度表与 governing rule 在它文件头）
    │  ├─ hero/
-   │  │  ├─ HeroOrbit.tsx        3D 环形卡片轨道（客户端组件，自洽）
-   │  │  ├─ hero-orbit.css       组件样式（全局引入，见下）
+   │  │  ├─ HeroOrbit.tsx        ★ 首屏：12 张封面的 3D 环形轨道 + 中心那一摞文案（客户端组件）
+   │  │  ├─ hero-orbit.css       组件样式（全局引入，见下；含 `.btn` 那两颗按钮）
    │  │  ├─ HeroTypewriter.tsx   一行轮流打两句主张（客户端组件）
-   │  │  ├─ hero-typewriter.css  撑宽度的占位 + 实时文字 + 光标
-   │  │  └─ StartCreating.tsx    ★「开始创作」那一颗 + 它的退场（跨页接力的起点，见 §五）
+   │  │  ├─ hero-typewriter.css  撑宽度的占位 + 实时文字 + 光标（≤640 折行，见文件头）
+   │  │  └─ StartCreating.tsx    ★「开始创作」那一颗 + 那 200ms 退场 + 跨页接力
    │  ├─ book/
-   │  │  ├─ StorybookFlip.tsx    第二屏：sticky 舞台 + 滚动映射 + 选择点 + 正文 + 静止模式
-   │  │  ├─ storybook-flip.css   组件样式（叶几何、纸感、染色层、刻度、选择点、静止模式）
-   │  │  ├─ flip.ts              叶绕书脊的翻页几何（★ 纯函数，不碰 DOM / React）
-   │  │  ├─ demoBook.ts          演示书的内容：跨页路径、每页正文、两个分支
-   │  │  ├─ spreadTints.ts       每一面的三朵主色（★ 生成物，改了图重跑 sample-tints.py）
-   │  │  └─ BookSpine.tsx        右侧刻度（进度指示 + 点击跳页）
-   │  ├─ booklist/               ★ 灵感书单那 12 本样书（只读，见 §五）
+   │  │  ├─ StorybookFlip.tsx    ★ 首页第二屏：一页页翻开的示例绘本《小宇的云》，中途一个选择点
+   │  │  ├─ storybook-flip.css   组件样式（区间与叶模型写在文件头；`≤640` 那一档整节不出现）
+   │  │  ├─ demoBook.ts          那本书的内容：四个跨页（一支 a、一支 b）
+   │  │  ├─ flip.ts              叶绕书脊的翻页几何（★ 纯函数，不碰 DOM / React；三处共用）
+   │  │  ├─ BookSpine.tsx        书脊
+   │  │  └─ spreadTints.ts       四张跨页的纸色（点阵孪生表的真值来源之一）
+   │  ├─ booklist/               ★ 灵感书单那 12 本样书（只读）
    │  │  ├─ booklist.ts          内容根：类型、`BOOKLIST`（12 本，与 THEMES 同序）、资产路径
    │  │  ├─ books/{key}.ts       一本一个文件：书名、主角锚点、8 个跨页的正文（= 朗读稿）
    │  │  ├─ booklist.test.ts     结构约束：同序、8 跨页、每跨页 42–60 字、无数字与字母…
@@ -169,30 +217,26 @@ once-upon-me/
    │  │  ├─ BooklistReader.tsx   `/booklist/<key>` 的全屏阅读器（一跨页一张 3:2 图）
    │  │  └─ booklist-reader.css  组件样式（★ 与 reader-book.css 各一套类名，理由在文件头）
    │  ├─ scene/
-   │  │  ├─ SceneBackdrop.tsx    页面级背景：三幕场景 + 长交叉溶解（客户端组件）
+   │  │  ├─ SceneBackdrop.tsx    页面级背景：两幕场景 + 长交叉溶解（客户端组件；锚点见文件头）
    │  │  └─ scene-backdrop.css   组件样式（每层的雾、background-position、权重消费）
    │  └─ highlights/
-   │     ├─ HighlightsReel.tsx   第三屏：GSAP 指针跟随 + 轮播（客户端组件）
+   │     ├─ HighlightsReel.tsx   亮点那一屏：GSAP 指针跟随 + 轮播（手机上是竖排五张，客户端组件）
    │     ├─ highlights-reel.css  组件样式（★ 谁写 transform 那张表在它文件头）
-   │     └─ highlights.ts        五条亮点的文案与胶囊（卡上不写排期，见 §五）
+   │     └─ highlights.ts        五条亮点的文案与胶囊（卡上不写排期）
    └─ lib/
       ├─ themes.ts               12 个主题的 key / 中文名 / 主题词
       ├─ booklist-assets.ts      ★ 样书的资产**在不在盘上**（服务端读一次目录，界面据此渲染）
-      ├─ useScrollDriver.ts      滚动驱动机器（绘本节在用，首屏待迁，见「已知取舍」）
-      ├─ useScrollTick.ts        页面级滚动 tick（`SceneBackdrop` 在用，见「已知取舍」）
+      ├─ useScrollDriver.ts      滚动驱动机器（绘本节在用，首屏待迁）
+      ├─ useScrollTick.ts        页面级滚动 tick（`SceneBackdrop` 在用）
       ├─ useEnterTimeline.ts     工作台每一屏挂载时那一条进场时间线（GSAP core，只 from()）
       ├─ useEnterTimeline.test.ts 只测纯部分：交错上限、步进顺序、整场收在 1.2s 内
-      ├─ theme-handoff.ts        ★ 首页那 12 张交给主题墙的接力（几何 + 一次性载荷，见 §五）
-      ├─ theme-handoff.test.ts   只测纯部分：图心对齐、缩放夹取、载荷的寿命（不拉 jsdom）
-      ├─ orbit.ts                环形轨道上**一张卡**的摆位（★ 纯函数；预渲染那一帧与 frame() 共用）
-      ├─ orbit.test.ts           6480 组输入 vs 搬走之前那段代码的对照实现（"搬动没改手"靠它摁着）
-      ├─ math.ts                 clamp / smoothstep / lerp / noNegZero（★ 新代码用；前两屏待单独迁移）
-      ├─ math.test.ts            含一条钉住首屏交接段推导的测试
+      ├─ math.ts                 clamp / smoothstep / lerp / noNegZero（★ 纯函数；`reel.ts` / `tilt.ts` 共用）
+      ├─ math.test.ts            手算值、区间外饱和、退化区间不返回 NaN
       ├─ reel.ts                 轮播状态；offset 走**环形最短位移**（第 1 条的左边是第 5 条）
       ├─ reel.test.ts            两侧永远填满、跨界判据、可见性三者不合并、环形取模的负数坑
       ├─ tilt.ts                 归一化指针 → 倾斜量（★ 纯函数，符号表在测试里）
       ├─ tilt.test.ts            四角与中心的符号表、上限、出界夹取、-0 与 NaN
-      ├─ asset-url.ts            资产路径 → URL（可选挂 `?w=`，见 §五「缩略档」那条）
+      ├─ asset-url.ts            资产路径 → URL（可选挂 `?w=`）
       ├─ thumbs.ts               ★ 封闭的缩略档表 + 一次 sharp 缩放（档位为什么不能任意，写在文件头）
       ├─ thumbs.test.ts          非法 `?w=` 一律不缩、向上归档、缓存键、真缩一次且绝不放大
       ├─ cards-list.ts           「有哪些角色卡」的唯一实现（API / 角色墙 / 主页胶囊共用）
@@ -204,23 +248,23 @@ once-upon-me/
 
 ### 分层约定
 
-| 层           | 位置               | 规则                                                                   |
-| ------------ | ------------------ | ---------------------------------------------------------------------- |
-| **设计系统** | `app/globals.css`  | 令牌只在 `:root` 定义一次；同时通过 `@theme inline` 暴露给 Tailwind    |
-| **组件层**   | `components/<域>/` | 组件自己的样式与组件同目录、同名（`HeroOrbit.tsx` / `hero-orbit.css`） |
-| **页面层**   | `app/`             | 只做组装与页面级规则（如首页的桌面 `min-width` 兜底）                  |
+| 层           | 位置               | 规则                                                                                |
+| ------------ | ------------------ | ----------------------------------------------------------------------------------- |
+| **设计系统** | `app/globals.css`  | 令牌只在 `:root` 定义一次；同时通过 `@theme inline` 暴露给 Tailwind                 |
+| **组件层**   | `components/<域>/` | 组件自己的样式与组件同目录、同名（`HeroOrbit.tsx` / `hero-orbit.css`）              |
+| **页面层**   | `app/`             | 只做组装与页面级规则（★ 首页那三条桌面 `min-width: 1280px` 兜底 2026-10-19 已退休） |
 
-`hero-orbit.css` **保持全局引入而非 CSS Modules**：组件依赖 `.hero[data-orbit-dragging='true'] .hero-orbit` 这类属性选择器和卡片上的 `:nth-child(2n)`，改 Modules 要同时重写类名与这些选择器，收益为零。类名都带 `hero-` 前缀，冲突风险低。
+组件样式**保持全局引入而非 CSS Modules**：几条规则依赖 `.hero[data-leaving='true'] .hero__brand`、`.storybook__stage[data-choice]` 这类属性选择器与 `:nth-child(2n)`，改 Modules 要同时重写类名与这些选择器，收益为零。类名都带前缀（`hero-` / `hl-` / `reader__`），冲突风险低。
 
 ### 命名规范
 
 | 类别              | 规则                                                | 示例                                  |
 | ----------------- | --------------------------------------------------- | ------------------------------------- |
 | 目录              | 全小写 kebab-case                                   | `components/hero/`、`lib/story-tree/` |
-| React 组件文件    | PascalCase，与默认导出同名                          | `HeroOrbit.tsx`                       |
+| React 组件文件    | PascalCase，与默认导出同名                          | `HeroTypewriter.tsx`                  |
 | 纯逻辑 / 工具模块 | kebab-case                                          | `lib/themes.ts`、`character-card.ts`  |
 | App Router 路由段 | kebab-case 英文                                     | `/create`、`/reader/[bookId]`         |
-| 样式文件          | 与所属组件同名                                      | `hero-orbit.css`                      |
+| 样式文件          | 与所属组件同名                                      | `hero-typewriter.css`                 |
 | 美术资源          | 全小写英文语义名，与提示词文档一致                  | `public/art/dino.webp`                |
 | 脚本文档          | 文件名 kebab-case 英文，正文中文                    | `docs/cover-art-prompts.md`           |
 | 类型 / 组件       | PascalCase                                          | `OrbitItem`、`StoryPage`              |
@@ -247,6 +291,10 @@ src/lib/
 │  └─ providers/      types.ts 能力接口 · registry.ts env→实现 · http.ts ·
 │                     openai-text · openai-vision · tokenrhythm-image ·
 │                     replay.ts（录制/回放）· stores.ts（内存/磁盘）
+├─ rag/               ★ 检索（2026-10-19）：corpus.ts 切块与内容指纹 · score.ts 中文 bigram + BM25 ·
+│                     retrieve.ts 两条极性（范例 / 避开）· prompt.ts 范例那一段 ·
+│                     load.ts 读种子索引 + 现场扫自家的书 · review-corpus.ts 审核条款 ·
+│                     index.seed.json（生成物，随仓库提交，见 `scripts/build-rag-index.mts`）
 ├─ story-draft.ts     ★ 故事草稿（`books/<id>/story.json`）：①与②之间落在盘上的那一份
 ├─ story-problems.ts  ★ 闸门上的判据：改过的故事还能不能画（浏览器安全的纯函数）
 ├─ schemas/           自写校验器（一份定义同时出 JSON Schema 与运行时校验）+ 故事契约
@@ -259,13 +307,21 @@ src/lib/
 > `runBook` 留着**不是为了兼容**：脚本、横评、离线跑测走的是它，而它是那两个动作的复合
 > （`split.test.ts` 钉着"两条路产出同一串事件、同一本书"）。
 
+> **检索（RAG）落在 `src/lib/rag/`**（2026-10-19）：三份语料**归属各不相同**
+> （12 本样书的种子 / 这个家庭自己的创作史 / 审核条款），索引**就是一个文件**、
+> 随仓库提交，排序是中文 bigram + BM25——**不引向量数据库**，理由是实测的
+> （[ADR-0011](docs/adr/0011-index-is-a-file-not-a-vector-db.md)）。
+> 它挂在规划那一步的一个入参上（`retrieve`），**不传就是这一轮不检索**，
+> 所以"开与关"是同一行代码的两个值，不是两条流水线。
+> 检索策略与那五个量的读数：`docs/known-tradeoffs.md` 的「检索那一层」一节。
+
 **三条硬性约束，都有机械执法**：
 
-| 约束                            | 怎么把门                                                                                                                                 | 怎么验收                                                                                             |
-| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `lib/engine/` 不得 import React | `eslint.config.mjs` 对 engine/schemas/prompts 三个目录禁 `react` / `next/*` / `@/components/**` / `window` / `document` / `localStorage` | `node scripts/engine-run.mts --mode=stub` 不启动浏览器跑完一本书                                     |
-| 新代码吃最严 TS 档              | `tsconfig.engine.json` 叠 `noUncheckedIndexedAccess`，`pnpm typecheck` 两个 config 都跑                                                  | 已交付的三屏**不吃**这一档（实测 67 处报错，全在动过的测量代码里）——留作单独一次迁移，见「已知取舍」 |
-| 模型名不写死                    | `providers/registry.ts` 只认 `LLM_MODEL` / `IMAGE_MODEL` / `VISION_MODEL`，缺一个就报「换模型不许改代码」                                | 全仓库零个硬编码模型 id                                                                              |
+| 约束                            | 怎么把门                                                                                                                                         | 怎么验收                                                                               |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| `lib/engine/` 不得 import React | `eslint.config.mjs` 对 engine/schemas/prompts/**rag** 四个目录禁 `react` / `next/*` / `@/components/**` / `window` / `document` / `localStorage` | `node scripts/engine-run.mts --mode=stub` 不启动浏览器跑完一本书                       |
+| 新代码吃最严 TS 档              | `tsconfig.engine.json` 叠 `noUncheckedIndexedAccess`，`pnpm typecheck` 两个 config 都跑                                                          | 已交付的那几屏**不吃**这一档（实测 67 处报错，全在动过的测量代码里）——留作单独一次迁移 |
+| 模型名不写死                    | `providers/registry.ts` 只认 `LLM_MODEL` / `IMAGE_MODEL` / `VISION_MODEL`，缺一个就报「换模型不许改代码」                                        | 全仓库零个硬编码模型 id                                                                |
 
 ### 后端（Java）：只管「你是谁」与「你能用什么」
 
@@ -274,7 +330,7 @@ src/lib/
 
 | 归 Next（`src/`）                           | 归 Java（`server/`）                                                                       |
 | ------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| 模型密钥、`serverEnv()`、模型配置           | 手机号/密码、会话票、**有没有创作权**（一位，见 §五）                                      |
+| 模型密钥、`serverEnv()`、模型配置           | 手机号/密码、会话票、**有没有创作权**（一位）                                              |
 | 引擎、prompt、资产（`ASSET_ROOT` 下的字节） | MySQL 里的那几张表：`users` / `user_permissions` / `voices` / `sms_send_log` / `sms_codes` |
 | BFF 路由（`/api/*`）                        | 短信频控、登录失败锁、管理页那些动作                                                       |
 
@@ -298,7 +354,9 @@ src/lib/
 ★ 站长那一侧还有一个**不进 Java** 的能力：在管理页换模型 / 接口地址 / api-key
 （密钥只从 Next 的服务端环境来，见 ADR-0009 与 §三「管理页」那一节）。
 
-生产是**同机四件**（工单 03/10，2026-10-17 后端那一半已上线）：
+生产是**同机四件**（工单 03/10，2026-10-17 后端那一半已上线；
+2026-10-19 前端那一半**只准备、未上线**——运行时、目录、`web.env`、systemd unit、
+Nginx conf 都已就位但**全部未启用**，80 端口还没有人在听）：
 
 ```
 公网 ──:80──> Nginx ──┬── /            ──> Next 生产 127.0.0.1:3000
@@ -306,7 +364,7 @@ src/lib/
                                             └──> MySQL 127.0.0.1:3306（库 xiaozhujue）
 
 数据与代码分开：作品在 /var/lib/xiaozhujue/assets，代码在 /opt/xiaozhujue/
-（部署时 rsync --delete 不许碰作品——合在一起手一抖就是一次真实的数据损失）
+（部署只写 /opt/xiaozhujue/app 那一棵，作品目录**不在射程内**——合在一起手一抖就是一次真实的数据损失）
 秘密只在服务器上：/etc/xiaozhujue/api.yml（640 root:xzj），由 systemd 挂进来
 ```
 
@@ -391,39 +449,45 @@ working directory 是项目目录（`server/`），所以 `-f server/pom.xml` �
 | `pnpm start`        | 启动生产服务器（需先 build）                                                                                                |
 | `pnpm lint`         | ESLint 检查（含引擎层的依赖禁令）                                                                                           |
 | `pnpm typecheck`    | **两个 config 各跑一遍**：全局一档，`tsconfig.engine.json` 对引擎/契约/提示词三个目录再叠 `noUncheckedIndexedAccess` 严一档 |
-| `pnpm test`         | Vitest 跑一遍纯函数测试（**1045 条**，全在 node 环境——W1 那会儿是 130 条，见下面那条）                                      |
+| `pnpm test`         | Vitest 跑一遍纯函数测试（**1202 条**，全在 node 环境——W1 那会儿是 130 条，见下面那条）                                      |
 | `pnpm test:watch`   | Vitest watch 模式                                                                                                           |
 | `pnpm format`       | Prettier 格式化                                                                                                             |
 | `pnpm format:check` | 只检查不写入（CI 用）                                                                                                       |
 
 引擎与跑测的脚本不进 `package.json`（它们是 node 直接跑的 `.mts`，不是 npm 生命周期）：
 
-| 命令                                                    | 作用                                                                                                                                                                                     |
-| ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `node scripts/engine-run.mts --mode=stub`               | ★ 引擎验收：不启动浏览器、不联网、不花钱跑完一本书                                                                                                                                       |
-| `node scripts/engine-run.mts --mode=live`               | 真供应商跑一本，并顺手录制离线回放包                                                                                                                                                     |
-| `node scripts/engine-run.mts --mode=offline`            | 用录好的 manifest 回放（ADR-0003 的断网演示路径）                                                                                                                                        |
-| `node scripts/w1-image-bakeoff.mts --models=a,b`        | 图像横评：同一角色 5 页 × N 候选，产出盲评包与横评表                                                                                                                                     |
-| `node scripts/w1-text-bakeoff.mts --models=a,b`         | 大模型横评：同一批主题 × 10 本的 Schema 通过率与重试次数                                                                                                                                 |
-| `node scripts/make-probe-library.mts --out=DIR`         | 造一个**隔离资产根**（9 本 `probe-01…09`）给会写盘、会删文件的探针用                                                                                                                     |
-| `node scripts/export-demo-cards.mts --from=DIR --apply` | ★ 把示例角色卡导出成随仓库发布的 `public/demo/cards/`（默认只打印计划）                                                                                                                  |
-| `node scripts/e2e-demo-cards.mts`                       | ★ 示例卡对每个人都有、**别人的东西拿不到**（打本机一台 dev server）                                                                                                                      |
-| `node scripts/probe-shelf.mts`                          | 书架那一屏的布局与编辑判据（要一台 dev server + Chromium）                                                                                                                               |
-| `node scripts/make-reader-paper.mts`                    | 出阅读器那六张底图候选 + 对照表（调图像模型；`--sheet` 只拼表、`--apply=` 落 `public/`）                                                                                                 |
-| `node scripts/check-reader-paper.mts`                   | ★ 底图的四组读数（周期尖峰 / 高频 / 彩度 / 偏离）+ 点阵那一行对照；文字对比度那条**不在这里**（见 §五）                                                                                  |
-| `node scripts/chk-reader-desk.mjs URL`                  | ★ 阅读器那层底图：铺满整块视口、**压在图上的每一行字逐档量真像素是否过 4.5:1**、设置里挑的那档真到了这一屏、**底图之外那行「← 回灵感书单」真画在图上面**（四条，两台阅读器都跑，见 §五） |
-| `node scripts/chk-paper-picker.mjs URL`                 | ★ 设置里挑一档 → 落盘 → 阅读器换底 这一条链从"点"量到"图文件名"                                                                                                                          |
-| `node scripts/mk-shared-fixture.mjs`                    | 造/拆**共读版**的验收夹具书（`--missing` 再造成缺一页图的；`--clean` 拆掉；不进仓库）                                                                                                    |
-| `node scripts/chk-shared-reader.mjs URL`                | ★ 共读版阅读器 40 条（真帧 + 网络）：阅读顺序 = 那条路、选完零生成、静止终态、键盘、缺图兜底纸、**整趟只请求本机**                                                                       |
-| `node scripts/chk-path-memory.mjs URL`                  | ★ 路径记忆 18 条：选过的那一支记得住——**含一次真销毁**（关掉标签页另开一个）、清了/坏了/串了都退回"没选过"                                                                               |
-| `node scripts/chk-demo-shared.mjs URL`                  | ★ 演示那本共读版：**不登录**打开、封面走到封底一屏不跳、岔口按钮 79px、**整趟不碰外部主机**（断网演示那条判据）                                                                          |
-| `node scripts/e2e-shared-reading.mts --base=URL`        | ★ 共读版全链路：一句话 → 编故事 → 闸门改一个字 → 出图配音 → 书里选一支（**真花钱**；`--until=story` 只验到闸门）                                                                         |
-| `node scripts/verify-mirror.mts --dir=DIR`              | ★ 本机那份镜像**自足吗**：每本书清单引用的每个资产在不在（工单 12）                                                                                                                      |
-| `scripts/pull-from-server.sh`                           | ★ 把服务器上的作品与数据库快照**单向**拉回本机（`--full` 全量）                                                                                                                          |
-| `node scripts/adopt-legacy-assets.mts --user=<登录名>`  | 把平铺的老数据搬进某个账号那一片（默认只打印计划，`--apply` 才动）                                                                                                                       |
-| `node scripts/check-secrets.mts`                        | 密钥自查：产物里有没有出现 `.env.local` 里那几个真值                                                                                                                                     |
-| `bash server/deploy.sh`                                 | 后端部署：构建 → 上传 → 重启 → 带重试的冒烟（工单 03）                                                                                                                                   |
-| `bash server/backup.sh [--verify]`                      | 每日数据库备份（服务器上由 cron 调）；`--verify` 会真灌一次再删                                                                                                                          |
+| 命令                                                    | 作用                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `node scripts/engine-run.mts --mode=stub`               | ★ 引擎验收：不启动浏览器、不联网、不花钱跑完一本书                                                                                                                                                                                                                                                                                                                                                              |
+| `node scripts/engine-run.mts --mode=live`               | 真供应商跑一本，并顺手录制离线回放包                                                                                                                                                                                                                                                                                                                                                                            |
+| `node scripts/engine-run.mts --mode=offline`            | 用录好的 manifest 回放（ADR-0003 的断网演示路径）                                                                                                                                                                                                                                                                                                                                                               |
+| `node scripts/w1-image-bakeoff.mts --models=a,b`        | 图像横评：同一角色 5 页 × N 候选，产出盲评包与横评表                                                                                                                                                                                                                                                                                                                                                            |
+| `node scripts/w1-text-bakeoff.mts --models=a,b`         | 大模型横评：同一批主题 × 10 本的 Schema 通过率与重试次数                                                                                                                                                                                                                                                                                                                                                        |
+| `node scripts/make-probe-library.mts --out=DIR`         | 造一个**隔离资产根**（9 本 `probe-01…09`）给会写盘、会删文件的探针用                                                                                                                                                                                                                                                                                                                                            |
+| `node scripts/export-demo-cards.mts --from=DIR --apply` | ★ 把示例角色卡导出成随仓库发布的 `public/demo/cards/`（默认只打印计划）                                                                                                                                                                                                                                                                                                                                         |
+| `node scripts/e2e-demo-cards.mts`                       | ★ 示例卡对每个人都有、**别人的东西拿不到**（打本机一台 dev server）                                                                                                                                                                                                                                                                                                                                             |
+| `node scripts/probe-shelf.mts`                          | 书架那一屏的布局与编辑判据（要一台 dev server + Chromium）                                                                                                                                                                                                                                                                                                                                                      |
+| `node scripts/make-reader-paper.mts`                    | 出阅读器那六张底图候选 + 对照表（调图像模型；`--sheet` 只拼表、`--apply=` 落 `public/`）                                                                                                                                                                                                                                                                                                                        |
+| `node scripts/check-reader-paper.mts`                   | ★ 底图的四组读数（周期尖峰 / 高频 / 彩度 / 偏离）+ 点阵那一行对照；文字对比度那条**不在这里**（在 `chk-reader-desk.mjs` 里）                                                                                                                                                                                                                                                                                    |
+| `node scripts/chk-reader-desk.mjs URL`                  | ★ 阅读器那层底图：铺满整块视口、**压在图上的每一行字逐档量真像素是否过 4.5:1**、设置里挑的那档真到了这一屏、**底图之外那行「← 回灵感书单」真画在图上面**（四条，两台阅读器都跑；`--w=844 --h=390` 可换横屏视口）                                                                                                                                                                                                |
+| `node scripts/chk-mobile.mjs URL`                       | ★ 手机那一档 66 条（五个视口 × 十三条路由）：不横向溢出、**横屏把书铺开**、旋转提示的判别力、**真触摸事件后跟手翻页**、触控目标 ≥ 44×44、**书架那一屏不"挤"**、**首页两副形态**（手机上：主张句不被切 / 只有两节、首屏就是一屏 / 竖排卡正文列 ≥ 240 / 那五张图各下一次且两套 DOM 同一批 URL / **那 12 张封面一张都没取**；桌面上反向：**三节都在、12 张照常取全**）（自己签票登录，`--user=1`；空架时明说跳过） |
+| `node scripts/chk-paper-picker.mjs URL`                 | ★ 设置里挑一档 → 落盘 → 阅读器换底 这一条链从"点"量到"图文件名"                                                                                                                                                                                                                                                                                                                                                 |
+| `node scripts/mk-shared-fixture.mjs`                    | 造/拆**共读版**的验收夹具书（`--missing` 再造成缺一页图的；`--clean` 拆掉；不进仓库）                                                                                                                                                                                                                                                                                                                           |
+| `node scripts/chk-shared-reader.mjs URL`                | ★ 共读版阅读器 40 条（真帧 + 网络）：阅读顺序 = 那条路、选完零生成、静止终态、键盘、缺图兜底纸、**整趟只请求本机**（`--w=844 --h=390` 把"选择点不压正文"那条在横屏下复量）                                                                                                                                                                                                                                      |
+| `node scripts/chk-path-memory.mjs URL`                  | ★ 路径记忆 18 条：选过的那一支记得住——**含一次真销毁**（关掉标签页另开一个）、清了/坏了/串了都退回"没选过"                                                                                                                                                                                                                                                                                                      |
+| `node scripts/chk-demo-shared.mjs URL`                  | ★ 演示那本共读版：**不登录**打开、封面走到封底一屏不跳、岔口按钮 79px、**整趟不碰外部主机**（断网演示那条判据）                                                                                                                                                                                                                                                                                                 |
+| `node scripts/e2e-shared-reading.mts --base=URL`        | ★ 共读版全链路：一句话 → 编故事 → 闸门改一个字 → 出图配音 → 书里选一支（**真花钱**；`--until=story` 只验到闸门）                                                                                                                                                                                                                                                                                                |
+| `node scripts/verify-mirror.mts --dir=DIR`              | ★ 本机那份镜像**自足吗**：每本书清单引用的每个资产在不在（工单 12）                                                                                                                                                                                                                                                                                                                                             |
+| `scripts/pull-from-server.sh`                           | ★ 把服务器上的作品与数据库快照**单向**拉回本机（`--full` 全量）                                                                                                                                                                                                                                                                                                                                                 |
+| `node scripts/adopt-legacy-assets.mts --user=<登录名>`  | 把平铺的老数据搬进某个账号那一片（默认只打印计划，`--apply` 才动）                                                                                                                                                                                                                                                                                                                                              |
+| `node scripts/check-secrets.mts`                        | 密钥自查：产物里有没有出现 `.env.local` 里那几个真值                                                                                                                                                                                                                                                                                                                                                            |
+| `bash server/deploy.sh`                                 | 后端部署：构建 → 上传 → 重启 → 带重试的冒烟（工单 03）                                                                                                                                                                                                                                                                                                                                                          |
+| `bash server/backup.sh [--verify]`                      | 每日数据库备份（服务器上由 cron 调）；`--verify` 会真灌一次再删                                                                                                                                                                                                                                                                                                                                                 |
+| `bash scripts/deploy-web.sh --provision`                | 前端那一半的一次性准备（幂等）：装运行时、建目录、写 `web.env` / systemd unit / Nginx conf，**一律不启动**                                                                                                                                                                                                                                                                                                      |
+| `bash scripts/deploy-web.sh --assets`                   | 一次性把本机作品搬上服务器（`.out/web/u` → `/var/lib/xiaozhujue/assets`）                                                                                                                                                                                                                                                                                                                                       |
+| `bash scripts/deploy-web.sh [--full] [--expect=文本]`   | 前端部署：`git archive` 打包 → 上传 → 按依赖指纹决定 install → 构建到 `.next-new` → 换目录 → 带重试的冒烟 → 失败自动回滚（`--expect` 是新构建里搜得到那句话才算成）                                                                                                                                                                                                                                             |
+| `bash scripts/deploy-web.sh --go-live` / `--rollback`   | ★ 上前端那一步本身（启用 Nginx site + web unit，默认不碰这两个开关）／ 秒级换回上一份 `.next`                                                                                                                                                                                                                                                                                                                   |
+| `bash scripts/deploy-web.sh --test-page`                | 在 80 上放一个 Nginx 静态占位页（**不经过 Next**），用来单独测"公网连不连得上"；`--go-live` 会自动撤掉它                                                                                                                                                                                                                                                                                                        |
 
 > 两个横评脚本**必须真跑**：没有 `IMAGE_API_KEY` 时直接拒绝运行，
 > 不带 `--yes=1` 时只打印预算。理由写在 CLAUDE.md「不糊弄」——
@@ -503,8 +567,7 @@ W3（共读版）落地时，树的形状（恰好一个选择点、两支深度
   那一格隔着两格）。它按的还是**服务端那份配置里**的地址——还没保存的地址在服务端不存在。
 - **拉到的那几个候选，在「模型名」下面那颗「挑一个」里是列全的**（2026-10-18 第二轮补的：
   第一版挂的是 `datalist`，Chrome 拿输入框里现有的字去筛它，于是"拉到 26 个"与
-  "点开只剩一个"同时成立——病根与改法见 **§五** 里那条「`datalist` 会拿输入框里现有的字
-  筛候选」）。
+  "点开只剩一个"同时成立——病根与改法见 [docs/known-tradeoffs.md](docs/known-tradeoffs.md) 的「`datalist` 会拿输入框里现有的字筛候选」一节）。
   ★ 那一格**仍然是自由文本框**，挑选框只是器具：图像在用的 `wan2.7-image` 不在
   网关 `/models` 返回的那 26 个里，做成强制选择框会当场丢掉它正在用的值。
 - ★ **「测试连通」真打厂商接口，也就真花钱**：文字发一句话（上限 64 token）、图像按产品自己的
@@ -587,7 +650,7 @@ python -I scripts/make-webp.py <源图目录> public/booklist/dino --preset book
 像素补不回来，放大只是把糊变成更贵的糊。看到这个告警应当回头按提示词里写的尺寸重出图，
 而不是改脚本里的数字。
 
-第三屏那 5 张同样走 `hero` 预设（16:9 / 1280 / ≤130KB，与首屏封面同规格，不必新增预设）：
+亮点那一屏那 5 张同样走 `hero` 预设（16:9 / 1280 / ≤130KB，与那 12 张封面同规格，不必新增预设）：
 
 ```bash
 python -I scripts/make-webp.py <源图目录> public/highlights
@@ -611,7 +674,7 @@ node scripts/check-reader-paper.mts             # 四组读数 + 点阵那一行
 **实测合计 1.23 MB，单张 183–266 KB、缩略图 188–860 B**。按体积算它是这片资产里最厚的一档
 （`book-spread` 那一档是 ≤220 KB，跨页图单张 159–235 KB），而它铺的是**一整层页面底**、
 不是一页正文——为什么认下这个体积、以及"要不要压到 200 KB 以下"的取舍，
-写在 §五「阅读器的底」那一段。`src/lib/reader-paper.test.ts` 有一条断言钉着
+写在 [docs/known-tradeoffs.md](docs/known-tradeoffs.md) 的「阅读器的底」一节。`src/lib/reader-paper.test.ts` 有一条断言钉着
 "表里每一档都在盘上、盘上没有表里没有的图"。提示词用的是
 `gpt-image-2-style-library` 的「插画与艺术风格」模板，但**渲染器是引擎自己那台**
 （`wan2.7-image`），所以那六张是**逐张看过**的，不是照模板产出就完事——
@@ -632,2191 +695,16 @@ node scripts/check-reader-paper.mts             # 四组读数 + 点阵那一行
 
 ---
 
-## 五、已知取舍
-
-骨架阶段的有意决定。
-
-### 灵感书单：12 本样书，**一跨页一张图**（2026-10-15）
-
-侧栏在「创作」与「书架」之间多了一格「灵感书单」（`/booklist`）：首页环上那 12 个主题，
-每个主题一本**写好正文、配好画面说明、可以真的翻开读**的样书。用户 2026-10-15 提的，
-用途是"给用户展示的时候可以多了解一点"——说到底，是因为"生成一整本"那条流水线还在做，
-而**一本成品长什么样**不该等到它做完才让人看见。
-
-五处判断：
-
-1. **一跨页一张图，不是一页一张图。** 翻开一屏是**一幅横跨左右两个书页的连续画面**，
-   正文叠在左页下角，与首页第二屏那本《小宇的云》同一个形状；8 个跨页 = 16 个书页。
-   半页**不切文件**：同一张 3:2 的图挂两次，靠 `background-size: 200% 100%` 各取一半
-   （`book/flip.ts` 顶部那段叶模型）。这与 `/reader/<bookId>` 那台阅读器的
-   "一页一图一句"是**两种形状**，所以两台阅读器不共用 DOM，也不共用类名——
-   把公共层抽出来要动一张已经在用的样式表（约 60 行几何），收益低于回归风险，
-   真正共用的那部分算术留在 `flip.ts` 里（那才是它该在的地方）。
-2. **它是样书，不是内容库。** 这一屏一句话写死这件事，阅读器底栏再写一遍：
-   那 12 本是**人写的**，给你家孩子生成的那条路在「创作」。所以这 12 本不进书架、
-   不写阅读记录、不接创作流，只读。一个把"展示样品"和"你孩子的书"混在一处的入口，
-   两条路都会被读错。
-3. **图与音频分批到达，界面据实说话。** 服务端问一次盘（`lib/booklist-assets.ts`），
-   缺图的跨页显示一张写着"这一页的画还没到位"的纸 + 主题 emoji（不留裂图、不留空框），
-   书单那张卡上写真实进度「画还在画 · 5/8」。**朗读控件仍然守"整本都能响"那一条**：
-   8 段音频没齐就不给按钮，下面一行小字说清"只有 3/8 段有朗读"——
-   只对几页能响的按钮，证的是反面（与首页那条拆掉的播放条同一个理由）。
-4. **12 本全新写，与首页那本《小宇的云》是两本。** 云这个主题因此有两条各自独立的东西：
-   首页那本滚动演示书（4 个跨页，已有成品图与配音稿），和书单里这本
-   《小飞看见的那朵云》。两本守同一条底线（是草地上的想象，不是真的飞上天），
-   但**不是同一本**——书单里 12 本长度齐平这件事比"少画一本"值钱。
-5. **正文就是配音稿。** `books/{key}.ts` 里的 `spreads[].text` 有两个消费者：
-   叠在左页下角的真 HTML 文字，和 `p{N}.m4a` 那段朗读的逐字稿。改一个字就是两处一起改，
-   有一条测试摁着每跨页 2–3 行、每行 ≤ 22 字、合计 42–60 字（约 13–19 秒的慢读，
-   一本八页约 2 分 10 秒）。上限不是审美，是**版面容量**：那句话三行是左页下角那块
-   纸色渐变能不盖住画的上限，推导写在 `booklist-reader.css` 的 `.blr__text` 上。
-
-出图与配音的规格、12 本的索引在 [`docs/booklist/README.md`](docs/booklist/README.md)，
-第一本《小果的恐龙朋友》的逐页提示词与配音稿在 [`docs/booklist/dino.md`](docs/booklist/dino.md)。
-
-### 输入框上方那个「站着的小主角」（2026-10-15）
-
-`/home` 那张输入卡的右上角站着一个孩子，就是下面 12 张主题封面里那个——
-点「鲸鱼」封面，站上来的就是鲸鱼那张的孩子。参考了这个交互，但**五处做法不同**，
-每一处都是判断：
-
-1. **全身、不切割。** 参考做法把他下半身藏进纸里（从卡片后面探出来）。我们让脚落在纸边上
-   （`bottom: calc(100% - 6px)`），全身完整。这条不只是审美：切 1/4 需要一套
-   "卡片画在小人上面"的层叠戏法（定位元素默认画在非定位元素背景之上，所以不显式安排层序
-   是出不来的），不切就没有这个坑，`.cl__card` 只要一条 `position: relative`。
-2. **不是 3D 盲盒质感。** 风格库里有一条 `3d-collectible-toy`，正是参考做法那种树脂公仔。
-   不用：一个 3D 渲染的小人站在 12 张水彩旁边，是"emoji 是扁平 clip-art，与水彩是两套画法"
-   那句话的升级版（§五「工作台与首页共用同一片天空」与 `create-landing.css` 文件头都记着
-   这条判断）。这 12 个是**从同一批封面里走出来的同一个孩子**，用的是同一支笔。
-3. **它只有一个来源：主题墙。** 点「鲸鱼」封面，站上来的就是鲸鱼那张的孩子；没挑主题时站
-   `DEFAULT_FIGURE`（`dino`）。一句话就是全部规则——`const figure = theme ?? DEFAULT_FIGURE`，
-   一行推导、不是一个状态。
-   ★ 这一节**改过一次**：初版是"侧栏底部一个切换器 + 手选值覆盖主题"，也就是人物落盘、
-   主题不落盘（下面第 4 条那段理由当时是这么写的）。2026-10-15 用户看过之后要求
-   **人物改为只跟随主题，左下角那一整套拆掉**。于是 `FigureProvider`、`lib/figure-pref.ts`、
-   `components/figure/`（切换器 + 它的 CSS）连同 `lib/figures.ts` 里为它长的
-   `FIGURE_KEYS` / `isFigureKey` / `figureLabel` 一起删了——**整层拆掉，不是留着等登录**
-   （"没有消费者的代码不留"与 `make-webp.py` 里 `chip-icon` 那一档同一条纪律）。
-   折叠态那颗头像、内联展开的 12 格网格、`Esc`/点外面收起、以及"面板不能探出 `overflow-y: auto`
-   的侧栏"那一串约束，也一并作废——它们都是那套机制的零件。
-   ★ 将来接登录时**不要顺手把它加回来**：那时若有"这个用户用哪个形象"这件事，它是
-   **另一件事**（用户记录上的一个字段），不是这条推导的复活。而且它仍然不该进
-   `SettingsForm`：`lib/settings/state.ts` 的 `STORABLE_FIELDS` 是一道**按字段名的白名单**，
-   存在的唯一理由是把 apiKey 挡在 localStorage 外面，塞进去会被 `storable()` 静默剥掉
-   （症状："存完刷新就没了"，看起来像 localStorage 没生效）。
-4. **主题不落盘——现在也一样。** 主题是"这一轮想讲什么"，刷新回空是**对的**。
-   人物既然只由主题推出，它也就跟着不落盘；两样都不存，就不存在"昨天挑的人今天还锁着
-   昨天的主题"这种漂。
-
-★ `public/figures/` 那 12 张**已经落地**（出图提示词、逐张体检数与 12 条身份锚点见
-[`docs/figure-art-prompts.md`](docs/figure-art-prompts.md)；去底与缩档的实测数见 §三那张预设表）。
-缺图时的兜底仍然成立、也仍然值得留着：`alt=""` 的 `<img>` 在 404 时不画碎图标，影子又是挂在
-`img` 上的 `drop-shadow`（跟着 alpha 轮廓走）而不是一个写死的椭圆——所以万一某张图没到位，
-纸上不会留一个孤零零的影子，也不会留一个"这里本该有人"的空壳。
-
-★ **去底这一道付过两次学费，两条都不是眼看出来的**（完整机制与实测数写在
-[`scripts/cutout.py`](scripts/cutout.py) 的文件头，这里只记结论）：
-
-- **白底必须用"边缘连通泛洪"，不能用全局色键。** 这批画是水彩铺色 + 细彩铅收形，**白是画面里的
-  颜料**：轮廓线把内部的白封住、泛洪够不到，于是保住了。这一条是**量**出来的、而且量了两档
-  （2026-10-15，逐张体检数里那个「最大封闭白块」）：
-  在 `--tol 2`（落地那一版）下它只有 **0.2%～0.5%**，且均色是**纯白 (255,255,255)**
-  ——`whale` 那张是 5288 px、bbox 落在脸上，就是**眼白**；
-  把阈值放宽到 `--tol 12`，`flower` 那张同一块**跳到 3.9%**（人物浅色衣物也进了"近白"掩码），
-  而且 `边缘残留` 从 0 变成 1～5 px。两次测量之间那 20 倍，就是"全局色键会在人脸上打洞"
-  这句话的实证——**它不是一句修辞**。
-- **`--tol` 不是越大越干净。** `--tol 12` 会**吃掉一条拴气球的线**：那条线本身近白（偏差 3～12），
-  于是自己也进了"近白"掩码，泛洪顺着它走过去把它抹了——症状是气球与手脱开、飘在图上
-  （在最终 256px 的 WebP 上是一块 4310 px 的独立岛）。压到 `--tol 2` 保住它，
-  但源图是 JPEG，平白背景带 ±10 噪声，紧阈值会让噪声点成片留下
-  （实测每张多留 1.0%～1.5%、bbox 铺满整幅画面）。所以两步必须一起：**紧阈值 + 抹孤岛**。
-  判据是**连通块**，不是眼看——那些噪声点在最终 256px 的图上一眼看不见，在源分辨率上
-  却是十来个像素一块的实心斑。
-
-★ 它是**第 13 处**"美术与界面同一支笔"的证据，也是唯一一处**不生成**的：这 12 张不进
-`lib/engine/`、不进清单与指纹（ADR-0007 那条"画的与查的同源"讲的是**角色卡参考图**），
-也不往 `/create` 的 URL 上加参数——它改的是这一屏站着谁，不改生成出来的书。
-
-### 工作台与首页共用同一片天空（2026-10-15）
-
-工作台四屏（`/home` `/shelf` `/character` `/voice`）原来是一块 `#faf5ee` 平涂 + 白色侧栏 +
-一枚实心橙胶囊，和首页放在一起**像两个网站**。现在它们共用首页第一幕那张
-`scenes/scene-1.webp`：`shell/StudioBackdrop` 一片天 + 一层按 WCAG 量过的纸光。
-
-#### 量的工具进了仓库，而且它读的是 CSS 本身
-
-给画加一层雾、判断"字还看不看得清"，README 前面已经写过一次教训（第三屏那两行灰字
-逐带要求 α ≥ 0.92…0.96，见下）——那不是"雾再厚一点"，是**那两行本来就不该压在画上**。
-这次不靠"看着挺清楚"下结论：`node scripts/check-scrim.mts` 把 CSS 里的数**解析出来**
-（天空带高度、`background-position`、每一档 α、四种墨色），按 CSS 的口径合成
-（先 multiply 出底色，再在 gamma 编码空间混纸色，最后按 WCAG 线性化算明度），
-按天空带切十段，每段取**最暗 1%**。解析不出来就当场报错退出，**不许退回内置默认值**——
-退回默认值的量具会一直报绿。
-
-1440×900 下的读数（门槛 4.5:1，正文级 AA）。★ 最后一列是 **R−B（冷暖度）**：
-负 = 偏冷（青/蓝），正 = 偏暖（橙/米）。它是 2026-10-15 为"滚到中段底色变橙"加的，
-见下一节：
-
-| 天空带内 y | `--ink` | `--ink-on-sky` | `--ink-muted` | `--accent` | R−B   |
-| ---------- | ------- | -------------- | ------------- | ---------- | ----- |
-| 0–10%      | 13.28   | 6.60           | 3.97 ✗        | 3.85 ✗     | −19.2 |
-| 10–20%     | 13.34   | 6.64           | 3.99 ✗        | 3.87 ✗     | −20.5 |
-| 20–30%     | 13.90   | 6.92           | 4.15 ✗        | 4.03 ✗     | −14.5 |
-| 30–40%     | 13.95   | 6.94           | 4.17 ✗        | 4.05 ✗     | −12.2 |
-| 40–50%     | 14.81   | 7.37           | 4.43 ✗        | 4.30 ✗     | −12.5 |
-| 50–60%     | 15.22   | 7.57           | 4.55          | 4.42 ✗     | −11.3 |
-| 60–70%     | 15.62   | 7.77           | 4.67          | 4.53       | −8.1  |
-| 70–80%     | 16.09   | 8.00           | 4.81          | 4.67       | −5.9  |
-| 80–90%     | 16.32   | 8.12           | 4.87          | 4.74       | −5.1  |
-| 90–100%    | 16.69   | 8.30           | 4.99          | 4.84       | −5.0  |
-
-脚本的脚注（同一支命令打印的，不手抄）：
-
-```
-侧栏那层纸 α=0.78：--ink 15.81 / --ink-muted 4.72 / --accent 4.59 / --ink-on-sky 7.86
-天空带以下是纯 --paper rgb(244,248,249)：--ink 16.69 / --ink-muted 4.99 / --accent 4.84 / --ink-on-sky 8.30
-✓ 交界不换色：天空带最后一段 R−B −5.0 与纯纸 −5 同号（都是冷白）
-```
-
-### 工作台的纸是**冷**的，物件才是暖的（2026-10-15 第二轮）
-
-上面那张表是"工作台的纸还是 `#faf5ee` 暖纸"时量的。它自己没说的一件事是：
-**那块暖纸与这片冷天是两个物种**——天是冷的（R−B ≈ −19），纸光一路往暖纸混，
-于是从天空带滚到下面那段纯纸，必然出现一次冷→暖的换色（R−B 从 −5 走到 +12）。
-用户在自己浏览器里提的原话是"鼠标一向下滚下面的底色就又变成橙色了，和上面有好强的割裂感"，
-说的就是这一件事；侧栏那条奶油柱在冷页面里显得又重又孤立，也是它。
-
-**解法不是把接缝处理掉，是让接缝不存在**：`--paper` 本身换成天自己的那个冷白
-（`#f4f8f9` = 244,248,249）。一处改动带到三个消费者（`.sb` 底色、`.sb__veil` 的每一档、
-侧栏那层纸），上面那张表重跑出来的 R−B 列从 −19.2 一路**单调**走到 −5.0，
-再往下就是纯纸的 −5 —— **一次换色都没有**，并且脚本新增了一条硬断言钉住它
-（天空带最后一段与纯纸必须同号，异号就 FAIL）。
-
-暖色没有丢，是**换了承担者**：`--card-paper`（`#f7efe3`）还在，它才是**实物**的相纸色
-（裱照片的 mat、虚线手写标签、图没到位时的底）。这一屏的中性色从此有一句能讲清的话：
-
-> **冷的是光，暖的是物件。** 页面跟着画面走；画面里那些纸才是暖的。
-
-★ 这一句后来**收窄过一格**（工单 05，用户第三轮反馈）：**卡背不是物件**。
-角色墙的卡身原来是整块 `--card-paper`，压在冷天上是一块暖斑——用户的原话是
-"角色卡和背景一点都不适配"。卡背改成 `--surface`（冷），暖色只留在那一圈 mat 上。
-所以"物件"指的是**被拿在手里的那张相纸**，不是承载它的那张卡。
-这次换色**同时**把四条墨色的对比度全部抬高了（`--surface` 上 17.85 / 17.08 / 5.33 /
-5.18，暖纸上 15.65 / 14.98 / 4.67 / 4.54），所以不是拿可读性换的——两层卡面的
-五行墨色现在是 `scripts/check-scrim.mts` 里的一组**断言**，谁把卡面调深到破线就红。
-
-顺带一条反直觉的读数：翻成冷白之后对比度**比原来那颗暖纸还好**
-（16.45/4.92/4.77 → 16.69/4.99/4.84）——因为 244,248,249 的整体明度比 250,245,238 高。
-两头都赚的改动最该怀疑自己算错了，所以那四条断言在脚本里是**硬闸门**，不是注释。
-
-侧栏同时减淡了：α 0.90 → **0.78**。0.90 那一档是为了在**暖**纸上压住天；
-纸与页面同族之后压住不需要那么厚，"侧栏太重、和右侧割裂"就是那 12% 的差别。
-减淡后的四条读数见上面那段脚注，仍然全过。
-
-#### governing rule（这条决定其余一切）
-
-> **压在天空带上的文字只允许 `--ink` 与 `--ink-on-sky`。**
-> `--ink-muted` 与 `--accent` 做文字时，必须在一张纸里（卡片的 `--surface`、
-> 侧栏那层纸、或天空带以下那段纯纸）。
-
-好处是纸光可以铺得**薄**——天空真的看得见，不用为了兜住灰字把整屏盖成米色。
-脚本唯一的硬断言就是这两条（十段全过）；灰字与橙字的安全区间由表报出来，
-那是排版时看的事，不是脚本能替人决定的。**红了改 CSS，不改门槛**（门槛是 WCAG 的）。
-落地的五处：`.cl__sub`（`/home`）、`.shelf__sub` / `.shelf__local-note` / `.shelf__tab`、
-`.cw__sub`、`.vc__sub`——每一个都原本是 `--ink-muted`，每一个都能在表上找到它破线的那一段。
-
-#### 这张图只有顶上 20% 是蓝的（第一版被真机截图否掉之后才量出来的）
-
-第一版按字面做了"满屏 fixed 天空 + 一团径向阅读光"，截图里读出来是**两块色斑**而不是一片天。
-逐行取样（1365×768，行均值）：
-
-```
-y= 4%  227,242,240  ← 蓝在这一行，且偏画面左半边
-y=13%  226,243,241
-y=21%  237,246,243  ← 从这个高度往下就是准白
-y=38%  239,247,245
-y=63%  243,250,248
-y=96%  242,247,244
-```
-
-21% 以下它本身就是 237–250 的准白，与 `--paper`(250,245,238) 只差一点色相。
-**直接把图铺上去，屏幕顶部就只会有一条淡蓝带 + 一整屏暖白**——那是"页眉有一条色"，
-不是一片天。把雾调薄只会让那条带更清楚，调厚则整屏变米色，两条路都不通。
-解法是拿这张图**自己顶部的色偏**（`--sky` = `#e8f3f4`，就是上面那两行均值的圆整）
-与图 multiply：准白部分被染成天顶那种淡蓝，蓝的部分加深，粉云退成灰玫瑰仍在水彩那一支笔里。
-于是"冷"是从画面顶上**长到整段**的，而不是一条带。
-
-#### 两条刻意不做
-
-- **侧栏不做毛玻璃。** `backdrop-filter` 挂在固定元素上 = 背景每变一次就要重新采样并重绘
-  它背后那块屏幕，而它背后正是一张满屏大图。首页为同一件事拆过 `.to-top` 与 `.btn--ghost`
-  （见下），两条都留着"别再加回去"的注释。侧栏用实底半透明纸
-  `rgba(var(--paper-rgb), .78)`：量出来的读数是 `--ink` 15.81 / `--ink-muted` 4.72 /
-  `--accent` 4.59 / `--ink-on-sky` 7.86，四条全过。
-- **不做视差位移。** 大图上任何 transform 都是每帧重采样一整屏（同一条账）。
-
-#### ★ 这不是"满屏 fixed"，而是**随文档走的天空带**
-
-第一版还有个更硬的毛病：**固定背景 + 会滚动的正文 = 契约不成立**。按视口分带量出来的表，
-只对"永远待在同一带里的字"有效；书架那一屏往下滚，任何一行灰字都会经过最上面那一带。
-改成 `absolute`（贴文档顶部 112vh）之后，"哪一行字能压在天光上"变成一个**与滚动无关**的事实：
-看它在文档里的位置。首页那三幕本来就是"镜头摇过一片风景"，工作台接的是同一条物理。
-★ 量具必须跟着换——按视口分带和按文档分带是两种几何，混用会量出一份对不上的数。
-
-#### ★ CSS 持终态，GSAP 只做 `from()`
-
-工作台的进场（`lib/useEnterTimeline.ts`）**倒过来写**：默认状态就是画完的样子，
-GSAP 只负责"从哪儿来"。这条正是首屏付过的学费（见下「首屏的第一帧不靠 JS」）：
-那样禁 JS、hydration 之前、`prefers-reduced-motion` 三种情形下，用户看到的都是完整的一页。
-**静止终态因此不需要单独写**——它就是默认态。
-
-实测过一次最狠的情形：预览面板被隐藏、`requestAnimationFrame` **一次都不跑**
-（README 记过的"后台文档 0 次 rAF"那条），此时每一处进场目标都停在
-`opacity: 1 / transform: none` —— 一页完整的内容，而不是一页半成品。
-
-★ 也正因为同一个原因，**动效本身没有在这次改动里被验证**：面板隐藏时 rAF 与
-CSS transition 都不推进（`transition: border-color` 也是这样"卡住"的，一度被误读成
-焦点样式失效）。判据是数 rAF 而不是读 `visibilityState`，而这次数不出来。
-要验它得在一个前台标签页里看。
-
-### 手工出的图**不重编码**（2026-10-15 第五轮）
-
-角色卡的两张示例形象是用户拿我们打印的提示词**自己在外部工具里出的**
-（`node scripts/make-demo-cards.mts --prompt-only=1 --bg=white` 就是那份提示词）。
-装回卡里时脚本**一个字节都不动**，这不是省事，是那份 JPEG 里带着凭据：
-实测 C2PA 清单写着 `c2pa.created` /「Created by Google Generative AI」与
-`c2pa.edited` /「Applied imperceptible SynthID watermark」。
-
-**"把图规整一下"（补白边到方的、转 PNG、压质量）会让那份签名失效。**
-卡上记着"这张图是谁画的"，而图里那份能拿去核对的凭据被我们自己抹掉了，
-等于一手剪断自己的证据链——这与 §7.4「画的与查的同源」是同一件事的两个方向。
-于是卡上的 `modelId` 记的就是清单里那句话（清单里没有模型名，就不写模型名）。
-
-代价是**参考图不是方的**（896×1200，3:4 全身像），所以**每一个显示它的框都不许裁**：
-`character-wall.css` 的 `.cw__art` 用 `object-fit: contain`，另外三处方框
-（主页那颗 24px 圆头像、创作流的 64/96px 预览与 48px 复用缩略图）一并从 `cover` 改过来。
-按 1:1 中裁的实测代价是每边切 152px——**小满的脚切掉 79px、小宇的头顶切进去 69px**，
-而提示词里只留了 8% 的余量；把中裁的结果渲染出来看过，脚没了、头发顶到画框上沿。
-
-顺带两条：**卡已存在时叠一版而不是覆盖**（ADR-0007；且直接重建会写出第二个
-`r1.<指纹>.json`，而 `store.ts` 的 `load()` 按前缀取 `keys[0]`——取哪个由目录顺序决定）；
-**`--images` 那条路的 `--model` 没有默认值**，因为脚本无从知道那张图是谁画的，
-回落到 `wan2.7-image` 就是**编一个来源**。
-
-### 「空值算不算错」要分锚点强度，不分就会假拦（2026-10-15 第六轮）
-
-同一天里有两处改动各自都对，合起来把一个**完全合法的卡**拦在门外：
-
-1. `checkAnchors` 补了一条「空值也算问题」。它补的是一道**会花钱**的缝：
-   界面把某格清空 → 槽位还在 → 界面说"可以提交" → 服务端**先出图** →
-   `normalizeAnchors` 丢掉那一格 → `validateCard` 才说「缺骨相」。家长付了一张图的钱，
-   换来一句"角色卡不合格"。
-2. 新的"读一遍照片"那条路会把模型**看不见的槽位清空**——这是刻意的，不清空就留着
-   示例孩子那句"芥黄短袖 + 红雨鞋"，那张卡会变成"照片里的脸 + 别人家的雨鞋"。
-
-撞出来的结果：家长读完一张照片，看到「**记号是空的**」，按钮点不动——而那张卡
-本来完全合法。因为 `特征记号` 与 `常服` 是**软锚点**，`REQUIRED_SLOTS` 里没有它们，
-丢掉它们之后卡照样能出图。而"照片里看不见记号/常服"是这条路上的**常事**
-（实测用的那张输入图就看不见）。
-
-修法一句话概括：**空值只在"缺了它会出不了图"的槽位上算错**。上面那段
-"界面不能比服务端松"的推理在软锚点上不花任何钱，所以对它不成立。
-
-★ 值得记的是**它是怎么被发现的**：不是读代码读出来的，是**看探针打出来的原始产物**
-（那一行 `mark:（没读到）`）才想起来"那界面会报什么"。所以那几条探针都把产物原样打出来
-——只打一个"通过/不通过"会整整漏掉这一类。这与 §五「测量这一层不许自己另搭流水线，
-也不许把「没跑成」记成「没跑过」」是同一条纪律的另一面：**探针的粒度要能看见病因**。
-
-★ 同一轮顺手把 `tsconfig.json` 格式化了：几个会话的 dev server 各自往里加 `include`
-条目，而 Next 改这个文件时会把数组展开成多行，于是 `format:check` 常红在一个
-**不属于任何一单**的文件上。`prettier --write` 只改排版、**不删任何人加的条目**，
-四条闸门因此第一次能一起绿。
-
-### 书架的次序是默认规则的**覆盖**，不是第二条默认规则（2026-10-16）
-
-`/shelf` 那一屏原来只有一条摆法：`listBooks` 的 `createdAt` 降序（新的在前）。
-用户要能自己挪次序，于是多了一份 `shelf/order.json`。两者合成的方式是**分层**，
-不是相加：
-
-```
-listBooks(store, coverUrlOf)        ← 默认序（这条规则仍然是真的）
-        ↓ applyOrder(books, loadOrder(store))
-```
-
-★ **清单没见过的书排在最前面**是这一层唯一需要想清楚的地方。手排是默认规则的
-**覆盖**，而覆盖只对它写下的那几本负责；剩下那几本之间仍然按"新的在前"。
-反过来把默认序的尾巴接在清单后面，症状是"刚做完一本书，回书架要翻一屏才看见它"
-——那读起来像"我的书是不是没存上"，而重排一格只是用户自己刚做的动作。
-
-同一条"分层"还决定了顺序**落在资产根、不落 `localStorage`**：书架那一屏是服务端
-渲染的，顺序只存在浏览器里的话，首屏只能按默认序渲染、挂载之后再跳一次。
-
-### 删一本书要连**派生内容**一起删，顺序清单也要剪（2026-10-16）
-
-`child-deletion.ts` 记过一个真实的漏（"删了卡没删图"）。删一本书是同一件事的第二个
-实例，清单三类：`books/<bookId>/`（本体）、`thumbs/<档>/books/<bookId>/`（5 档缩略缓存，
-**它是派生的，但它也是这本书的图**）、`shelf/order.json`（把书号划掉，文件留着）。
-
-纪律逐字照那一层：前缀一律带尾斜杠（`deletePrefix` 在内存 store 上是键前缀、fs store
-上是目录遍历，传文件路径两边报数不一样而东西照样被删）、凭据上那些数出自
-`deletePrefix` **真删掉的条数**、**不共用**删之前那一次枚举（那一次只负责拼出
-"2 张图 + 1 段朗读…"那句人话；两者在"正常情况"下相等，而"正常情况"正是不该被假定的
-东西）、每个位置各自 try/catch（失败记进 `failed` → `complete: false`，界面**不许**说
-"删掉了"）。**不报字节**：`AssetStore` 没有 `stat`，要算字节得把几十张页图读一遍，
-而家长要问的是"删干净了吗"。
-
-★ 这一层**没有**导出 `DeletionPartialError`：`child-deletion.ts` 那边导出了它，但
-`deleteChildEverywhere` 从头到尾不抛——那个 `instanceof` 分支是够得着的假象。
-多一个永远走不到的分支，就多一处会骗人的代码。这里把 `complete: false` 与每个位置的
-原话写进凭据，路由照着凭据回码（删到一半 → 500 + **带上那张不完整的凭据**：
-"确实删了一半"与"什么都没删"要让用户做两件不同的事）。
-
-★★ 2026-10-16 用户第二句话把确认框砍到**一句话**：「也不要写这么多，就一个确认是否删除，
-还是算了」。第一版照着 `/api/children/[childId]` 做了两步——`GET` 一张"将要失去什么"
-的凭据（一个字节都不动）→ 逐行列出来 → 确认 → `DELETE`。那份逐行清单是这一屏最长的
-一处，而用户要的是"问一句"。
-撤掉的不只是那几行字：`planBookDeletion` 与那条 `GET` 一起删了——留着就是一段没人消费
-的代码，而"预演"这条路上最容易出的错正是"预演说能删、真删说没有"。
-**代价说清楚：点确认之前不再知道"要失去多少张图"。**
-删完那张凭据**只在出错时被人看**：正常删完，界面上什么也不留（用户先说的那条
-「书架底下什么也不要留」——不做"最近删除"、不做回执行）。删到一半失败是唯一的例外：
-那时逐行的位置清单才渲染出来，那不是"留下的记录"，是必须说的话。
-这与「不糊弄」那条是同一件事的两面：**"删掉了"这三个字要能被检查，
-但检查的凭据不必留在屏幕上**，更不必在删之前先铺一遍。
-
-★★ 验证这件事的探针**会写盘、还会删文件**，所以它跑在
-`scripts/make-probe-library.mts` 造出来的隔离资产根上，且两道守卫：造夹子的脚本拒绝
-指向缺省资产根 `.out/web`（那是用户自己的书架）与 `public/`；探针的拖动/键盘/删除三节
-只在"架子上真有 `probe-` 开头的书"时才跑，否则**跳过并说明**。
-一次"验收"把用户唯一那本书删掉，是这个脚本最坏的失败方式，比漏测严重得多。
-
-★ 次序那条判据必须**重载一次**才算数：DOM 顺序变了只证明本地状态改了，
-`Page.navigate` 之后新次序还在，才证明它进了 `shelf/order.json`。
-
-★ 删那一节的判据之一是**"确认框有多短"**，不是"它写了什么"：里面不许出现"11 条"那种
-数、不许出现旧版那三行位置名，两颗按钮正好是「算了」与「确认删掉」。而先点一次
-「算了」——这一本还在架上、也还在 `GET /api/books` 里（**"能反悔"才是这句话的全部
-意义**），再点 ✕ 重新问一遍才真删。
-
-### 首页那 12 张，接力到工作台的墙上（2026-10-16）
-
-用户实测的反馈是**「从首页点击进主页就是很单调的直接跳转，这样子不太优雅」**。
-这一条不是加一段特效，是**把那次路由的接缝补上**：首页那个环与 `/home` 的主题墙
-用的是**同一批图、同一个顺序**（两边都是 `THEMES`），只隔了一次客户端路由——
-所以点「开始创作」时把那 12 张**此刻在视口里的位置**量下来，切页之后让墙上那 12 格
-**从那些位置飞回自己的格子**。数据层 `lib/theme-handoff.ts`，落点那一步由
-`lib/useEnterTimeline.ts` 的 `arrival` 接管（`ENTER_STEPS` 其余各步一字不动）。
-
-观感：文案 / 点阵 / 柔光淡出 200ms（**环继续自转，一个像素不改**）→ 切页 →
-侧栏从左边让进来 + 12 张封面各飞各的格子（0.62s，错峰 25.5ms/张）。
-过程与实测记在 [`.scratch/home-handoff/`](.scratch/home-handoff/spec.md)。
-
-**八处判断，每条都对应一个"为什么不那样做"：**
-
-1. **不用 View Transitions API。** `next` 15.5 的 `experimental.viewTransition` 要 React
-   canary（本仓库锁 19.1.0 stable），而且它把整个视口做快照交叉淡入——那正是
-   "两个网站互换了"这句话。手写一条只搬 12 个元素的接力，可控、可退化。
-2. **落点是墙上那 12 格本身动**，不是叠一层贴图：终点天然精确（它就是 CSS 的终态），
-   没有"落地那一帧与真身对不齐"的交接，也没有第二份 12 个 `<img>` 要清理。
-   代价是卡片带着**名字与主题词**一起飞进来——那不是穿帮，是"这张画的名字一起到场"。
-3. **对齐的是"图心"，不是"卡心"**：环上那张卡只有图，墙上这一格是图 + 名字 + 主题词，
-   卡心比图心低约 22px。所以平移量里还有一条 `s·(artC − cardC)`
-   （`theme-handoff.test.ts` 有一条"图心落在环上那张卡的中心"钉着它）。
-4. **退场走完 200ms 才量、才 push**，不是"点了立刻 push"：生产环境里 `<Link>` 悬停已预取、
-   RSC 三十几毫秒就回来，立刻 push 会把退场**腰斩**——过渡质量取决于缓存冷热，
-   而且量到的是点击那一刻的位置，环已经又转过十几像素。
-5. **CTA 那一行不参与淡出。** 退场之后到工作台上屏之间还要等一次 RSC
-   （dev 下实测 0.5–2.6s，见 `shell/AppShell.tsx` 文件头那组读数）；那时屏上若只剩一个
-   转着的环、一个字都没有，读起来像坏了。所以那颗主按钮留下来，120ms 后自己说
-   「正在打开…」——门槛数字与 `AppShell` 的 `PENDING_SHOW_AFTER_MS` 是同一条规矩。
-6. **模糊不跟着飞**：让 12 个元素每帧重新栅格化 0.6s，与 `backdrop-filter` / `video`
-   那两次学费同一性质（见上面两条）。距离感由 scale + opacity 承担。
-7. **宽度量的是"投影之后"的那一块。** `.hero` 的 `perspective: 1400px` 配上每张卡自己的
-   深度（`z = (d − .5)·360`，最深 ±180）——按公式是 `1400/(1400 ∓ 180)`，即近的那半圈
-   1.147 倍、远的 0.886 倍；**1440×900 实测逐张**（`包围盒 ÷ 旋转撑大 ÷ 未投影宽`）
-   是 **1.140 / 0.894 / z=0 那两张 1.02**，也就是前/后排各约 **±12%**。
-   用没投影过的尺寸起飞，切页那一帧前排那 6 张会凭空缩小一成多。所以取
-   `rect.width / rotInflation(rot)`：包围盒是投影过的（要的就是它），但也被旋转撑大了
-   4.7%（16:9 转 5.2°），那一项除回去。
-8. **墙上那一层抬到输入卡上面**（`.cl__wall` 的 `position: relative; z-index: 2`）：
-   按绘制顺序 static 块画在定位元素（`.cl__card` 是 relative）**下面**，
-   不抬的话卡片会在输入卡背后消失半秒——而"这 12 张一路看得见"是这条接力的全部意义。
-
-**四条退化路径，一条都不留半成品：**
-
-| 情形                        | 会怎样                                                 |
-| --------------------------- | ------------------------------------------------------ |
-| 直接访问 / 刷新 `/home`     | 没有载荷 → `ENTER_STEPS` 原来那一步，一字不差          |
-| `prefers-reduced-motion`    | `StartCreating` 不拦那一下，瞬间切页；不量、不飞、不演 |
-| 禁 JS / 中键 / ⌘ 点击       | 那仍然是一颗真 `<Link href="/home">`，浏览器自己走     |
-| 载荷过期（3s）/ 12 张没量齐 | `peekThemes()` 返回 null → 退回默认进场                |
-
-★ 载荷**不进 localStorage / sessionStorage**：它是"一次点击到下一次渲染之间"的事，
-刷新之后那份坐标不但没用，还会把上一屏的位置用在这一屏上。用的是**只读不认领**
-（`peek`）——React 严格模式会重复调用 `useState` 的初始化器，"读一次就没"的写法
-在 dev 下会读到空的（与"防双发用 ref 不用 state"同一类坑）。
-
-**验过什么、没验过什么。** 在预览面板里验过（一次性探针，量完即删）：退场态生效、
-§8 那条规则从 CSSOM 读出来一字不差、CTA 会换成「正在打开…」、切页落在 `/home`、
-12 格终态（`opacity` 全 1、没停在半途），以及**接力载荷与独立量的一遍环几何逐张相减
-最大差 0.00**——这是"接力真的接上了"唯一的硬证据。
-**动效在那个面板里验不了**：1.2 秒 **0 次 rAF**（`visibilityState` 却报 `visible`，
-就是上面记过的那个伪装），GSAP 的时间线一帧都不渲染，既看不到飞行、
-也没法区分"接力接管了"与"走的默认那条"。**而它一进真帧就露了一个真 bug**——见下。
-
-★ **2026-10-16 补：用户实测「我并没有感受到那 12 张各自从环上的位置飞进主题墙自己那一格」。**
-根因不在接力这一侧（起点算得是对的），在 `useEnterTimeline` 的**两行之间**：
-
-- 「只播一次」的闸门（`played` ref）立着，而 cleanup 里的 `mm.revert()` 会把这条时间线
-  **整条撤回**。于是只要 effect 跑第二遍，第二遍撞上闸门当场 return，
-  画面就停在**撤回之后**的状态——**什么都不演**，连默认进场都没有。
-- 而 dev 的 StrictMode 正是"挂载 → 卸载 → 再挂载"，所以**从首页点进来那一趟必然跑两遍**
-  （直接打开 `/home` 只跑一遍）。**实测**（headless Chrome 直连 CDP，真帧）：
-  点击进来那一趟 `runs: 2, earlyReturn: 1, mmCallback: 1`，墙上 12 格**从第一帧起
-  就是终态**（`opacity: 1` / `transform: none`）；直接打开那一趟 `runs: 1`，
-  同一格读得到 `opacity 0.7 → 1`、`y 3.6 → 0`。同一个 effect，差别只在跑了几遍。
-  ★ 这正是**"静态验证全绿、用户那边什么都没有"**最容易长成的形状：光标停在前台那一刻
-  页面是完整的，而"完整"与"演完了"在看代码时分不开——**只能数帧**。
-- 修法是把闸门在 cleanup 里放回去（`played.current = false`）。`played` 从此是
-  "这一刻有没有一条**活的**时间线"，不是"这辈子演过没有"；组件一卸载 ref 就没了，
-  路由内切回这一屏是全新实例，那一刻重播是**对的**（每一屏都该有它自己的进场）。
-- 修完在同一台 headless Chrome 里量到了飞行本身（墙第一格）：
-  `scale 1.465 → 1.0`、图宽 `235 → 160px`、`y 421 → 587`，约 0.7s 收敛到终态。
-  也就是说上面"载荷最大差 0.00"那条是对的，但**它当时并不足以证明用户会看见东西**。
-
-★ 顺带一条量这个面板时撞到的：面板的 `innerWidth/innerHeight` 是 **0**（`.hero` 仍有 1280 宽），
-于是 `clamp(214px, 19.1vw, 302px)` 里的 `19.1vw` 解析成 0、每张卡取下限，主题墙也塌成一列。
-**这一屏的几何数不是真的**，别拿它当版面读数——与"会话没开窗口时几何量出来是错的数"
-是同一类。载荷比对不受影响：两边量的是同一个当下。
-
-★ 三处**两处手写的数**（与本文件其它几处同一类耦合，改一处要改另一处）：
-`StartCreating.tsx` 的 `EXIT_MS` ↔ `hero-orbit.css` §8 的 `transition: opacity .2s`；
-`theme-handoff.ts` 的 `WALL_ITEM` ↔ `ENTER_STEPS` 最后一步的选择器（**改一处不改另一处，
-接力会一声不响地不生效**，所以有一条断言钉着）；以及两个页面各自那份 `THEMES` 顺序
-（环靠 `data-orbit-index`、墙就是 `THEMES.map`，谁重排了其中一边就是错位）。
-
-### 首页只做桌面，不做移动端
-
-`HeroOrbit` 内部没有任何断点——环上的卡片数与半轴都按宽屏调过，缩到手机宽度只会糊成一团。页面层给 `min-width: 1280px` 兜底成横向滚动。
-
-**这个 `min-width` 刻意写在首页容器（`.home-hero`）上，而不是 `body` 上**：一条全局的 `body { min-width }` 会把之后所有页面一起锁死在桌面宽度。组件自己不带断点，兜底交给消费方，理由写在 `HeroOrbit.tsx` 顶部注释里。
-
-### 页面级背景：三幕场景靠长交叉溶解换（`SceneBackdrop`）
-
-三屏各压一张 16:9 场景图（清晨天光 → 午后草坡 → 夜晚台灯下的书桌），叠成三层
-`position: fixed` + `z-index: 0`，随滚动换幕。权重由 JS 写进 `--scene-1/2/3`，
-**归一化到和为 1**，所以任何滚动位置都有一个完整合成，不会漏出页面底色
-（漏出来就是两幕交接处"闪一下"）。
-
-**权重按「幕中心距视口中心的距离」算，不按总滚动进度**：总进度是个纯数字，它不知道
-第一屏有多高——加一节内容、书多翻一页，溶解的时间点就全漂了；而"某一幕的中心离屏幕
-中心还有多远"是自解释的：看到第二幕的书居中，第二幕就正好是全实的一帧。
-半宽不能拍常数，**必须由实测的幕间距推出来**：1440×900 下相邻幕中心相距
-**1.92 与 2.29 视口高**，取 `spread = max(间距 / 2 + 0.5, 0.6)` ≈ 1.64。
-原型阶段拍过常数 0.75——两条权重带从不交叠，所谓"交叉溶解"一次都没发生过，
-走到中点时三层全为 0、被"最近者胜"的兜底接住，读起来是硬切。
-把同一公式对实页几何全滚动量扫一遍（42 个采样点）：两层以上同时非 0 的有 **20** 个
-（真的在溶解），**没有任何位置三层全 0**，归一化后恒为 1。
-
-**为什么另起 `lib/useScrollTick.ts`，而不是并进 `useScrollDriver`**：那条广播只在
-有 driver 实例的节里跑，第三屏是 GSAP 驱动的——走到第三幕时没有任何实例在跑，
-广播会把溶解冻在半路。这份是页面级 tick，只在 scroll / resize 时排一帧 rAF
-（空闲时零个 rAF，不是第二条常驻循环；与 `useScrollDriver` 的"常驻循环 + 帧率窗口"
-是两种东西）。哪天第三屏也迁到 `useScrollDriver`，这份就该并回去。
-
-**首屏必须把底色让出来**：背景层是满屏 fixed，`.hero` 那块不透明的 `--bg` 会把它
-整个盖住。口子开成 `backdrop="none"` 一个属性（规则落在 `hero-orbit.css`），点阵与
-柔光仍留在首屏里——"三屏共用同一张桌面"这条没破。实测依据：整页的不透明底色只有
-`.hero` 与 `body` 两处，`.storybook` 与 `.hl` 都没有整节底色，所以只开这一个口子就够。
-
-**雾的 α 是对比度预算，不是审美参数**（写在每层自己的 `::after` 里，跟着那层一起淡；
-量法在出图侧：先在 gamma 编码空间混色、再按 WCAG 线性化算最暗 1%）：
-
-| 幕          | 整屏最暗 1%（编码） | 雾                                                     |
-| ----------- | ------------------- | ------------------------------------------------------ |
-| 清晨 / 午后 | 229 / 187           | 平铺 0.12（原型写过 0.30，那是照暗得多的占位素材调的） |
-| 夜晚        | 66                  | 上浓下清 0.62 → 0.5 → 0.34 → 0.12 → 0                  |
-
-第三幕上 `--ink` 逐带要求 α ≥ 0.14…0.42，这条渐变罩得住；但 `--ink-muted`
-（第三屏的眉标、正文）逐带要求 α ≥ 0.92…0.96——那等于整屏盖成纸，方案本身就没意义了。
-差别这么大说明的不是"雾不够厚"，是**那两行本来就不该压在画上**。
-
-抬头那三行由 `.hl__head` 自己那层雾负责（`highlights-reel.css` 的 `::before`）。
-**它原来写的是 0.96，2026-10-14 降到 0.45，同时把那三行的字色从灰换成深墨**——
-两件事必须一起做，因为 0.45 的雾只兜得住深墨：按 `check-art.py --needs` 量出的逐带
-最暗 1%（编码 42…108）叠上第三幕自带的渐变再叠这层雾，最差那一带给的是
-`--ink` 6.03:1、`rgba(23,23,29,.86)` 4.90:1，而 `--ink-muted` 只有 1.80:1、
-连 `.75` 的墨都只有 4.02:1（门槛 4.5:1）。换句话说：**灰字与薄雾不能同时留**，
-谁要留，另一条就得回到 0.92 以上——当初那个 0.96 就是这么来的。
-前两幕的字则都在 `.hero__glow` 那团 96% 的柔光、书页、选择点或卡片自己的纸上。
-
-**两条已知取舍**：源图 1365×768（12.6 / 23.2 / 67.7 KB），在 1440×900 的窗口上
-`cover` 撑到 1599×900 ⇒ 放大 1.17×（DPR 2 的屏上 2.34×）——现状按用户的选择保留，
-重出图属出图侧的事；三个 `background-position` 的纵向百分比在 16:9 的视口上是**空转**
-的（cover 没有纵向余量），只在更扁的超宽屏上才生效，那一档还没在真窗口里看过。
-
-**验过什么、没验过什么**（写清楚，免得下次当成已验收）：实页上量过三节的几何
-（1512 / 3060 / 1059.6px）、三层各自的 `background-position` 与 `pointer-events`、
-`.hero` 让色后的 `background-color: rgba(0, 0, 0, 0)`、`.hl__head::before` 的
-`mask-composite: intersect, add` 与那条 0.45、以及那层雾对抬头的包覆
-（第三幕全实时抬头在视口 y 37–184，雾盖 y 3–218）；上面那张溶解表是把组件里的公式
-对实页几何**全滚动量扫出来**的。**没有**在真窗口里逐帧看过整段溶解
-（自动化预览的标签页是 hidden 的，浏览器不给 hidden 文档排 rAF，只量到了挂载那一帧
-与公式的全量扫描），`prefers-reduced-motion` 下的静止终态与超宽屏那一档也还没眼看。
-
-抬头那三行的对比度后来是**逐像素**复核的（2026-10-14）：把 `scene-3.webp` 画进
-canvas 取真像素，按 CSS 的口径先在 gamma 空间叠第三幕那条渐变、再叠 0.45 的雾，
-在抬头走过的四个滚动位置上、对每一行矩形内每 3px 采一次点（每行 2400–7200 个样本），
-取最小值 —— 眉标 / 标题 / 副句最差是 **6.21 / 5.75 / 5.82:1**，全部过 4.5:1。
-同一套测量按下"整层雾完全不铺"这一档：四个位置里有**三个**不过线，
-最差那一处（抬头走到视口 y 571）眉标只有 **2.11:1**、副句 **3.03:1** ——
-所以这层雾不能整条删掉，只能连字色一起换。
-
-### 两句主张合并成一行打字
-
-原来主张句与副句各占一行。现在由 `HeroTypewriter` 合成一行轮流打，省出一整行竖向空间。代价是**两句不会同时出现在屏幕上**——只讲机制的那句要等轮到它才看得到。
-
-三个兜底：
-
-- **隐形占位钉死容器宽度**。文案是居中的，若盒子跟着文字伸缩，每打一个字整句就左右抖一次。实测 1600px 视口下盒宽恒为 904.3px，全程不变。
-- **屏读与无 JS 走 `.sr-only` 的完整两句**，不跟着逐字闪，爬虫也拿得到全文。
-- **`prefers-reduced-motion` 下完全不播**，停在第一句完整状态，光标也不闪。与 `HeroOrbit` 同一套规矩。
-
-首帧就是「第一句完整」，服务端渲染与客户端初始 state 一致——既没有 hydration 警告，也不会先闪一下完整文字再清空重打。
-
-### 首屏与下一节之间有一条硬编码的时间契约
-
-`.hero-experience` 高 168vh，但**可滚距离是 68vh**（`height - 100vh`，sticky 的缘故）。
-这 68vh 分成两段：
-
-| 段         | 进度         | 发生什么                                                   |
-| ---------- | ------------ | ---------------------------------------------------------- |
-| 表演段     | 0 → **0.45** | 三层文案依次离场，轨道转过半格（`scrollTurns` 0.34 → 61°） |
-| **交接段** | 0.45 → 0.95  | 轨道下沉 24vh、收到 0.82、淡到 0.08；下一节同时升起        |
-
-两端的时刻由三个数咬死，**改一个要同时改另外两个**：
-
-- `HeroOrbit.tsx` 的 `HANDOFF_START = .45`
-- `hero-orbit.css` §5 的 `--out-start`（最后一层 .20）与离场跨度（.30）
-- `HeroOrbit.tsx` 里 `--hero-copy-p` 的 `smoothstep(.06, .84, p)`
-
-推导：最后一层在 copy-p = .20 + .30 = .50 处走完，而 `smoothstep(.06,.84,p) = .50`
-解得 p = .45。下一节的 `margin-top: -62vh` 就是按"书顶边在首屏 p≈.39 露头、
-文案刚走完书已经升到眼前"算的（详见 `storybook-flip.css` §1 的推导）。
-
-原来这三处是 `smoothstep(.03,.24,p)` + 跨度 .55 + `scrollTurns .76`，实测三层在
-**p≈.19 就全部消失**，剩下 80% 的滚动距离只剩轨道空转 137° —— 观感就是"第一页转个没完"。
-
-卡片淡出写在**每张卡片**上而不是轨道容器上：容器带 `preserve-3d`，一旦
-`opacity < 1` 就会把 3D 子元素压平，前后遮挡排序当场失效。
-
-### 首屏的第一帧不靠 JS（2026-10-14）
-
-原来的毛病是**静态可查的**：预渲染 HTML 里 12 个 `.hero-orbit__item` **一个
-inline style 都没有**，而 `hero-orbit.css` 写着 `opacity: 0`（"JS 接管前不可见"）。
-两条合起来 —— 首帧是一张空环，而这 12 张图**就是这一页的 LCP**：图下载完了
-（`fetchpriority="high"` 是对的），却没有任何一张能被画出来，LCP 从"图到"退到
-"hydration + 第一帧"。顺带第二个后果：JS 挂了 / 用户禁了 JS，首屏只剩文案和空环
-（第三屏为同一件事删过一个 `rendered`——"内容缺失才是问题"，首屏现在同一条待遇）。
-
-**t=0 那一帧其实是纯常量**：`phase = 0` 代进去，每张卡的角度 `i/n·TAU` 是定值，
-深度、scale、rot、blur、opacity、zIndex 全与视口无关。唯一不知道的是椭圆半轴
-（浏览器布局出来的数）。所以：
-
-- 摆位数学搬进 [`src/lib/orbit.ts`](src/lib/orbit.ts)（纯函数，与 `flip.ts` / `tilt.ts`
-  同一套规矩），**两个调用方共用**：`frame()` 每帧一次、`restInlineStyle()` 构建期一次。
-- 静态帧里 x / y 写的是**系数**，由 CSS 的 `--orbit-rx` / `--orbit-ry` 解 ——
-  那对变量定义在 `.hero` 上，用 `cqw/cqh`（认的是 `.hero` 自己的内容盒 =
-  `clientWidth`/`clientHeight`，**不含滚动条**；`vw` 含滚动条，1440 的窗口上差 8.4px，
-  那一跳正好发生在 JS 接手的第一帧）。没有容器查询的引擎退回 `vw/vh` 一档。
-- ★ **这是两处手写的数**：`hero-orbit.css` 的 `min(56cqw, 1420px)` / `min(38cqh, 285px)`
-  与 `HeroOrbit.frame()` 里的 `clientWidth × 0.56` / `clientHeight × 0.38` 必须同步 ——
-  与 §五 开头那条交接契约同一类耦合，注释里都写了"改一处要改另一处"。
-- ★ **一处刻意的行为变更**：自转时钟从 `ts * angularSpeed`（`ts` 从导航起点算）改成
-  `(ts - phaseBase) * angularSpeed`。不改的话，JS 第一帧会把环从静态帧的 0° 直接跳到
-  "加载耗时 × 角速度"那个角度 —— 1 秒 ≈ 0.072rad ≈ 前排卡 46px。转速（87.3 秒一圈）、
-  `scrollTurns`、交接段那三个数一个没动。
-
-**每帧写入的账**（同一个循环里原来两种标准：`setVar` 去重，逐卡 12 × 4 = **48 次写入**不去重）：
-
-- 逐卡写入加了 per-element 去重（照 `useScrollTick` 的 `setTickVar` 那套写法）。
-  实测：887 个 rAF tick 里 16509 条 style 变更 ⇒ **约 18.6 次/帧**，而结构上限是 48。
-  差额来自两处：`d ≥ 0.5` 的那半圈 `opacity` 恒等于 1（字符串不变就跳过），
-  以及 blur / zIndex 只是偶尔跨档。transform 每帧必写，那 12 次省不掉。
-- **模糊半径量化到 0.25px**（`blurFilter`）：自转每帧让 blur 变约 0.02px，不量化时
-  任意时刻约 6 张卡每帧都要重新栅格化；量化后约每 12 帧才变一档，偏差 ≤0.125px。
-  没有模糊就写 `none` —— `blur(0px)` 与 `none` 不是一回事，零值滤镜照样开一层渲染面。
-  ★ **这条的收益没量出来**：同一台机器、同一条脚本化滚动（121 次跳转/2 秒），
-  带模糊与强制 `filter:none` 各测三次，读数在 19–31fps 之间来回跳、**与有没有模糊无关**
-  （交替顺序解释了全部差异）。所以它是"结构性地少了栅格化"，**不是实测的提速**。
-- **`zIndex` 那 12 次写入不是死写，实测留了**。原来怀疑 `preserve-3d` 里 `z-index`
-  不参与排序，做法是受控实验：把两张卡摆到**同一个共面位置**（连 z 分量都一样），
-  再用 `document.elementsFromPoint()` 取层序 —— 带内联 `z-index` 得 `[3, 4]`，
-  摘成 `auto` 得 `[4, 3]`（DOM 顺序接管）。层序确实变了，写入留着。
-- **空闲帧率不动（仍 30fps）**。曾经想降到 15fps 省电，账算错了：分析里写"30fps 下一帧
-  0.24px"，实际是 `0.000072 rad/ms × 33.3ms = 0.0024 rad`，× 半径 798px = **1.91px/帧**；
-  15fps 就是 3.83px/帧，前排卡会看出阶梯。省电的收益换不来可见的抖。
-
-**首屏那颗"看一本成品"按钮的毛玻璃拆了**（`hero-orbit.css` 的 `.btn--ghost`）：
-它原来带 `backdrop-filter: blur(10px)`，而背后正是每帧在动的环 —— 与 `.to-top`
-那条同一个理由（`back-to-top.css` 里留着"别再加回去"）。底色从 `.72` 提到 `.86`，
-少了"透过玻璃看"那层柔化，换来的是每帧少一块重新采样的区域；底色更实，
-`--ink` 的对比度只高不低（方案三的场景图现在也在它背后）。
-
-**第二屏那四张跨页图离开了首屏关键窗口**：它们原来以 `background-image` 出现在
-预渲染 HTML 里（不受 `loading="lazy"` 管，元素一进布局就请求），而看到它们要先滚
-一屏半。现在挂载时 `scrollY > 0` 直接算就绪，否则等**第一次滚动**或**页码离开封面**
-（静止模式没有滚动，翻页就是那个信号）才把 URL 挂上去。
-量到的差：初载图片字节从约 1.70MB 降到约 1.39MB（那四个文件 `ls` 量出来是
-**305.9 KB**，−18%）；代价是快滚到第二屏时那一两页可能先看见纸色（`.book__face`
-自己的 `#fbf7ef`）—— 一张还没印上画的纸，不是坏掉。
-★ 这不算"内容缺失"：跨页图**只能靠 JS 翻出来**，禁 JS 的人看到的是合着的书 + 封面，
-那几张图本来就取不到；正文另有 `.storybook__live` 那段 `aria-live` 在，不依赖它们。
-
-**怎么验的**（都在 `pnpm dev:preview` 起的真页面上，用 `preview_eval` 读 computed style）：
-
-| 量                                                                       | 读数                                                                    |
-| ------------------------------------------------------------------------ | ----------------------------------------------------------------------- |
-| 预渲染 HTML 里带 inline style 的 `.hero-orbit__item`                     | **12 / 12**（改前 0 / 12）                                              |
-| 静态帧 vs `placeCard(i, 12, phase 0, …)` 的差（12 张卡逐个比 translate） | **最大 0.19px**（来自系数 6 位小数的四舍五入）                          |
-| `--orbit-rx` 探针 vs `clientWidth × 0.56`                                | 1440: 798 vs 798.0 · 1920: 1066.797 vs 1066.8 · 1366: 756.555 vs 756.56 |
-| 12 张卡的相位互差（把每张卡的深度反推出来再看是否共处一个相位）          | **0.0006 rad** ⇒ 环是一个环，不是 12 个各转各的                         |
-| 每帧 style 写入                                                          | 16509 条 / 887 tick ≈ **18.6 次/帧**（结构上限 48）                     |
-| 首载是否还拉那四张跨页                                                   | **不拉**（网络面板：只有 12 张封面 + 3 幕场景 + 封面 + 2 枚选择点图标） |
-
-`orbit.test.ts` 里另有一份**原样抄来的对照实现**（搬走之前那段内联代码），
-在 6480 组输入上与 `placeCard` 逐字段对齐（`toBeCloseTo(…, 12)`）——
-"搬动时改了手"这件事靠注释拦不住，靠这张网格拦。
-
-### 第二屏：滚动翻页绘本（`StorybookFlip`）
-
-首屏回答"能做什么"（12 个**不同的**孩子）；这一节回答产品真正的承诺——
-**每一页都是同一个他**。论点不靠文字说，靠翻给人看：同一本《小宇的云》四个跨页，
-中途停下来让孩子选一次往哪朵云去。
-
-**叶模型**：一张 3:2 的跨页图**不是一个物理单位**，真实书里
-`第 k 个跨页 = 第 k−1 叶的背面 + 第 k 叶的正面`，所以 4 个跨页要 **5 片叶**。
-半页不切文件——同一张图挂两次，`background-size: 200% 100%` 各取一半，请求数减半；
-3:2 的图铺进 3:4 的页面正好是原比例，不拉伸也不裁。
-这也是出图时那条「主体不许压在水平 46%–54%」约束的来源。几何在
-`components/book/flip.ts`，是**纯函数**（`q → 每叶的角度 / 层序 / 阴影`），
-不碰 DOM 也不碰 React——W2 的阅读器要换接口时它能整块搬走。
-
-**页面比例是 3:4，不是 1:1**：一条跨页 = 两个 3:4 的页面，与 3:4 的封面同比例——
-封面落进页面不用再裁（2026-10-12 之前跨页按 2:1 落盘、页面是 1:1，封面得上下各裁 12.5%；
-这笔账的来龙去脉见 [`docs/demo-book-art-prompts.md`](docs/demo-book-art-prompts.md) §五）。
-连带一条：书的宽度上限里有一条 `90vh`——3:2 的书比 2:1 高 1/3，不夹高度的话
-书顶边会抬高（首屏交接的时序契约跟着错）、书底边会顶到收尾 CTA。
-夹到书高 60vh 之后顶边落回 20vh，与 2:1 时代的 20.4vh 几乎重合，**首屏那三个数没动**。
-代价是同一视口下书窄了约 1/4（1440×900 下 1065px → 810px），换来的是真正的 3:4 书页。
-
-**三个穿帮点**，都在那个小函数里摁住：
-
-1. **层序**：未翻的叶按 `i` 递减（封面在最上面），已翻的按 `i` 递增，
-   **正在翻的那一叶顶到 `2N+10`**，否则转过 90° 会被下一页吃掉半截。
-   两摞的 z 区间不相交，所以与 DOM 书写顺序无关。**`.book` 刻意不写 `preserve-3d`**：
-   写了就变成按深度排序，`z-index` 当场失效。
-2. **纸感靠阴影不靠卷曲**：`shade = sin(θ)`，两端点钉成恰好 0（`sin(180°)` 在浮点下是
-   `1.2e-16`）。水彩风下卷曲几乎看不出，而它要分裂 DOM、要引库，收益为负。
-3. **角度一律由插值后的 `qDisplay` 算**：鼠标滚轮是离散格，不插值就是一顿一顿
-   （触控板连续，看不出这个问题，只有真拿滚轮滚才会暴露）。
-
-**合着的书只有一页宽**：舞台正中放的是"两页宽的书"，合上时整体左移半页
-（`--book-x` 25% → 0），让右半幅、也就是封面落在正中。另一条推论：舞台**不能**是
-一张带投影的卡片——影子要落到每一叶与书下那团椭圆上。
-
-**滚动预算**（`.storybook` 高 340vh，`enter-exit` 区间）：p=0 是书顶边触到视口下沿，
-p≈0.29 舞台钉住，p=1 是本节底边触到视口下沿（也就是页面滚到底）。
-0→0.18 升起（合着）、0.18→0.32 封面翻开、之后每翻一页占约 0.05–0.09，
-0.525→0.615 停在选择点，0.68→0.7727 停在分支页。分段表与理由在 `StorybookFlip.tsx` 的
-`P_Q` 注释里。**如果嫌长，砍的应该是分支页，不是每页的停留时长**——每页压到 40vh
-以下翻页就不跟手了。
-
-> `enter-exit` 区间在**页面最后一节**上够不到 p=1（p=1 是"整节滚出视口顶"，
-> 而文档到本节底边触到视口下沿就结束了）。`useScrollDriver` 因此把它夹到文档真实
-> 可达的滚动量上——不夹的话最后 100vh 是一段永远走不到的量程，进度到 0.77 就顶死，
-> 收尾那一页只分到一百多像素。
-
-### 第二屏：`enter-exit` 的最后 23% 是退场，不是"停在最后一页"
-
-上面那段说"进度到 0.77 就顶死"讲的是**量程被夹住**的情形。第三屏加进来之后本节
-不再是最后一节，量程没被夹（实测 `clamped=false`），于是露出另一条更隐蔽的性质：
-
-```
-stage 从 y=T 起钉住，到"本节底边贴住视口底"就被顶出去：y = T + H − V
-rangeTop = T − V，span = H + V      ⟹  被顶走那一刻 p = H / (H + V)
-H = 340vh、V = 100vh                ⟹  p = 0.7727（与视口高度无关，vh 上下同约）
-```
-
-**也就是说 `enter-exit` 这个量程天生把最后 23% 留给"书离开屏幕"。**
-`P_Q` 原先把最后一个跨页排在 0.86 才翻开——那一刻 stage 已经在视口上方 346px，
-书顶边被切掉 166px；到 p=1 时 stage 顶到 −900px，整本书早就没了。
-症状就是"最后一页明明展开了，绘本却不在中间"。
-
-改法不是把 340vh 加大（`H/(H+V)` 涨得极慢，要 p=0.9 得让本节高到 900vh），
-而是**把每一个要让人读的停顿都排到 0.7727 之前**：整表按这个约束重排，
-最后一个跨页现在在 p=0.68 翻开，之后还有 367px 的滚动里书**始终正居中**
-（1440×900 实测 `offCenter = 0`），0.7727 之后才是退场。
-
-顺带修掉两处同源的问题：
-
-- 选择点窗口原先收到 p=0.78，比"开始翻走"（0.76）还晚，而且已经在退场段里——
-  现在收口正好压在翻页那一刻（0.615）。
-- 刻度点最后一格跳的是 `P_AT[4]`，原来算出 0.902，落在退场段：
-  **点一下"最后一页"会把书推到屏幕外去**。现在 0.708，仍在钉住区间内。
-
-`PUSH_OUT_P` 写成了常量，并加了开发期断言：任何一次翻页排在它之后都会 `console.error`。
-这条注释早就写在文件里（"最后一页的停顿要早于 0.773 开始"），**但注释没拦住表**——
-两个手写的数各改一处，只有断言拦得住。
-
-### 第二屏的四周：点阵续下来 + 一团落在桌面上的光
-
-首屏唯一的纹理（点阵网格与中心柔光）挂在 `.hero` 上，跟着首屏一起滚走了；
-第二屏那一节**刻意不设背景**（挂在 section 上会得出一条横切轨道与书的硬边）。
-两件事叠在一起的后果是：书在 1440×900 下是 810×540，只占**约 34%** 的像素，
-剩下三分之二是一块 `#f7f7f8` 平涂 —— 书不是"放在桌上"，是"贴在灰墙上"。
-
-补法是两层，**都挂在 sticky 满屏的 stage 上而不是这一节上**，这是关键的一步：
-
-- `.storybook__ambient` —— 与首屏**同一套** `--dot` / `--dot-size` / `background-position`
-  的点阵，透明度 .5（首屏是 .58，这里它是背景不是主角）。用 `mask-image` 在正中挖一个
-  与书差不多大的洞，点只出现在四周的留白里。
-- `.storybook__light` —— 书后面一团极淡的暖光（核心偏亮、外圈一点陶土色），
-  读起来是"光照在桌面上"。**透明度低到看不出有个圆才算对**，一旦能看见椭圆边界就是做坏了。
-
-挂在 stage 上还顺手解决了两个麻烦：stage 永远正好铺满视口，所以**不存在"边"**；
-点阵与首屏那张都是 sticky 满屏元素上的同一组 inset，两屏同时钉住时逐像素重合，
-**不会摩尔纹**（挂在 section 上就一定错位——那一节的顶边在文档里比 hero 低 954px）。
-代价是书升起的那一小段里 stage 还没钉住、点阵会短暂错开，而那一刻首屏的
-`--hero-grid-opacity` 已经掉到 .1 以下，看不出来。静止模式下三层一起去掉
-（stage 不再是满屏，`inset: 0` 会去贴 340vh 高的框，光斑会被拉成竖长的椭圆）。
-
-**第三层：整个阅读器被当前页染一层色**（`.storybook__tint`）。
-每一面的三朵主色是从那张图里取的，不是手挑的——
-脚本 [`scripts/sample-tints.py`](scripts/sample-tints.py) → 生成物
-[`src/components/book/spreadTints.ts`](src/components/book/spreadTints.ts)，
-换了图重跑一次即可，命令写在生成文件头上。取色口径里有一条值得记：
-
-> 第一版按"主色要的是整块画面什么颜色"缩到 64px、量化 8 色，交出来的三朵全是
-> `#b29a7a` 这种灰褐——**草坡的绿与天空的蓝在缩略时被平均掉了**。
-> 改成 200px / 16 色之后同一张 spread-1 给出 `#eae49d`（草坡黄绿）、`#bbc687`（草绿）、
-> `#fdfef8`（云白），与肉眼在那页上看到的东西一致。
-> **给"取主色"这件事降分辨率，取到的是平均色而不是主色。**
-> 另一道必要的闸是"太暗的候选不要"：水彩的暗部最亮通道也在 150 以上，
-> 而铅笔线稿那几朵全在 130 以下——不加这一道，spread-3 的第一朵会是线稿褐。
-
-三朵按**彩度从高到低**排（最白的那朵永远最后），所以 CSS 可以固定读法：
-前两朵做有色的两团、最后一朵做外圈底色。五面各铺一张、靠 `opacity` 交叉淡入 0.78s，
-不用 `color-mix` 也不用 Houdini——老一点的浏览器只是没有这层色，不会渲染出错。
-**整层只到 .18**：判据是"认不出这是哪张图的颜色，但觉出桌面跟着页面换了口气"，
-再往上就读成壁纸了。这一档还没在人眼前验过（见下面「没测的」）。
-
-右侧那条留白顺手变成了信息：刻度下面写出**当前跨页的短名**（「上去了」），
-随翻页淡入。它填了留白，又真的回答了"我读到哪儿了"——3.4 屏的滚动里本来就需要。
-对辅助技术隐藏，因为 `aria-current="step"` 那根刻度已经把同一句话念过了。
-
-### 选择点
-
-**选择点不阻塞滚动，但点了就当场翻过去**：p 0.525–0.615 停在第 3 个跨页时，书下方浮出
-两个大图标按钮（左 🦕 恐龙云 / 右 ⛵ 帆船云，与 P1 封面、P4 那张图里的左右严格一致）。
-不点也能一路滚到底，默认走分支 A；一按下去就换第 4 个跨页的图**并平滑滚到那一页**。
-"不阻塞"说的是**不逼你选**，不是"选了也没反应"——停在原地等他自己往下滚，读起来
-像是没生效。阻塞式（不选就不让翻）则是另一种坏：把人困在原地，评审尤其容易以为页面坏了。
-
-- **窗口用布尔不用透明度**：淡出到一半的时候按钮还是 clickable，就会有一发点到
-  看不见的东西。`CHOICE_FROM / CHOICE_TO` 与 `P_Q` 是两处手写的数，模块加载时
-  有一个开发期自检把窗口中点对到第 3 个跨页上，改一头忘了另一头会在控制台里报。
-- **图标是那朵云自己的小插画**（`choice-dino` / `choice-ship`，出图文档 P7），不是系统
-  emoji。emoji 是扁平高饱和的 clip-art，与水彩是两套画法，而且跟画面里那两朵云只有语义
-  对应、没有视觉对应。图还没进来时露出 emoji 兜底（`alt=""` 的 `<img>` 在 404 时什么都不
-  画，所以不会留一个碎图标），图一到就是一张不透明的小画正好盖住它。
-- **滚过去的那一刻书是自己在翻的**：切换本身看不见（那一刻两个半幅都还停在 S3），
-  看得见的是按下态、翻页、以及右侧刻度第 4 格的短名换成了「坐进船帆里」。
-- **往回滚窗口会再出现，按下态还在**：滚过头之后反悔是允许的。
-- **另一张图到窗口打开才预取**：放进首屏会白拉 60KB，等点了再拉，
-  翻页那一拍会看得见白。
-- **跳页的反推必须与算进度用同一套量程**（`enterExitSpan`）。这一节是页面最后一节，
-  量程要夹到文档滚得到的地方；自己写 `offsetHeight + innerHeight` 的话每一格都多滚
-  约 30%——点刻度第 3 格会直接跳到第 4 页上去。这个 bug 是加自动翻页时撞出来的。
-
-关着的时候写的是 `visibility: hidden` 而不只是 `opacity: 0`：**opacity 不会把东西从辅助
-技术里去掉**，封面那一屏会照着把两个按钮念一遍。
-
-> **这一节有过配音播放条：做过 → 2026-10-17 拆掉 → 2026-10-18 按满配做回来。**
-> 中间那一次拆的理由是它撑不起自己的承诺：全篇只录了第 1 页，于是第 1 页有声音、
-> 其余四页只有一句「演示仅第 1 页配音」——首页要证的恰恰是「**每一页**都是同一个他」，
-> 而一个只有一页能响的播放条，证的是它的反面。宁可整节不做，也不做一个只对四分之一的控件。
->
-> 做回来的那个（左下角「▶ 朗读」）把这条理由**写成了代码里的闸门**，三条：
-> · **5 段全在盘上才出现**（`lib/demo-book-audio.ts` 的 `complete`），少一段整块不做——
-> 空缺不靠一句道歉文案补，靠控件根本不出现；
-> · **连 4a/4b 两支都算**：只录了恐龙云那一段的书，孩子选了帆船云会当场哑掉而按钮还在，
-> 那正是上一条要挡的"部分能响"；
-> · **封面没有朗读**：书还没打开，没有哪一页在念——所以它在封面上不出现，不是灰着。
->
-> 三条口径写在 `components/book/StorybookFlip.tsx` 文件头（含"为什么不做自动朗读"：
-> 这一节的翻页是**滚动位置**，替人滚页面是另一件事），
-> 逐字的稿子与时长预算留在 [`docs/demo-narration-script.md`](docs/demo-narration-script.md)。
-> `scripts/chk-book-narration.mjs` 是它的验收：真的会响、翻页就停、滚出视口就停、
-> 选哪朵云念哪一段、静止模式下位置也对——七条都取**只有真做才会不同**的量。
-
-### 静止模式（`prefers-reduced-motion`）
-
-**两套 DOM 都渲染，靠 CSS 的 `display` 切**，不靠 JS 读 `matchMedia` 再换树——
-那样首帧会先闪一下动效版。静止模式退化成：静态跨页 + 正文 + `‹ n/4 ›` 按钮，
-键盘 `← →` 也能翻。被藏起来的那一套是背景图，URL 与书那套相同，不会多一次请求。
-
-选择点在静止模式里**回到文档流**（动效模式里浮起来只是为了不挡住书），
-但开关还是那一套 `data-on` —— 两种模式下必须说同一件事。选择点没有滚动窗口可用，
-改由页码决定：**翻到第 3 个跨页时它才在，翻走就不占位**。
-
-书那叠 3D 叶对辅助技术是一团噪音（十个面里一半背朝外），所以整块 `aria-hidden`，
-正文由一段 `aria-live` 的段落替代；在静止模式下那段正文转为**可见**的正常排版。
-
-### 首页没有滚动提示
-
-这类首屏底部通常有一个 `SCROLL` 滚动提示。**仍然没加**，理由是：第二屏已经落地，
-交接段那个"轨道沉下去、一页纸升上来、书翻开"本身就是往下滚的提示——
-再加一个箭头是重复的，而且它一进第二屏就该消失，等于给自己加一条状态。
-
-留着的真缺口是**静止态**：首屏 p=0 看起来是完整的一屏，没有任何东西告诉你下面还有
-68vh。要补的话，提示该指向的是"下面有一本可以翻的书"，落点应该跟 `BookSpine` 的
-刻度说同一件事——那是一个设计动作，不是加个箭头。
-
-### 右下角那颗「回到页首」（`BackToTop`）
-
-与上面那条不矛盾：**往下**的提示仍然没有（那一屏自己会演给你看），
-**往上**的落点现在有。三屏加起来约 5.6 屏滚动量（1440×900 下文档高 5073px），
-滚到底想回头看第一屏只能一路往上拽——那是这一页唯一一处"进去容易出来难"。
-
-- 滚过 0.6 视口高才升起来。在页首时"回到页首"是无意义的按钮，而且它会压住首屏那两句主张。
-- 造型是**一张纸**（`#fffdf7` + 1px 极淡描边 + 紧投影），不是深色实心圆：
-  深色圆在 `#f7f7f8` 上是全页最重的一个元素，会把视线从内容上抢走。
-  图标是内联 SVG 的向上箭头，不是 emoji——与首屏那条"emoji 是扁平 clip-art，和水彩是两套画法"同一个判断。
-- 48px 见方，过 44px 最小可点尺寸那条线，又不至于压住卡片右下角的编号。
-- 藏起来写的是 `visibility: hidden` 而不是只写 opacity（与 `.book-choice` 同一条理由：
-  opacity 不会把东西从辅助技术与点击里去掉），组件那边再加一层 `tabIndex={-1}` 兜住淡出那 0.28s。
-- `prefers-reduced-motion` 下不升起也不淡出，直接在场/不在场；滚动本身退回 `behavior: 'auto'`——
-  减少动效要的是"没有不该动的东西在动"，一段 900px 的平滑滚动正是那种东西。
-
-已知的小缺口：按下去只滚不回焦点，键盘用户 Tab 序列还停在原处。
-补法要给首屏某个元素加 `tabIndex={-1}` 再 focus 它，而那会改动已交付的 `HeroOrbit`，
-按「迁移是单独一个提交」的纪律先记着，不混进这次。
-
-### 左下角那个黑圆点不是我们的东西
-
-它是 **Next.js 15.5 自己的开发者工具指示器**（`<nextjs-portal>`，只在 dev 下注入，
-生产构建里没有）。仓库里所有 CSS 都没有 `position: fixed` 或圆形深色元素，
-grep 得出来。已经用 `next.config.ts` 的 `devIndicators: false` 关掉
-（实测关掉之后那个 portal 还在 DOM 里，但尺寸是 0×0，什么都不画）。
-
-★ 这一条对**已经在跑的 dev server 不生效**：`next.config.ts` 的改动要重启才读得到。
-所以看到截图里那颗黑点还在，先重启 dev server，再怀疑代码。
-
-### 暂无深色模式
-
-设计令牌只有浅色一套，`color-scheme` 已锁定为 `light`。
-
-### 首屏曾经有 12 段卡片动效，现在删了
-
-这一节留在这里是为了说清**为什么删**，以及要拿回来该动哪几处 —— 不是因为忘了。
-
-首屏那 12 张卡曾经各挂一段 4 秒短片（`public/video/{key}.mp4`，640×360 / 无音轨 /
-源 61.56 MB 压到 3.22 MB，压缩脚本 `scripts/make-clip.py`）。播放策略是认真做过的：
-全部 `preload="none"`，只有转到最前排、深度 > 0.72 的至多 4 张才真正拉流并开始解码，
-转过去就停在那一帧；标签页藏起来或本节滚出视口时全停。首屏的动效增量约 1 MB。
-
-**换回静帧的原因是实测手感**：整页滚动时首屏明显发涩。定位到的成本有两处，
-一处是这些短片，另一处比它更隐蔽：
-
-- 12 个 `<video>` 元素本身就要占 12 条媒体管线，前排 4 条同时解码，
-  而它们各自还是一个 `will-change: transform, opacity` 的合成层 ——
-  **解码与 3D 变换抢的是同一批帧**。
-- 一颗 `position: fixed` 的按钮上挂了 `backdrop-filter: blur(6px)`。
-  固定元素做背景模糊 = **每一帧滚动都要重新采样并重绘它背后那块屏幕**，
-  为了一颗常驻右下角的小按钮把整页的滚动成本抬上去。这条与视频无关，
-  是同一轮里一起摘掉的（`back-to-top.css` 里留了注释，别再加回去）。
-- 换回静帧时顺手发现的、**可能是最值钱的一条**：那 12 张封面 `<img>` 带着
-  `loading="lazy"`。它们全都在首屏的环上一张不落，懒加载它们等于让首屏先画
-  一个空环、再去取图 —— 而这 12 张就是这一页的 LCP。现在改成不 lazy，
-  前排 4 张给 `fetchPriority="high"`。
-  后台面板里量得到后果：12 张全部 `pending`、`/art/` 请求数 **0**。
-
-★ 一条诚实的保留：**没有做出"删之前 / 删之后"的帧率对照**。
-预览面板是后台文档，rAF 与 CSS 过渡的时间线都不走，量不到真帧率；
-所以"视频是卡顿主因"是**推断 + 用户体感**，不是实测结论。
-真正被量过的是"这些短片在后台一页里一字节都没拉"（`mp4Requested: 0`、
-12 个元素 `readyState` 全 0）—— 它证明懒加载策略本身没失效，
-不能证明前台解码不贵。
-
-要拿回来需要动的地方（都在 git 里，`git show 05b818c` 那一次提交）：
-`OrbitItem` 的 `video`/`poster` 两个字段、`themes.ts` 的 `videoPath()`、
-`HeroOrbit.tsx` 的 `syncVideo()` / `pauseAll()` / `VIDEO_PLAY_DEPTH` / `frontSet`、
-`page.tsx` 里 `orbitItems` 的 `video` 一项、`hero-orbit.css` 的 `.hero-orbit__item video`，
-以及 `public/video/` 与 `scripts/make-clip.py` 两个产物。
-拿回来时**顺手把 `backdrop-filter` 那条一起看住**，否则修好一个卡点又留一个。
-
-### 第三屏：项目亮点（`HighlightsReel`）
-
-前两屏让人**相信这个产品存在**，这一屏回答下一个问题：凭什么做得出来。
-五条全部取自本文件已定稿的设计与周计划，不新造说法。
-
-**当前卡恒居中，邻居从两侧被视口边缘切掉一半**——标准轮播图的读法。
-实测几何（1440 视口，居中时）：偏移 `[-971, -525, 0, +525, +971]`、
-缩放 `[0.86, 0.93, 1, 0.93, 0.86]`、不透明度 `[0.42, 0.82, 1, 0.82, 0.42]`。
-
-★ 这组数现在**对每一条都成立**，包括第 1 条与第 5 条 —— 因为
-`reelState` 的 offset 走的是**环形最短位移**（`ringOffset`），不是 `index - active`。
-第一版是后者，于是第 1 条居中时偏移是 `[0,1,2,3,4]`：**左边零个卡位**，
-第 4、5 条全堆在右边缘外被裁掉，画面上就是"轮播左边空一大片"。
-自动播的 `active` 一直是环着走的，但卡片在环上的位置不是 —— 半环不环。
-现在第 1 条的左边是第 5 条，任何时刻左右各两张。
-
-代价是绕回那一下有一张卡要从最左跨到最右。补间是连续插值，它**必然横穿正中间**，
-看起来像页面坏了 —— 所以组件用 `reelJumped` 认出那一张（判据：位移超过半圈），
-给它挂 `data-jump` 关掉这一拍的过渡，让它"在最左消失、在最右出现"。
-环上**每一步**都恰好有一张跨界，这不是边角情况而是环形轮播的固有形状。
-
-陶土色现在只点两处（标题左边那条、当前卡的编号）——原本还有"当前卡的点"与
-"暂停态的暂停键"两处，随底下那排控件一起删了。阴影语言仍是一套。
-但**深度那一档刻意没照抄首屏**：第一版直接搬了环上的 `scale 0.845 / blur 1.6 / opacity 0.6`，
-结果是五张卡糊成一道向右的瀑布、邻居读不出字，只剩正中那张有意义——
-并排的轮播要的是"退后一步"，不是"隔着毛玻璃"。邻居因此只收到 0.93 / 0.82，blur 为零。
-
-**大标题走衬线（`--font-serif`）**。原先是无衬线 700 + 负字距 + 「引擎」这两个字，
-靠五件事撑着——那个组合是落地页的口气，与这一屏要说的"这本书是怎么长出来的"不搭，
-也与前两屏的水彩不搭。卡片自己的小标题仍然无衬线：大标题衬线 + 正文无衬线
-是一套编辑排版的层级，两处都衬线就分不出主次了。
-
-**hover 是"一张被一角托起的纸"**：卡片按光标方向做 3D 倾斜（±6°），插画在框内往
-**反**方向滑（±10px），一层暖光跟着光标走。±6° 是"纸"，±8° 往上就变成"手里转玩具"。
-
-**整条 reel 可以用鼠标横向拖着走**：拖拽量写成挂在 `.hl__reel` 上的一个 CSS 变量
-`--hl-drag`（那一层的 transform 原本没人认领，见上面的归属表），
-**每帧的量不进 React** —— React 这边只留一个 `dragging` 布尔用来停自动播。
-三条不太显然的规矩：
-
-- **松手按"过半就认"翻页**（`dragSteps`，用 `round` 不是 `floor`）：拖到半格时用户
-  已经表达了意图，卡在中间不上不下是最坏的结果。往左拖 = 前进（内容跟着手走）。
-- **6px 以内不算拖，算点击**。而且浏览器在 `pointerup` 之后还会补一次 `click` ——
-  不吞掉它就会"拖一下翻两下"。
-- **拖的时候关过渡，松手那一帧开回来**，两句样式必须在同一个任务里写完；
-  分开写就会先把拖拽量瞬间抹掉、再让卡片补剩下的路，看着像弹了一下。
-  这也是 `data-dragging` 由组件**直接写 DOM** 而不是走 React state 的原因。
-- 这是**环**，所以不需要橡皮筋回弹：直线轮播拖到端头要减速，环上没有端头。
-  步长不自己按公式算，用一根没有 transform、没有过渡的探针量
-  （`.hl__step-probe`，`width: var(--hl-step)`）—— 公式在 CSS 里已经写了一遍，
-  JS 再抄一遍就是两个手写的数会各自漂移。
-- 触屏写 `touch-action: pan-y`：纵向留给页面滚动，这是整页的一节不是横向滚动容器。
-  文字只在 `data-dragging` 期间禁选，平时这些正文仍然可以正常选中复制。
-
-#### 一个元素只能有一个 transform 主人
-
-这一屏四层，主人写死并各自注明：
-
-| 层                 | 主人                | 管什么                                  |
-| ------------------ | ------------------- | --------------------------------------- |
-| `.hl__slot`        | **CSS**             | 轮播位移 + 深度（scale/opacity/blur/z） |
-| `.hl__card`        | **GSAP**            | 倾斜 `rotationX/Y`、进场 `autoAlpha`    |
-| `.hl__card` 的抬起 | **CSS `translate`** | 独立属性，与 transform 复合，不抢笔     |
-| `.hl__art`         | **GSAP**            | 插画反向视差 `x/y`                      |
-| `--hl-gx/gy`       | **GSAP**            | 光斑位置（0–1 比例）                    |
-
-抬起一开始也走 GSAP 的 `y`，那样它和进场就是同一个属性上的两个主人；
-改用 CSS 独立属性 `translate` 之后两者复合，谁也不用让谁。卡片进场因此**只淡入不位移**。
-
-**`perspective` 挂在每个 slot 上，不挂在 reel 上**：slot 带 `opacity < 1` 与 `blur()`，
-这两样都会压平 3D 子元素——挂在 reel 上就会得到"邻居卡不倾斜"这种查不出原因的 bug。
-这是首屏那条 `preserve-3d` + `opacity` 的坑（上面交接段那节）的另一面。
-代价是"五张卡共用一个灭点"变成各自一个灭点，6° 下看不出，反而更像桌上摊着的五张纸。
-
-#### ★ 删掉的一条：`rendered`（该不该进 DOM）
-
-第一版 `reelState` 返回三个可见性，其中 `rendered` 是「`|offset| <= 2` 才进 DOM」，
-用来给以后加到八条时兜住节点数。**实测把它删了**：首页是静态预渲染的，`active` 初值 0
-→ 左边没有卡位 → 5 条亮点里只有 3 条出现在 HTML 里，另外两条对爬虫与禁用 JS 的人
-**根本不存在**，而页面上完全看不出来。五条（以后十条）绝对定位的卡片不是性能问题，
-内容缺失才是。舞台半径保留，但它只管视觉窗口（`reelShift` 用它算两端平移）；
-超出窗口的卡由 `reelDepth()` 把外观钉在最深一档，再由 `.hl` 的 `overflow: hidden` 裁掉。
-
-验收方式就是数预渲染 HTML 里的 `.hl__card`：`pnpm build` 后 `.next/server/app/index.html`
-里应当是 **5**，曾经这里是 3。
-
-#### ★ 一条 typecheck 抓不到的错误
-
-`gsap` 的 `.d.ts` 把插件类声明成了**全局**（为了让你在类型里写 `ScrollTrigger`）。
-所以只写 `gsap.registerPlugin(ScrollTrigger)` 而**忘了 `import { ScrollTrigger } from 'gsap/ScrollTrigger'`**，
-`pnpm typecheck` 与 `pnpm lint` 全绿，只有浏览器会抛 `ReferenceError`，症状是第三屏整节白屏。
-这条闸门失效是实测撞出来的：删掉那行 import 之后三条闸门一次都没响。
-**结论：GSAP 插件的 import 只能靠开浏览器验**，别指望 tsc。
-
-#### ★ 一次测错的账，以及它的教训
-
-排查上面那条白屏时，我一度"实测证明"了 ScrollTrigger 一次也没触发（时间线停在
-`opacity:0; visibility:hidden`），并据此把触发器换成了 IntersectionObserver。
-**那个结论是错的**，错在测量环境：预览用的 Browser 面板当时是一个后台文档，
-`document.visibilityState === 'hidden'`、500ms 内 **0 次 rAF tick**——
-GSAP 的 ticker 是 rAF 驱动的，IntersectionObserver 的回调在隐藏文档里也会被推迟，
-所以"什么都没动"是必然的，与用哪个触发器无关。改回 ScrollTrigger 后一切正常。
-
-留这段是因为它记的是**与本仓库同一条规矩的另一半**：
-「数字要能复现」不只要求写下怎么量的，还要求先确认**量具本身在不在工作**。
-以后在预览面板里测任何动效，第一件事是确认**帧还在不在走**；
-帧不走就只能测静态事实（DOM 结构、computed style、几何），动不了的东西一律不算测过。
-
-**上面这条判据原本写的是「读 `document.visibilityState`」，2026-10-12 晚实测推翻了它。**
-读数可以对不上：
-
-| 量                         | 实测读数  |
-| -------------------------- | --------- |
-| `document.visibilityState` | `visible` |
-| `document.hidden`          | `false`   |
-| 1.2 秒内的 rAF tick 次数   | **0**     |
-
-窗口被遮挡或最小化时 Chrome 停掉 rAF，而 `visibilityState` 照样报 `visible` ——
-也就是同一类误判（"什么都没动"）换了个更不容易识破的伪装。两条可复现的规矩：
-
-- **判据是数 rAF**，不是读可见性：`requestAnimationFrame` 跑一个计数器、
-  `setTimeout` 兜底，拿到 0 就是冻结。
-- **等条件别 `await` 一个 rAF**：在冻结的文档里那会把脚本挂死
-  （实测让预览面板的 eval 30 秒超时并卡在页里）。等条件一律用 `setTimeout`。
-
-#### 三条被推翻的决定，和一条被推翻之后又改回来的
-
-- **不做滚轮劫持**（仍然成立）。上一屏整屏都在用滚轮翻页（340vh），到这一屏偷偷改滚轮语义是最恶劣的一种坏。
-- ~~每条右下角标一句进度~~ → **进度标注整行删掉**。原先 01/03 标「↑ 上面那本书演示过」、
-  其余标周次（`W4 · 11/04–11/10`），是"没有的东西直说没有"的可视化。
-  现在卡上只讲机制与做法，**排期回到 README §一 的进度表**——首页不该带甘特图。
-  「不写查看详情」那条规矩没变：没有详情页可去，指向不存在的东西比不指更难堪。
-- ~~不做自动轮播~~ → **做了**；~~底下给一排圆点 + 箭头 + 暂停键~~ → **那排也删了**。
-  自动播的间隔 **6.5s → 3.2s → 2s**（两次都要求加快；6.5s 实测像"页面卡住了"，
-  绕一圈要 32 秒，现在 10 秒），位移补间同步从 0.68s 收到 0.56s，
-  让每一次翻完之后还剩约 **1.44 秒**是**停着的**（0.56 + 1.44 = 2.0）。
-  两个数是咬在一起的：补间比间隔还长就变成"一直在飞"。
-  中断条件剩三个：**指针进这一节停、焦点进这一节停、标签页切后台停**，离开就恢复。
-  手动翻一次会把这 2 秒从头计，否则刚点到第 3 条、半秒后就被自动播扔走。
-  `prefers-reduced-motion` 下**一次都不启动**，不是「启动后再停」。
-  间隔 2s 远短于读完最长那条（约 110 字，默读要 11–14 秒）所需——
-  这是自动轮播的固有代价，写在 `AUTOPLAY_MS` 的注释里而不是藏起来。
-
-##### 删掉暂停键是一次真实的无障碍退步，记在这里
-
-WCAG 2.2.2 要的是"持续超过 5 秒的自动更新，有一个**看得见、点得到**的暂停手段"。
-★ 别把"现在间隔只有 2 秒、短于 5 秒"当成脱离了这一条：判据说的是
-**这个自动更新的东西在屏幕上存在多久**，不是"每次之间隔多久"。
-轮播只要挂在页面上，它就是无限期地自动更新 —— 加快反而让它更需要暂停手段，
-因为 2 秒连扫一眼标题都不够。
-那颗暂停键就是为这一条存在的，不是装饰。现在只剩三条补偿：
-
-1. 焦点一进这一节就停 —— 所以 `.hl__viewport` 自己带 `tabIndex={0}`。
-   删掉圆点之后本节里**没有任何可聚焦元素**，不给它一个 tab 落点，
-   键盘用户就既进不来（`onKeyDown` 挂在节上，焦点不在本节内根本不触发）
-   也停不下自动播。**那颗焦点环是这件事唯一的可见证据**，别删。
-2. `prefers-reduced-motion` 下一次都不启动。
-3. 触屏没有 hover，但触屏有焦点与点击。
-
-这三条都不满足 2.2.2 的字面要求（"想到要 Tab 才停"不是"点得到"）。
-这是产品决定而不是无障碍改进，所以留在文档里；要恢复就照 git 里那一版把
-`.hl__dock` 那五组规则与那颗键拿回来。
-
-#### 键盘：只在本节内部接，并且 `stopPropagation`
-
-`StorybookFlip` 在 `window` 上无条件接 ← →，**哪怕书已经滚出屏幕外**——在第三屏按方向键，
-看不见的那本书会默默翻一页。那是上一屏留下的 bug，等另一条会话把那部分改完再单独修
-（记在下面「刻意未做」里，不混进这个提交）。
-
-本节的接法是在 `<section>` 上接键并 `e.stopPropagation()`：React 的监听器挂在
-root container 上，位置在 `window` 之前，所以挡得住，**且不必改动对方的文件**。
-
-#### 五张插画：图已落盘，CSS 兜底仍然是退路
-
-五张插画走 `public/highlights/{key}.webp`（1280×720，单张 89–117 KB，合计 0.51 MB），
-提示词与逐张验收记录见 [`docs/highlights-art-prompts.md`](docs/highlights-art-prompts.md)。
-
-`.hl__art` 那层兜底**没有删**：图缺失或加载失败时它露出 CSS 画的水彩底纹 + 一枚大字编号，
-`<img alt="">` 在 404 时什么都不画，所以不会留碎图标；图在场时它被 `z-index` 压在下面。
-与选择点那两枚小云图同一个机制、同一个理由——**兜底是退路，不是死代码**。
-
-顺带修正了提示词文档里一条写错的判据：原先要求"插画右下角不放主体"，前提就错了。
-真正压在那里的编号角标 `.hl__art-num` 自带 `rgba(255, 253, 247, 0.72)` 底片，
-中低对比的主体压在上面照样清楚；会糊的是高对比硬边。那条判据已按实际机制放宽，
-并在原处留了一行说明它当初错在哪。
-
----
-
-### 测量这一层不许自己另搭流水线，也不许把「没跑成」记成「没跑过」
-
-W1 一天之内在**四个不同的地方**踩了同一类错，每一处都差点让 go/no-go 表给出反结论。
-写在这里是因为它不是四个 bug，是**一个习惯**：拿一个更弱的事实去回答一个更强的问题。
-
-**第一类：横评脚本自己搭了一条流水线。**
-`w1-text-bakeoff.mts` 手写了"调用 → 校验 → 重试"，与 `engine/plan.ts` 悄悄分叉
-（maxTokens 3000 对 4096、树形不过时 `break` 对 `continue`）。
-分叉的代价不是风格问题——**横评表上的数字是另一条流水线的成绩，它不是引擎要用的那个数**。
-现在横评直接调 `planStory`，生产也有的配置（jsonMode / 预算 / 思考开关 / 超时）
-只从 `registry.ts` 的 `textOptionsOf(env)` 一个来源拿。
-
-**第二类：三种"没成功"记成同一个数。**
-出图失败 / 视觉核对超时 / 规划三次不过 / 调用层报错（超时、503、思考链吃光预算）——
-处置完全不同（重跑 / 等 / 换模型 / 调参数），但只要记进同一个格子，
-读表的人只能得出"这家不行"。图像横评曾写着 wan2.7-image `2/5`，而磁盘上 5 张 PNG 都在；
-文本横评曾有四个候选 `0/10` 而平均重试恰好 `1.00`——那个 1.00 就是破绽：
-**它们根本没走到第二次**，说明抛的是调用本身。
-现在两边都拆开记，并且**通过率的分母不含调用失败**：裁判没到场，不能判选手没跑。
-报错消息也照此拆——`openai-text.ts` 把"预算被思考吃光"和"回包结构变了"分开说，
-因为前者的处置是调参数，后者才是找平台。
-
-**第三类：拿"便宜"决定判据的强度。**
-为了省调用，探针一开始送**错值**去问"平台认不认 `enable_thinking`"——
-七家都回"字段不认"，于是写下「可以安全地对全体关思考」。
-正式跑测随即打脸：`glm-5.3-flash` 十本全灭，`400 · REASONING_REQUIRED`。
-**送错值只证明字段名存在，证明不了这个值被允许**，
-这是拿一个更弱的命题去答一个更强的命题。现在探针送真值，
-判据拆成三值（允许 / 拒绝 / **不知道**）——503 是平台抖动，
-并进"拒绝"就是冤枉一家（kimi-k2.6 被这么冤枉过一次）。
-
-**第四类，也是最贵的一次：引擎自己的汇总行说谎。**
-`engine-run.mts` 打的是"N/5 页有图"，而 N 数的是**核对通过的页**。
-实测跑 5 页：磁盘上 8 张 PNG 都在，那一行写着 **"2/5 页有图"**。
-成因在 `illustrate.ts`——比对调用抛 504 时异常冒出去，把**已经画完、已经付过钱的图**
-连同这一页一起从书里丢掉。而 `ConsistencyResult.verdict` 的注释本来就写着
-`unavailable` 覆盖"未配置**或调用失败**"：代码没做到注释里写的事。
-前三类都在横评脚本里，只有这一类在**产品本体**里，而且它骗的是演示时看屏幕的人。
-现在汇总行分开报四档并当场核对后三档之和等于有图；
-`Book` 补了 `errors` 字段（`illustrateAll` 的注释早就要求"书要标'这一页缺'"，
-但那个字段一直没建，失败只闪一下事件流）；加了回归测试锁住这三件事。
-
-顺带修掉的一条同族问题：`engine-run.mts` 的录制器把资产写进 `createMemoryStore()`，
-manifest 里记着 `assets/<指纹>.img`，**那批字节却从没落到盘上**——
-于是 ADR-0003 的"断网也能出一本完整的书"在此之前根本跑不通，
-而 manifest 自己是好的（它确实写出来了），看上去不像坏了。
-
-两份横评报告都支持 `--reportOnly=1` 从 json 重放 markdown，一个模型都不调用，
-且重出的报告与当初发布的**逐字节一致**——排版改错一次不该再花一遍调用，
-而"重放能得出同一份报告"本身就是可复现性的证据。
-
----
-
-### 行尾：一条 `.gitattributes`，和被它藏住的一处真格式错
-
-`pnpm format:check` 在本机长期是红的——**58 个文件**。红着的闸门不是闸门，
-更糟的是它把真信号也一起淹了：这 58 个里**有 1 个是真错**。
-
-成因不在格式，在行尾。Windows 的 `core.autocrlf=true` 把工作区检出成 CRLF，
-而 `.prettierrc.json` 要求 `endOfLine: "lf"`。**索引里其实一个 CRLF 都没有**，
-所以这是纯粹的检出产物，不是谁写坏了格式。量法与量出来的数：
-
-```bash
-git ls-files --eol        # 63 个 i/lf w/crlf · 60 个 i/lf w/lf · 27 个 i/-text
-                          # （27 个非文本 = 26 个 .webp + 1 个 .ico，没有一个是文本文件误判）
-```
-
-「58 个里 57 个只是行尾」这句话不是推的，是量的：把那 58 个文件逐个 CRLF→LF
-拷到临时目录里重跑 prettier，**57 个当场变干净**，只剩
-`docs/commit-convention.md` 差一行——一个 `---` 前面少了个空行，是**真的**漏了格式。
-（修完 `pnpm format:check` 全绿，测试 145 条仍全过。）
-
-修法是仓库层面的，不是请每个人去改本机的 `core.autocrlf`：
-`.gitattributes` 的 `* text=auto eol=lf`（外加一串显式 `binary` 声明，
-不依赖 `text=auto` 的自动探测——探测规则会随版本变，写死的后果比探测错更可控）。
-`eol` 属性**优先于 `core.autocrlf`，且对新克隆同样生效**，所以这个坑对后来者不再出现。
-
-两条残留，都是无害的，写在这里省得下次当故障查：
-
-- 改完那一瞬 `git status` 可能一口气列出 57 个 `M`——那是索引的 stat 缓存过期，
-  **不是内容变了**。逐个算 blob 哈希对过：`git hash-object -- <file>` 与
-  `git rev-parse :<file>` 相等的有 57 个，真正不同的只有 8 个（这 8 个是当时
-  未提交的改动本身）。下一次 `git add` / `git commit` 会让它自己安静下来。
-- `.env.example` / `.gitignore` / `.prettierignore` 这三个在磁盘上仍是 CRLF：
-  prettier 不认它们的语法、不检查，而 git 比较时会先归一化，所以既不报错也不产生 diff。
-  下次检出就是 LF 了。
-
-和 §三里 ESLint 那条是同一个形状：**一片假红会把真问题一起盖掉**。
-区别是那条靠 `.next*` 一条通配解决，这条要靠一份提交进仓库的属性文件。
-
----
-
-### 生成的图不拖垮页面：一条封闭的缩略档通路（2026-10-14）
-
-图像模型给回来的是 **1440×1440 的 PNG，一张 2.7–2.8 MB**，演示书三页合计
-**11,192 KB**。而卡片墙上那张图显示宽度只有 372 CSS 像素。让浏览器拉原图只为一个小方块，
-是把等待转嫁给最不该等的人（评委那台机器、家长的手机）。
-
-做法是**一条封闭的档位表**，不是一个任意缩放参数：
-
-| 档        | 用在哪                                         | 实测          |
-| --------- | ---------------------------------------------- | ------------- |
-| 240       | 主页「小主角」胶囊的头像、创作流里的复用缩略图 | 10 KB         |
-| 384 / 512 | 目前没有消费者，留着是因为下一档跳得太远       | 13 KB / 29 KB |
-| 768       | 角色卡墙（372px × 2 倍屏 = 744）               | 73–76 KB      |
-| 1024      | 阅读器的一页                                   | 159–235 KB    |
-
-三条不是显然的约定：
-
-- **`?w=` 不接受任意宽度**，值一律**向上归到最近的一档**（`?w=480` → 512）。
-  接受任意值等于让缓存键跟着 URL 无限增长——自己给自己做一次磁盘 DoS，
-  而且每个新宽度都要再跑一遍缩放（实测 60–600 ms）。非法值（`0`、`abc`、比最大档还大）
-  **回原图**而不是报错：那是性能层，不是校验层。
-- **静态的 `public/demo/` 走不到这条路**。Next 直接发盘上的字节，查询字符串它看不懂，
-  挂 `?w=` 会静悄悄回原图——一个骗人的优化比不优化更糟。所以演示书导出时
-  预生成 `.webp` 兄弟文件（`export-demo-book.mts`），`book-source.ts` 有就用它。
-  ★ 两条路出的字节数**一模一样**（162,564 / 178,918 / 234,604），因为是同一组 sharp 参数。
-  ★ 2026-10-17 的例外：**示例角色卡**。它们的参考图经 `/api/assets?w=` 走完整条档位表
-  （`card-source.ts` 把 `public/demo/` 垫在 store 底下，见 §五 那一节），而不是静态文件——
-  实测 240 档 4,256 字节（原图 327,226，77 倍）。代价是每个登录用户第一次看它都会
-  现缩一次、缓存进自己那一片（`u/<id>/thumbs/…`，派生物）。
-- **原图永远是记录**。缩略图是派生物，不进清单、不进指纹、不参与一致性核对，
-  删了能重算（缓存落在资产根 `thumbs/<档>/<原路径>.webp`）。
-
-实测收益：角色卡墙 **5,590,702 → 156,342 字节**（35.8 倍）；
-创作流第 3 步 **约 8.4 MB → 95,096 字节**；演示书三页 **11,192 KB → 563 KB**（19.9 倍）。
-
-### 先 IP + HTTP：登录口令与内部令牌在公网是明文（2026-10-17）
-
-站点跑在 `http://123.56.148.105` 上，没有域名也没有证书。这意味着**登录口令、
-短信验证码、会话 cookie 在公网上是明文**——同一段 Wi-Fi 里的人抓得到。
-
-为什么先这样：域名要先备案（几天到几周），而交付时间不等人。缓解是三件，
-每一件都要真做，不能只写在文档里：
-
-- **Java 与 MySQL 只听回环**：公网那一侧只有 Nginx。所以"直接打后端"
-  这件事不是被规则挡住的，是**没有那个端口**。
-- **密码存 BCrypt 哈希**，票是 HS256 签名 + 7 天有效期（票本身不含口令）。
-- **演示账号的口令是公开的**（见那一节），所以它**不是**管理员——
-  它和其他注册的人一样**能创作**，但改不了别人的权限。
-
-★ 上域名与 HTTPS 是**下一步**，不是"以后有空再说"：这件事的代价随用户数增长，
-而它现在只有两个账号。
-
-### 没有 token 黑名单：登出只删 cookie（2026-10-17）
-
-★ 这是一个**已知的**安全边界，写在这里因为它反直觉：**登出不会让已经发出去的那张票失效**。
-一张 7 天前签发的票，只要还在别人手里，7 天之内**照样能打**（`systemctl stop` 不算）。
-
-真撤销需要一张"失效票表"或在票里放密码代次，那是下一轮的事。现在**唯一**
-能立刻让手里所有票作废的动作是**改密码**（`users.password_changed_at` 那一列：
-早于它签发的票一律作废，见 `AuthService#requireUser`），以及管理页的**停号**。
-
-所以"我怀疑账号被人拿了"这件事的正确处置是**改密码**，不是登出。界面上那一句话
-（改密码成功后的提示）要说的是这一句。
-
-### 作品在磁盘上，不在 MySQL 里（2026-10-17）
-
-一本书的字节（20 页图 + 朗读 + 清单）全部落在 `ASSET_ROOT` 下的文件里，
-MySQL 里**一行都没有**（连"这本书属于谁"都不在——归属是磁盘上的 `u/<userId>/`
-前缀，理由见「归属」那一节）。所以：
-
-- **数据库的每日备份救不了作品**。`server/backup.sh` 备份的是账号、权限、音色，
-  它**故意**不管作品（工单 12 那条单向通路管那一半）。
-- 服务器**只租 6 个月**（到期 2027-04-15）。所以"数据在服务器上"不是终点，
-  本机必须有一份能独立撑起来的副本——那是工单 12，还没做。
-  到期前那句提醒写在那里：**两次 pull 之间生成的东西只在服务器上。**
-
-### 短信三层频控 + 每日 300 条硬顶（2026-10-17）
-
-站上公网之后，短信接口是一条**直接连着钱**的接口。四层闸门（`SmsRateLimiter`）：
-
-| 层                                    | 窗口     | 挡的是                               |
-| ------------------------------------- | -------- | ------------------------------------ |
-| 同号 60 秒 / 每小时 3 条 / 每日 10 条 | 秒·时·天 | 一个人手滑连点，或拿一个号刷         |
-| 同 IP 每小时 5 条 / 每日 20 条        | 时·天    | 一台机器换着号刷                     |
-| **全局每日 300 条**                   | 天       | 分布式换 IP 刷——**唯一真正硬的上限** |
-
-★ 数字的口径：前两层的判据是"体验"，第三层是"今天最多花多少钱"。
-300 这个数写在 `application.yml`，改它要连着把"为什么是这个数"一起改。
-★ 测试那一档把**按 IP** 那两层放到 10000（MockMvc 的请求都同源，
-不放宽会让测试互相挡），按号那三层不放宽——它们本来就该按真值验。
-★ 服务器上现在**是假发**（`api.yml` 里 `app.sms.enabled: false`，码固定 123456）：
-真发要阿里云号码认证服务的 AccessKey 与签名/模板，那两把钥匙只有站长有。
-
-### 一份 DDL 同时喂两种库：本地 H2 永远测不出 MySQL 不认的写法（2026-10-17）
-
-`db/schema.sql` 是**唯一一份**建表语句，本地那份 H2 与服务器上的 MySQL 8 都读它
-（`spring.sql.init.mode=always`）。代价是它只能用两家都认的那一小块 SQL，
-所以那个文件的文件头上列了三条禁令：没有 `ENGINE=` / `DEFAULT CHARSET`、
-没有反引号、没有 `CREATE INDEX IF NOT EXISTS`。
-
-★ **禁令写在注释里，就一定会有人违反它**——2026-10-17 上服务器的第一晚正是如此：
-工单 09 那轮往文件末尾加了一句 `CREATE INDEX IF NOT EXISTS idx_…`，
-本地一直好好的（H2 认这一句），到 MySQL 那一刻 `spring.sql.init` 挂住，
-**整个后端起不来**，日志里只有一句 `You have an error in your SQL syntax`。
-这类错误的出现时间是最坏的那一种：**只在部署那天出现**。
-
-两条处置：
-
-- **索引写成建表语句里的 `KEY 名字 (列)`**——两个库都认。
-  ★ 这一步是**先测再改**的：`KEY` 这种写法在 H2 的 MySQL 兼容档与 MySQL 8.0.46 上
-  各测过一次。（顺带推翻了文件头原来那句"写在 CREATE TABLE 里的 `KEY idx (...)`
-  H2 又不认"——它是错的，一直是错的，只是没人验过。）
-- **加一条 `SchemaSqlPortabilityTest`**，把那几条禁令变成会红的判据。
-  ★ 它必须**先把注释剥掉再判**：第一版没剥，于是判据命中的是"解释这句禁止"的那句注释，
-  文件完全正确时它也红。反证过：把那句 `CREATE INDEX IF NOT EXISTS` 加回去，它红。
-
-★ 这条的教训比修法值钱：**"两份东西要长得一样"的约定，只有在**能自动红的判据**里
-才成立**。读一遍注释然后点头，是这件事最不可靠的形式。
-
-### 一条坏记录能让整页读不出来（2026-10-17）：写入口 + 一次启动修复
-
-用户截图里那一屏是「声音」，卡片（豆豆 / 灵灵）画得好好的，下面一行红字：
-**「服务端回的音色列表不是我们认识的形状，刷新一次试试」**。
-
-查出来的根因链，四节：
-
-1. 界面按「选它」时**只送 `voiceId`**（`VoiceProvider#setVoice`），它假定服务端已经
-   记着这个名字——这个假定对**预置音色**不成立：豆豆 / 灵灵是代码里的常量，
-   **第一次被选中才落一行**（不这么做，"当前音色"就没地方记）。于是那一行生下来
-   `name` 与 `model` 都是空串。
-2. 前端的 `parseMyVoices` 见到**空名字整份拒绝**（一条没有名字的音色在界面上没法显示），
-   于是列表为空、`current` 也不认。
-3. 客户端把"认不出来"如实说成**形状问题**——这一条是对的（不伪造一份空的，
-   那会显示成"你还没录过音色"）；但它的下半句"刷新一次试试"是**错的建议**：
-   记录本身坏了，刷新一百次也一样。
-4. 库里已经躺了这样的行（本机实测 **3 行**），所以修好写入口**还不够**。
-
-两处修法，各管一半：
-
-- **写入口**（`VoiceService#labelOf`）：一条记录的名字**永远不是空串**，缺了就退回
-  它自己的 `voiceId`（那是厂商的机器名，是真的，只是不好看；同 `/home` 那处
-  "名字读不到就退回 childId"）。★ 它是一条**给客户端看的形状契约**，
-  写在这里、也由前端的解析器在另一头检查——这个契约正是这次把 bug 抓出来的东西。
-- **启动时的一次数据修复**（`SchemaUpgrades` 的 `DATA_FIXES`）：把历史上写坏的值修回
-  契约允许的那一种（`UPDATE voices SET name = voice_id WHERE name IS NULL OR TRIM(name) = ''`）。
-  ★ 它与上面那一列是同一件事的两半：**上面加的是列，这里改的是值**，都是"一条后来才发现
-  的不变式在老库上不成立"。所以判断同样必须幂等，只在**真的改到了行**的时候打一行 warn。
-  ★ 表还不存在时**跳过**而不是让它抛——那种库上不可能有坏值。这一条不是假想的：
-  第一版无条件跑，`SchemaUpgradesTest` 里那份"只有 users 一张表"的老库当场炸在
-  `Table "voices" not found` 上。
-  ★ 修的是**值**不是**行**：`DELETE FROM voices WHERE name = ''` 也能让判据变绿，
-  而那是把用户选的音色一起删掉。所以那条测试的判据里有一条是"**他选的那一个
-  还是他选的那一个**"。
-
-顺带修的一处：服务端那一行里混着预置音色（它就是"选过的那一个"的记录），
-而 `catalog.ts` 原来把它当"我录的"渲染——于是选了豆豆之后那一屏会长出
-**第二张豆豆**（一张带调性、一张不带）。现在按 **id**（不是名字）把预置那几行
-从"我录的"里剔掉。
-
-### 归属：站点上的东西是**谁的**（2026-10-17，工单 16）
-
-在那之前，整个资产根是**平铺**的：`books/` `cards/` `children/` `kids.json`
-没有一处记着 userId。后果是三件具体的事：`/api/assets/<path>` 不认人（书号是
-"卡 + 主题"推出来的指纹，猜得出来，于是**知道 id 就能拿到别人的整本 `book.json`
-与朗读音频**）、书架/角色墙数的是"这台服务器上的全部"、管理页那句
-「每个用户的作品与用量」没有东西可显示。
-
-**归属只记在一个地方：磁盘上的 `u/<userId>/` 前缀。** 不加 books 镜像表——
-引擎写文件、Java 写库，两者之间**没有事务**，镜像表迟早与盘上的字节不一致
-（"行说是你的、字节不在"，或反过来），而那种不一致最难查。
-
-缝选在 `AssetStore`（[`src/lib/asset-scope.ts`](src/lib/asset-scope.ts)）：它是接口、
-已有两个实现（`createFsStore` / `createMemoryStore`），这一轮加**第三个实现**——
-按人加前缀的包装。于是引擎里二十来处路径表达式（`books/${bookId}/page-…`、
-`manifestPathOf`、`book-deletion`…）**一个字节都没改**；`book.json` 里记的仍是
-逻辑路径（`put` 交回的 `ref.path` 去掉前缀），所以导出演示书、阅读器、清单审计照旧。
-
-三条纪律，每条都对应一次真实的踩坑：
-
-1. **权限是结构性的，不是过滤。** 读取时拼的是**请求者自己**的前缀，
-   别人的书 id 在你那一片里根本不存在 → 404。没有"先查出来再判是不是他的"这一步，
-   也就没有"某处忘了判"这一步。
-2. **没有 userId 就当场炸**（`requireUserId`）。这条防的不是攻击者，是
-   **我们自己忘了那道闸**：漏一行 `requireCapability` 就是 `u/undefined/`，
-   而它**看起来是通的**（存得下、读得回、界面无异常），实际两个陌生人在同一片里。
-   丢掉闸门的症状从此是"500 + 一句说清的话"，不是"悄悄串号"。
-3. **越界要自己拦一层。** 底层的 `../` 检查判的是"还在资产根之内"——加了
-   `u/<id>/` 前缀之后**多了一层边界**：`/api/assets/../u/7/books/x/book.json`
-   拼出来是 `u/3/../u/7/…`，`resolve` 之后正好还是根之内的 `u/7/…`，
-   于是底层放行、3 号读到了 7 号的书。★ 这个洞是**单元测试先照出来的**
-   （那条测试第一版写的是"put 越界会抛"，用了 `../../`，加前缀之后它没抛）。
-
-★ 两条跟着改的口径，都是**跨账号撞书号**逼出来的（书号只由"卡 + 版 + 形态 + 主题"
-推出，不含时间戳、不含账号）：进程级租约的键带上人（`runKeyOf`，否则甲在跑时
-乙会收到一句关于**别人的、他看不见的书**的 409）；`bookExists` 从"收书号、自己
-读根"改成**收 store**（否则「这个主题你已经有一本了」会变成"别人有过这个主题，
-所以你不许做"，既是误伤也是把别人的存在性泄漏出去）。
-
-★ **第三条口径是同一天用户实测报出来的**：书架架子上看得见《纸箱火箭》，
-点进去却是「找不到这本书」——`resolveBook`（[`src/lib/book-source.ts`](src/lib/book-source.ts)）
-是**唯一**还拼着裸根 `books/<id>/book.json` 的地方：架子那头读的是"你自己那一片"，
-这一头还在老地方找，于是两个答案不一样。现在它**收一个必给的
-`AssetStore | null`**（阅读器用 `currentUserId()` 现取），传 `null`（没登录）
-就只剩演示书那一条路——**不去别处找**，与"未登录时书架是空架"同一条口径。
-代价说清：运行期的书**只有它的主人在登录状态下读得到**；这不是新加的约束，
-图那一头（`/api/assets`）本来就是这条口径，改的只是让正文那一头别再假装人人可读。
-★ 判别性的验据是"只有真做归属才会不同"的三种会话：主人那一片 →
-`data-source="runtime"`、别人那一片 → 空态、没有会话 → 空态（而演示书仍然是
-`data-source="demo"`）。
-
-**音色**一并挂到账号上——它没有字节（样本从不落盘这条没变），磁盘挂不上，
-所以进 MySQL：`voices(user_id, voice_id, name, model, chosen, created_at)`，
-唯一键 `(user_id, voice_id)`；"现在用哪一个"用 `chosen` 那一列，不另开一张表
-（"我录过哪些"与"在用哪一个"本来就是同一个问题的两半）。它替掉的是浏览器
-localStorage 里的两个 key——换台设备就没了，而"我录的声音"看起来像账号的属性。
-
-**老数据**用一次性脚本搬（[`scripts/adopt-legacy-assets.mts`](scripts/adopt-legacy-assets.mts)，
-`--user=<登录名>` 走管理页接口查号，**默认只打印计划**、`--apply` 才动手，
-`rename` 整目录搬）。本机的 `.out/web` **没有**替你搬过：那是共享的开发数据。
-
-**仍然不做**（第二步，部署那一步的事）：换 S3/MinIO 实现（`AssetStore` 已经可换，
-这一轮只保证"换实现不用改调用方"这条属性没被破坏）、账号级导出。
-
-<details>
-<summary>验证怎么做的（为什么不是"点一下看看"）</summary>
-
-`.out/verify-ownership.mjs`，隔离栈（Java 8099 + Next 3314 + **throwaway 的
-ASSET_ROOT**，不碰共享的 `.out/web`），31 条全绿。主判据是"只有真做归属才会不一样"
-的那一条：甲的 `book.json`——甲 cookie **200** / 乙 cookie **404** / 匿名 **401**。
-"列表里没有"在过滤式实现下也成立，它分不出两种做法；拿 id 直接打接口并且要求
-404，才分得出"结构性隔离"与"事后过滤"。
-
-★ 端到端那一步照出了三道闸门都照不出的一个错：`AdminScreen`（客户端组件）
-顺手 import 了 `usageTextOf`，把 `node:fs/promises` 拖进浏览器包——
-typecheck / lint / 单元测试**全绿**，而 `/admin` 整页 500（webpack
-`UnhandledSchemeError`）。形状与文案因此住在 `admin/state.ts`（纯），
-数数的活儿留在 `admin/usage.ts`（服务端）。
-</details>
-
-### 示例角色卡：随仓库发布的第三份演示资产（2026-10-17）
-
-`public/` 下现在有三份"断网也在"的演示内容：`demo/books/`（**两本**画好的书——
-独读版那本《小宇的云》，与 2026-10-18 加的**一本共读版**，见 §五「演示书多了一本共读版」）、
-`demo/children/`（两个孩子的档案）、以及**两张角色卡本体**：
-
-| 位置                            | 内容                                                               | 实测                |
-| ------------------------------- | ------------------------------------------------------------------ | ------------------- |
-| `public/demo/cards/xiaoman-r1/` | `r1.<指纹>.json` + `ref.<指纹>.jpg` + `latest` + `ref.<指纹>.webp` | 321 KB / webp 23 KB |
-| `public/demo/cards/xiaoyu-r1/`  | 同上                                                               | 349 KB / webp 26 KB |
-
-那个 `.webp` 是 **768 档的静态小图**（2026-10-18 随仓库预生成，见下面"访客那一支"）：
-静态文件看不懂 `?w=`，所以档位在导出时定死。原图**留在目录里**——卡里
-`reference.path` 指的是它，出图锁脸用的那份字节还是它。
-
-★ 这两张卡**不是新画的**：它们 2026-10-16 就在本机的资产根里，只是那之后
-`cards/` 搬进了 `u/1/`，于是**谁都看不见了**——角色墙上写着「形象还没印出来」。
-那句话当时是**实话**（`CharacterWall` 第 22 行那句"不拿一张示例图去顶"说的就是它），
-现在它不再是实话了，所以那句话连同它背后的判断一起改了。
-
-**导出是整目录复制，一个路径都不翻译**：`card-source.ts` 把垫底层的根取在
-`public/demo/`，于是逻辑路径 `cards/<卡号>/x` 与演示那边的物理路径**逐字相同**
-（`book-source.ts` 那份要摘一次 `books/<id>/` 前缀，这里不用）。
-脚本 [`scripts/export-demo-cards.mts`](scripts/export-demo-cards.mts) 导完逐条自检：
-`latest` 指的那一版在不在、每一版的参考图在不在、**参考图名里的指纹与卡里记的对不对**
-（对不上就说明复制过程动过文件名，那张图是哪一版卡的就此答不上来），
-★ 以及**每一版的参考图都有一个 `.webp` 兄弟文件**（2026-10-18 加的第四条自检）。
-生成兄弟文件那段逻辑与演示书那份是**同一个**（[`scripts/webp-siblings.mts`](scripts/webp-siblings.mts)），
-不是抄的第二份——两边各写一遍，早晚会在质量档与 `withoutEnlargement` 上漂开。
-★ 加了示例卡、或者改了档位，重跑一次 `--apply` 就会补上；漏跑不报错，
-只是访客那一屏每次拉 **321 / 349 KB 的原图**（单元测试 `card-source.test.ts` 里
-那条事实判据会把这种漏跑照出来）。
-
-<details>
-<summary>为什么垫在 store 上，而不是"两个来源、两种 URL 前缀"（三处落点与三条代价）</summary>
-
-书与档案用的是"一个函数里查出两个来源"（`resolveBook` / `listChildren`），
-卡**不能照抄**，因为卡要被两拨人读：列卡/详情读 `rN.<指纹>.json`，
-而出图那一步读的是 **`providers.store.read(card.reference.path)`** ——
-参考图的字节要当锁脸的输入（`engine/index.ts`）。第二拨走的是 store 本身，绕不过去。
-
-所以这一层给 store 也加了一个实现：**把 `public/demo/` 垫在每个人那一片底下，
-只对 `cards/` 生效**。于是引擎、卡存储、缩略档、导出脚本一个字节都不用改，
-而"示例卡能不能用"这件事的分水岭（参考图字节读不读得到）自动就通了。
-
-三个落点（同一个决定，见 `card-source.ts` 文件头）：`createUserStore`（路由那一侧，
-十来条路由共用）、`listCardItems`、`childDetailOf`（这两个收的是**根路径**，
-自己建 store）。★ 少垫一处的症状很具体：示例小主角**选得中、一点生成就说找不到参考图**。
-
-三条代价，写在这里免得下次有人惊讶：
-
-1. **缩略图缓存进了请求者那一片**（`u/<id>/thumbs/cards/xiaoman-r1/…`）。
-   它是派生物、不是作品，管理页那一列按目录名数（`books/` `cards/` `children/`），
-   不会把它算成人家的书或卡。
-2. ~~**未登录的访客在角色墙看到的仍然是空墙**~~ —— ★ 2026-10-18 **这条改掉了**，
-   用户点名的正是它（"对于没有登录的人，那两个默认角色卡也是可以看见的"）。
-   做法就是上面预言的那一个：示例卡的地址换成静态的 `/demo/cards/…`
-   （`card-source.ts` 的 `demoCardPathInPublic`，与 `book-source.ts` 那套同形，
-   差别只有一处——**卡是 `.jpg`**，所以换兄弟文件时两种扩展名都认）。
-   三件事跟着落下来，都写在下面"访客那一支"里：`/character` 不再提前返回空墙；
-   匿名点得开**只读**的形象页（`canEdit: false`，写动作整组收起来）；
-   `/api/assets` 对匿名照样 401（换的是地址，不是鉴权）。
-   ★ 当晚又补了一格：**`/home` 那颗"选小主角"的选择器对访客也放上了这两张**
-   （用户看着截图问的第二句："为什么在输入框上面这个是请创建一个角色呢"）。
-   那一刻两屏对**同一件事实**给了两种说法，其中一种是假的，而假的是首页那颗药丸。
-   做法与角色墙同源（`children-list.ts` 的 `listDemoCardPicker`），代价见下一节末段。
-3. **`public/demo/cards/*.json` 在公网是可下载的**（静态目录）。里面是锚点、
-   `modelId`、`promptFragment`——界面上本来就看得见，所以不是泄漏；
-   参考图是**合成**的（`make-demo-cards.mts`：演示与答辩现场不需要任何真孩子的照片）。
-   ★ 2026-10-18 起**图片文件本身**也在公网可直接下载了（访客那一屏要的就是这个），
-   而它同样只是那两张合成图——上面那条判断一个字没变。
-
-**验证**（[`scripts/e2e-demo-cards.mts`](scripts/e2e-demo-cards.mts)，打本机一台 dev server）：
-一个全新账号的 `/api/cards` 与 `/api/children` 里都有这两张卡；
-参考图 200 且字节数与卡里记的一致（327,226）；`?w=240` 是真缩出来的一张 webp（4,256 字节）；
-`/character` 与 `/home` **渲染出来的 `<img>` 地址**拿去请求也 200
-（只看"页面 200"看不出问题——一个指向 404 的 `<img>` 所在的页也 200）；
-★ 而真正的隔离一个字没变：**甲打乙那一片的卡 → 404**、乙自己打 → 200、匿名 → 401。
-垫底层是只读的：跑完乙那一片的 `cards/` 里只有它自己那张探针卡，示例卡一个字节都没抄进去。
-★ 访客那几条（同一份脚本，2026-10-18 加）：匿名 `/character` 里那个 `<img>` 的地址
-落在 `/demo/cards/…` 这一族、请求它 **200 且 `content-type` 是 webp**（23,590 / 26,670 字节
-那两个兄弟文件）；匿名 `/character/xiaoman` 200 且那一页的图也 200；
-匿名打 `kid-private-probe`（**乙刚建的那个孩子，它真的存在**）→ **404**；
-★ 匿名 `/home` 那颗药丸里三样一起：有名字「小满」、有静态图地址（请求得回来）、
-而且 HTML 里**不再出现**「还没有小主角」——那一句是这次改动的反面，只有真改到才会消失。
-</details>
-
-### 访客那一支：未登录的人也看得见那两张示例卡（2026-10-18）
-
-来的是一句用户报障的截图（空墙）："对于没有登录的人，那两个默认角色卡也是可以看见的。"
-分岔点在 `src/app/(studio)/character/page.tsx`——匿名那一支以前是个 `items={[]}`。
-
-**做法是换地址，不是松鉴权。** 示例卡随仓库发布，本来就是 `public/` 下的文件，
-Next 直接发得出去；运行期的卡在资产根里（不在 `public/` 下），只能经 `/api/assets`，
-而那条出口对匿名一律 401——**那句 401 一个字没动**（"别人的东西拿不到"的守门人，
-上面第 3 条与工单 16 都指着它）。所以访客拿到的地址是 `/demo/cards/<卡号>/ref.….webp`，
-而那个 `.webp` 是**导出时预生成的 768 档**（静态文件看不懂 `?w=`，档位没法在请求时说）。
-
-三条纪律写在 `children-list.ts` 的"访客那一支"那一段里，免得下次有人顺手扩大它：
-
-1. **只读 `public/demo/`**（根由 `card-source.ts` 的 `demoAssetRoot()` 给，写死），
-   绝不传 `.out/web`——那底下是所有人的作品；
-2. **来源必须是 `demo`**（走 `listDemoChildren()`，不是 `listChildren(<示例根>)`）：
-   后者会让示例档案以 `source: 'runtime'` 出现，于是"示例"两个字与"示例不给删"
-   的判据一起翻面；
-3. "用他做过几本书"数的是**示例那一片**里的书——小宇那本演示书是真的，访客点得开它。
-
-界面那一侧：`CharacterWall` 的图改用取数层给的 `card.faceUrl`（这个数从此只在一处决定），
-形象页收一个 `canEdit`（匿名恒为 `false`）：**"再画一版"「从现在起用这一版」「出一张形象」
-「改基础信息」整组不渲染**，右栏换成一句"登录之后可以用他做一本，也能提建议再画一版"
-加一颗去登录的链接。**版本历史留着**——切看第几版不是写动作。
-★ 匿名打**别人的**孩子 id 仍然是 404，而且这一支的 404 是**结构性的**：
-访客那条路的根钉在 `public/demo/`，那底下根本没有这个人（不是"读出来再判是不是他的"）。
-
-#### 同一天补的第三处：`/home` 那颗「小主角」药丸（2026-10-18）
-
-用户第二张截图问的是它："没有登录的人是可以看到默认的两个角色，为什么在输入框上面
-这个是请创建一个角色呢，把默认的两个角色放过去"。两屏对同一件事实给了两种说法，
-而**药丸上那一句是假的**——`/home` 的匿名支路以前返回的是空表，于是落到
-`CreateLanding` 里那颗 `<Link>还没有小主角 · 先去建一个</Link>`。
-
-修法是给访客支路补一个与角色墙同源的取数：`children-list.ts` 的 `listDemoCardPicker()`
-（同一份 `demoListing()`，所以那两个目录只读一遍）。登录那一支提成
-`ownCardPicker(root)`，两支**返回同一个形状**（`CardPickList`：卡 + `childId → 名字`
-的表 + **这张卡的地址怎么来**），于是 `CardListItem → ChildOption` 那段投影只写一遍
-——两条支路各写一遍，迟早会有一边忘了带名字，而症状是药丸上写着一个 `kid-yl957g`。
-
-★ 三样里第三样（`faceOf`）是**这一屏比角色墙多出来的那个坑**，值得单记一笔：
-卡和名字第一次就都对了，图却是空的——因为地址那一层仍然是页面自己拼的
-`assetUrlOf(card.referencePath, 240)`，而那条出口**对匿名一律 401**。
-症状恰好是这次要防的那种："页面 200、名字也在、只有图不出现"，
-e2e 里"把渲染出来的那个地址真去请求一次"那条判据当场把它照出来了
-（这一条也是为什么那一组判据不能只看"页面 200"）。两支给的函数不同：
-登录是 `/api/assets` 的 240 档，访客是 `public/` 下那张静态图（示例卡自己的
-`faceUrl`，768 档兄弟文件）。**判据写在取数层，界面层不判"我是哪一支"。**
-
-★ 一个数字上的代价，写清楚免得下次有人惊讶：示例卡的图**没有 240 档**，就是那个
-768 档兄弟文件（小满 **23,590** / 小宇 **26,670** 字节），而登录用户那份 `?w=240`
-实测 10 KB 上下——那颗圆点拉的是两倍多。认这笔账的理由是**两屏共用同一个地址**：
-访客在 `/character` 与 `/home` 之间来回走，浏览器只下一次。真要省，该做的是导出时
-再生成一个 240 档兄弟文件（`scripts/webp-siblings.mts` 里换一个宽度），
-而**不是**在界面这一层手拼宽度——`demoCardUrlOf` 收到 `width` 也照旧忽略它，
-这个"忽略"是刻意的：静态文件看不懂 `?w=`。
-
-★ 那条"空表"的分支**留着**（`CreateLanding` 里那句 `<Link>` 一个字没改）：它现在几乎
-走不到（访客有示例两张、登录的人有 `withDemoCards` 垫底），但"一张卡都没有"仍是一种
-合法状态（比如 `public/demo/cards/` 没跟着发布）——那时药丸必须如实说"还没有"，
-**而不是**渲染一颗点开是空表的下拉。
-★ 访客选中了也不会有写动作漏出去：`submit()` 第一句就是那道登录闸（`gate.ask()`），
-比"没有卡时跳去新建"那一句还早。
-
-### 演示账号：`123456` / `123456`，以及怎么停掉它（2026-10-17）
-
-**账号 `123456`，口令 `123456`**（6 位短账号，只能走「密码登录」——它不是手机号，
-永远收不到验证码）。它和其他账号一样**有创作权限**（2026-10-18 之前那句是"四个能力
-全开"，现在权限只有一位，见 §五），用途是**评委/演示时不必收短信就能进门**
-（用户 2026-10-16 点名要的）。
-
-★ **它现在只写在这里**。2026-10-17 用户要求「演示账号就不要明着写出来了」，
-登录页页脚那一行（`login__demo`）连同组件里的 `DEMO_ACCOUNT` 常量一起删掉了。
-代价是**评委从界面上再也拿不到进门的口令**——它改由交付说明与本页给出。
-（它照旧由服务端在启动时补建，见 `AccountSeeder`；删的只是"印在登录页上"这一件事。）
-
-★ **它是这个系统里唯一一个口令写死在代码里的账号**，而后果必须直说：
-**站上公网之后，任何人只要知道这两行字就能用它生成绘本——花的是站长的钱。**
-这也是它只有 `USER` 权限、不是管理员的原因：演示要的是"能创作"，
-不需要"能改别人的权限"，做成管理员等于把管理页也一起公开了。
-（口令下限那 8 位管的是"**自己设**密码"那一步，它是预置的，不是谁设的。）
-
-**停掉它**（启动日志每次都会喊一遍，管理页在它那一行上也有提醒）：
-
-```sql
-DELETE FROM users WHERE account = '123456';
-```
-
-然后重启服务。`AccountSeeder` 只在"库里没有"时才补建，所以删掉之后它不会再自己长回来。
-
-<details>
-<summary>为什么这一节要写得这么细</summary>
-
-因为它是一个**已知会花掉真钱的口子**，而它的存在是产品决定、不是疏漏。
-把"它是什么、为什么这么设计、怎么关掉"写在同一处，比分散在三个文件里可靠——
-`DemoAccount` 的类注释、`AccountSeeder` 的启动日志、以及这一节指的是同一件事，
-改一处要一起改。
-</details>
-
-### 权限收成一位：登录就能创作，站长只留一个收回开关（2026-10-18）
-
-用户的原话是「**没有登录的人是没有权限进行创作，但是登录之后就可以使用各种模型了，
-不用站长分配**，在站长的管理那，还是可以看到用户创作了几本，有几个人物，
-后面的选项就变为是否有权限，默认注册的用户都有权限，所以给"帮助"那个模块删除吧」。
-
-在这之前权限是**四个开关**（文字 / 图像 / 视觉 / 语音），新号四个全关，
-用户看到一个「帮助」弹窗、在里面申请，站长在管理页的队列里批。那套形状是为
-"我得控制谁在花我的钱"设计的，而它在本站的前提不成立：注册进来的都是被邀请来的人，
-而一个四个开关全关的新号**什么也看不见**——他点「开始创作」只得到一句
-「当前用户没有权限，请联系管理员」。于是"注册 → 找站长开权限 → 再回来"里
-中间那一步是纯粹的等待，而它每个新号都要发生一次。
-
-改完是：
-
-- **有没有创作权 = 一位**（`user_permissions.allowed`）。四项同真同假之后，
-  四个必然一起动的列只长成"看起来能分开配"的样子。
-- **注册 / 建号就给上**（`AuthService` / `AdminService` / `AccountSeeder` 都走
-  `UserPermission.allowedFor`）。这就是"登录之后就能用各种模型"。
-- **管理页那一排四个开关收成一格**「权限 / 能否创作」；「作品」那一列照旧
-  （几本书 · 几张卡 · 几个孩子）。
-- 站长把权限收回去 ⇒ 那个人**下一次点「开始创作」就生效**，不必重新登录
-  （权限每次问后端，不从票里读——那条纪律是 2026-10-17 定的，这次一字未动）。
-  而那句话**一个字没改**：
-  「当前用户没有权限，请联系管理员」——它现在只在"站长把这个人关掉了"时出现。
-- ★ **没登录不能创作这一条没动**，它也不是靠界面上藏按钮实现的：三个入口
-  （创作 / 人物 / 声音）在未登录时都弹「请先登录」并带着 `?next=`，
-  而服务端那道闸（`requireCapability`）先判登录、再判那一位。
-
-**「帮助」那一格整条拆掉**（组件、样式、`AppShell` 上那颗钮）。它里面除了申请，
-另外三条（谁配的密钥 / 为什么看不到别人的书 / 数据在服务器上只租 6 个月）
-也一起删了，没搬家。**申请那整套一并删掉**：两条 BFF 路由、Java 的
-`PermissionRequest*`、管理页的申请队列、`permission_requests` 建表语句一起退场。
-理由不是省事：默认给上之后没有人需要申请了，而**一个永远收不到东西的队列
-比没有这一栏更坏**——它会让人以为"是不是没人找过我"。
-
-★ **老库里的那两样东西留着**：`user_permissions` 的四列 `can_*`、
-以及 `permission_requests` 整张表连同里面的数据。`SchemaUpgrades` 的纪律是
-"启动时按代码重排你的库"这种事会吃掉数据，所以它**只加列、从不 DROP**。
-代价是一笔明账：老库上会有几列、一张表没有代码再读写它们
-（`db/schema.sql` 与 [ADR-0010](docs/adr/0010-permission-is-one-bit.md) 都写明了）。
-
-**老账号怎么"自动给上"**：补列那一句是
-`ADD COLUMN allowed TINYINT NOT NULL DEFAULT 1`，`DEFAULT 1` 就是"给上"这句话的落地。
-库里原来那批四个开关全关的账号（他们当初全关，只因为那时候要站长手工开）
-一次变成「有权限」。`SchemaUpgradesTest` 里钉住的是**老行补完等于 1**，
-不是"补上了一列"——这两件事的差别正是这一次的产品要求。
-
-★ **代价说清楚**：花钱的防线变薄了。以前"谁在用站长的密钥"由四个开关兜着，
-现在是"注册就有"；站长能做的只剩两件：关掉注册、把某个人收回来。
-而被收回权限的人**没有任何界面手段**再要回来——申请那条路是**用户选掉**的，
-不是漏掉的一步。
-
-这一节里那两句"一眼能看见"的话各有一个脚本，判据都是**只有真做才会不同**的量，
-不是读 CSS（先起一台自己独占 dist 的 dev server，见上面「全部脚本」）：
-
-```bash
-node scripts/chk-admin-access.mjs http://127.0.0.1:3338 <一张真登录拿到的 xzj_session>
-node scripts/chk-shell-gate.mjs http://127.0.0.1:3338
-```
-
-前一个量管理页（表头里含"权限"的列数必须是 **1**——退回四个开关就是 4、
-每一行那颗开关的 `data-on`、「作品」那一格、以及页面报错 **0** 条），
-后一个量三处创作入口的登录闸（弹窗在不在、那颗 `<a>` 带没带 `?next=`、有没有留在原页）。
-★ 会话 cookie 由调用方传进前一个脚本，是因为"怎么登进去"与"管理页长什么样"是两件事，
-而传进去的那一张是**真的**——这一遍仍然走真鉴权。
-
-### 「能力」这个词还剩哪两种用法（2026-10-18）
-
-它没有消失，但都不再是"这个人有没有"：
-
-| 在哪                                     | 是什么                                               | 谁给          |
-| ---------------------------------------- | ---------------------------------------------------- | ------------- |
-| `GET /api/auth/me` 的 `configured`       | **站里配没配**这一项（密钥在不在），四项仍然各自独立 | `serverEnv()` |
-| `requireCapability(req, caps)` 的 `caps` | **这条路由要什么**能力                               | 路由自己      |
-
-★ 前者**不能**跟着收成一位：界面上那句"站里今天还没配齐创作要的模型"仍然说得出，
-而它与"你的账号没有权限"指向**两个不同的下一步**（等一等 vs 找站长），
-把两者收成一位就是把这两件事合成一句假话。★ 后者现在**不改变结果**
-（那道闸判的都是那一位），留着是因为它记着"这条路由要什么"——
-回到按能力授权时改的是**那一处**，不是三十个调用点。代价是它**看起来**像在分别判四项，
-所以那段解释就写在函数头上（`lib/auth/session.ts`）。
-
-### 一个错误码盖着两件事，那句文案就只剩一件（2026-10-18）
-
-`asset-write-failed` 这个码现在盖着**两件**事：把图**下回来**失败（`http.ts` 的 `fetchBytes`：
-网络被掐、签名地址过期、HTTP 非 2xx），与**写下去**失败（磁盘满、目录不可写、路径越界）。
-复用是**刻意**的（`asset-scope.ts` 文件头：路径越界那种"永远不该有用户读到的文案"），
-代价是 `provider-messages.ts` 里按码取的那句话原来只说后一件。
-
-★ 这个代价是 2026-10-18 在管理页的「测试连通」上**真撞出来**的：本机代理把 OSS 那一段掐断
-（ECONNRESET），屏幕上写着「资产没法落盘（磁盘满了或目录不可写）/ 清一点磁盘空间再试」——
-磁盘是空的。**一句具体、可执行、且与故障无关的下一步，比没有这句话更坏。**
-现在那句话两件都说得对（"要么没下回来，要么没写下去"，原文接着说是哪一种）。
-
-★ 更好的做法是把这个码拆成两个（下载 / 落盘），那要动 `ErrorCode` 那份词汇表与它所有调用点，
-是独立的一件事——这一轮只改了那一句文案。
-
-### `datalist` 会拿输入框里现有的字**筛**候选，于是"拉到 26 个"与"点开只有一个"同时成立（2026-10-18）
-
-「模型名」那一格的候选第一版是 `<input list>` + `<datalist>`，那是最省事的写法：
-候选跟着输入框走，不用另摆一件控件。代价是 `datalist` 的**原生过滤**——
-Chrome 打开它的时候拿输入框里**当前的字**去筛，而这一格**恰恰不是空的**
-（`qwen3.8-flash` 就在里面），26 个候选里只有它自己匹配得上。
-
-于是页面上同时写着两句真话：那一行说「拉到 26 个模型候选」，点开只有一条。
-用户的原话是「**你这里写的拉取到了，可是我点击下拉款（框）没有啊**」。
-**这个控件只在字段空着的时候可用，而它永远不会空着**——一个只在反例下才成立的用法。
-
-★ 换成真的 `<select>`（挑完弹回占位项、值写进那格自由文本框）之后候选是列全的。
-不把那一格做成**强制选择框**是刻意的：图像那一路在用的 `wan2.7-image` 根本不在
-网关 `/models` 返回的 26 个里，选择框会当场丢掉它正在用的值。
-
-★ 同一轮里还改了一处**方向词**：CSS 第一版写的是 `flex: 0 1 190px`（挤在输入框右边），
-而那一行只有 298px（输入框 192 + 「拉取模型列表」92 就满了），选择框必然折到第二行——
-**排版在下面、灰字却写着"右边"**。现在钉成 `flex-basis: 100%` 独占一行，
-灰字说「下面那颗」。**一句话里的方向、数量、单位，都是能被量错的**；
-把"它是下面那颗"也写成探针的一条判据（`chk-admin-model.mjs` 的「候选」那一节记宽度），
-下次改版式时它会当场红。
-
-### 故事闸门：编完故事先停下来，家长点「就按这个画」才出图（2026-10-17）
-
-用户的原话是「**现在用户只能修改画出的东西，不能修改具体的故事**，应该把第一个编故事的
-提示词也给用户看一下，用户可以修改一下，应该怎么发展，当用户确定之后再来生成图片」。
-
-出图是这条流水线上**唯一真正花钱**的一步（实测 ≈154 s/页、0.2 元/张），而它原来紧跟在
-编故事后面——家长在读到故事第一个字之前，整本书的钱已经花出去了。所以流水线拆成两段
-（`planBook` / `illustrateBook`），中间开一道**门**：故事摊在 `StorySheet` 上（书名 +
-每页的正文 / 画面 / 情节），改完点「就按这个画」才开跑。
-
-**八处判断，每条都有一个具体的坏法：**
-
-1. **改的是"故事"，判据还是引擎那一套**。界面上标出来的问题、以及服务端「就按这个画」
-   拒绝时说的那句话，来自**同一个函数**（`lib/story-problems.ts`，内部跑
-   `planDraftCodec` + `buildTree`）。各写一份的症状是"按钮亮着、服务端 400"。
-2. **改了的东西自动存盘**（静默 1.2s）。不存的话，家长改到第 5 页时刷一下，前四页就没了
-   ——而"关掉标签页也找得回来"正是这一轮对用户的承诺（那条路是书架上多出来的
-   「还没开始画」那一档，`BookSummary.status === 'story'`）。
-3. **重写一版会截断事件日志**，序号从 1 重来。不截的话，12 页重写成 8 页之后重放出来的
-   画桌会多出 4 个永远填不上的格子（`frames.ts` 的 `deskOf` 里 `total` 只增不减）。
-4. **已知代价：同一个主题做不出第二本**。书号是 `card|revision|form|theme` 的指纹，
-   **不含时间戳**（`bookIdOf`），所以同一个孩子 + 同一个主题 = 同一个目录。
-   旧代码在这里是**静悄悄重跑整本**（覆盖上一本的书、再付一次钱），现在改成 409 +
-   一句人话（"想再来一本就把主题改一个字"）。这不是新造的约束，是把一条本来就有的
-   约束**说出来**。
-5. **`stats.elapsedMs` 的口径改成"机器时间"**（① + ②），不含家长看故事与改故事的时间。
-   家长可能把故事改上十分钟，而那十分钟不是生成。两条路（脚本一次跑完 / 界面分两步）
-   因此仍然可比。
-6. **两处"白"变薄了：`--surface-glass` 与 `--paper-glass`。** 用户两句话是
-   「创作流程上面和下面的两个白色的背景不透明度减小一点」和
-   「白色背景的透明度增高一点，要不然和背景不符」——阶段轨与底部那条原来是纯白，
-   而这一屏铺着天光，两块白板把背景切成了三块。两个令牌都是**量**出来的，
-   量具是 `node scripts/check-scrim.mts` 的"运行视图那两层玻璃"那一节
-   （把这一档叠在**天空带最暗的像素**上，再按 WCAG 算墨色对比度，门槛 4.5:1）：
-   - `--surface-glass: rgba(255,255,255,0.70)`：阶段轨、底部那条、闸门那一屏的每张卡。
-     实测最暗天光 rgb(200,209,204) 上合成出 rgb(238,241,240)，`--ink-muted` 4.70、
-     `--accent` **4.56**。★ **卡在 4.5 上的是 `--accent`**，所以这个令牌的底是
-     **α ≈ 0.69**——原来注释里写的"0.60 是底"是估的，量出来 0.60 时两个墨色**都破**。
-   - `--paper-glass: rgba(244,248,249,0.45)`：卡片里那些框。原来框铺的是**不透明**的
-     `--paper`，于是这一屏上**最大的一块白其实是框不是卡**（一屏 8–20 张卡，每张卡里
-     两三个框都比卡更白更实），用户第二次说的正是这件事。天光透过卡片是 30%、
-     透过框是 16%（两层叠加 = 0.835），代价是框与卡之间只剩一次很轻的色阶，
-     "哪里能打字"主要靠那一圈 1px 描边认。这一层**故意不进** `check-scrim`：
-     它叠在卡片之上，只会更不透明，所以玻璃那一张表就是下界。
-   - 顺带修了一处：闸门那些框的占位文字原来落到 Tailwind preflight 的
-     `color-mix(in oklab, currentcolor 50%, transparent)` 上——那是一个**算出来的**
-     灰、不在任何令牌上、也就没人量过它。现在显式写成 `--ink-muted`。
-7. **"接着改一份停在闸门上的草稿"是一条**独立**的路，它有自己两个坏法**（2026-10-17 验收时
-   实测抓出来，都只在真跑时看得见）：
-   - 那一支**也要读一遍事件日志**。理由听起来绕，但它是硬的：闸门那一屏的**正文**来自
-     `story.json`，而阶段轨前两格（书名、"0 / N"）读的是 `desk`，那两样**只在①的
-     `plan-ready` 事件里**，而事件只在日志里。不读的症状是点「就按这个画」之后第一帧一到，
-     桌子被折成「编故事 **还没轮到** ｜ 逐页画 **0 / 1**」（`total` 兜到第一条事件的
-     `pageNo` 上，`title` 是 `null`）。
-   - **画桌上顶着的书名以"家长手上那一份"为准**（`frames.ts` 的 `withStoryTitle`）。
-     `desk.title` 唯一来源是日志里的 `plan-ready`（`book-ready` **不带书名**），
-     而书名在闸门上是**能改**的——不覆的话，屏幕上从开跑到装订完都写着旧名字，
-     而 `book.json` 的 `tree.title` 里是新名字：**界面与产物说的是两个名字**。
-8. **一个说清楚的边界**：书架那一栏"还没开始画"的判据是"有 `story.json` 没有 `book.json`"，
-   所以**②从开跑到装订完这一段**里，一本已经画了几页的本子在书架上仍然写着"还没开始画"
-   （`illustratedCount: 0`）。窗口是自己消失的（`book.json` 一落盘就归到 `draft`）。
-   要做得更细得在②每一步之后回写草稿，那是另一个量级的开销——所以选择写下来。
-
-过程与工单记在 [`.scratch/story-gate/`](.scratch/story-gate/spec.md)。
-
-### 阅读偏好：默认「自己翻」，自动朗读要按一下才走（2026-10-17）
-
-侧栏左下角那一格「设置」里只有一节：**翻页这件事交给谁**。两个答案——
-**我自己翻**（默认，= 这一版之前唯一的行为）与**自动朗读**（按一次，一页页自己念、
-念完自己翻）。四条取舍都对着一个具体的走法：
-
-1. **默认是不变。** 一个偏好项不该顺手改掉任何人的既有体验，所以默认值就是原来那条路。
-   存储里认不出来的值（上一版的格式、被手改过的、只剩半截的）一律退回它
-   （`parseTurnMode`，`lib/reading-prefs.ts`）。
-2. **自动朗读要按一下才走**，不做"进阅读器就自己念"。浏览器不允许页面在**没人点过**的
-   情况下出声，直接输网址进来的那种会被拦掉——而拦掉的样子与"这本书没有朗读"一模一样，
-   等于给了一个说不清自己为什么没响的控件（判据 ② 要挡的正是这种沉默）。
-3. **人翻页 = 人接管，这一趟就地结束**，声音不跟着新页走。这条与两个阅读器里从第一天
-   就写着的那句「翻页就停：朗读是『这一页的』」是同一条，只是多了一种走法；
-   好处是 ‹ › 永远说一不二。
-4. **两个阅读器都算**（`/reader/<bookId>` 与灵感书单那本样书），所以朗读那一套
-   （含这条链）收在 `components/reader/use-narration.ts` 一处——两台的类名与"页"的口径
-   都不同，但**行为不能有两个脾气**。
-
-代价认下两条：**这一屏没有侧栏**，所以改偏好要退出书（两个阅读器都在 `(studio)` 路由组
-之外，那是全屏阅读要的）；偏好**只存在这台设备的这个浏览器里**（`localStorage`），
-与阅读记录同性质——**这一条没有写在设置弹窗里**（2026-10-17 用户圈掉了那两句注解），
-只记在这里与 `lib/reading-prefs.ts` 的文件头。「只有整本每页都有朗读才生效」那一句同理，
-改由阅读器自己在撞上它的那一刻说（"这本书只有 N/M 页有朗读，所以没有给朗读控件"）。
-
-过程与工单记在 [`.scratch/reader-prefs/`](.scratch/reader-prefs/spec.md)。
-
-### 阅读器的底：点阵换成一张图片，而且这件事成了一个偏好（2026-10-18）
-
-上一轮给两台阅读器补的那层「桌面」是**点阵**（沿用首页三屏那一套 `--dot` / `--dot-size`）。
-用户看了落地那一屏之后一句话否掉，三句要求：
-
-> 「背景点阵的样式有点晕，这也背景改为一张图片……多给几张设配的图片，
-> 用户之后可以在设置里面选择，选用哪张，图片不要太艳，不要抢绘本的视线」
-
-**范围只动两台阅读器**：`/booklist/<key>` 与 `/reader/<bookId>`。首页三屏的点阵一个字不动
-（各有各的遮罩与滚动契约，不在射程里）。
-
-★ 这一节记的是**换底**（点阵 → 一张图 + 一个偏好）。同一天这块地方又改了两次：
-第三轮把底图铺满整屏（遮罩退役、证明从几何换成光度），第四轮把书周围那四层
-**全删**（暖光、随页染色、接触影、书页明暗）——三、四两轮都在下面按顺序记着。
-
-#### 「晕」不是形容词，是一个能算出来的量
-
-第一版拿**高频能量**（`mean |L − blur1(L)|`）当"晕"的尺子，判据写"新图必须比点阵安静"——
-**六张全红**，而红的原因不是图太吵，是那条判据的**前提错了**。把点阵那一格印出来看：
-
-```
-一格 20×20 里的那一行：247 234 234 247 247 … 247
-```
-
-一颗粒子只占 **2 个像素**、只比底色深 **13 级灰**（粒心 α = `.18 × .5 = .09`），
-所以那一层的逐像素能量**几乎为零**（0.0001 量级），而生成的图每一颗像素都带纸纹
-（0.002–0.007）——**比点阵高两个数量级**。拿它当尺子等于说"点阵是这一屏最安静的底"。
-
-第二次换**自相关**，这回方向对了，但取值又不对：直接读 `r(20)` 时
-一张**平滑**的图也能拿到 0.94–0.97，与点阵同一量级——一样没有区分度。
-最后落在**周期尖峰**上：`r(k) − (r(k−1)+r(k+1))/2`（`k` 取 20 与 40），
-即"这个周期上的自相关比左右邻居高多少"。这才是"规则重复"的定义：
-
-| 层                   | 周期尖峰    | 高频能量    | 彩度     | 相对 `--bg` 的 p99 偏离 |
-| -------------------- | ----------- | ----------- | -------- | ----------------------- |
-| 点阵（第二屏仍在用） | **0.505**   | 0.000       | 1.0      | 0.000                   |
-| 绘本 24 张（中位）   | —           | 0.011       | 47.8     | 0.882                   |
-| 六张底图             | 0.000–0.040 | 0.002–0.007 | 4.6–13.0 | 0.097–0.460             |
-
-判据两条，参照系**都是量出来的**、不是我新造的门槛：周期尖峰 < 点阵那一行的五分之一
-（0.101）、高频能量 < 绘本中位数（0.011）。`node scripts/check-reader-paper.mts` 现在打
-**6/6 张全过**。
-
-★ 点阵那一行**不是印象里的点阵**，也不是誊抄下来的字面量：它是按 CSS 合成出来的一张 400×400
-瓦片（20×20 个格子——周期性要有一片格子才量得出来）。底图换上来之后**退役那一层自己那份
-CSS 已经不在了**，所以这一行读的是它的**活着的同胞**：首页第二屏 `.storybook__ambient`。
-这个替换有据可查——退役那一版的文件头自己写着「逐字沿用首页与第二屏那一套，一个数都不新造」，
-连 `opacity: .5` 都是照着第二屏改回来的。量具连粒子半径都从那条渐变里解析出来：
-改了渐变而没人想起这支脚本，量到的就会是一张**早就没有的点阵**
-（`must()` 解析不出来当场报错，不许退回内置默认值——那是 `check-scrim.mts` 的同一条纪律）。
-
-★ **两条量错的经过都留在脚本的文件头里**，不删。一个量错了不要紧，
-把错的量也写下来，下一个人就不会再照着它推一遍。
-
-★ 还有一条判据**搬了家**：第一版这里要求"最暗 1% 仍能让 `--ink-muted` 过 4.5:1"
-（由 WCAG 反推），它全红，当时的判决是"本来就该红"——那条线是"字要压在这张图上"才成立的
-约束，而那一版的底图按设计**一行字都不压**（见下一节那条几何证明）。拿文字的门槛去卡一层
-没有文字的装饰，是把两件事混成一件，所以 `dark` 退成报数。
-
-★ **2026-10-18 第三轮把那个前提掀掉了**：底图现在铺满整块屏幕，每一行字都真压在图上。
-那条门槛于是重新成立，但**不在这支脚本里成立**：`dark` 量的是整张图的最暗 1%，
-而字压在图上时该问的是「**那一行字脚下那一横条**里最暗的 1% 是多少」——
-四边均匀的一张图，全图 p1 可能落在一个没字的角落，拿它去卡字是把依据选松了。
-量法搬到了 `scripts/chk-reader-desk.mjs` 判据 2（逐行 × 逐档 × 逐视口，
-在浏览器里真截屏量合成后的像素）。留在这里的 `dark` 现在说的是另一件事：
-"这张底整体比画亮"，也就是「不抢绘本的视线」。
-
-#### 第三轮：这一层**铺满整块屏幕**，证明从几何换成光度
-
-用户看了落地的第二版，一句话：
-
-> 「背景铺平整个屏幕呀」
-
-上一版为了让"一行字都不压"成立，把底图收在一条竖直遮罩里：顶端 96px 淡入、
-书底下面一点淡出。那在 1440×900 上量出来是 `0 / 96 / 603.2 / 680`（px），
-于是顶上有 41px、底下有 29px 露着纯 `--bg`——屏幕上下各一条素带，
-底图在中间**读成一条横幅**，而不是"这片屏幕的底"。这一轮把遮罩整条删掉：
-
-- `.blr__desk` / `.reader__desk` 从 `position: absolute; inset: 0`（只盖 `.blr` 那 830px）
-  改成 `position: fixed; inset: 0`，盖的是**视口**。
-- 顶端那 96px 淡入跟着没了：它防的是"图片的顶边读成一条横幅的硬边"，
-  而铺满整屏之后**根本没有顶边**可读。
-
-三条前提/代价，都不是想当然：
-
-1. **不把 `.blr` 撑到 100vh**：那一屏的高度由书决定，撑满会在书与控制区之间多出一条谁都
-   不想要的空隙，而且屏幕本来就不是 `.blr` 的事。
-2. **`fixed` 有前提**：从 `.blr` 到 `html` 的祖先上不许有 transform / filter / contain /
-   will-change —— 那几样都会把 `fixed` 的定位基准从视口拉回那个祖先（症状是"铺满了但铺的是
-   另一块"）。这一条是**逐层查过**的（`.out/probe-desk-geometry.mjs` 打印整条祖先链）。
-3. **这一层从今天起有对比度门槛要过**（上一版那句「这三层没有一条对比度门槛要过」
-   随之作废）。于是压在图上的那几行字**上了一档墨**：`--ink-muted` 在六张图上
-   **没有一张过线**（最好的白垩 4.58；木桌那一档在页码行 2.85、在说明行 **2.15**），
-   `--ink-soft` 最差 6.8、`--ink` 最差 7.2。改的是 `.blr__total` / `.blr__meta`
-   （→ `--ink-soft`）与 `.blr__meta--note`（→ `--ink`），层级没变，整体抬一格。
-   上面那行「← 回灵感书单」在 `globals.css` 的 `.reader-page__back` 里：它除了要上墨，
-   还多一条 `position: relative` —— `fixed` 是定位元素，按规范画在**静态内容之上**，
-   不加这一条那行字会被底图盖住。这是**层序**不是观感，两件事分开办。
-   ★ **这一条当时只做了一半**：只给 `position: relative` 是**不够**的，
-   那行字当晚真的被图盖住了 —— 经过、量法与补法见下面「第五轮」。
-
-**顺带修掉一个真缺陷**：竖屏手机上暖光与染色靠负 inset 外溢，390×844 实测
-`documentElement.scrollWidth = 444`（视口 390）——整页横着能拖，而横向滚动条又占掉 15px、
-把纵向那条也带出来，于是 `fixed; inset: 0` 的底图只盖到 375×829，右边与下边各留一条
-`--bg`。当时修法是 `.blr` / `.reader` 上 `overflow-x: clip`（**不是** `hidden`：那会把这个盒子
-变成滚动容器、把 `overflow-y` 一起算成 `auto`；`clip` 不建滚动容器，`overflow-y` 仍是
-`visible`）。它切不到底图——`fixed` 的包含块是视口，按规范祖先的 overflow 切不了它。
-★ 当天晚上外溢的那两层被删掉了（见下一节），这条补丁**跟着一起删**——理由没了就不留补丁。
-★ 量具这一条仍然有份：判据 1 的尺子用**布局视口**（`clientWidth/Height`）而不是
-`innerWidth/Height`，后者把滚动条算在里面；这条口径与 clip 在不在无关。
-
-那几条断言的清单与"每条错了会怎样"写在
-[`scripts/chk-reader-desk.mjs`](scripts/chk-reader-desk.mjs) 的文件头，判据 1/2 被换过一次、
-判据 4 是当晚补的、以及当晚删掉五条的理由，也在那里。
-
-#### 第四轮：书周围那几层**全删**，只剩底图与书
-
-铺满整屏的那一版落地之后，用户在截图上把书的四条边圈出来：
-
-> 「把书籍四周的仿真书效果删掉吧，只有背景就行」
-
-并在"删到哪一层"那一问里选了**最深的那一档（连书页明暗也删）**。于是四层全去：
-
-| 删掉的                                    | 原来在干什么                                          |
-| ----------------------------------------- | ----------------------------------------------------- |
-| `.blr__light` / `.reader__light`          | 落在桌上那团暖光（`inset: -16% -20%` 的两层径向渐变） |
-| `.blr__tint` / `.blr__tint-face`          | 随页染色（0 → .16 的交叉淡入，色来自离线点样）        |
-| `.blr__face` / `.reader__face` 上的接触影 | 让书"放在桌上"而不是"贴在灰墙上"                      |
-| `.blr__shade` / `.reader__shade`          | 书页内侧的明暗与弯折（`shade = sin θ`）               |
-
-剩下的是：**底图 + 一张跨页图 + 叠在左页下角的正文 + 底栏那几行字**。
-
-★ 这是**删掉**，不是"留着不跑"（CLAUDE.md「不糊弄」）：
-
-- **随页染色删的是整条功能**：`booklistTints.ts` 那张离线色表、`booklist.test.ts` 里
-  盯着它的四条断言、`chk-reader-desk.mjs` 里量它的四组判据，一起删了。
-  `scripts/sample-tints.py` **留着**——首页第二屏那份 `spreadTints.ts` 仍然是它生成的。
-- **`chk-reader-desk.mjs` 从 8 条断言收到 3 条**，连"跳过"那套机件（`skipNote` / `skips`）
-  一起删：它当初唯一的存在理由是独读版没有染色层，现在两台都没有、也都不该有。
-  ★ 当晚**又补回第 4 条**（判据 4：底图之外那行字有没有被图盖住）—— 见下一节。
-- 于是这一屏**不再有"翻页时看得见纸张的厚度"**这回事。`book/flip.ts` 照旧交出 `shade`
-  （首页第二屏仍在用，那边一个字没动），这一屏不再渲染它——翻页看起来就是图在换。
-- `.blr` / `.reader` 上那条 `overflow-x: clip` 跟着删（见上一节末尾）。
-
-★ **删掉的是往上提亮的层，所以必须复量**：`--ink` / `--ink-soft` 那两档墨是第三轮
-**带着暖光与染色**量出来的，少两层之后字脚下的像素会变——往哪边变不许推，量了才算。
-判据 2 于是当场重跑了七档底图 × 三个视口 × 两台阅读器：**最差的一格仍是 6.70:1**
-（1440×900 的说明行，两台同数，与第三轮一模一样），390×844 那一档的最差一行从 9.51:1
-抬到 10.51:1（换了一行当最差），其余在 ±0.01 内。没有一档掉到 4.5 以下，**墨的档位一个字没动**。
-
-#### 第五轮：底图把那行「← 回灵感书单」整个盖住了
-
-第四轮之后，用户在 `/booklist/dino` 的截图上把**左上角**单独圈出来：
-
-> 「左上角的这个回灵感书单怎么没有了」
-
-他是对的，而**我上一轮那句"它还在、量到 `found: true`"是错的**：
-
-- 老探针（`.out/probe-back-link.mjs`）判的是「`elementsFromPoint` 的栈顶是不是那个 `<a>`」，
-  量出来 `found: true`、rect `{x: 180, y: 21, w: 88, h: 19}`、`opacity: 1`、栈顶正是它。
-- 换成**量像素**才看见真相：把那行字自己的矩形裁下来数暗像素 ——
-  有底图时 **0** 个（最暗的像素就是纸，灰阶 228），把底图藏起来时 **334** 个
-  （最暗 28，正是 `--ink-soft` `#1c1b22` 的灰阶）。
-- ★ 老探针为什么**恒真**：底图身上有 `pointer-events: none`，**命中测试会把它整个跳过**，
-  于是"栈顶是那个 `<a>`"在字被盖得严严实实的时候照样成立。
-  判据落在"元素在不在/谁在最上面"上，就会漏掉这一整类错（同一条教训见
-  `ui-probe-clicks-land-before-hydration`）。
-
-**根因**：第三轮给它加的那条 `position: relative` **不够**。按规范，同为 `z-index: auto`
-的定位元素之间是**按树序**画的，而 `.blr__desk` 在 `<nav>` 之后 —— 后画的压在上面，
-于是那层图整个盖住了那行字。补法是 `z-index: 1`（正的永远晚于 `auto`），
-一处在 `globals.css` 的 `.reader-page__back`，两台阅读器共用一条。
-
-**判据补在 `chk-reader-desk.mjs` 判据 4**：逐档底图数那行字自己矩形里的墨
-（最暗 ≤ 80，且比纸暗的像素 ≥ 40；实测恒为 28 / 230–358 个）。
-★ 这条判据**反过来也证过一次**：在页面上把 `z-index` 按回 `auto` 重跑，
-同一个矩形从 354 个暗像素掉到 **0** —— 一条永远绿的判据等于没写。
-
-★ 「这一页上还有没有别的字被盖住」是**枚举过**的，不是想当然：`main` 底下带自己文本、
-又不属于阅读器根的叶子，整页只有这一行（`.out/probe-back-pixels.mjs` 的 `OUTSIDE_PROBE`）。
-
-#### 七档：六张图 + 一档「纯色」，默认是**最轻的那张图**
-
-- **默认 `paper`（暖纸），不是「纯色」。** 点阵退役之后，"什么都不铺"会让大多数人一进门
-  看到一块空场——而这一轮要的正是"这块底不那么简陋"。`paper` 是六张里与页面底 `--bg`
-  差得最少的一档，选它等于**把既有观感改到最小**。
-- **`plain` 排在最后**，不夹在六张图中间：它是一句"都不要"，不是第七张图。
-- **点阵不再是选项。** 它就是要被换掉的那个，留一档"回到会晕的那层"没有意义。
-
-#### 偏好那一套，逐条照 `reading-prefs` 抄
-
-`lib/reader-paper.ts`（纯的那半，可测）+ `lib/use-reading-prefs.ts` 的 `useReaderPaper`
-
-- `SettingsDialog` 里新开的第二节「阅读器背景」，七行单选，改一下即时生效：
-
-1. **认不出来的一律退回默认**，不"猜一个"：存储里可能是上一版的格式、被手改过的、
-   某一档后来被删了。判据是"这个键在不在 `READER_PAPERS` 里"，不是比对某个字面量。
-2. **只活在这台设备的这个浏览器里**（`localStorage`，键 `xiaozhujue.reader.paper`，
-   与阅读记录、翻页偏好分开）。读不到就用默认、存不下就只在这会话生效——
-   **不许**因为一个偏好读不出来就让阅读这件事本身出问题。
-3. **两台阅读器共用一份**：这是一张桌子，不设"书单那台用这个、独读那台用那个"。
-
-代价认下两条：
-
-- 选过非默认的人进阅读器时会**先看到默认那一张再换过来**（初值一律默认、挂载后才读盘，
-  SSR 读不到 `localStorage`，初值写成"读得到就读"会 hydration 不一致）。
-  与 `useTurnMode` 那次"先看到「▶ 朗读」再变成「自动朗读」"是同一条取舍。
-- 原生 1536×1024 在 1920 宽的窗口上 `cover` 要放大 **1.25×**（DPR 2 的屏 2.5×）。
-  按 `studio-backdrop.css` 那份先例**写清楚认下**，不假装没这回事。
-
-★ **加一档 = 三处一起动**：`READER_PAPERS` 那张表、`public/reader-papers/<key>.webp`
-（跑出图脚本）、以及 `reader-paper.test.ts` 里"表与盘是同一个事实"那条断言。
-它红了就是在说"你加了一档但没出图"（或者反过来）。
-
-#### 验收读数
-
-| 量具                              | 结果                                                                  |
-| --------------------------------- | --------------------------------------------------------------------- |
-| `check-reader-paper.mts`          | 6/6 张全过（尖峰、高频两条判据）                                      |
-| `chk-reader-desk.mjs`（书单那台） | **4/4 条过 × 三个视口**（1440×900 / 1920×1080 / 390×844），第五轮复量 |
-| `chk-reader-desk.mjs`（独读那台） | **4/4 条过 × 三个视口**（同上；两台跑的是同四条，不再有"跳过"那一档） |
-| `chk-paper-picker.mjs`            | 5/5 条过（设置 → 落盘 → 阅读器换底）                                  |
-
-判据 2 的逐档读数（每一行字压在底图上，最暗 1% 的对比度；七档底图 —— 六张图 + 「纯色」
-—— × 每档 4 行字 = 28 行，逐档重载各量一次）：
-
-| 视口      | 行数 | 最差一行（书单那台）                     | 最差一行（独读那台）                             |
-| --------- | ---- | ---------------------------------------- | ------------------------------------------------ |
-| 1440×900  | 28   | **6.70:1**（木桌 · 说明行 `.blr__meta`） | **6.70:1**（木桌 · 说明行 `.reader__meta`）      |
-| 1920×1080 | 28   | 8.93:1（木桌 · 说明行 `.blr__meta`）     | 9.76:1（木桌 · 页码行的读数 `.reader__readout`） |
-| 390×844   | 28   | 10.51:1（木桌 · 说明行 `.blr__meta`）    | 10.51:1（木桌 · 说明行 `.reader__meta`）         |
-
-★ 三档 × 两台，最差那一行**永远出在木桌那一档**（六张图里它最暗）——
-这正是"底图不必都够浅，但最暗的那张也得让字站得住"的意思。最差的一个数是 **6.70:1**，
-出现在 1440×900 的说明行上（12px，两台同数），离 4.5 那条线还有余量。
-
-★ 这条比它取代的那条几何证明**更严也更近**：它量的是合成之后的真像素，不关心
-上面压着几层；而 α = 0 只证明了"那里是纯 `--bg`"。（写它的时候上面还压着暖光与染色，
-那两层当晚删掉了，判据 2 **当场复量过**——读数见上表与「第四轮」那一段。）
-取样取整行那一横条的最暗 1%，比"字真正压着的那几个像素"还更严一档，偏严的那一头
-不许红，这是刻意的。尺子也不是"一次量好就锁死"：**逐档 × 逐视口**各量一次，
-换一档底图就要重新过一遍。
-
-★ `chk-reader-desk.mjs` 的判据 3 与 `chk-paper-picker.mjs` 是这一轮**唯一**能证伪
-"设置那条链接通了"的地方——`localStorage` 里写什么与屏幕上铺什么之间隔着 hydration、
-`useReaderPaper`、CSS 变量，中间任何一处断了，界面上都只是"选了没反应"。两条判据取的
-都是**图文件名**（只有真换过才会变）与**存储里那串字**，不取"点得动"——
-SSR 的 HTML 里元素本来就在，`element.click()` 绕过命中测试。挑那一档之前先验
-`__reactProps$` 在不在，而且**同一轮 JS 里**查完就点（共享工作区里 HMR 会整页重载）。
-
-★ 判据 4（第五轮补的）是另一件同样容易漏的事：那行字**读不读得清**（判据 2）与
-那行字**有没有被画出来**（判据 4）是两条独立的性质 —— 判据 2 把字隐掉之后量它脚下的像素，
-字被图盖着照样绿。逐档读数：最暗恒为 **28**、比纸暗的像素 230–358 个（书单那台 353–358、
-独读那台 230），7/7 档都数得到。
-
-### 共读版：一棵树、**恰好一个选择点**，两支各自收尾（2026-10-18）
-
-产品定义那一版设想的是"多几层分支"。落地时收窄成**恰好一个选择点**，
-因为那笔账算下来，"多层"在这个产品里买不到东西：
-
-| 形状             | 每条路读到 | 全书要画 | 那个孩子**看不见**的比例 |
-| ---------------- | ---------- | -------- | ------------------------ |
-| 独读版（0 层）   | 8          | 8        | 0%                       |
-| **1 层**（本版） | 8          | **≈11**  | 27%                      |
-| 2 层             | 8          | ≈14      | **43%**                  |
-| 3 层             | 8          | ≈22      | **64%**                  |
-
-根因是一句**结构上的推论**：**两条支不可能汇合**。`buildTree` 的三条规则
-（每节点最多一个父、选择点恰好两子、非选择点不得有第二个孩子）合起来，
-让"某个节点由两条支共同接上"**无法被表达**——汇合节点要么需要两个父（撞第一条），
-要么得挂回选择点（撞第二条）。不是没实现，是无法表达（为什么不为此扩 `from`：
-[ADR-0006](docs/adr/0006-one-tree-two-forms.md) 的 Comments）。
-于是**一条支必须自带到结尾的全部页，每加一层就多付一整条尾巴**。
-
-而选择的上界本来也不是页数给的，是年龄给的（`domain.ts` 的 `StoryChoice` 那条注释：
-「两个选项（孩子不识字，两个已经够）」）。多做几层不等于多做几次选择，
-等于把同一个选择摊到更多页上去付费——五分之三的书对那一个孩子永远不存在。
-
-三条代价，都写在明面上：
-
-1. ★ **走不到的那一支是"预生成"的价钱。** 它也照样出图、照样配音，而孩子只会读到
-   其中一条。这是 GLOSSARY「预生成」这个词本身的价钱，共读版第一次让它变成真账——
-   所以钱要说在**花钱的那一刻**：故事闸门那一屏写着
-   「读下来 N 页，一共要画 M 页的图（含走不到的那一支）」。
-   ★ 实测（2026-10-18，`--pages=5` 真跑一本）：**路长 5 页长成 8 个节点**，
-   选择点在第 2 页——同一本书做成独读版就是 5 个节点、5 张图。
-2. **书号里含形态**（`bookIdOf`）：同一个主题的独读版与共读版是**两本书**，
-   不做互转——那是"改一本已经画好的书的形状"。
-3. **同一个主题出不了第二本**（书号是"卡 + 形态 + 主题"的指纹，不含时间戳）：
-   想再来一本就改一个字，这本想改就走书架的「正在编辑」。
-
-两条刻意不做：**不做 2 层以上嵌套**（上面那张表）、**不做分支汇合**（上面那条推论）。
-`buildTree` 里对应的是**会红的那种**判据：多于一个选择点、两支深度差 > 1、
-选择点在最后一页——三条反例都会拒绝，而且重试提示会点名。
-
-### 演示书多了一本**共读版**（2026-10-18）
-
-`public/demo/books/` 原来只有独读版那本《小宇的云》，于是**断网演示只有一档**——
-而"两种形态"是这个产品最想让人看见的那件事。现在多了一本共读版：
-`public/demo/books/xiaoyu-r1-6ca00a33b4d7/`（6 个节点、路长 4 页、选择点在第 2 页、
-9 段朗读——正文 6 段，加选择点那三段「引导提问 / 选项 A / 选项 B」；**22 MB**）。
-
-它是**真跑出来的**，不是手拼的：`scripts/e2e-shared-reading.mts` 那一趟把
-"一句话 → 编故事 → 家长改一个字 → 出图配音 → 书里选一支"整条路走了一遍，
-产物就是这一本（导出走 `scripts/export-demo-book.mts --book=<它>`）。
-★ 用户 2026-10-18 在两条路里挑了这条（另一条是 `--mode=stub` 造的"形状示范"：
-476 KB、图是复用的、**没有配音**——而"大图标 + 语音"双通道正是共读版要证的那件事）。
-
-导出时**只拷清单引用到的那些文件**：这一本跑的时候有两页被一致性核对打回重画过，
-目录里留着 `page-1-a2` / `page-3-a3` 这些中间产物（11.7 MB），
-清单一个都不认，跟着进仓库就是把草稿当资产。`book.json` 仍然**逐字节原样**拷过去
-（ADR-0003 那条"资产要能被比对"管的是它）。
-
-验它的是 [`scripts/chk-demo-shared.mjs`](scripts/chk-demo-shared.mjs)（11 条，
-无头 Chrome）：**不登录**就能打开（评审点开它时手上没有票）、从封面走到封底
-一屏不跳（底栏正好报过 1..4）、岔口那两颗按钮 **79px** 高（≥44 那条）、
-选完那一支的图都取到了——以及那条真正的断网判据：**整趟一个外部主机都没问**。
-
-### 刻意未做（按周次计划）
-
-| 项                                                 | 计划                                                                                                                                                                                                                                                                                                                                                  |
-| -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 引擎架构、prompt 层、schema、状态管理              | W1（架构定稿）                                                                                                                                                                                                                                                                                                                                        |
-| Agent 事件流架构                                   | **W2，不许推迟**——生成过程可视化是「AI 深度」最主要的证据，晚做等于没做                                                                                                                                                                                                                                                                               |
-| shadcn/ui                                          | 它的 `components.json` 与 oklch 变量体系会和本项目手写令牌打架，等有第二个页面再引                                                                                                                                                                                                                                                                    |
-| `next/image` 替换原生 `<img>`                      | 会改动已交付的 `HeroOrbit.tsx`，等性能优化阶段统一做。**它的动机已经解决了一大半**：首屏那 12 张是 `public/art/` 里预算过的 WebP（≤130 KB），运行期生成的那批走的是上面那条缩略档通路，不靠 `next/image`。剩下它独有的收益（自动协商 AVIF、尺寸属性防 CLS）仍待评估                                                                                   |
-| `HeroOrbit` 改用 `useScrollDriver`                 | 单独一个提交做，行为必须一字不变（同一组滚动位置上逐个变量对照）。混进绘本那个提交里，出问题分不清是谁带的                                                                                                                                                                                                                                            |
-| 首页的配音播放条                                   | **做过→拆了→2026-10-18 按满配做回来**：拆的理由是"全篇只能录到第 1 页，而首页要证的是「每一页都是同一个他」，一个只对四分之一的控件证的是反面"；现在 5 段全在盘上才出现（`lib/demo-book-audio.ts` 的闸门），少一段整块不做。配音本身是 W1 引擎的产物（详见「选择点」那一节的说明与 [`docs/demo-narration-script.md`](docs/demo-narration-script.md)） |
-| pre-commit hook、CI                                | 待仓库稳定后接入 husky + lint-staged                                                                                                                                                                                                                                                                                                                  |
-| `StorybookFlip` 的全局 ← → 该按节生效              | **已知 bug，单独提交修**：`window` 上无条件接键，书滚出屏幕外照样翻页。第三屏暂时用自己那层的 `stopPropagation` 挡住，等另一条会话改完那节再动它（见 §五 第三屏）                                                                                                                                                                                     |
-| `HeroOrbit` / `useScrollDriver` 迁到 `lib/math.ts` | 那两份里各有一份手抄的 `clamp` / `smoothstep`，第三屏是第三个消费者，所以建了 `lib/math.ts`。**这一批只给新代码用**，迁移是单独一个提交、行为必须一字不变（同「HeroOrbit 改用 useScrollDriver」那条纪律）                                                                                                                                             |
-
----
-
-## 六、原创声明
+## 五、原创声明
 
 本作品为原创，未抄袭、未直接使用开源项目包装参赛。首屏 12 张绘本封面插画由 AI 生成，完整提示词见 [`docs/cover-art-prompts.md`](docs/cover-art-prompts.md)；品牌标记小插画同为 AI 生成，提示词与落盘前的裁切依据见 [`docs/brand-mark-prompt.md`](docs/brand-mark-prompt.md)。两类画面均不含任何文字、水印或签名。
 
-首屏那 12 张卡曾经还配过 12 段 AI 生成的短片（以同主题的封面静帧为输入帧），**现已整条移除**，理由与"要拿回来该动哪几处"记在 §五。
+首屏那 12 张卡曾经还配过 12 段 AI 生成的短片（以同主题的封面静帧为输入帧），**现已整条移除**（换回静帧的理由与实测见 [docs/known-tradeoffs.md](docs/known-tradeoffs.md)）；封面静帧本身还在，提示词见 [`docs/cover-art-prompts.md`](docs/cover-art-prompts.md)、成品在 `public/art/`。
 
-`HeroOrbit` 组件的 3D 环形卡片轨道为独立实现：椭圆参数方程布点、`preserve-3d` 遮挡排序、三层视差、拖拽惯性与帧率节流都在组件内部自己完成，**没有引入任何动画库**。视觉上参考了公开站点的「卡片环绕中心」构图。
+首页首屏那个 3D 环形卡片轨道（`components/hero/HeroOrbit.tsx`）同样是独立实现：椭圆参数方程布点、`preserve-3d` 遮挡排序、三层视差、拖拽惯性与帧率节流全在组件内部自己完成，**没有引入任何动画库**；视觉上参考了公开站点的「卡片环绕中心」构图。
 
-第三屏（`HighlightsReel`）**用了 GSAP**——指针跟随的每帧补间用 `quickTo` 比自己再写一套 rAF 平滑更稳，而且这一屏不需要前两屏那套滚动映射。边界写死在 §五：GSAP 只在第三屏，前两屏的滚动驱动仍是 `useScrollDriver`，不重写。
+亮点那一屏（`HighlightsReel`）**用了 GSAP**——指针跟随的每帧补间用 `quickTo` 比自己再写一套 rAF 平滑更稳。边界写死在 [docs/known-tradeoffs.md](docs/known-tradeoffs.md)：GSAP 只在这一屏（首页前两节的滚动驱动是 `useScrollDriver`，第三屏那一节没有滚动驱动）。
 
-首页第三屏那 5 张卡片插画同样是 AI 生成（同一套水彩绘本提示词模板），源 JPG 不入库，只保留压缩后的 5 张 WebP（合计 0.51 MB）与转换脚本 [`scripts/make-webp.py`](scripts/make-webp.py)；提示词与逐张验收记录见 [`docs/highlights-art-prompts.md`](docs/highlights-art-prompts.md)。
+首页亮点那一屏那 5 张卡片插画同样是 AI 生成（同一套水彩绘本提示词模板），源 JPG 不入库，只保留压缩后的 5 张 WebP（合计 0.51 MB）与转换脚本 [`scripts/make-webp.py`](scripts/make-webp.py)；提示词与逐张验收记录见 [`docs/highlights-art-prompts.md`](docs/highlights-art-prompts.md)。
 
-页面级背景那 3 张三幕场景插画（`public/scenes/`，1365×768 WebP，合计 103.5 KB）也是 AI 生成，同一套水彩绘本提示词模板的变体。它与上面几批的差别在于：**提示词与逐张验收记录留在出图侧的工作区，没有随仓库提交**（那条流水线的脚本与文档不属于本仓库）；因此 `scene-backdrop.css` 的文件头把源图尺寸、压缩后字节数、以及每一档雾的 α 是怎么量出来的就地写全了，README §五 那条也把结论抄了一份。
+页面级背景那 3 张三幕场景插画（`public/scenes/`，1365×768 WebP，合计 103.5 KB）也是 AI 生成，同一套水彩绘本提示词模板的变体。它与上面几批的差别在于：**提示词与逐张验收记录留在出图侧的工作区，没有随仓库提交**（那条流水线的脚本与文档不属于本仓库）；因此 `scene-backdrop.css` 的文件头把源图尺寸、压缩后字节数、以及每一档雾的 α 是怎么量出来的就地写全了，[docs/known-tradeoffs.md](docs/known-tradeoffs.md) 那条也把结论抄了一份。

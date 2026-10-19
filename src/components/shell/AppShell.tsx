@@ -19,6 +19,24 @@
  *   - 「创作」落地页是一句话输入框（原型里那句"我们要做什么？"），
  *     它把话递给 `/create?wish=`，不自己造第二套表单。
  *
+ * ★ 2026-10-19 移动端适配：**同一圈侧栏，在手机上是一条底部标签栏**
+ *
+ * `≤900px` 那一档（上一轮加的）把侧栏压成 72px 的图标轨 —— 那在平板上是对的，
+ * 在 390px 的手机上却要吃 **19% 的宽度**。用户从三档里挑了"底部标签栏"
+ * （另两档：留着图标轨、顶部汉堡抽屉），于是多了两件事：
+ *
+ *   · `.shell__nav` 那五格横过来、等分，钉在屏幕下沿（`app-shell.css` 的 §手机）；
+ *   · 侧栏底部那两格（**我是谁** / **设置**）搬到**顶上那一行** `.shell__bar` ——
+ *     底栏放得下五格导航，放不下它们。
+ *
+ * ★ 那两格是**重新渲染一组**，不是把它们从 `.shell__foot` 里挪过来：位置决定了桌面
+ *   那一版的长相，挪出来就要用 `order` / 绝对定位摆回去。两处各在对方的档里
+ *   `display: none`，所以任何时刻辅助技术只看得见一组（`display: none` 不进
+ *   可访问性树，不会"同一样东西念两遍"）。
+ * ★ 壳在手机上变 `flex-direction: column`（顶栏一行 + 内容一栏）；
+ *   侧栏那条**从左边让进来**的进场动画同一轮改成了从下边——由 `gsap.matchMedia`
+ *   的 conditions 判，转屏跨断点时它自己重算。
+ *
  * ★ 四条实现上的讲究：
  *
  * 1. **折叠状态存本地**。侧栏收起/展开是一个偏好，不是秘密，也不是会话数据；
@@ -178,6 +196,35 @@ const ADMIN_ITEM: NavItem = {
 const PENDING_SHOW_AFTER_MS = 120
 
 /**
+ * 「设置」那一格的图标（两条推子：三条横线 + 三个错开的圆点）。
+ *
+ * ★ 2026-10-19 它从**内联在 JSX 里**抽成了一个组件：手机上「设置」多了一个落点
+ *   （顶部那一行，见 `app-shell.css` 的 §手机），两处必须是**同一颗**图标 ——
+ *   抄一份出来是十六行 SVG，而抄出来的那份迟早会只改一处
+ *   （本仓库为这类"两处手写的数"记过好几次账）。
+ * ★ 形状的选择理由没有变，整段留在原来的位置（下面 `.shell__foot` 那一段注释里）：
+ *   侧栏里另外九个形状里一个"平行线 + 点"都没有，收起侧栏只剩图标时也认得出来。
+ */
+function SettingsGlyph() {
+  return (
+    <svg className="shell__icon" viewBox="0 0 24 24" aria-hidden="true">
+      {/* 三条轨 */}
+      <path
+        d="M4 6.5h16M4 12h16M4 17.5h16"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+      {/* 三个钮，一条一个位置，彼此错开（错开才读得出是"可调"） */}
+      <circle cx="9" cy="6.5" r="2.1" fill="currentColor" />
+      <circle cx="15.5" cy="12" r="2.1" fill="currentColor" />
+      <circle cx="7.5" cy="17.5" r="2.1" fill="currentColor" />
+    </svg>
+  )
+}
+
+/**
  * 一格导航里的东西。★ 单独拆成一个组件只有一个理由：`useLinkStatus()` 读的是
  * **最近的 `<Link>`** 通过 context 发下来的那份状态，所以这一句必须在 `<Link>`
  * **里面**调——写在 AppShell 的主体里是在 `<Link>` 外面，拿到的永远是"不 pending"。
@@ -242,8 +289,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const sideRef = useRef<HTMLElement>(null)
 
   /* ── 进工作台时侧栏从左边让进来（2026-10-16）────────────────────────────────
-   * 起因是首页 → `/home` 那一次跳转：主题墙上那 12 张现在是**从环上接力飞过来**的
-   * （见 `lib/theme-handoff.ts`），可整条侧栏是"啪"地出现的——一次接力配一次硬切，
+   * 起因是首页 → `/home` 那一次跳转：主题墙上那 12 张当年是**从首页的环上接力飞过来**的
+   * （那条接力 2026-10-19 随首页那 12 个主题一起下架），可整条侧栏是"啪"地出现的——一次接力配一次硬切，
    * 观感上还是两个网站。侧栏因此补上它自己那一下。
    *
    * ★ 它只挂在**挂上**这一次：AppShell 在 `(studio)` 路由组的布局里，
@@ -254,24 +301,41 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
    *   与 `lib/useEnterTimeline.ts` 同一条契约，那段注释里有首屏付过的学费。
    * ★ 不进 `lib/`：只有这一个读者。为一个读者抽一层出去是给假想的将来搭架子。
    * ★ 只动 `x` 与 `opacity`，不做位移动画之外的任何事：这一层背后是满屏固定的大图，
-   *   任何 scale / filter 都是每帧重采样一整屏（README §五 那条账）。 */
+   *   任何 scale / filter 都是每帧重采样一整屏（docs/known-tradeoffs.md 那条账）。 */
   useEffect(() => {
     const side = sideRef.current
     if (!side) return
     const mm = gsap.matchMedia()
-    mm.add('(prefers-reduced-motion: no-preference)', () =>
-      gsap.context(() => {
-        gsap.from(side, { x: -18, opacity: 0, duration: 0.26, ease: 'power2.out' })
-        // 导航项比侧栏晚半拍、彼此错峰：`staggerFor` 是那一套已经在测的交错规则
-        gsap.from('.shell__nav li', {
-          x: -8,
-          opacity: 0,
-          duration: 0.22,
-          delay: 0.06,
-          stagger: staggerFor(NAV.length),
-          ease: 'power2.out',
-        })
-      }, side),
+    /* ★ 2026-10-19 移动端适配：把"从哪一边让进来"也交给媒体查询。
+       手机上这一条侧栏是**底部标签栏**（`app-shell.css` 的 §手机），
+       从左边让进来会读成"这一条横着飞过来了"——方向错了。
+       交给 `gsap.matchMedia` 的 conditions 而不是壳里再读一次 `window.matchMedia`：
+       转屏 / 拉窗口跨过断点时它是**自己重算**的，而手写一次只会留下一个陈旧的方向。 */
+    mm.add(
+      {
+        reduce: '(prefers-reduced-motion: reduce)',
+        phone: '(max-width: 640px)',
+      },
+      (context) => {
+        const { reduce, phone } = context.conditions as { reduce: boolean; phone: boolean }
+        // 静止模式：一条 tween 都不建（终态是 CSS 那个"已经在原位"的样子）
+        if (reduce) return
+        const axis = phone ? 'y' : 'x'
+        const dist = phone ? 18 : -18
+        const itemDist = phone ? 8 : -8
+        return gsap.context(() => {
+          gsap.from(side, { [axis]: dist, opacity: 0, duration: 0.26, ease: 'power2.out' })
+          // 导航项比侧栏晚半拍、彼此错峰：`staggerFor` 是那一套已经在测的交错规则
+          gsap.from('.shell__nav li', {
+            [axis]: itemDist,
+            opacity: 0,
+            duration: 0.22,
+            delay: 0.06,
+            stagger: staggerFor(NAV.length),
+            ease: 'power2.out',
+          })
+        }, side)
+      },
     )
     return () => mm.revert()
   }, [])
@@ -367,7 +431,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <Link className="shell__brand" href="/" aria-label="回首页">
           <span className="shell__brand-mark" aria-hidden="true">
             {/* 28px 的装饰性标记，`alt=""`。next/image 在这件事上没有收益
-                （一张本地小图、没有 LCP 意义），而它是 README §五 里
+                （一张本地小图、没有 LCP 意义），而它是 docs/known-tradeoffs.md 里
                 「刻意未做」那一条——与首页几处同一个处理 */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/brand/mark.webp" alt="" width={28} height={28} />
@@ -433,20 +497,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             onClick={() => setSettingsOpen(true)}
             title="设置"
           >
-            <svg className="shell__icon" viewBox="0 0 24 24" aria-hidden="true">
-              {/* 三条轨 */}
-              <path
-                d="M4 6.5h16M4 12h16M4 17.5h16"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                strokeLinecap="round"
-              />
-              {/* 三个钮，一条一个位置，彼此错开（错开才读得出是"可调"） */}
-              <circle cx="9" cy="6.5" r="2.1" fill="currentColor" />
-              <circle cx="15.5" cy="12" r="2.1" fill="currentColor" />
-              <circle cx="7.5" cy="17.5" r="2.1" fill="currentColor" />
-            </svg>
+            <SettingsGlyph />
             <span className="shell__link-label">设置</span>
           </button>
 
@@ -506,6 +557,37 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </button>
         </div>
       </nav>
+
+      {/* ── 手机那一档的顶栏（2026-10-19 移动端适配）────────────────────────────
+          侧栏在手机上收成**底部标签栏**（`.shell__nav`，见 `app-shell.css` 的 §手机），
+          那一条放得下五格导航，放不下「我是谁」与「设置」。所以这两格搬到顶上这一行。
+
+          ★ 为什么是**再渲染一组**而不是把 `.shell__foot` 那两格挪进来：
+            它们在 DOM 里的位置决定了桌面那一版的长相（底部那一列），
+            挪出来就要用 `order` / 绝对定位把它们摆回去，而那比多写四个标签脆得多。
+            两处**各在对方的档里 `display: none`**，所以同一时刻辅助技术只看得见一组
+            —— `display: none` 的东西不进可访问性树，不会出现"同一样东西念两遍"。
+          ★ 两处共用同一个 `setSettingsOpen`：设置弹窗只有一份（挂在壳上，见文件末尾）。
+          ★ 记账那一格（「请登录」/昵称）与侧栏那一格**同一份取值**（`user` 那三条派生，
+            见上面 `signInItem` / `accountItem` / `avatar`），不是又算了一遍。 */}
+      <div className="shell__bar">
+        <button
+          type="button"
+          className="shell__bar-btn"
+          onClick={() => setSettingsOpen(true)}
+          title="设置"
+        >
+          <SettingsGlyph />
+          <span className="shell__link-label">设置</span>
+        </button>
+
+        <Link
+          className="shell__bar-btn shell__bar-btn--who"
+          href={user ? accountItem.href : signInItem.href}
+        >
+          <NavContent item={user ? accountItem : signInItem} avatar={avatar} />
+        </Link>
+      </div>
 
       <div className="shell__main">{children}</div>
 

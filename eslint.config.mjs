@@ -28,6 +28,13 @@ const PURE_ENGINE_FILES = [
   'src/lib/engine/**/*.ts',
   'src/lib/schemas/**/*.ts',
   'src/lib/prompts/**/*.ts',
+  // ★ 2026-10-19 加：检索层与引擎同档（`.scratch/rag/spec.md` §四）。
+  //   它要能在 node 脚本里跑（`engine-run --mode=stub` 不联网跑完一本书），
+  //   所以同样不许碰 React / DOM / 组件目录。
+  //   ★ 这也是 `corpus.ts` 只声明样书的**结构形状**、而不 import
+  //     `components/booklist/booklist.ts` 的原因——那条禁令把它挡在了外面，
+  //     切块由脚本把真对象递进来（见 `scripts/build-rag-index.mts`）。
+  'src/lib/rag/**/*.ts',
 ]
 
 /**

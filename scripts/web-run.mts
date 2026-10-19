@@ -13,7 +13,7 @@
  *
  * 1. **消费那条 SSE**：用的是与浏览器**同一个解码器**（`src/lib/engine/sse.ts` +
  *    `src/lib/book-stream.ts`），不是脚本另写一个松一点的解析。
- *    横评那一轮的教训（README §五 第一类）：测量脚本自己搭一条流水线，
+ *    横评那一轮的教训（docs/known-tradeoffs.md 第一类）：测量脚本自己搭一条流水线，
  *    量出来的就不是产品的数。
  * 2. **按顺序打事件**：用引擎的 `describeEvent` 打人话——同一个函数也是界面要用的那个，
  *    所以这份终端输出就是"界面上会出现什么"的可离线证据（演示视频的素材也是它）。
@@ -358,7 +358,7 @@ async function main(): Promise<void> {
   const fatal = frames.find((f) => f.kind === 'fatal')
   // ★ 页级失败与非页级 error 分开数：引擎那条"配音未接入"是**没有页号**的非致命事件，
   //   把它算进"页级失败"会让汇总行虚报一页。同一个教训在 engine-run.mts 的汇总行里
-  //   已经付过一次学费（README §五 第四类：三档分类漏一档，读的人只能猜）。
+  //   已经付过一次学费（docs/known-tradeoffs.md 第四类：三档分类漏一档，读的人只能猜）。
   const pageFailures = streamEvents.filter(
     (e) => e.kind === 'error' && e.pageNo !== undefined,
   ).length

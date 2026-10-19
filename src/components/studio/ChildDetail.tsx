@@ -498,7 +498,7 @@ export default function ChildDetail(props: ChildDetailProps) {
         <div className="cd__left">
           {shown ? (
             <>
-              {/* 原生 <img>：图经 /api/assets 出来，next/image 要另配 loader（README §五 那条） */}
+              {/* 原生 <img>：图经 /api/assets 出来，next/image 要另配 loader（docs/known-tradeoffs.md 那条） */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 className="cd__art"

@@ -13,9 +13,19 @@
 # `eol` 属性优先于 core.autocrlf，对新克隆也生效——所以这里是从仓库层面修的，
 # 不依赖任何人记得去改本机的 core.autocrlf。
 # 副作用一个：克隆后工作区不再有 CRLF，某些老 Windows 工具（记事本、
-# 少数批处理）读纯 LF 的 .bat/.cmd 会出问题。本仓库没有 .bat/.cmd，不受影响。
+# 少数批处理）读纯 LF 的 .bat/.cmd 会出问题。
+# ★ 2026-10-19 更正：这一句原来写着"本仓库没有 .bat/.cmd，不受影响"——
+#   现在不成立了：`server/run-local.cmd` 就是（起本机后端那个入口）。
+#   所以下面按批处理单独声明 CRLF，而不是让它们跟着 `eol=lf` 走。
 
 * text=auto eol=lf
+
+# 批处理必须 CRLF：cmd.exe 读纯 LF 的 .cmd/.bat 会在某些结构上错位
+# （标签、goto、多行块那一类）。
+# ★ 必须写在这条 `*` **之后**：gitattributes 是"后面的模式赢"，不是"更具体的赢"——
+#   写在前面时 `* ... eol=lf` 会把它盖掉（`git check-attr eol -- <file>` 当场就能看见）。
+*.cmd text eol=crlf
+*.bat text eol=crlf
 
 # 真正的二进制单独声明：不依赖 text=auto 的自动探测（探测会随版本变化，
 # 而这里写死的后果比探测错更可控）。

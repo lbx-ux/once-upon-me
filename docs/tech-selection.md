@@ -159,7 +159,7 @@ Next.js **15.5.27**（App Router）+ React **19.1.0** + TypeScript strict + Tail
 
 另一条同时命中的准则：**不要让重要操作只靠 hover**（`ux-guidelines.csv`，
 "Don't rely only on hover for important actions"）。第三屏"自动轮播的暂停手段"
-现在只剩 hover 与 Tab 焦点两条路径，这条准则与 README §五 记的那条 WCAG 2.2.2 让步
+现在只剩 hover 与 Tab 焦点两条路径，这条准则与 docs/known-tradeoffs.md 记的那条 WCAG 2.2.2 让步
 是同一件事，**已在两处分别记录**，不要在 W5 才想起来。
 
 ---
@@ -719,7 +719,7 @@ src/lib/engine/
 共读版是**树**，选择点之前那段主干被两条路共享，按 `(voiceId, textHash)` 去重可少合成——
 成本公式按独读版 20 页算**上界**。（★ 2026-10-18 落地口径：**恰好一个选择点**、
 两支各自收尾，所以"共享"只发生在选择点之前那一段；选择点之后的页两条路各有一份，
-而两份都要出图与配音——见 README §五 那笔账。）
+而两份都要出图与配音——见 docs/known-tradeoffs.md 那笔账。）
 
 ### 10.2 填数纪律
 

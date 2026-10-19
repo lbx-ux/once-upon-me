@@ -30,7 +30,7 @@
  *
  * ## ★ `perspective` 挂在 slot 上，不挂在 reel 上
  *
- * `hero-orbit.css` 记着一条已经付过学费的坑：带 `preserve-3d` 的祖先一旦
+ * 首屏那个环（`hero-orbit.css`）记着一条已经付过学费的坑：带 `preserve-3d` 的祖先一旦
  * `opacity < 1` 或带 `filter`，就会把 3D 子元素压平，遮挡排序当场失效。
  * 这一屏的 slot 正是又 `opacity < 1` 又 `blur()` 的，所以：
  *
@@ -60,7 +60,7 @@
  *
  * ★ 记一条真实的让步：WCAG 2.2.2 要的是"看得见、点得到"的暂停手段，
  *   上面第 2 条只在键盘用户**想到要 Tab** 时成立。删掉那颗暂停键是产品决定，
- *   不是无障碍改进 —— 已记进 README §五「已知取舍」，将来要恢复就照 git 里那一版拿回来。
+ *   不是无障碍改进 —— 已记进 docs/known-tradeoffs.md「已知取舍」，将来要恢复就照 git 里那一版拿回来。
  *
  * ## 键盘：只在本节内部接，并且 stopPropagation
  *
@@ -68,7 +68,12 @@
  * React 的监听器挂在 root container 上，位置在 window 之前，
  * 所以本节里的 `e.stopPropagation()` 挡得住它 —— 这是不改对方文件的唯一办法，
  * 而那个文件此刻正被另一条会话编辑。对方那个全局接法本身是 bug，
- * 已记进 README「已知取舍」，等那一边落地再单独修。
+ * 已记进 docs/known-tradeoffs.md「已知取舍」，等那一边落地再单独修。
+ *
+ * ★ 2026-10-19：这一段中间曾经删掉过一轮（那一版首页把第二屏那本书整节下架了，
+ *   全局监听跟着走，`stopPropagation` 就没有对象了）。当天稍后用户澄清
+ *   **"只删手机那一档，web 端首页和以前一样"**，那本书回到 web 端，
+ *   于是这一条连同它的解释**照原样回来** —— 让步仍然是让步，没有变好。
  */
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
@@ -114,6 +119,35 @@ const AUTOPLAY_MS = 2000
  */
 const DRAG_SLOP_PX = 6
 
+/**
+ * 窄屏判定（2026-10-19 第二轮）。
+ * ★ **与 `highlights-reel.css` §11 里"藏轮播、显竖排列表"那条媒体查询是同一个数**，
+ *   而全仓的手机竖屏断点只有一个（640，见 `globals.css` 那条断点约定），
+ *   新写的断点也照它走 —— 改一处要一起改。
+ *
+ * 这一档在**手机上换成竖排五张全宽卡**（`.hl__list`），理由见 CSS §11 与
+ * `docs/known-tradeoffs.md`：轮播的卡宽是 `min(560px, 36vw)`，390px 上取 140px，
+ * 正文列只有 94px、13px 的字一行放不下 8 个 —— 那不是"手机上小一点"，是读不了。
+ * 这个常量管的是**三件"不跑"的事**（不自动播、不建进场时间线、不接指针倾斜），
+ * 换形态本身由 CSS 决定（两套 DOM 都渲染、靠 display 二选一）。
+ */
+const NARROW_QUERY = '(max-width: 640px)'
+
+/** 订阅一次窄屏判定。GSAP 那一条走 `gsap.matchMedia` 自己会跟着窗口变，
+ *  这只给两个 `useEffect` 用（它们原本只在 `active` / `playing` 变时才重跑，
+ *  转屏那一刻不会自己醒过来）。 */
+function useNarrow(): boolean {
+  const [narrow, setNarrow] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia(NARROW_QUERY)
+    const on = () => setNarrow(mq.matches)
+    on()
+    mq.addEventListener('change', on)
+    return () => mq.removeEventListener('change', on)
+  }, [])
+  return narrow
+}
+
 type CardCtl = {
   rotX: gsap.QuickToFunc
   rotY: gsap.QuickToFunc
@@ -142,6 +176,9 @@ export function HighlightsReel() {
   const [timerSeed, setTimerSeed] = useState(0)
   const count = HIGHLIGHTS.length
   const slots = reelState(active, count)
+
+  /** 手机竖屏（≤640）：轮播那三件事一件都不跑，见 NARROW_QUERY。 */
+  const narrow = useNarrow()
 
   /** 上一次交互是指针还是键盘 —— 用来分辨 focus 是谁带来的，见 onFocusCapture。 */
   const viaPointerRef = useRef(false)
@@ -293,12 +330,17 @@ export function HighlightsReel() {
   useEffect(() => {
     if (!playing) return
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    /* ★ 窄屏一次都不启动（2026-10-19）：手机上这一屏是**竖排五张全宽卡**，
+       没有"当前卡"这回事 —— 自动播只会每 2 秒把 `active` 推一格，
+       同时把那条 aria-live 播报念一遍（"第 3 条，共 5 条…"），
+       而画面上一个字都没变。那不是"跑了没看见"，是**在替用户看一份不存在的东西**。 */
+    if (narrow) return
 
     const id = window.setInterval(() => {
       setActive((cur) => wrapActive(cur, 1, count))
     }, AUTOPLAY_MS)
     return () => window.clearInterval(id)
-  }, [playing, count, timerSeed])
+  }, [playing, count, timerSeed, narrow])
 
   /* ------------------------------------------- 后台标签页要停
    *
@@ -319,7 +361,7 @@ export function HighlightsReel() {
    * ★ 卡片这一段**只淡入，不带上移**。
    *   倾斜的 quickTo 写的是 `.hl__card` 的 `transform`；进场若也写 `y`，
    *   两者就是同一个属性上的两个主人。一个元素一个 transform 主人，
-   *   这条规矩在 `hero-orbit.css` 与这里各值一次教训。
+   *   这条规矩在环那一屏与这里各值一次教训。
    *   标题没有倾斜，所以它可以安心用 `y` —— 进场需要那点上升的重量感。
    *   （底部控制条那一排本来也用它，现在整条删了，见文件头。）
    *
@@ -336,7 +378,7 @@ export function HighlightsReel() {
     const ctx = gsap.context(() => {
       const mm = gsap.matchMedia()
 
-      mm.add('(prefers-reduced-motion: no-preference)', () => {
+      mm.add('(prefers-reduced-motion: no-preference) and (min-width: 641px)', () => {
         const tl = gsap.timeline({
           defaults: { ease: 'power3.out' },
           scrollTrigger: { trigger: section, start: 'top 88%', once: true },
@@ -348,6 +390,11 @@ export function HighlightsReel() {
         )
       })
       // reduce 分支刻意什么都不写：不建 tween，卡片就停在终态（可见、平放）。
+      // ★ 2026-10-19 起这条谓词还带一个宽度条件：手机上轮播整块是 `display: none`
+      //   （换成了 §11 的竖排列表），时间线里那两个选择器在那时候**一张可见的卡都选不到**。
+      //   写成 `min-width: 641px` 而不是在回调里读一次 NARROW_QUERY —— 前者由
+      //   gsap.matchMedia 自己跟着窗口变（转屏、拖窗口宽度都会重算），后者只在挂载那一刻成立。
+      //   640 / 641 那一对与 CSS 的 `max-width: 640px` 是同一条线，改一处要改另一处。
     }, section)
 
     return () => ctx.revert()
@@ -363,6 +410,11 @@ export function HighlightsReel() {
   useEffect(() => {
     const section = sectionRef.current
     if (!section) return
+    /* 窄屏不接（2026-10-19）：这一整套是**指针跟随**，30 处注释里逐条写明了它
+       只在"鼠标停在卡上"时成立。手机上轮播是 `display: none` 的，
+       接上去只会给五张看不见的卡拉 quickTo —— 真正会命中的是 `pointermove`：
+       手指拖动页面时它照样派发。 */
+    if (narrow) return
 
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)')
 
@@ -512,7 +564,7 @@ export function HighlightsReel() {
         delete card.dataset.tilt
       })
     }
-  }, [active, count])
+  }, [active, count, narrow])
 
   /* ------------------------------------------------------------------ 键盘 */
   const onKeyDown = (e: React.KeyboardEvent<HTMLElement>) => {
@@ -522,10 +574,12 @@ export function HighlightsReel() {
     viaPointerRef.current = false
     const delta = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0
     if (!delta && e.key !== 'Home' && e.key !== 'End') return
-    // ★ 两个都要挡：preventDefault 是给浏览器自己的横向滚动 / 回到页首，
-    //   stopPropagation 是给 StorybookFlip 那个 window 上的全局 ← →（见文件头）。
-    e.preventDefault()
+    /* ★ `stopPropagation` 挡的是**首页第二屏那本书**那个挂在 `window` 上的
+       全局 ← →（"哪怕书在屏幕外也会翻一页"）—— React 的监听器在 root container，
+       位置在 window 之前，所以这里挡得住。对方那个接法本身是 bug，见文件头。
+       `preventDefault` 挡的是**浏览器自己的**横向滚动与回到页首。 */
     e.stopPropagation()
+    e.preventDefault()
     if (e.key === 'Home') goTo(0)
     else if (e.key === 'End') goTo(count - 1)
     else go(delta)
@@ -697,6 +751,69 @@ export function HighlightsReel() {
           })}
         </ul>
       </div>
+
+      {/* ------------------------------------------------------- 竖排五张全宽卡
+          手机那一档（≤640，CSS §11 里换）。**两套 DOM 都渲染、靠 display 二选一** ——
+          与首页其余几处"首帧就是对的"同一个做法：不用等 JS 读到 matchMedia 再换树
+          上一版这条举的例子就是第二屏那本书的 `__static` / `__live`。
+
+          ★ 内容与轮播那一套**同源**：同一份 `HIGHLIGHTS`、同一个 `artPath`、
+            同一批 `.hl__frame` / `.hl__art` / `.hl__body` 样式类（见 CSS 里那条
+            共用选择器列表）—— 换的是"一次看一张还是五张一起看"。
+          ★ 这里**刻意不挂 `.hl__card`**：那个类名是 GSAP 与指针倾斜的选择器，
+            挂上去等于让手机上这五张也进那两套（`section.querySelectorAll('.hl__card')`）。
+          ★ `<ol>` 而不是一串 `<div>`：这是一份**有序清单**（01…05），
+            屏读应该念"列表，5 项"。轮播那一版是"轮播"，两个形状说两件不同的事。 */}
+      <ol className="hl__list">
+        {HIGHLIGHTS.map((h, i) => {
+          const num = pad2(i + 1)
+          return (
+            <li key={h.key} className="hl__item">
+              <div className="hl__frame">
+                <div className="hl__art" data-key={h.key} data-n={num} aria-hidden="true">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    className="hl__art-img"
+                    src={artPath(h.key)}
+                    alt=""
+                    width={1280}
+                    height={720}
+                    loading="lazy"
+                    decoding="async"
+                    draggable={false}
+                  />
+                  <span className="hl__art-num">{num}</span>
+                </div>
+              </div>
+
+              <div className="hl__body">
+                <p className="hl__meta">
+                  <span className="hl__index">
+                    {num}
+                    <span className="hl__index-of"> / {pad2(count)}</span>
+                  </span>
+                  <span className="hl__cat">
+                    / {h.category} · <span className="hl__tag">{h.tag}</span>
+                  </span>
+                </p>
+
+                <h3 className="hl__card-title">{h.title}</h3>
+                <p className="hl__card-text">{h.body}</p>
+
+                <footer className="hl__foot">
+                  <ul className="hl__chips">
+                    {h.chips.map((c) => (
+                      <li key={c} className="hl__chip">
+                        {c}
+                      </li>
+                    ))}
+                  </ul>
+                </footer>
+              </div>
+            </li>
+          )
+        })}
+      </ol>
 
       {/* 切换时播报。视觉上永远不进画面 —— 它说的每一句，画面上都有。 */}
       <p className="hl__sr-only" aria-live={playing ? 'off' : 'polite'}>

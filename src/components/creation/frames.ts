@@ -120,9 +120,9 @@ export type DeskState = {
   stage: Stage | null
   notes: DeskNote[]
   /**
-   * 编故事那一段**刚失败过一次**（`stage: 'planning'` 的 `retry`）——存的是那句原话
+   * 「正在编故事」那一段**最近一句要说的话**——存的是那句原话
    * （`describeEvent` 给的，与写进日志的**是同一句**）。`plan-ready` 一到就清空：
-   * 那是"这一版写好了"，之前那几次重写不再算数。
+   * 那是"这一版写好了"，之前那句话不再算数。
    *
    * ★ 2026-10-18 加的，起因是用户圈出了屏幕上的那一行
    *   「不太像，正在重画（第 1 / 3 次）：故事结构不对（1 处）」：
@@ -131,6 +131,13 @@ export type DeskState = {
    *   ② 它没有页号，于是掉进 `notes`（"不属于任何一页的提醒"），画在**整排画框
    *      底下**——离它说的事最远，而且那一轮早就过去了它还在那儿站着。
    *   所以给它一个自己的位置：画在"正在编故事"那一行底下，`plan-ready` 一来说明它作废。
+   *
+   * ★ **2026-10-19 它多了一个住户：检索的结果**（`.scratch/rag` 的 `retrieved`，
+   *   "翻到了 2 段可以照着写的"）。所以上面那句"刚失败过一次"不再准确——
+   *   它现在是**这一段里最近的一句实话**，来源有两处：重写的原因、检索的结果。
+   *   ★ 两者共用一个位置是刻意的：屏幕上那是一行状态，
+   *     而"编故事"这一段里能说的话本来就只有这些（`Desk.tsx` 那一屏也照这个改了口径）。
+   *     后到的覆盖先到的：真重写时，重写的原因比"翻到了什么"更要紧。
    *
    * ★ **只留最后一次，而且不留结构化的那三个字段**（`attempt` / `maxAttempts` / `reason`）：
    *   屏幕不是过程面板（同一条纪律见文件头第 3 条："一格上的话只写那格的事"），
@@ -329,9 +336,26 @@ export function deskOf(events: readonly EngineEvent[]): DeskState {
         break
       }
 
+      case 'retrieved': {
+        // ★ 检索与规划期的 `retry` 同一条处置：**它是"编故事那一格里的一件事"**，
+        //   所以进 `desk.planning`（"正在编故事"那一行底下），不占阶段轨的格子。
+        //   给它一格节点的坏法见下面判断 2 那段：一个只亮一次的节点是骗人的。
+        desk.planning = describeEvent(event)
+        break
+      }
+
       case 'review': {
         if (event.verdict === 'pass') break
         const text = describeEvent(event)
+        // ★ 编故事那一段的审核（`stage: 'planning'`，2026-10-19 工单 05）与规划期的
+        //   `retry` 同一条处置：它也是"编故事那一格里的一件事"——没有页号，
+        //   而它说的正是**这本故事能不能这么写**。掉进 `notes` 的坏法与上面那条一样。
+        //   ★ 出图之后那一次（`stage: 'auditing'`）**没有页号也不用**：它是整本书的事，
+        //     而那一次要么放行、要么直接抛错（`index.ts` 那道闸），所以走不到这里。
+        if (event.stage === 'planning') {
+          desk.planning = text
+          break
+        }
         const reviewPage = pageOf(event)
         if (reviewPage === null) {
           desk.notes.push({ key: `e${event.seq}`, text, tone: toneOf(event) })
@@ -498,8 +522,16 @@ export function withStoryTitle(desk: DeskState, story: { title: string } | null)
  *    `checking` 逐页交替），做成节点会 20 页闪 40 次，而那个闪烁只说明我们在数事件。
  *    核对是**某一页的事**，所以它留在那一格的 `note` 上（`Desk.tsx` 的 `dk__note`
  *    本来就是干这个的）。与文件头那条"不声称第 N 页正在核对"是同一条纪律。
- * 2. **不放「内容审核」**这类节点：`auditing` 与 `review` 在全仓库**从未 emit**，
- *    摆一个永远不亮的节点是骗人（CLAUDE.md §不糊弄）。
+ * 2. **不放「内容审核」这类节点**。原文是：「`auditing` 与 `review` 在全仓库**从未 emit**，
+ *    摆一个永远不亮的节点是骗人（CLAUDE.md §不糊弄）」。
+ *    ★ **2026-10-19 那句话不再成立**：检索（`retrieving` / `retrieved`）与内容审核
+ *      （`auditing` / `review`，`.scratch/rag` 工单 05）都已经落地、都会 emit。
+ *      而处理**不是**加格子，仍然不加，理由是这一条上面那句：
+ *      它们是**某一页或某一步的事**——核对与审核是逐页的（20 页会闪 40 次），
+ *      检索是"编故事"内部的一步（只发生一次）。两者都进 `note`：
+ *      页级进那一格的 `note`，编故事那一步进 `desk.planning`（见 `deskOf` 里那条）。
+ *      ★ 所以这一条的判据从"**有没有事实**"变成了"**这件事有没有一整格的分量**"：
+ *      阶段轨那 4 格说的是"这本书做到哪一步了"，而检索与审核都不是那件事。
  * 3. **「逐页画」那一格的 `k / N` 是真数**（`drawnCount` / `desk.total`），
  *    不是另画一根百分比条——`Desk.tsx` 文件头第 1 条已经写过这条判断。
  *

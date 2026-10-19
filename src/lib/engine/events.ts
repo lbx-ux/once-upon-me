@@ -27,6 +27,12 @@ import type { NarrationPart } from './domain.ts'
 /** 流水线阶段。人话文案由 UI 决定，这里只给语义名 */
 export const STAGES = [
   'planning',
+  /**
+   * ★ 2026-10-19 加（`.scratch/rag`）。它是**编故事内部的一步**，不是与它并列的第五个阶段——
+   *   所以 `frames.ts` 那条 4 格阶段轨**一格都不加**，它落在「编故事」那一格的 `note` 上
+   *   （与规划期的 `retry` 同一条处置）。摆一个只亮一次的节点，就是那个文件点名的「骗人」。
+   */
+  'retrieving',
   'illustrating',
   'checking',
   'retrying',
@@ -38,6 +44,7 @@ export type Stage = (typeof STAGES)[number]
 
 export const STAGE_LABELS: Record<Stage, string> = {
   planning: '正在编故事',
+  retrieving: '正在翻以前写过的故事',
   illustrating: '正在画',
   checking: '正在核对是不是同一个孩子',
   retrying: '正在重画',
@@ -94,6 +101,19 @@ export type EngineEventPayload = (
       check: 'safety' | 'coherence'
       verdict: 'pass' | 'flag' | 'block' | 'unavailable'
       reason?: string
+    }
+  | {
+      kind: 'retrieved'
+      /**
+       * 这一轮用的语料指纹（`rag/corpus.ts` 的 `corpusVersion`）。
+       * ★ 检索**没跑成**时是 `null`——不是空串，也不是"某个默认语料"。
+       *   这两件事的处置完全不同：`null` 说"这一轮等于没检索"，空串会被读成"语料名叫空"。
+       */
+      corpusVersion: string | null
+      examples: number
+      avoids: number
+      /** 最高分。`null` = 一条都没取到（**合法结果**，不是失败） */
+      topScore: number | null
     }
   | {
       kind: 'narration'
@@ -158,6 +178,7 @@ export function isDisplayable(event: EngineEvent): boolean {
     case 'illustration':
     case 'narration':
     case 'retry':
+    case 'retrieved':
     case 'error':
     case 'book-ready':
       return true
@@ -201,8 +222,40 @@ export function describeEvent(event: EngineEvent): string {
       return event.stage === 'planning'
         ? `这一版故事没通过校验，正在重写（第 ${event.attempt ?? '?'} / ${event.maxAttempts} 次）：${event.reason}`
         : `${page}不太像，正在重画（第 ${event.attempt ?? '?'} / ${event.maxAttempts} 次）：${event.reason}`
-    case 'review':
-      return `${page}${event.check === 'safety' ? '内容检查' : '前后连贯检查'}：${event.verdict}`
+    case 'review': {
+      // ★ 2026-10-19（`.scratch/rag` 工单 05）：**这条分支到这一天为止从未被走到过**
+      //   （`review` 事件全仓库没有 emit 过，`frames.ts` 那条注释原来指的就是这件事）。
+      //   闸门接上之后它第一次会出现在屏幕上，所以原来那句直接把枚举值印出来的
+      //   `${event.verdict}`（屏幕上会长出"内容检查：flag"这种半句英文）必须换掉。
+      // ★ `reason` 有值就**原样用它**：它是 `reviewProblemText` 给的一整句，
+      //   已经带着页码、条款 id 与命中的词。再加前缀会变成
+      //   「第 1 页内容检查没过：第 1 页：恐怖（R-01）…」——同一件事说两遍。
+      if (event.reason) return event.reason
+      const what = event.check === 'safety' ? '内容检查' : '前后连贯检查'
+      const verdict =
+        event.verdict === 'pass'
+          ? '通过'
+          : event.verdict === 'block'
+            ? '没过，这一版不能给孩子看'
+            : event.verdict === 'unavailable'
+              ? '没法查（这一档今天没跑）'
+              : '没过，要改一版'
+      return `${page}${what}${verdict}`
+    }
+    case 'retrieved': {
+      // ★ 这一句要**说得清"空"是什么**：`[]` 是合法结果（"这次没有可参考的"），
+      //   不是失败。写成"检索失败"或干脆不显示，都会让家长以为出了故障，
+      //   而"这次没翻到"本身是有信息量的（新主题、头一本书）。
+      // ★ 语料指纹是 `null` 时才真的是"没检索成"（见那个字段的注释）。
+      if (event.corpusVersion === null) return '这次没翻成以前的故事（照常往下编）'
+      const found = [
+        event.examples > 0 ? `${event.examples} 段可以照着写的` : '',
+        event.avoids > 0 ? `${event.avoids} 段他读过的（这本避开）` : '',
+      ].filter(Boolean)
+      return found.length > 0
+        ? `翻到了 ${found.join('、')}`
+        : '以前的故事里没有相近的（这次没有可参考的）'
+    }
     case 'narration': {
       // ★ 一页最多四段，所以"第 6 页配好音了"要带上**是哪一段**——
       //   四条一模一样的句子并排出现在过程面板里，等于什么都没说。

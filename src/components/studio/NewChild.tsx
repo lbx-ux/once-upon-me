@@ -582,7 +582,7 @@ export default function NewChild() {
         </header>
 
         <div className="nc__made">
-          {/* 原生 <img>：图经 /api/assets 出来，next/image 要另配 loader（README §五 那条） */}
+          {/* 原生 <img>：图经 /api/assets 出来，next/image 要另配 loader（docs/known-tradeoffs.md 那条） */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img className="nc__made-art" src={result.imageUrl} alt={`${state.child.name}的形象`} />
           <div className="nc__made-side">
@@ -738,7 +738,7 @@ export default function NewChild() {
               /* 原生 <img> 而不是 next/image：地址是本次会话的 `blob:`，
                  next/image 的优化器只吃"它自己取得到的地址"，`blob:` 会当场变成 400
                  （要它工作得为这一格关掉优化，那还不如直接写 <img>）。
-                 与 `CreateFlow.tsx` 里那几处是同一条判断，理由也写在 README §五。
+                 与 `CreateFlow.tsx` 里那几处是同一条判断，理由也写在 docs/known-tradeoffs.md。
                  ★ eslint-disable 紧贴 <img> 那一行：写在三元外面的那一行不生效。 */
               // eslint-disable-next-line @next/next/no-img-element
               <img className="nc__drop-shot" src={shot} alt="" />

@@ -42,6 +42,8 @@ import type {
   Illustration,
   Narration,
   NarrationPart,
+  RetrievalProvenance,
+  RetrievedChunkRef,
   StoryNode,
   StoryTree,
 } from './domain.ts'
@@ -49,7 +51,8 @@ import { childWordOf, NARRATION_PARTS } from './domain.ts'
 import { linearOrder } from './tree.ts'
 import { createEventFactory, type EngineEvent, type EngineEventPayload } from './events.ts'
 import { EngineError } from './errors.ts'
-import { planStory } from './plan.ts'
+import { planStory, type PlanRetriever } from './plan.ts'
+import { reviewProblemText, reviewStory } from './review.ts'
 import { illustrateAll, illustrateCover, illustrateNode } from './illustrate.ts'
 import { narrateAll, narrateTarget, nextTakeNo, targetsOfNode } from './narrate.ts'
 import { cardDigest, validateCard } from './character-card/card.ts'
@@ -92,6 +95,19 @@ export type {
   StyleLock,
 } from './domain.ts'
 export { EngineError, asEngineError } from './errors.ts'
+/**
+ * ★ 检索那道缝的类型也导出去：`lib/rag/load.ts` 要按它拼出那个函数，
+ *   而"引擎以外只 import 这个 index"这条规矩对 `lib/rag` 一样成立。
+ */
+export type { PlanRetriever, PlanRetrieval } from './plan.ts'
+/**
+ * ★ 2026-10-19 加（`.scratch/rag`）：**检索的出处**。`story-draft.ts` 要把它写进
+ *   `story.json` 的 provenance，而那一层只从 `engine/index.ts` 取东西。
+ *   ★ 这两个名字在**上面的 import 里已经引过一次**（`StoryPlan` 那一处要用），
+ *     所以这里是**本地转出**而不是 `export … from './domain.ts'`——
+ *     同一个名字既做本地绑定又做转出绑定，实测报 TS2300 重复标识符。
+ */
+export type { RetrievalProvenance, RetrievedChunkRef }
 export type { EngineEvent, EngineEventPayload } from './events.ts'
 export { STAGE_LABELS, describeEvent, isDisplayable, maxSeqOf } from './events.ts'
 export { buildTree, choicePagesOf, linearOrder, pathOf } from './tree.ts'
@@ -182,6 +198,23 @@ export type RunDeps = {
    * ★ 缺省仍是 0，所以整本一次跑完的那条路（脚本、离线跑测）一个字都不用改。
    */
   startSeq?: number
+  /**
+   * 检索（2026-10-19，`.scratch/rag`）。**不传就是这一轮不检索**。
+   *
+   * ★ 它落在 `RunDeps` 而不是 `PlanDeps`：**它是"这一轮运行"的一个属性**，
+   *   而 `runBook` 里也包含编故事那一步。挂在 `PlanDeps` 上的话，
+   *   脚本与横评（它们走 `runBook`，见那个函数的注释）就传不进来——
+   *   而"脚本走的那条路 == 产品走的那条路"正是 `split.test.ts` 摁着的那件事。
+   *   ②（逐页画）不读它，这没问题：`IllustrateDeps` 是 `RunDeps & …`，
+   *   多带一个没人读的字段，好过让两条路各有一套依赖。
+   *
+   * ★ 与 `providers` 同一条分工：引擎不读盘、不找语料、不知道语料在哪——
+   *   它只调这个函数，拿回"取到了哪几段、用的是哪一版语料"。
+   *   语料的装载在 `lib/rag/load.ts`（服务端那一侧），
+   *   于是"引擎不碰 React、不碰文件系统"这条约束在加了检索之后仍然成立：
+   *   `node scripts/engine-run.mts --mode=stub` 照样跑得完一本书。
+   */
+  retriever?: PlanRetriever
 }
 
 /**
@@ -212,6 +245,11 @@ export type StoryPlan = {
    *   在这一层顺手记一下（`emit` 本来就把事件还给我们）就够了。
    */
   lastSeq: number
+  /**
+   * 这一版故事是看着哪些旧文本写出来的（2026-10-19）。**没开检索就没有这个字段**。
+   * ★ 三种状态各不相同，`story-draft.ts` 原样写进 `story.json` 的 provenance。
+   */
+  retrieval?: RetrievalProvenance
 }
 
 export type PlanDeps = RunDeps & {
@@ -266,6 +304,8 @@ export async function planBook(request: BookRequest, deps: PlanDeps): Promise<St
   const plan = await planStory(planInput, {
     text: deps.providers.text,
     form: request.form,
+    // ★ 不传就是这一轮不检索（`PlanOptions.retrieve` 那条注释）
+    ...(deps.retriever ? { retrieve: deps.retriever } : {}),
     emit: forward,
   })
 
@@ -277,6 +317,7 @@ export async function planBook(request: BookRequest, deps: PlanDeps): Promise<St
     attempts: plan.attempts,
     elapsedMs: now() - startedAt,
     lastSeq,
+    ...(plan.retrieval ? { retrieval: plan.retrieval } : {}),
   }
 }
 
@@ -319,6 +360,34 @@ export async function illustrateBook(
   const startedAt = deps.createdAt ?? now()
   /** ①那一段的机器时间。★ 见 `IllustrateDeps.planMs`：口径是机器时间，不是挂钟 */
   const planMs = deps.planMs ?? 0
+
+  /**
+   * 内容审核的**最后一道**（2026-10-19，`.scratch/rag` 工单 05）。
+   *
+   * ★ 为什么规划那一步已经审过一次，这里还要再审：**这一版正文可能已经不是模型写的那一版了**。
+   *   故事闸门允许家长在 `StorySheet` 上逐字改，而"改"这件事不经过规划那一步——
+   *   盘上那份 `story.json` 才是接下来要画、要念的东西。
+   *   只留规划那一道闸的话，家长手打进去的任何字都绕过了它。
+   * ★ 为什么放在**最前面**（第一张图都还没画）：与规划那一步同一条理由——
+   *   出图是这条流水线上唯一真花钱的一步，拦在它之前，钱就没花。
+   *   （工单里写的是"装订前"；这里比它更早，因为"更早"是严格更好的位置：
+   *   装订前的检查栏下来的那一版，图已经画完了。）
+   * ★ 这一道上 **`flag` 也拒发**（不像规划那一步会先带反馈重写）：这里没有"重写一版"那条路——
+   *   `illustrateBook` 不重做规划（那会把家长改过的东西丢掉，还再花一次文本调用的钱）。
+   *   所以两种处置在这道闸上的下一步是同一件事：**退回去改那一份故事**。
+   *   事件里的 `verdict` 仍然如实报 `flag` / `block`，让界面说得清是哪一种。
+   */
+  const review = reviewStory(tree)
+  if (review.verdict !== 'pass') {
+    const flagged = review.pages.filter((page) => page.verdict !== 'pass')
+    const reason = flagged.map(reviewProblemText).join('；')
+    forward({ kind: 'review', stage: 'auditing', check: 'safety', verdict: review.verdict, reason })
+    throw new EngineError('review-blocked', `这一版故事被内容审核拦下了：${reason}`, {
+      detail: flagged.map(
+        (page) => `${page.pageNo}:${page.problems.map((p) => p.clauseId).join(',')}`,
+      ),
+    })
+  }
 
   const referenceBytes = await providers.store.read(request.card.reference.path)
   if (!referenceBytes) {

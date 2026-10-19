@@ -40,9 +40,50 @@
   }
 }
 
-/* 与 HeroOrbit 同一套规矩：尊重系统的「减少动态效果」，光标不闪 */
+/* 与首屏其余动效同一套规矩：尊重系统的「减少动态效果」，光标不闪 */
 @media (prefers-reduced-motion: reduce) {
   .hero__typing-caret {
     animation: none;
+  }
+}
+
+/* ── 手机：这一句**必须折行**（2026-10-19 第二轮） ──────────────────────────
+   桌面那套"隐形占位撑宽 + 实时文字绝对定位盖上去"的机制，前提是**整句一行放得下**。
+   手机上它当场变成 bug：`.hero__typing-ghost` 把盒子钉在**最长那句的宽度**上 ——
+   390×844 上量到 **585px**，而 `.hero__copy` 只有 350px，`.hero { overflow: clip }`
+   于是把右边 **235px** 直接切掉（用户圈的就是这里：「…都值得以他开」后面没有了）。
+   ★ 而整页的 `scrollWidth` 仍然是 390 —— 溢出的是**文案层内部**，被 clip 吃掉，
+     所以判据 1（不横向溢出）碰不到它，必须另立判据（`chk-mobile.mjs` 判据 7a）。
+
+   三处一起去掉，缺一处就还是坏的：
+   1. `white-space: normal` —— 允许折行；
+   2. `.hero__typing-ghost { display: none }` —— 那个撑宽的占位**就是元凶**；
+   3. `.hero__typing-live { position: static }` —— 它原来是"盖在占位之上"的绝对定位，
+      占位一走它就没有可盖的东西了，改成正常流。
+
+   ★ `min-height` 是为了**别让按钮上下跳**：两句长短差一倍（16 字 / 33 字），
+     打字机在两句之间来回，行数一变这一块就高一截、低一截，底下那颗「开始创作」
+     会跟着动。钉住两行的高度，这一块在整轮播放里是静止的。
+     390 与 360 上最长那句都是 **2 行**（350 / 320px 内容宽 ÷ 18px ≈ 19 / 17 字一行）；
+     320px 的老机器上要 3 行 —— 那一档把 `min-height` 提到 4.2em。 */
+@media (max-width: 640px) {
+  .hero__typing {
+    display: block;
+    white-space: normal;
+    min-height: 2.8em;
+  }
+
+  .hero__typing-ghost {
+    display: none;
+  }
+
+  .hero__typing-live {
+    position: static;
+  }
+}
+
+@media (max-width: 340px) {
+  .hero__typing {
+    min-height: 4.2em;
   }
 }

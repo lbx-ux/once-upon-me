@@ -59,7 +59,7 @@ export function artPath(key: ThemeKey): string {
  * 派生小图（`scripts/make-webp.py` 从 `public/art/` 缩/裁出来，不是新出的一批画）
  *
  * ★ 为什么不走 `/api/assets?w=`：静态 `public/` 走不到那条通路——Next 直接发盘上的字节，
- *   查询串它看不懂，挂 `?w=` 会静悄悄回原图（README §五 缩略档那条）。所以预生成。
+ *   查询串它看不懂，挂 `?w=` 会静悄悄回原图（docs/known-tradeoffs.md 缩略档那条）。所以预生成。
  * ★ 文件名仍然只由 `key` 决定，与 `artPath` 同一条约定：对不上就是一张裂图。
  */
 

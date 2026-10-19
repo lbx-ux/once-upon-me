@@ -66,7 +66,7 @@
  *     的底也算进来了）。偏严的那一头不许红，这是刻意的。
  *   ★ 第四轮（删掉暖光与染色那一晚）**复量过一次**：那两层原先是**往上提亮**的，
  *     删掉之后字脚下只会更暗，所以判据 2 当场按七档底图 × 三个视口重跑了一遍，
- *     新读数见 README §五。
+ *     新读数见 docs/known-tradeoffs.md。
  *
  * ★ 两条判据的取值都**从浏览器读**（rect / `getComputedStyle().color`），脚本里不重抄
  *   一份数 —— 与 `check-scrim.mts` 那条纪律同源：一份写在量具里的数，改 CSS 的人不会
@@ -614,18 +614,28 @@ try {
    * ★ 逐档打出来，理由与判据 2 一样：判的是"这一档底图下算不算数"，
    *   而"哪一档盖住了"正是下一个人要的那条信息。
    * ★ 门槛两条一起过：最暗的像素 ≤ 80（这行字的墨是灰阶 ≈ 28，纸是 ≈ 228–236）、
-   *   且比纸暗的像素 ≥ 40（一行七个字加一个箭头，实测 300 上下；被盖住时是 0）。
+   *   且比纸暗的像素 ≥ 14。
+   *
+   * ★ `14` 这个数是**两种形状**卡出来的（2026-10-19 移动端适配补的量）：
+   *   · 桌面与竖屏：`← 回灵感书单` 是一行七个字加一个箭头，实测 **300 上下**；
+   *   · 手机横屏：它是左上角一颗 **44px 圆钮、里面只有那个箭头**（那一行字在
+   *     横屏下收进了 `sr-only`，见 `globals.css` §手机横屏），实测 **20 个像素**。
+   *   原先写死 40 —— 那是照"一行字"定的数，在圆钮那一档会把**画得好好的**箭头
+   *   判成"被盖住"（实测 844×390 下七档全红、每档都是"最暗 28 / 20 个暗像素"）。
+   *   判据真正要区分的是"有墨 / 没墨"：被底图盖住时是 **0**（见文件头第 3 条），
+   *   所以 14 离两边都远，而且"只画出一半"（约 10）照样会被拦下。
+   *   ★ 量的是同一个东西、同一个结论，只是换了形状之后把阈值收到它真正的量纲上。
    */
   console.log(`\n判据 4：底图之外那行字「← 回灵感书单」自己矩形里的墨`)
   for (const row of backInk) {
-    const ok = row.minLuma !== undefined && row.minLuma <= 80 && row.darkPx >= 40
+    const ok = row.minLuma !== undefined && row.minLuma <= 80 && row.darkPx >= 14
     console.log(
       `  ${row.key.padEnd(6)} 最暗 ${String(row.minLuma ?? '—').padStart(3)} · ` +
         `比纸暗的像素 ${String(row.darkPx ?? '—').padStart(4)} ${ok ? '✓' : '✗'} 「${row.text ?? ''}」`,
     )
   }
   const inked = backInk.filter((row) => row.minLuma !== undefined)
-  const covered = inked.filter((row) => !(row.minLuma <= 80 && row.darkPx >= 40))
+  const covered = inked.filter((row) => !(row.minLuma <= 80 && row.darkPx >= 14))
   check(
     '「← 回灵感书单」那行字真的画在底图上面（逐档数它自己矩形里的墨）',
     inked.length > 0 && covered.length === 0,

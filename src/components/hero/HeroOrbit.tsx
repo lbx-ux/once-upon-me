@@ -32,9 +32,18 @@
  *
  * 注意：容器需要一个比视口高的父元素 + 内部 sticky，才能拿到 scrollProgress。
  *
- * 适用范围：**桌面 Web**。移动端不做（超出本项目范围），低于 1280px 由页面层
- * 用 `min-width` 兜底成横向滚动，所以组件里没有任何断点和 isMobile 分支 ——
- * 环上的卡片数和半轴都按宽屏调过，缩到手机宽度只会糊成一团，硬做不如不做。
+ * 适用范围：**桌面 Web**。环上的卡片数和半轴都按宽屏调过，缩到手机宽度只会糊成一团，
+ * 硬做不如不做 —— 所以手机那一档（`hero-orbit.css` §6，≤640）**环整块不演**，
+ * 首屏只剩中心那一摞文案。★ 用户 2026-10-19 的口径是"**只删手机那一档，
+ * web 端首页和以前一样**"：这一屏在 web 上是三节里的第一节（环 → 那本书 → 亮点），
+ * 在手机上是两节里的第一节（标题 → 亮点）。
+ *
+ * ★ 这里没有 `matchMedia` 分支 —— "手机上不演"是 CSS 的 `display: none`，
+ *   组件不知道自己在哪一档上跑。唯一必须由 JS 知道的一处是**取图**：
+ *   浏览器对 `display: none` 里的 `<img>` 照取不误（12 张封面 2.8 MB），
+ *   于是每张封面走 `<picture><source media>`，见下面 img 上那段注释。
+ *   另一处是**量程退化**：父层被收成一屏之后没有可滚的距离，
+ *   交接段整段不成立，见 `measure()` 里那条 `noTravel`。
  *
  * ---------------------------------------------------------------------------
  * ★ 首帧不靠 JS（2026-10-13 加的）
@@ -93,6 +102,11 @@ type Props = {
 }
 
 /* ------------------------------------------------------------------ 常量 */
+/** 手机那一档的 `<picture>` 兜底：1×1 透明，data URI 所以**一个请求都不发**
+    （见下面 img 上那段注释；换成一张真图片就等于把省下的那笔又花回去一半）。 */
+const BLANK_PX =
+  'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
+
 const TAU = Math.PI * 2
 /** 鼠标平滑系数：0.055 ≈ 0.3s 追上，丝滑不抖 */
 const SMOOTHING = 0.055
@@ -219,21 +233,32 @@ export function HeroOrbit({
     }
 
     /* ------------------------------------------------ 几何测量与滚动量 */
+    /** 父层与这一屏一样高 = **没有可滚的距离**。
+     *
+     * 手机那一档把 `.hero-experience` 收成一屏（见 `hero-orbit.css` §6），
+     * 于是 `wrap.offsetHeight - heroEl.offsetHeight` 是 0，而下面那条
+     * `Math.max(…, 1)` 会把它兜成 **1px** —— 页面滚一像素，`scrollProgress`
+     * 就跳到 1，三层文案在**离开屏幕之前**就整层淡光了。
+     * 那不是"交接段快了点"，是"文案还没滚出去就没了"。
+     *
+     * 所以没有量程时不再兜 1px，而是**整段交接作废**：进度恒为 0，
+     * 文案不淡、环不下沉（环在那一档本来也不演）。桌面那一档量程是 68vh，
+     * 这一条碰不到它。 */
+    let noTravel = false
+
     function measure() {
       const wrap = heroEl!.parentElement
       if (!wrap) return
       rangeTop = wrap.getBoundingClientRect().top + window.scrollY
-      rangeHeight = Math.max(
-        1,
-        Math.min(
-          Math.max(wrap.offsetHeight - heroEl!.offsetHeight, 1),
-          heroEl!.offsetHeight * 0.92,
-        ),
-      )
+      const travel = wrap.offsetHeight - heroEl!.offsetHeight
+      noTravel = travel <= 1
+      rangeHeight = noTravel
+        ? 1
+        : Math.max(1, Math.min(travel, heroEl!.offsetHeight * 0.92))
     }
 
     function readScroll() {
-      scrollProgress = clamp((window.scrollY - rangeTop) / rangeHeight)
+      scrollProgress = noTravel ? 0 : clamp((window.scrollY - rangeTop) / rangeHeight)
     }
 
     /* ---------------------------------------------------------- 主循环 */
@@ -484,16 +509,34 @@ export function HeroOrbit({
             >
               {/* 静帧。这一屏曾经是 12 段 4 秒短片（只有转到前排才播、至多 4 条并发），
                   换回静帧的理由与实测见 README §五「首屏曾经有 12 段卡片动效」。
-                  ★ 刻意**不写** loading="lazy"：这 12 张全都在首屏的环上，
-                    一张不落，懒加载它们等于让首屏先画一个空环再去取图 ——
-                    它们就是这一页的 LCP。fetchPriority 给浏览器排个先后。 */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={item.src}
-                alt={item.alt ?? ''}
-                decoding="async"
-                fetchPriority={i < 4 ? 'high' : 'auto'}
-              />
+
+                  ★ 2026-10-19：这张图走 `<picture>`，为了让**手机那一档不白下 12 张**。
+                    环在手机上被 CSS 藏了（`hero-orbit.css` §6），但浏览器对
+                    `display: none` 里的 `<img>` 照取不误 —— 12 张封面共 2.8 MB
+                    （`public/art/` 3.2 MB / 14 个文件），手机上全是拿不到的带宽。
+                  ★ 为什么不用 `loading="lazy"`：这里**刻意不写**它。这 12 张全都在
+                    首屏的环上、一张不落，懒加载它们等于让首屏先画一个空环再去取图
+                    —— 它们就是这一页的 LCP；而且 `lazy` 的图**不进预加载扫描器**，
+                    桌面那 12 张的发现时机与优先级会一起往后挪。
+                    `<picture><source media>` 是浏览器**认在预加载阶段**的那种门：
+                    宽屏挑中的仍是同一个 `/art/*.webp`，桌面这一侧的取图时机、
+                    `fetchPriority`、LCP 元素一个字都没变；窄屏挑不中那一条 source，
+                    落回 `src` 上这张 1×1 的透明占位图（data URI，零请求）。
+                  ★ 同理**没有** `width/height`：盒子由 `.hero-orbit__item img` 给
+                    （`width: 100%; height: 100%`），占位图与真图都照这一条排。 */}
+              <picture>
+                <source media="(min-width: 641px)" srcSet={item.src} />
+                {/* ★ 这一颗 `<img>` 外面套着 `<picture>`，`@next/next/no-img-element`
+                    不认它（规则只挑裸的 `<img>`），所以这里**不需要**那条
+                    eslint-disable —— 写了它会变成一条"多余的豁免"，
+                    `pnpm lint` 当场报 unused directive。 */}
+                <img
+                  src={BLANK_PX}
+                  alt={item.alt ?? ''}
+                  decoding="async"
+                  fetchPriority={i < 4 ? 'high' : 'auto'}
+                />
+              </picture>
             </figure>
           ))}
         </div>

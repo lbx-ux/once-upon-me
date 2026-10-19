@@ -104,11 +104,13 @@
   }
 }
 
-/* 编故事失败过一次时的那句原话。★ 比上面那行小半档、压在它底下：
-   它不是标题，是"为什么还没好"——而这句话是**真的**（`desk.planning` 来自事件）。
-   ★ 颜色用 `--ink-on-sky` 而不是 `--danger`：第 3 次也没成时才是硬失败，
-     而那一条走的是 `role="alert"` 那一处（`.gr__error`）。这里说的是"正在重写" */
-.dk__plan-retry {
+/* 「编故事」那一段里最近的一句实话（2026-10-19 从 `dk__plan-retry` 改名）。
+   ★ 比上面那行小半档、压在它底下：它不是标题，是"这一段里刚才发生了什么"——
+   而这句话是**真的**（`desk.planning` 来自事件）。
+   两个来源：重写的原因（2026-10-18）、检索的结果（2026-10-19）。
+   ★ 颜色用 `--ink-on-sky` 而不是 `--danger`：硬失败走的是 `role="alert"` 那一处
+     （`.gr__error`），这里说的是"正在编/刚翻完"那一段的进展 */
+.dk__plan-note {
   margin: 0 0 9px;
   padding-left: 10px;
   border-left: 2px solid rgba(var(--accent-rgb), var(--accent-a4));

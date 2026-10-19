@@ -45,6 +45,8 @@ import {
   type BookRequest,
   type CharacterCard,
   type ChildProfile,
+  type RetrievalProvenance,
+  type RetrievedChunkRef,
 } from './engine/index.ts'
 import type { AssetStore } from './engine/providers/types.ts'
 import type { CreateBookBody } from './book-api.ts'
@@ -77,7 +79,20 @@ export type StoryDraft = {
    * 它是报价表 §10.1 的 N_plan——**重写一版会把它换成新的那一次**，
    * 因为这个数说的是"盘上这一版花了多少代价"，不是"这一路上一共试了几次"。
    */
-  provenance: { modelId: string; promptVersion: string; attempts: number }
+  provenance: {
+    modelId: string
+    promptVersion: string
+    attempts: number
+    /**
+     * 这一版故事是**看着哪些旧文本**写出来的（2026-10-19，`.scratch/rag`）。
+     *
+     * ★ **可选**，理由与 `events.ts` 的 `branchPages` 完全相同：2026-10-19 之前
+     *   落盘的 `story.json` 没有这个字段，那是历史，**不重录**；读的时候没有就不显示。
+     * ★ 它在这里是**可答性**的落点：家长问"这本书为什么像书单里那本"，
+     *   答得出是哪一页哪一句被参考过（`hits` 里有出处与分数）。
+     */
+    retrieval?: RetrievalProvenance
+  }
   /**
    * ①那一段的机器时间（毫秒）。②的 `stats.elapsedMs` 靠它把编故事算进去，
    * 所以两种走法（脚本一次跑完 / 界面分两步）在账单上仍然可比。
@@ -176,6 +191,7 @@ export function asStoryDraft(raw: unknown, bookId: string): StoryDraft | null {
   if (typeof input['cardId'] !== 'string' || !input['child']) return null
 
   const provenance = (record['provenance'] ?? {}) as Record<string, unknown>
+  const retrieval = asRetrieval(provenance['retrieval'])
   return {
     bookId: typeof record['bookId'] === 'string' ? record['bookId'] : bookId,
     input: input as unknown as StoryInput,
@@ -185,10 +201,59 @@ export function asStoryDraft(raw: unknown, bookId: string): StoryDraft | null {
       promptVersion:
         typeof provenance['promptVersion'] === 'string' ? provenance['promptVersion'] : '',
       attempts: typeof provenance['attempts'] === 'number' ? provenance['attempts'] : 0,
+      // ★ 读回来的时候**也**认它：写出去、读回来丢掉一个字段，是那种"看起来没事、
+      //   等有人要显示它时才发现"的不对称。形状不对就当没有（历史产物就是没有）
+      ...(retrieval ? { retrieval } : {}),
     },
     planMs: typeof record['planMs'] === 'number' ? record['planMs'] : 0,
     createdAt: typeof record['createdAt'] === 'number' ? record['createdAt'] : 0,
     ...(typeof record['editedAt'] === 'number' ? { editedAt: record['editedAt'] } : {}),
+  }
+}
+
+/**
+ * 检索出处的信封校验。
+ *
+ * ★ `corpusVersion` **允许是 `null`**（那一轮没检索成，见 `domain.ts` 那条注释），
+ *   所以这里判的是 `null 或 非空字符串`，而不是"必须是非空字符串"——
+ *   写成后者会把"检索没成"那一档读成"没有检索"，两件事就差在这里。
+ */
+function asRetrieval(raw: unknown): RetrievalProvenance | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const record = raw as Record<string, unknown>
+  const corpusVersion = record['corpusVersion']
+  if (corpusVersion !== null && typeof corpusVersion !== 'string') return null
+  if (typeof record['examples'] !== 'number' || typeof record['avoids'] !== 'number') return null
+  const rawHits = record['hits']
+  if (!Array.isArray(rawHits)) return null
+
+  const hits: RetrievedChunkRef[] = []
+  for (const item of rawHits) {
+    if (!item || typeof item !== 'object') return null
+    const hit = item as Record<string, unknown>
+    if (
+      typeof hit['chunkId'] !== 'string' ||
+      typeof hit['source'] !== 'string' ||
+      typeof hit['score'] !== 'number' ||
+      (hit['polarity'] !== 'example' && hit['polarity'] !== 'avoid')
+    ) {
+      return null
+    }
+    hits.push({
+      chunkId: hit['chunkId'],
+      source: hit['source'],
+      score: hit['score'],
+      polarity: hit['polarity'],
+    })
+  }
+
+  const topScore = record['topScore']
+  return {
+    corpusVersion: corpusVersion as string | null,
+    examples: record['examples'],
+    avoids: record['avoids'],
+    topScore: typeof topScore === 'number' ? topScore : null,
+    hits,
   }
 }
 

@@ -156,7 +156,7 @@ function tagLabelOf(book: RecentBook): string {
  *      （书里那几张是 1.50，裁到 1.9 要切掉四成高度，构图必坏。）
  *
  * ★ 它不是 `next/image`：一张装饰性的本地 webp、`alt=""`、没有 LCP 意义——
- *   与侧栏那颗 `brand/mark.webp`、文章里几处同一个处理（README §五「刻意未做」）。
+ *   与侧栏那颗 `brand/mark.webp`、文章里几处同一个处理（docs/known-tradeoffs.md「刻意未做」）。
  *   `width`/`height` 给的是**渲染尺寸的近似**，只为占位不让卡片跳；
  *   真正的尺寸由 `.pf__stage` 的 `aspect-ratio` 定（见 profile-home.css）。
  */

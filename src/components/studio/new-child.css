@@ -544,7 +544,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   /* 这一屏没有位移类动效，显式说清"没有"：谁在这里加一条过渡，
-     都得先看一眼这一段（README §五：静止终态不是「不播」）。
+     都得先看一眼这一段（docs/known-tradeoffs.md：静止终态不是「不播」）。
      ★ 名单里原来有 `.nc__mode`（那两张入口卡）与 `.nc__agree`（同意勾），
      它们随 JSX 一起删掉了；`.nc__analyze` 要写两位类名才盖得住上面那条过渡。
      ★ 第 28 刀又少了一条：三步那个呼吸的点搬去了 `wait-steps.css`，它的静止终态

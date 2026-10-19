@@ -97,7 +97,7 @@ export async function demoCardSiblingNames(cardId: string): Promise<ReadonlySet<
  *   Next 直接把它发出去；运行期的卡在资产根（`.out/web/u/<id>/cards/…`），**不在 `public/` 里**，
  *   必须经 `/api/assets`——而那条出口对匿名一律 401。
  *   于是"访客也能看见示例卡"这件事落在**换地址**上，不是松鉴权：
- *   `/api/assets` 那句 401 是"别人的东西拿不到"的守门人（README §五）。
+ *   `/api/assets` 那句 401 是"别人的东西拿不到"的守门人（docs/known-tradeoffs.md）。
  *
  * ★ 换 `.webp` 兄弟文件那一手与 `book-source.ts` 的 `demoAssetPathFor` 同形，
  *   差别只有一处、写在这里免得下次有人以为漏了：**卡是 `.jpg`**（书是 `.png`），

@@ -54,6 +54,15 @@ public/demo/books
 # 是卡自己能自证的前提；让排版工具来改它，就是在替资产做决定。
 public/demo/cards
 
+# 检索索引（`scripts/build-rag-index.mts` 从 12 本样书切出来的）。
+# ★ 与上面 `public/demo/books` 同一条理由：这是**脚本写出来的字节**，不是手写源码。
+#   `JSON.stringify(x, null, 2)` 与 Prettier 的 JSON 排版不同，让 Prettier 接管之后
+#   "生成脚本刚吐出来的那份"与"仓库里那份"就不再是同一个文件，
+#   而这直接撞上 `corpus.test.ts` 里那条**产物与内容自洽**的护栏
+#   （它比对 `corpusVersion`，而指纹取自文件里的 chunks）。
+#   要检查它的格式，去看产出它的脚本，不是看排版。
+src/lib/rag/index.seed.json
+
 # ── Java 侧（server/）────────────────────────────────────────────────────────
 # ★ 它不是这份仓库里"前端那三条闸门"的对象：Java 有自己的闸门（`mvn test`），
 #   而 Prettier 不认识 .java —— 它只会去格式那些 `target/` 里**构建产物**的

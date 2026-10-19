@@ -36,7 +36,7 @@ import { THEME_KEYS, type ThemeKey } from '@/lib/themes.ts'
  */
 export const DEFAULT_FIGURE: ThemeKey = THEME_KEYS[0]
 
-/** 立绘资源。★ 静态 `public/`，不走 `/api/assets?w=`（那条通路读不到查询串，见 README §五） */
+/** 立绘资源。★ 静态 `public/`，不走 `/api/assets?w=`（那条通路读不到查询串，见 docs/known-tradeoffs.md） */
 export function figurePath(key: ThemeKey): string {
   return `/figures/${key}.webp`
 }

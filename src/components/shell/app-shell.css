@@ -9,7 +9,7 @@
  *   `rgba(var(--paper-rgb), 0.90)`。
  *   ★ 刻意**不是毛玻璃**：`backdrop-filter` 挂在固定元素上 = 背景每变一次就要重新
  *   采样并重绘它背后那块屏幕，而它背后正是一张满屏 fixed 大图。首页为同一件事拆过
- *   `.to-top` 与 `.btn--ghost`（README §五，两条都留着"别再加回去"的注释）。
+ *   `.to-top` 与 `.btn--ghost`（docs/known-tradeoffs.md，两条都留着"别再加回去"的注释）。
  *   0.90 这一档是量的：见 `node scripts/check-scrim.mts` 的「侧栏那层纸」那一行。
  *
  * ★ 折叠不是"把宽度改成 0"：折叠后**图标还在**，标签隐藏。
@@ -23,6 +23,10 @@
   --side-w: 232px;
   display: flex;
   min-height: 100vh;
+  /* ★ 2026-10-19 成对写 `dvh`（照 `shell/studio-backdrop.css` 那条既有写法）：
+     手机上地址栏收起/展开时 `vh` 是不动的那个数，只写 `vh` 会让底栏在地址栏
+     收起之后下面留一条。 */
+  min-height: 100dvh;
   color: var(--ink);
   /* 背景层（`StudioBackdrop`）是 `position: absolute` 铺在**文档**上，
      所以这一层必须是它的包含块。★ 不能是 `fixed`：理由写在 studio-backdrop.css 文件头。
@@ -445,6 +449,13 @@
   position: relative;
 }
 
+/* 手机那一档的顶栏。★ 桌面上它**整块不存在**（`display: none`），
+   里面那两格（设置 / 我是谁）在桌面上住在侧栏底部 —— 两边各在对方的档里藏起来，
+   所以任何时刻辅助技术只看得见一组。完整理由写在 `AppShell.tsx` 那一处。 */
+.shell__bar {
+  display: none;
+}
+
 /* 内容区不再铺点阵了（原来这里有一条 `.shell__main::before`）。
    ★ 理由是那条纹理要解决的问题已经不存在了：点阵是给**一块平涂**加层次的
    （首页第二屏那条"书不是放在桌上、是贴在灰墙上"就是同一件事的另一处）。
@@ -503,10 +514,188 @@
     padding-right: 0;
   }
 
+  /* ★ 触控目标 44×44（2026-10-19 移动端适配）。
+     这一档**同时**是"平板"与"手机横过来"的形态（手机横过来宽度是 844，落在
+     `≤900` 里、落在 `≤640` 的**外**面）。而这两件事的手指一样粗：
+     底栏那条 44px 的线只管得住竖屏，横屏这一格漏在外面。
+     实测症状：`chk-mobile.mjs` 在 844×390 上报「创作:44×42 灵感书单:44×42 …」——
+     宽 44 是恰好够的（72 − 左右各 14），**矮的那 2px 来自 `padding: 11px` + 20px 图标**。
+     ★ 只补高：宽度那个 44 是侧栏宽度算出来的，动它就要动 `--side-w`，
+       而 `--side-w` 是平板/窄窗那一档的版面（不是触控目标）。 */
+  .shell__link {
+    min-height: 44px;
+  }
+
   /* 与上面折叠态同一条：品牌行不归零就会被它的 min-content 撑宽 */
   .shell__brand {
     justify-content: center;
     padding-left: 0;
     padding-right: 0;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * §手机（2026-10-19 移动端适配）：侧栏收成**底部标签栏**，另加一行顶栏
+ *
+ * 上一档（`≤900px`）把侧栏压成 72px 的图标轨 —— 那在平板上是对的，
+ * 在 390px 的手机上却要吃掉 **19% 的宽度**，而工作台五屏每一屏都是"内容说了算"的版面。
+ * 用户 2026-10-19 从三档里挑了"底部标签栏"（另两档是留着图标轨、顶部汉堡抽屉）。
+ *
+ * 三件事：
+ *   1. `.shell__nav` 那五格横过来、等分，钉在屏幕下沿；
+ *   2. 牌子、分组标签、折叠钮在这一档**没有意义**（宽度不够放标签，"收起"也没有第二态可收）；
+ *   3. 侧栏底部那两格（我是谁 / 设置）搬到顶上那一行（`.shell__bar`）。
+ *
+ * ★ 层序：底栏 `z-index: 20`、顶栏 15。它们都要压在 `StudioBackdrop` 之上，
+ *   而那一层是 `absolute; inset: 0` **铺在文档上的**（不是 fixed）——
+ *   所以底栏用 `position: fixed` 是安全的：它盖的是视口，而那层背景跟着文档滚，
+ *   两者不在同一个层叠上下文里抢（壳自己 `position: relative`，两个都在它里面）。
+ * ========================================================================== */
+@media (max-width: 640px) {
+  .shell {
+    /* 顶栏一行、内容一栏。★ 必须从 `row` 改过来：`.shell__bar` 与 `.shell__main`
+       都是壳的直接孩子，不改方向它俩会并排。 */
+    flex-direction: column;
+    --shell-tabbar-h: 64px;
+  }
+
+  /* ── 底栏 ─────────────────────────────────────────────────────────────── */
+  .shell__side {
+    position: fixed;
+    inset: auto 0 0 0;
+    height: auto;
+    width: auto;
+    /* `.shell__side` 基准那条 `flex: 0 0 var(--side-w)` 在 fixed 之后没有意义，
+       留着会让它按 232px 撑开（`width: auto` + 一个 flex-basis 不参与 fixed 定位，
+       但 `padding` 与内容仍按它算）——显式归零更省心 */
+    flex: 0 0 auto;
+    align-self: auto;
+    /* 纸光那一套翻到上边：原来那条 `inset -1px 0 0`（右侧竖线）在这里读成"顶上一条线"，
+       影子也从"往右拖"改成"往上拖" —— 底栏是**贴在屏幕下沿的一层纸**，
+       与侧栏是同一种材质，只是贴的边换了。 */
+    box-shadow:
+      inset 0 1px 0 var(--hairline),
+      0 -18px 40px -32px rgba(23, 23, 29, 0.32);
+    padding: 6px 8px calc(6px + var(--safe-b));
+    z-index: 20;
+    transition: none;
+  }
+
+  .shell__brand,
+  .shell__group-label,
+  .shell__collapse,
+  .shell__foot {
+    display: none;
+  }
+
+  /* ── 那五格 ───────────────────────────────────────────────────────────── */
+  .shell__nav {
+    flex-direction: row;
+    gap: 2px;
+    /* 基准那条 `overflow-y: auto` 是给竖着的一列用的；横过来之后它会在
+       图标 + 字那两行上切一刀（高度是 `min-height` 撑出来的，滚动容器算的是内容盒） */
+    overflow: visible;
+  }
+
+  .shell__nav > li {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  /* ★ 上一档（`≤900px`）把标签**藏了** —— 那是"图标轨"那一档的地盘，
+     而手机上是**底部标签栏**：五格里有一半不标名字认不出来
+     （「角色卡」与「声音」那两个图标尤其像）。所以这里要把标签请回来。
+     ★ 请它回来必须用**足够高的特异性**：那一条是
+       `.shell__link-label, .shell__brand-text, .shell__group-label, …` 的**并列选择器列表**，
+       单独一条 `.shell__link-label` 与它同权（都是 (0,1,0)），只能靠文件顺序取胜 ——
+       而那正是本仓库写过"站不住"的那条路（`reader-book.css` 的 `.reader .book-choice[data-on]`
+       为同一件事抬过一次特异性）。所以这里写成 `.shell__nav .shell__link-label`。
+     ★ 同理，下面 `.shell__link` 的每一条也带上 `.shell__nav`：那一档同样定了
+       `justify-content` 与左右内边距。 */
+  .shell__nav .shell__link-label,
+  /* ★ 顶栏那两颗也要（`设置` / 昵称）：它们与底栏那五格**同属这一档**，
+     而上面那条藏标签的规则管的是整个壳 —— 少写这半句的症状是
+     "顶上两颗只剩图标"，看着像故意做成图标钮的。 */
+  .shell__bar .shell__link-label {
+    display: block;
+  }
+
+  .shell__nav .shell__link-label {
+    /* 横过来之后标签在图标**下面**，居中；`text-align: left` 是给竖排那一列写的 */
+    text-align: center;
+  }
+
+  /* ★ 44px 是这一轮追认的触控目标下限（`reader-book.css` 那一档同一个数）。
+     这里给到 52：图标 22 + 间距 3 + 字 13 + 上下各 7 —— 再矮手指就压到"点没点中"上了。 */
+  .shell__nav .shell__link {
+    flex-direction: column;
+    justify-content: center;
+    gap: 3px;
+    min-height: 52px;
+    padding: 7px 4px;
+    font-size: 11px;
+    border-radius: 10px;
+  }
+
+  /* ── 内容区：给底下那条让出位置 ────────────────────────────────────────── */
+  .shell__main {
+    padding-bottom: calc(var(--shell-tabbar-h) + var(--safe-b));
+  }
+
+  /* ── 顶栏 ─────────────────────────────────────────────────────────────── */
+  .shell__bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    position: sticky;
+    top: 0;
+    z-index: 15;
+    /* 与侧栏、底栏同一层纸（`--paper-rgb` 0.78 那一档，`check-scrim` 量过）。
+       ★ 它压在 `StudioBackdrop` 那条天空带上，所以墨色用 `--ink`（那一带最暗的
+         天光下 14:1 那一档）—— 底栏那条地板缝上的读数不适用于这里。 */
+    background: rgba(var(--paper-rgb), 0.78);
+    padding: calc(6px + var(--safe-t)) calc(8px + var(--safe-r)) 6px calc(8px + var(--safe-l));
+    box-shadow: inset 0 -1px 0 var(--hairline);
+  }
+
+  .shell__bar-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    /* 44 那条下限：这一行只有两颗，没有理由不满足它 */
+    min-height: 44px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 10px;
+    background: none;
+    color: var(--ink);
+    font: inherit;
+    font-size: 13px;
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  /* 「我是谁」那一格靠右：先设置、后是谁，与侧栏底部那一列的次序一致
+     （"先是谁在用、再是这个人在哪儿调"反过来读也说得通，但**两处必须是同一个次序**）。 */
+  .shell__bar-btn--who {
+    margin-left: auto;
+    min-width: 0;
+  }
+  /* ── 折叠状态**不该管到手机上** ─────────────────────────────────────────
+     `collapsed` 是从 `localStorage` 读来的桌面偏好（`COLLAPSE_KEY`，见 AppShell 文件头），
+     它在手机上会把底下那五格压成**只剩图标** —— 而 390px 上那五格本来就窄，
+     再没有字就认不出来了（「角色卡」与「声音」两个图标尤其像）。
+     ★ 这几条必须写成 (0,4,0)：基准那几条 `[data-collapsed='true'] .shell__link-label`
+       是 (0,3,0)，只写 `.shell__link-label` 会被**静悄悄地盖掉**，
+       而症状是"手机上底部栏没有字"—— 看起来像这一档漏写了，不像被别处压住。
+       （本仓库那条"同一特异性别靠文件顺序取胜"就是为这种情形立的。） */
+  .shell[data-collapsed='true'] .shell__nav .shell__link-label {
+    display: block;
+  }
+
+  .shell[data-collapsed='true'] .shell__nav .shell__link {
+    padding-left: 4px;
+    padding-right: 4px;
   }
 }

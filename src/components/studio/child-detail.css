@@ -386,7 +386,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   /* 这一屏没有滚动驱动的动画，但要显式说清"没有"：
-     将来谁在这里加一条过渡，都得先看一眼这一段（README §五：静止终态不是「不播」） */
+     将来谁在这里加一条过渡，都得先看一眼这一段（docs/known-tradeoffs.md：静止终态不是「不播」） */
   .cd__btn,
   .cd__version,
   .cd__textarea {

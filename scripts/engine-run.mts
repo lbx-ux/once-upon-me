@@ -32,6 +32,7 @@ import { dirname, join, resolve } from 'node:path'
 
 import { promptFragmentOf } from '../src/lib/engine/character-card/card.ts'
 import { createCardStore } from '../src/lib/engine/character-card/store.ts'
+import { createPlanRetriever } from '../src/lib/rag/load.ts'
 import { digest } from '../src/lib/engine/digest.ts'
 import { describeEvent } from '../src/lib/engine/events.ts'
 import { runBook } from '../src/lib/engine/index.ts'
@@ -253,6 +254,14 @@ async function main(): Promise<void> {
     },
     {
       providers,
+      // ★ `--retrieve`（2026-10-19，`.scratch/rag`）：把检索接进来跑。
+      //   默认**不开**——这一条命令是架构验收（不联网跑完一本书），
+      //   而每一种新能力都开成默认，等于让每一次跑测都换一条没量过的路。
+      //   ★ 它在这一档上是**离线**的：语料是仓库里那份索引 + 这一片存储里的旧书，
+      //     读盘不联网，所以 `--mode=stub` 加上它之后仍然是"不碰网络"的那条验收。
+      ...(args['retrieve']
+        ? { retriever: createPlanRetriever({ store, owner: 'u/engine-run' }) }
+        : {}),
       onEvent: (event) => {
         const line = `[${String(event.seq).padStart(2, '0')}] ${describeEvent(event)}`
         events.push(line)

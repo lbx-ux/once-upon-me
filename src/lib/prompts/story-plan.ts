@@ -7,6 +7,8 @@
  *   改文案就 +1，别偷偷改：改了不升版，横评数据与线上产物就对不上了。
  */
 
+import { retrievalBlock } from '../rag/prompt.ts'
+import type { RetrievePair } from '../rag/retrieve.ts'
 import type { AgeBand, BookForm } from '../engine/domain.ts'
 import { CHOICE_ICONS } from '../engine/domain.ts'
 import { planJsonSchema } from '../schemas/story.ts'
@@ -14,6 +16,7 @@ import { planJsonSchema } from '../schemas/story.ts'
 /**
  * ☆ 2026-10-17 升到 v2：加了「家长看完第一版之后的新要求」那一段（`StoryPlanInput.reviseNote`）。
  * ☆ 2026-10-18 升到 v3：**共读版那一段重写了**（`FORM_RULES.shared`）。
+ * ☆ 2026-10-19 升到 v4：**加了检索那一段**（`StoryPlanInput.retrieval`，`.scratch/rag`）。
  *
  *   ★ 为什么改文案就要 +1（而不是偷偷改）：这一版进 `Provenance.promptVersion`，
  *     横评数据、线上产物、以及"这一页是哪一版提示词生成的"都要靠它可比。
@@ -26,10 +29,24 @@ import { planJsonSchema } from '../schemas/story.ts'
  *     汇合节点要么需要两个父，要么得挂回选择点。所以那是一句**读起来像结构约束、
  *     实际只能靠叙事去近似**的指令。v3 把它换成模型真能做到的事：
  *     两支各自收出一个结尾，而两个结尾落在同一个落点与同一种情绪上。
+ *
+ *   ★ **v4 与前三版不同：它多了一段"只有在检索到东西时才出现"的输入**。
+ *     所以"v4 的输出"仍然可能逐字节等于 v3 的——家长碰上的第一次生成多半就是这样
+ *     （新主题 + 头一本书 = 一条范例都没有）。这不是没生效，见 `rag/prompt.ts`
+ *     那条"空结果整段不出现"。
  */
-export const STORY_PLAN_VERSION = 'story-plan@v3'
+export const STORY_PLAN_VERSION = 'story-plan@v4'
 
-/** 适龄档 → 语言约束。这是 #3「RAG 技术应用」里"4 岁和 8 岁复杂度可对比"的对照物 */
+/**
+ * 适龄档 → 语言约束。**它是"分档"，不是检索**（2026-10-19 改口径）。
+ *
+ * ★ 原来这一行把这一档说成 #3「RAG 技术应用」的验收依据（"4 岁和 8 岁复杂度可对比"）——
+ *   那句话**从 2026-10-19 起不成立**：检索真的落地了（`.scratch/rag`，`rag/` 那一族），
+ *   于是"按年龄取一条规则"与"按相似度取几段旧文本"是两件不同的事，
+ *   把它们说成一件事，评审那句「检索策略是否合理」就会被这个注释带歪。
+ *   两者的分工见 [GLOSSARY](../../../GLOSSARY.md) 的「适龄档」与「检索」两条。
+ *   现在的用途只有一条：**这一档的孩子该用多长的句子、多难的词**。
+ */
 const AGE_RULES: Record<AgeBand, string> = {
   '4-': '每句不超过 12 字；全篇只用最常见的动词与名词；一句一个动作，不写因果从句；拟声词可以多用。',
   '4-6': '每句 12–18 字；可以有"因为…所以…"但只套一层；允许 2–3 个稍难的词，上下文要能猜出意思。',
@@ -129,6 +146,14 @@ export type StoryPlanInput = {
    *   而家长要的是"按我说的这个方向重新长一遍"（他会拿新版与旧版对着看）。
    */
   reviseNote?: string
+  /**
+   * 检索到的正反两栏（2026-10-19，`.scratch/rag`）。**没检索就是 undefined**。
+   *
+   * ★ 它由 `engine/plan.ts` 在进重试循环**之前**取一次，三次 attempt 共用同一份
+   *   （重试要改的是**格式**，不是"再找一批参考"，见 `plan.ts` 文件头第 1 条）。
+   * ★ 讲法归 `rag/prompt.ts` 管，这里只决定**它放在用户提示词的哪个位置**。
+   */
+  retrieval?: RetrievePair
 }
 
 /** system：身份、硬约束、输出形状。不随书变化，所以可以整段缓存 */
@@ -164,7 +189,7 @@ export function storyPlanSystem(): string {
 }
 
 export function storyPlanUser(input: StoryPlanInput): string {
-  return [
+  const base = [
     `主角：${input.childName}（名字念 ${input.nameReading}，别念错）。`,
     `年龄档：${input.ageBand}。语言规则：${AGE_RULES[input.ageBand]}`,
     input.interestTags.length > 0
@@ -204,4 +229,14 @@ export function storyPlanUser(input: StoryPlanInput): string {
   ]
     .filter(Boolean)
     .join('\n')
+
+  // ★ 检索那一段放在**整条用户消息的最后**，两个理由：
+  //   ① `rag/prompt.ts` 把反例排在它自己那一段的末尾，为的是"模型读到的最后一件约束
+  //      是别重样"。那件事只有在这一段**位于消息末尾**时才成立——放中间等于把它盖掉。
+  //   ② 输出的形状（JSON schema）在**系统提示词**里另有一份（`storyPlanSystem`），
+  //      所以把参考材料放在字段说明之后，不会让模型丢掉"要出 JSON"这件事。
+  //   ★ 空结果时 `retrievalBlock` 回空串，这里就逐字节等于 v3 的内容——
+  //     "没检索到"不该在提示词里留下一句声明（见 `rag/prompt.ts` 第二条硬约束）。
+  const block = retrievalBlock(input.retrieval ?? { examples: [], avoids: [] })
+  return block === '' ? base : `${base}\n\n${block}`
 }

@@ -38,6 +38,7 @@
     ".next-avatar/types/**/*.ts",
     ".next-build/types/**/*.ts",
     ".next-cd24/types/**/*.ts",
+    ".next-color/types/**/*.ts",
     ".next-cwsub/types/**/*.ts",
     ".next-diag/types/**/*.ts",
     ".next-form/types/**/*.ts",
@@ -49,12 +50,13 @@
     ".next-session/types/**/*.ts",
     ".next-shelfbig/types/**/*.ts",
     ".next-shelftext/types/**/*.ts",
+    ".next-shots/types/**/*.ts",
     ".next-ui15/types/**/*.ts",
     ".next-uia/types/**/*.ts",
     ".next-verify/types/**/*.ts",
     ".next/types/**/*.ts",
     "next-env.d.ts",
-    ".next-color/types/**/*.ts"
+    ".next-mobile/types/**/*.ts"
   ],
   "exclude": ["node_modules"]
 }

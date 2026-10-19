@@ -1,0 +1,140 @@
+/* ============================================================================
+ * rotate-hint.css —— 竖屏手机进阅读器时那层「把手机横过来」（`RotateHint.tsx`）
+ *
+ * 与组件同目录同名，在 `app/globals.css` 里 `@import`。
+ *
+ * ---------------------------------------------------------------------------
+ * ★ 显隐**整条归媒体查询**，JS 一个字都不管这件事
+ *
+ * 底色那一层默认 `display: none`，只在
+ *   `(orientation: portrait) and (max-width: 640px)`
+ * 里变成 `flex`。这样：
+ *   · 桌面与横屏上它**根本不画**，连首帧都不会闪一下；
+ *   · 转屏不用 JS 参与 —— `orientation` 是浏览器自己的事实，
+ *     在 JS 里再算一遍就是第二个真相（而它们会在地址栏收起的那一瞬漂）。
+ * ★ 反过来，**要不要问**是 JS 的事（`useRotateHint`，落盘在
+ *   `xiaozhujue.reader.rotate`）。两件事分开：一条管"这块屏幕要不要"，一条管"这个人要不要"。
+ *
+ * ---------------------------------------------------------------------------
+ * 颜色：一个新色都没有
+ *
+ * 遮罩取的是 `dialog.css` 那条**同一个** `rgba(var(--ink-rgb), .34)`（弹窗那一族
+ * 用在同一个位置上的同一个数），卡片是 `--surface` + `--ink` / `--ink-muted`，
+ * 三颗都是已经量过的（`node scripts/check-scrim.mts` 的「纯 --surface」那一段：
+ * `--ink` 17.85 / `--ink-muted` 5.33）。所以这一层**没有新的对比度要过** ——
+ * 不是"没量"，是"用的全是量过的那些"。
+ *
+ * ★ 而它**不该进 `check-scrim` 那支量具**（原先那一轮的计划里是这么写的，量完才看清）：
+ *   那支量具量的是"墨压在**半透明**的层上"——层与底要按 gamma 合成一次才谈得上对比度。
+ *   这一层的文字在**卡片上**，而卡片是**不透明**的 `--surface`：遮罩那 0.34
+ *   压根不参与任何文字的对比度，合成进去只是把同一对被量一遍。
+ *   真正需要逐图量的那一处在**这台阅读器**上，而它已经有一支专门的量具
+ *   （`chk-reader-desk.mjs` 判据 2：七档底图 × 三行字，取**真实像素**算对比度）。
+ *   两支量具各管一件事，这里不重复建模。
+ *
+ * ---------------------------------------------------------------------------
+ * 布局：正中的一张窄卡，不是满屏的一张纸
+ *
+ * 卡片 `min(320px, 84vw)`，在 390px 的手机上是 320px 宽。**刻意不铺满**：
+ * 底下的书从卡片四周露出来一圈，读起来才是"书在这儿，只是建议你转个屏"，
+ * 而不是"这一屏坏了，先给你一张说明"。
+ * ========================================================================== */
+
+.rotate-hint {
+  position: fixed;
+  inset: 0;
+  /* 60：底图那两层是 `fixed` 的定位元素（按规范画在静态内容之上），
+     这一层要压过它们。弹窗那一族是 80，比它高 —— 这一屏上没有弹窗，
+     但真要有，弹窗该在上面。 */
+  z-index: 60;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: calc(24px + var(--safe-t)) calc(20px + var(--safe-r)) calc(24px + var(--safe-b))
+    calc(20px + var(--safe-l));
+  background: rgba(var(--ink-rgb), 0.34);
+}
+
+/* 只有"竖屏 + 手机宽"才画（见文件头）。★ 两条条件缺一不可：
+   只写 `max-width: 640px` 的话，手机横过来（844 宽）判据已经为假，是多写的；
+   只写 `orientation: portrait` 的话，桌面竖着的窗口也会被这一层盖住。 */
+@media (orientation: portrait) and (max-width: 640px) {
+  .rotate-hint {
+    display: flex;
+  }
+}
+
+.rotate-hint__card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: min(320px, 84vw);
+  padding: 26px 22px 20px;
+  border-radius: var(--card-radius);
+  background: var(--surface);
+  box-shadow: var(--card-shadow);
+  text-align: center;
+}
+
+/* 图标比字大一号：它是这一层**唯一**的图形，而文字只有两行。
+   颜色取 `--accent`：这一屏上"要你看见"的位置一直是它（默认色是继承来的 `--ink`，
+   而一个黑图标在正中会被读成"示意图"而不是"提示"）。 */
+.rotate-hint__icon {
+  width: 56px;
+  height: 56px;
+  color: var(--accent);
+}
+
+.rotate-hint__title {
+  margin: 14px 0 0;
+  font-family: var(--font-serif);
+  font-size: 19px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.rotate-hint__sub {
+  margin: 6px 0 0;
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: var(--ink-muted);
+}
+
+/**
+ * 「仍然竖着看」。
+ *
+ * ★ 形状走**药丸 + `--surface-soft` 底**，不是实心主按钮：这一层里没有"主按钮"
+ *   ——它的两个出口是"照做（转屏，不用点）"与"算了（点这里）"，点的那一个反而是退路。
+ *   做成实心强调色会让它读成"必须点这个才能继续"，而实际上转屏就够了。
+ * ★ 44px 高：手机上这一层只有手指能点（`reader-book.css` 的触控目标那一条同一个数）。
+ * ★ 焦点圈与全站同档（2px accent、offset 2px），键盘用户 Tab 到这儿看得见。
+ */
+.rotate-hint__ok {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  margin-top: 18px;
+  padding: 0 22px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.rotate-hint__ok:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* "关掉之后就不再问了"那句。★ 它必须比上面那句**轻**（`--ink-muted` 已经用过一次，
+   这里再轻就没有档位了），所以改用字号与行距把它推到次要位置，而不是再换一个色。 */
+.rotate-hint__note {
+  margin: 12px 0 0;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--ink-muted);
+}
