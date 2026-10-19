@@ -33,6 +33,18 @@ import type { NextConfig } from 'next'
  */
 const buildCpus = Number(process.env.NEXT_BUILD_CPUS ?? '')
 
+/**
+ * 服务器上那一次构建要**跳过类型检查与 ESLint**（部署脚本设 `NEXT_SKIP_GATES=1`）。
+ *
+ * ★ 这不是偷工减料，是同一句话的第二次应用：`server/deploy.sh` 的文件头写着
+ *   「跳过测试：测试是提交前那道闸门的事，不是部署这一步的」。类型检查与 lint 同理 ——
+ *   它们是**本机提交前**那道闸门（CLAUDE.md 里那三条），在同一份源码上跑第二遍
+ *   换不来新的信息，而它们在 `next build` 里是**内存大户**（tsc 与 ESLint 都在同一个
+ *   进程里跑），而那台机器只有 1613 MB。
+ * ★ 默认**不跳**：本机 `pnpm build` 与 CI 的语义一字不变，只有服务器那次会设这个变量。
+ */
+const skipGatesOnServerBuild = process.env.NEXT_SKIP_GATES === '1'
+
 const nextConfig: NextConfig = {
   distDir: process.env.NEXT_DIST_DIR ?? '.next',
   /**
@@ -42,6 +54,9 @@ const nextConfig: NextConfig = {
    * 而参赛材料是截图 —— 所以关掉。
    */
   devIndicators: false,
+  // ★ 见上面那段：只在服务器构建时跳（本机 / CI 的语义不变）
+  typescript: { ignoreBuildErrors: skipGatesOnServerBuild },
+  eslint: { ignoreDuringBuilds: skipGatesOnServerBuild },
   /**
    * ── 客户端路由缓存：同一屏在 30 秒内再进去，直接用手里那份，**不再问服务端** ──────
    *

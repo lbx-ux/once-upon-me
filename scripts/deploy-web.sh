@@ -316,33 +316,49 @@ deploy() {
     say "指纹没变 → 跳过 install"
   fi
 
-  # ★ 构建期间先把 web 那个进程停掉。★ 这一条是 2026-10-19 用一次整机锁死换来的：
-  #   那台机器只有 1613 MB，"构建期间站点照常服务"在这里**做不到** ——
-  #   实测不做的时候：available 594 → 157 MB，ssh 连握手都排不上队，
-  #   nginx / Java / MySQL 一起对外超时，部署卡在构建上 27 分钟没动。
-  #   宁可诚实地停几分钟，也不要不受控地锁死整机（锁死时更糟：那是整个机器不可用）。
-  local was_running=0
-  if [ "$(rsh "systemctl is-active $SERVICE" || true)" = "active" ]; then
-    was_running=1
-    say "先停掉 $SERVICE，把内存让给构建（这台机器上做不到零停机构建）"
-    rsh "systemctl stop $SERVICE"
+  # ★ 构建期间把这台机器上另外三个吃内存的东西都让开 —— 2026-10-19 用**两次整机锁死**
+  #   换来的：只停 web 不够，只把堆降到 512 MB、串行也都试过，还是进了换页螺旋。
+  #   实测的内存账：机器 1613 MB，MySQL ~400 MB、Java 的 RSS ~350 MB、
+  #   systemd+nginx+sshd ~150 MB —— 留给构建的只有 ~820 MB，而构建峰值不止这么多。
+  #   一旦开始换页，sshd / nginx 都排不上队，**整机对外不可用**（连着两次都是靠人去
+  #   控制台强制重启才回来的）。
+  #   所以：web / Java / MySQL 三个都停，构建完按**依赖顺序**恢复（mysql → api → web）。
+  #   ★ 代价说清楚：构建期间站点与接口都不可用，时长就是构建那几分钟。
+  #     用户那边的决定（2026-10-19）：这台机器上"零停机构建"做不到，接受短暂停机。
+  local was_web=0 was_api=0 was_db=0
+  if [ "$(rsh "systemctl is-active $SERVICE" || true)" = "active" ]; then was_web=1; rsh "systemctl stop $SERVICE"; fi
+  if [ "$(rsh "systemctl is-active xiaozhujue-api" || true)" = "active" ]; then was_api=1; rsh "systemctl stop xiaozhujue-api"; fi
+  if [ "$(rsh "systemctl is-active mysql" || true)" = "active" ]; then was_db=1; rsh "systemctl stop mysql"; fi
+  if [ "$was_web$was_api$was_db" != "000" ]; then
+    say "构建期间停掉：web=$was_web api=$was_api mysql=$was_db（这台机器上做不到零停机构建）"
   fi
 
-  say "构建到 .next-new（不碰正在服务的 .next）"
+  say "构建到 .next-new（不碰正在服务的 .next；内存上限 ${XZJ_BUILD_MEM:-1400M}，不许换页）"
   local t0 t1
   t0=$(date +%s)
   # ★ 上一次半途而废的产物不许混进来（`next build` 会往已存在的目录里写）
   rsh "rm -rf $APP_DIR/.next-new"
-  # ★ 两个救命参数，理由写在 next.config.ts 与本节上面：
-  #   NEXT_BUILD_CPUS=1 —— 串行静态生成（默认按 CPU 数开 worker，那台机器是 2 个）
-  #   --max-old-space-size=512 —— 堆小、GC 勤、峰值 RSS 低：宁慢不炸
-  if ! rsh "sudo -u xzj env HOME=/var/cache/xiaozhujue bash -lc 'cd $APP_DIR && NEXT_BUILD_CPUS=1 NODE_OPTIONS=--max-old-space-size=${XZJ_BUILD_HEAP:-512} NEXT_DIST_DIR=.next-new pnpm build'"; then
+  # ★ **cgroup 硬边界**才是这次真正的修法：内存超了**当场 OOM kill 掉构建**，
+  #   而不是让整机换页锁死到 ssh 都进不去。`MemorySwapMax=0` 是关键那一句 ——
+  #   不许它用 swap，"装不下"就立刻变成"构建失败"，我这边还能接着换参数重试
+  #   （前面两次没有这条，代价是两次强制重启）。
+  #   加上另外三个参数，理由写在 next.config.ts 与文件头第 7 条：
+  #   NEXT_BUILD_CPUS=1 串行 · NEXT_SKIP_GATES=1 跳过 tsc/ESLint（本机那道闸门已跑过）
+  #   --max-old-space-size=512 小堆
+  if ! rsh "systemd-run --scope --collect -q -p MemoryMax=${XZJ_BUILD_MEM:-1400M} -p MemorySwapMax=0 -- sudo -u xzj env HOME=/var/cache/xiaozhujue bash -lc 'cd $APP_DIR && NEXT_BUILD_CPUS=1 NEXT_SKIP_GATES=1 NODE_OPTIONS=--max-old-space-size=${XZJ_BUILD_HEAP:-512} NEXT_DIST_DIR=.next-new pnpm build'"; then
     rsh "rm -rf $APP_DIR/.next-new"
-    if [ "$was_running" = "1" ]; then rsh "systemctl start $SERVICE"; fi
-    die "构建失败（正在服务的那一份没动过）"
+    if [ "$was_db" = "1" ]; then rsh "systemctl start mysql"; fi
+    if [ "$was_api" = "1" ]; then rsh "systemctl start xiaozhujue-api"; fi
+    if [ "$was_web" = "1" ]; then rsh "systemctl start $SERVICE"; fi
+    die "构建失败（正在服务的那一份没动过；停掉的三个服务已恢复）。
+   ★ 如果上面是 137 / 'Killed'，那是内存上限撞到了 —— 这台机器装不下这次构建：
+     先试 XZJ_BUILD_MEM=1600M，再不行就得换条路（在 WSL2 里构建后上传产物）。"
   fi
   t1=$(date +%s)
   say "构建耗时 $((t1 - t0)) 秒"
+  if [ "$was_db" = "1" ]; then rsh "systemctl start mysql"; fi
+  if [ "$was_api" = "1" ]; then rsh "systemctl start xiaozhujue-api"; fi
+  if [ "$was_db$was_api" != "00" ]; then say "mysql 与后端已按顺序恢复"; fi
 
   say "换目录并重启（停机只有 mv 那一下）"
   rsh "set -e; cd '$APP_DIR'; systemctl stop $SERVICE; rm -rf .next-old; mv .next .next-old 2>/dev/null || true; mv .next-new .next; systemctl start $SERVICE"
