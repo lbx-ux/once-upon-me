@@ -207,6 +207,22 @@ export function choiceScreenOf(
 }
 
 /**
+ * 选择点那一屏要念的三段，**按这个顺序**：引导提问 → 选项 A → 选项 B。
+ *
+ * ★ 顺序就是按钮的左右顺序：`options[0]` 对应 `via: 'a'`（`tree.ts` 保证），
+ *   所以"念的第二段"与"左边那颗按钮"永远是同一个选项。
+ *   ★ 这一行原来写在 `ReaderBook` 的 `ChoicePoint` 里（那颗「🔊 念一遍」按来念）。
+ *     2026-10-20 自动朗读也要念这三段，于是抽到这里：两处各写一遍就是两份会漂的顺序
+ *     ——念的是 A、亮的是 B，而屏幕上没有任何东西会说出这件事。
+ *
+ * ★ 缺一段就**把它留在原位**当 `null`：判据是"三段齐了才念"（只对两个选项能响的按钮，
+ *   证的是反面），而不是把数组压短——压短之后下标与选项就对不上了。
+ */
+export function choiceClipsOf(choice: StoryChoiceView): readonly (string | null)[] {
+  return [choice.promptAudioUrl, choice.options[0].audioUrl, choice.options[1].audioUrl]
+}
+
+/**
  * ★ 这里原来还有一个 `pressedOf(path, opening, pick)`——"这一屏该按着哪一颗"，
  *   2026-10-18 收尾时删掉了。理由是它**没有消费者，而且恒等于 `pick`**：
  *   控件只在 `choiceScreenOf(...) !== null` 的那一屏被渲染，所以"这一屏是不是选择点"

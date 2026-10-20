@@ -82,8 +82,16 @@ describe('describe() —— 同一份定义的两个用途', () => {
   it('★ 发出去的 maxItems 与 parse 真正卡住的条数是同一个数', () => {
     const codec = stringList({ min: 1, max: 4 })
     const schema = codec.describe() as { maxItems: number }
-    expect(codec.parse(Array.from({ length: schema.maxItems }, () => '句'), '').ok).toBe(true)
-    const over = codec.parse(Array.from({ length: schema.maxItems + 1 }, () => '句'), '')
+    expect(
+      codec.parse(
+        Array.from({ length: schema.maxItems }, () => '句'),
+        '',
+      ).ok,
+    ).toBe(true)
+    const over = codec.parse(
+      Array.from({ length: schema.maxItems + 1 }, () => '句'),
+      '',
+    )
     expect(over.ok).toBe(false)
   })
 })

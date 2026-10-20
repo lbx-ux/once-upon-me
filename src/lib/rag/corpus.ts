@@ -256,7 +256,9 @@ const ELLIPSIS = '…'
 /** 太长就削到上界并留一个 `…`。★ 按**码点**算，一个 emoji 不该被腰斩成半个 */
 function clampChunkText(text: string): string {
   const points = [...text]
-  return points.length <= MAX_CHUNK_CHARS ? text : points.slice(0, MAX_CHUNK_CHARS).join('') + ELLIPSIS
+  return points.length <= MAX_CHUNK_CHARS
+    ? text
+    : points.slice(0, MAX_CHUNK_CHARS).join('') + ELLIPSIS
 }
 
 /* ───────────────────────── 指纹与解析 ───────────────────────── */

@@ -236,3 +236,53 @@ describe('封面的 prompt', () => {
     expect(IMAGE_PROMPT_VERSION).toBe('image-page@v5')
   })
 })
+
+/**
+ * ★ 出图这条路**没有文字闸**，事后只有那一档**不可复现**的画面审核兜着
+ *   （`review.ts` 里那句：出图没有"我们替你重写一版"这条路）。
+ *   而这一份提示词里有两类会打架的东西——角色描述/构图/负极清单是**代码里的常量**，
+ *   `本页画面`/`情节`/书名是 `story.json` 里的字，**家长可以逐字改**。
+ *
+ * 所以 2026-10-20 补了两件事，这一组盯的就是它们：
+ *
+ * 1. **声明谁赢**（`PRECEDENCE_BLOCK`）：不写清的话，一句"这一次改成两只手各拿
+ *    一把刀"会与负极清单正面撞上，而模型照哪一条全看运气。
+ * 2. **把家长可改的那几处包进「」**：引号划出"这是被引用的字"，
+ *    而不是"这是给你的要求"。与 `story-plan.ts` 那三格、检索片段那一段同一手法。
+ *
+ * ★ 判据取的是"这句话在不在、在不在该在的位置"，不是整句逐字：
+ *   逐字钉住会让每次润色都红一次，而这两条要防的是"有人把它删掉/挪走"。
+ */
+describe('★ 家长可改的那几处：引号划界 + 谁说了算（@v5）', () => {
+  const base = { card, page: '坐在云上', scene: '云像棉花糖', mood: 'wonder' as const }
+
+  it('本页画面与情节的值都包进「」（它们是 `story.json` 里的字，家长可逐字改）', () => {
+    const prompt = pagePrompt(base)
+    expect(prompt).toContain('「坐在云上」')
+    expect(prompt).toContain('「云像棉花糖」')
+  })
+
+  it('★ 优先级那一句在每一页里，且排在构图与负极清单**之前**', () => {
+    const prompt = pagePrompt(base)
+    expect(prompt).toContain('优先级：')
+    expect(prompt).toContain('避免出现') // 它点名的那一段确实在下面
+    expect(prompt.indexOf('优先级：')).toBeLessThan(prompt.indexOf('构图：'))
+  })
+
+  it('★ 封面也有这一句（书名同样是模型写、家长可改的那一类）', () => {
+    const prompt = coverPrompt({ card, title: '云朵小船去旅行' })
+    expect(prompt).toContain('优先级：')
+    expect(prompt.indexOf('优先级：')).toBeLessThan(prompt.indexOf('避免出现'))
+  })
+
+  /**
+   * ★ 反面的一半：`fixNote` 那一块是**家长这一次的更正**，不是被引用的内容——
+   *   所以它**不**包引号（包了会读成"这是素材，参考着看"，而它是命令）。
+   *   这一条防的是"照着上面那两行顺手也给它加一对「」"。
+   */
+  it('★ `fixNote` 不包引号：它是命令，不是被引用的内容', () => {
+    const prompt = pagePrompt({ ...base, fixNote: '把云画少一点' })
+    expect(prompt).toContain('这一版要改掉上一版的问题：把云画少一点')
+    expect(prompt).not.toContain('「把云画少一点」')
+  })
+})

@@ -91,16 +91,41 @@ describe('长度上限：散文承诺的 = 解析器接受的', () => {
     expect(user).toContain(nodeRange('ask'))
     expect(user).toContain(nodeRange('spokenA'))
   })
+
+  /**
+   * ★ `title` 是这一族里**唯一一处刻意不对齐**的：散文写「≤8 字」，codec 是 `min 2, max 20`
+   *   （`schemas/story.ts`）。台账与 diff 都把它列为"等用户拍板"，而**方向**不该等：
+   *   散文只能**比闸严**，不能比闸松。松的那一头的坏法是具体的——模型照散文写了一个
+   *   25 字的书名，`parseWith` 报「过长」，**整张 20 页的表作废**、带路径重来一次。
+   *   严的那一头不会失败，只会让书名更短（而实测 11 本真书的书名是 4–6 字，本来就都在 8 内）。
+   *
+   *   ★ 所以这条判据钉的是**关系**（`散文的数 ≤ codec 的 max`），不是那个数本身：
+   *   以后无论谁把哪一边改了，只要改出"散文比闸松"这个形状就红；
+   *   而把 codec 从 20 收到 8（那个决定还没做）不会让它红。
+   */
+  it('★ title：散文里那个数只能比闸严，不能比闸松', () => {
+    const system = storyPlanSystem()
+    const found = /title 是书名（≤(\d+) 字/.exec(system)
+    if (!found) throw new Error('提示词里 title 的上限写法变了，这条判据要先跟着改')
+    const proseMax = Number(found[1])
+    const codecMax = numberAt(['properties', 'title', 'maxLength'])
+    const codecMin = numberAt(['properties', 'title', 'minLength'])
+    expect(proseMax).toBeLessThanOrEqual(codecMax)
+    // 下限也不能写成"模型不可能满足"的样子：散文要求 ≤8 而闸要求 ≥2，那 2–8 这一段是空的
+    expect(proseMax).toBeGreaterThanOrEqual(codecMin)
+  })
 })
 
 describe('红线：散文管的"事"与词表管的"字"对齐', () => {
   const system = storyPlanSystem()
 
   /**
-   * ★ 这条盯的是一个**具体的前科**：`死` 与 `血` 是词表里仅有的两个单字
-   *   （`rag/review-corpus.ts` 第三节写着为什么只有它们两个）。它们命中时，
-   *   `plan.ts` 会判 `flag` 并把**整本 20 页**作废重写一次。
+   * ★ 这条盯的是一个**具体的前科**：`rag/review-corpus.ts` 的注释原来写着
+   *   "`死` 与 `血` 是仅有的两个单字"，而 R-02 的词表里躺着**第三个** `踹`
+   *   ——注释与数据矛盾，而症状是"每加一个单字，提示词就悄悄少一句"。
+   *   ★ 2026-10-20 用户拍板 `踹` **保留单字**、注释改成实话，所以现在是三个。
    *
+   *   它们命中时，`plan.ts` 会判 `flag` 并把**整本 20 页**作废重写一次。
    *   所以不变式是：**词表里每多一个单字，提示词就必须点名它**。
    *   单字是这一族里最危险的一种（歧义少、日常句子多、模型想都想不到），
    *   多字词靠"恐怖、暴力、死亡"那三行概括就够了。

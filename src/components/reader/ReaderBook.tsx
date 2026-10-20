@@ -78,14 +78,22 @@
  * 两个答案来自侧栏 设置 · 阅读偏好（`lib/reading-prefs.ts`），
  * 而这一屏**没有侧栏**（`(studio)` 路由组的 layout 文件头写了为什么），
  * 所以底下那行小字要说清"在哪儿改"。
+ *
+ * ★ 2026-10-20：这一屏两种形态**各读各的那条偏好**（`useTurnMode` / `useSharedTurnMode`），
+ *   而自动朗读在共读版上多一段路：**走到还拦着路的选择点就停下来**，把提问与两个选项
+ *   念给孩子听，选完那一支接着念（规则整段在 `use-narration.ts` 的文件头）。
+ *   要停的那一屏由 `stopAt` 告诉 hook——它唯一的来源是 `blocked`（`reader-model.ts`
+ *   的 `maxLeafOf` 用的是同一个判断），所以"能按 › 翻过去"与"这一趟会停在哪儿"
+ *   永远是同一件事的两个说法。
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { flipState } from '@/components/book/flip.ts'
 import { loadPick, savePick } from '@/lib/reading-path.ts'
 import { useReadingLog } from '@/lib/use-reading-log.ts'
-import { useReaderPaper, useTurnMode } from '@/lib/use-reading-prefs.ts'
+import { useReaderPaper, useSharedTurnMode, useTurnMode } from '@/lib/use-reading-prefs.ts'
 import {
+  choiceClipsOf,
   choiceScreenOf,
   leafCountOf,
   maxLeafOf,
@@ -159,6 +167,13 @@ export default function ReaderBook({ bookId, title, coverUrl, story, source }: R
    */
 
   const { turnMode } = useTurnMode()
+  /**
+   * 共读版那一档（2026-10-20）。★ **两档各读各的键**：独读版是睡前自己听、
+   * 共读版是白天陪玩（中间还要孩子选一支），一条偏好顺手改掉另一档不是我们要的。
+   * 所以这里按 `story.form` 二选一，喂给朗读那一套的是**挑好的那一个**。
+   */
+  const { turnMode: sharedTurnMode } = useSharedTurnMode()
+  const mode = story.form === 'shared' ? sharedTurnMode : turnMode
   /** §桌面那一层铺哪张底图。与书单那台**同一个偏好**（两台是同一张桌子） */
   const { paper } = useReaderPaper()
   /**
@@ -177,12 +192,20 @@ export default function ReaderBook({ bookId, title, coverUrl, story, source }: R
   const faces = useMemo<ReaderFace[]>(() => readerFaces(pages), [pages])
 
   /* ── 选择点 ────────────────────────────────────────────────────────────────
-   * 三件事都从这一处派生，别在 JSX 里各算一遍：
+   * 几件事都从这一处派生，别在 JSX 里各算一遍：
    *  · `choice` —— 这一屏该浮出的选择点（不是那一屏就是 null）
+   *  · `choiceClips` —— 这一屏要念的三段（提问 → A → B）
    *  · `blocked` —— 前面没路了，而拦住它的是**还没选过的那个选择点**
    *  · `maxTarget` —— `›` 能翻到的上界（`blocked` 时封底那一片叶不给）
+   *  · `stopAt` —— 自动朗读要停在哪一屏等孩子选（与 `blocked` 同源，见下面）
    */
   const choice = useMemo(() => choiceScreenOf(path, opening), [path, opening])
+  /**
+   * 这一屏的选择点要念的三段（引导提问 → 选项 A → 选项 B）。`null` = 这一屏没有。
+   * ★ 与"要不要停在这儿"**是两件事**：选过之后回到这一屏，那三段照样能按一下念一遍
+   *   （那颗「🔊 念一遍」还在），只是不该再拦住自动朗读那一趟。
+   */
+  const choiceClips = useMemo(() => (choice ? choiceClipsOf(choice) : null), [choice])
   /**
    * 前面没路了，而拦住它的是**还没选过的那个选择点**。
    * 判据就一句：**这条路的最后一屏是个选择点**——`storyPath` 在没选时停在选择点上，
@@ -195,6 +218,14 @@ export default function ReaderBook({ bookId, title, coverUrl, story, source }: R
   )
   const maxTarget = maxLeafOf(pages, blocked)
 
+  /**
+   * 自动朗读这一趟要停在哪一屏等孩子选（`null` = 一路念到底）。
+   * ★ 判据只有一条：**这一屏还拦着路**——`storyPath` 走到没选过的选择点就停下，
+   *   所以那时路的最后一屏恰好就是那个选择点，于是它就是 `pages.length`。
+   * ★ 选过之后（昨天选过的也算）它为 `null`：那一屏就是一页普通的页，没有要决定的事。
+   */
+  const stopAt = blocked ? pages.length : null
+
   /** 第 k 屏的朗读（封面与封底不在内）。`useMemo`：不然每次渲染换一个新数组，
    *  hook 里那条链的依赖会跟着换身份，白跑一遍 */
   const narrationUrls = useMemo(() => pages.map((page) => page.audioUrl), [pages])
@@ -206,11 +237,13 @@ export default function ReaderBook({ bookId, title, coverUrl, story, source }: R
     // ★ 直接把 `setQTarget` 递进去：它的身份是稳定的，而这条链会拿它当依赖。
     //   包一层匿名函数也能跑，但那个函数每次渲染都是新的，链就会每次渲染都重跑
     goTo: setQTarget,
-    mode: turnMode,
+    mode,
+    choiceClips,
+    stopAt,
   })
   // ★ `takeOver` 单独取出来：它自己是稳定的（`useCallback` 包着），而 `narration`
   //   这个对象每次渲染都是新的——`turn` 依赖前者才不会每次渲染都换身份
-  const { takeOver } = narration
+  const { takeOver, continueAfterPick } = narration
 
   /* ── 静止模式：读一次、订阅一次。reduced 下不跑补间，直接落在目标上 ───────── */
 
@@ -317,6 +350,10 @@ export default function ReaderBook({ bookId, title, coverUrl, story, source }: R
    * ★ 翻页走 `setQTarget` 而不是 `turn(1)`：`turn` 每次都会 `takeOver()`（人翻页 = 人接管），
    *   而在选择点上按按钮**本来就不是"人翻页"**——它是这一屏该做的事。
    *   走 `turn` 的话，按完按钮自动朗读会被莫名其妙地关掉。
+   *   ★ 2026-10-20：连停声这一件事也换成了 `continueAfterPick()`——它停的是**声音**，
+   *     不关这一趟。共读版的自动朗读是"念到选择点停下、选完接着念"（`use-narration.ts`
+   *     规则 4），而"选完"这一步正好落在这里；走 `takeOver()` 的话，孩子选完，
+   *     剩下半本书就不会自己念了。
    * ★ 按下态与路径是**同一个 state 的两个投影**（`pick`）：先落下再翻页，
    *   那一帧里按下态就在了，所以看不到"翻过去之后才亮起来"的闪。
    * ★ `savePick` 是"孩子选了哪一支"**唯一的写盘处**（工单 07）——所以那个值只有一个
@@ -324,13 +361,13 @@ export default function ReaderBook({ bookId, title, coverUrl, story, source }: R
    */
   const pickVia = useCallback(
     (via: 'a' | 'b') => {
-      takeOver()
+      continueAfterPick()
       setPick(via)
       savePick(bookId, via)
       // 翻到那一支的第一页。`pick` 一变，`path` 就长了一截，所以 `current + 1` 是新路里的下一页
       setQTarget((current) => current + 1)
     },
-    [bookId, takeOver],
+    [bookId, continueAfterPick],
   )
 
   /**
@@ -436,10 +473,17 @@ export default function ReaderBook({ bookId, title, coverUrl, story, source }: R
    *   不说的话，一个人只会觉得"这书怎么自己在翻"，而找不到关掉它的地方。
    * ★ 出错那一条优先（`narrationNote === null` 是前提）：那时"自动朗读开着"
    *   已经不成立了——上面那条链读到音频读不出来就把这一趟停掉了。
+   * ★ 2026-10-20 加了一档：停在选择点上时改说**为什么没声了**。那一刻这一趟确实
+   *   开着（钮还是「■ 停止」），可书不再往下走——不说明白，家长会以为它卡住了。
+   *   （"在哪儿改"那句这时可以不提：钮就在下面，按一下就停。）
+   * ★ 判据用的是 `mode`（这一本书按形态挑好的那一个），不是 `turnMode`：共读版
+   *   读的是另一个键，写成 `turnMode` 的话共读版选了自动朗读也不会有这行小字。
    */
   const autoNote =
-    narration.fullyNarrated && turnMode === 'auto' && narrationNote === null
-      ? '自动朗读开着（念完一页自己翻）。想自己翻，到工作台左下角的「设置」里选「我自己翻」。'
+    narration.fullyNarrated && mode === 'auto' && narrationNote === null
+      ? narration.awaitingPick
+        ? '自动朗读停在选择点上：选完一支，剩下的接着念。'
+        : '自动朗读开着（念完一页自己翻）。想自己翻，到工作台左下角的「设置」里选「我自己翻」。'
       : null
 
   return (
@@ -543,7 +587,18 @@ export default function ReaderBook({ bookId, title, coverUrl, story, source }: R
         {/* DOM 顺序在底栏之前，所以 Tab 的顺序是「舞台 → 两颗按钮 → 底栏」，
             与眼睛看到的上下关系一致。它自己的开关在 `ChoicePoint` 里（`data-on`）。 */}
         {choice && (
-          <ChoicePoint choice={choice} pressed={pick} settled={settled} onPick={pickVia} />
+          <ChoicePoint
+            choice={choice}
+            pressed={pick}
+            settled={settled}
+            onPick={pickVia}
+            /* ★ 那三段的播放权在 `use-narration.ts` 里（2026-10-20 搬过去）：自动朗读
+               走到选择点也要念它，而这一屏的声音只能有一个出处。这一层只把三样它
+               算不出来的东西递进去——正在念没有、三段齐了没有、按下去干什么。 */
+            speaking={narration.choiceSpeaking}
+            canSpeak={narration.choiceCanSpeak}
+            onToggleSpeak={narration.toggleChoice}
+          />
         )}
       </div>
 
@@ -729,6 +784,10 @@ function FaceView({
  *    而拦掉的样子与"这本书没有朗读"一模一样（`use-narration.ts` 规则 1 的同一条）。
  *    三段里缺任何一段就**不给这颗按钮**，并且说清为什么——只对两个选项能响的按钮，
  *    证的是反面（首页那条拆掉的播放条）。
+ *    ★ 2026-10-20：播放那三段的东西**整块搬去了 `use-narration.ts`**
+ *      （自动朗读走到选择点也要念它，而这一屏的声音只能有一个出处）。
+ *      这一层因此收三样 prop：正在念没有、三段齐了没有、按下去干什么——
+ *      按钮的文案、位置、`aria-label` 一个字没变。
  * 5. **键盘**：两颗按钮是**原生 `<button>`**，所以 Tab 到、Enter/空格选中全是浏览器
  *    自己的行为，没有一处 `preventDefault`；只在**这一层里**补一条 ← →（在一颗上按
  *    → 走到另一颗），那是 `radiogroup` 的习惯而 `<button>` 不给。
@@ -740,24 +799,22 @@ function ChoicePoint({
   pressed,
   settled,
   onPick,
+  speaking,
+  canSpeak,
+  onToggleSpeak,
 }: {
   choice: StoryChoiceView
   /** 孩子已经选过的那一支（没选过是 null）。选过再回翻时用它还原按下态 */
   pressed: Pick
   settled: boolean
   onPick: (via: 'a' | 'b') => void
+  /** 那三段正念着（`use-narration.ts` 的 `choiceSpeaking`） */
+  speaking: boolean
+  /** 三段齐了没有（缺一段就换成一行小字，见上面第 4 条） */
+  canSpeak: boolean
+  onToggleSpeak: () => void
 }) {
-  const audioRef = useRef<HTMLAudioElement>(null)
   const rowRef = useRef<HTMLDivElement>(null)
-  /** 正在念第几段；null = 没在念 */
-  const [step, setStep] = useState<number | null>(null)
-
-  /** 这一遍要念的三段，按顺序。★ 缺一段就不念——见上面第 4 条 */
-  const clips = useMemo(
-    () => [choice.promptAudioUrl, choice.options[0].audioUrl, choice.options[1].audioUrl],
-    [choice],
-  )
-  const canSpeak = clips.every((url) => url !== null)
 
   /**
    * ← → 在两颗按钮之间走。
@@ -775,27 +832,6 @@ function ChoicePoint({
     const delta = event.key === 'ArrowRight' ? 1 : -1
     buttons[(at + delta + buttons.length) % buttons.length]?.focus()
   }
-
-  useEffect(() => {
-    const audio = audioRef.current
-    if (!audio) return
-    if (step === null) {
-      audio.pause()
-      return
-    }
-    const url = clips[step]
-    if (!url) {
-      setStep(null)
-      return
-    }
-    audio.src = url
-    // ★ 播放被拦（没人点过、或这一趟已经结束）就**停下来**，不装作在念：
-    //   按钮停在"正在念…"而一点声音都没有，是这一屏最难查的一种坏法
-    void audio.play().catch(() => setStep(null))
-  }, [step, clips])
-
-  /** 离开这一屏（翻走）时停声。控件自己会被卸载，但 `pause` 要在卸载前发生 */
-  useEffect(() => () => audioRef.current?.pause(), [])
 
   return (
     <div className="book-choice" data-on={settled || undefined} role="group" aria-label="选择点">
@@ -831,25 +867,14 @@ function ChoicePoint({
         <button
           type="button"
           className="book-choice__speak"
-          onClick={() => setStep((current) => (current === null ? 0 : null))}
-          aria-label={step === null ? '念一遍这两个选项' : '停下'}
+          onClick={onToggleSpeak}
+          aria-label={speaking ? '停下' : '念一遍这两个选项'}
         >
-          {step === null ? '🔊 念一遍' : '正在念…（点一下停下）'}
+          {speaking ? '正在念…（点一下停下）' : '🔊 念一遍'}
         </button>
       ) : (
         <p className="book-choice__note">这一页的选项没有朗读，念给孩子听吧</p>
       )}
-      <audio
-        ref={audioRef}
-        preload="none"
-        aria-hidden="true"
-        onEnded={() =>
-          setStep((current) =>
-            current === null || current + 1 >= clips.length ? null : current + 1,
-          )
-        }
-        onError={() => setStep(null)}
-      />
     </div>
   )
 }

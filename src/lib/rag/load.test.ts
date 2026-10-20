@@ -137,7 +137,10 @@ describe('② 创作史：现场扫这一片存储', () => {
     const store = createMemoryStore()
     await store.putJson({
       path: storyPathOf('bk_empty_node'),
-      value: { ...draftOf('bk_empty_node', '缺字段的那本', 'cloud'), doc: { title: '缺字段的那本', nodes: [{}] } },
+      value: {
+        ...draftOf('bk_empty_node', '缺字段的那本', 'cloud'),
+        doc: { title: '缺字段的那本', nodes: [{}] },
+      },
     })
     const chunks = await ownChunksOf(store, 'u/12')
     // 那一页一个字都没有 → 它本来就不是语料（与"空的跨页不产 chunk"同一条）

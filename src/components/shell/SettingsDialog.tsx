@@ -3,8 +3,10 @@
 /**
  * SettingsDialog —— 侧栏底部那一格「设置」点开的东西（用户 2026-10-17 要的）
  *
- * ★ 现在里面**两节**：**阅读偏好**（翻页交给谁）与**阅读器背景**（书底下铺哪一张，
- *   2026-10-18 用户要的）。他当时的原话是"点开设置是阅读偏好"，所以第一版就只做了那一节
+ * ★ 现在里面**四节**：**阅读偏好**（独读版翻页交给谁）、**共读版**（同一件事，
+ *   共读版那一档，2026-10-20 用户要的）、**手机横屏提示**（2026-10-19）与
+ *   **阅读器背景**（书底下铺哪一张，2026-10-18 用户要的）。
+ *   他当时的原话是"点开设置是阅读偏好"，所以第一版就只做了那一节
  *   ——**不为"将来可能还有别的"先搭一排空的格子**。多一条偏好就多一节，`<section>`
  *   直接往下排（`settings-dialog.css` 那个 grid 就是为此写的间距），现在正是它兑现的时候。
  *
@@ -41,10 +43,16 @@
 
 import Dialog from '@/components/dialog/Dialog.tsx'
 import { READER_PAPERS } from '@/lib/reader-paper.ts'
-import { useReaderPaper, useRotateHint, useTurnMode } from '@/lib/use-reading-prefs.ts'
+import {
+  useReaderPaper,
+  useRotateHint,
+  useSharedTurnMode,
+  useTurnMode,
+} from '@/lib/use-reading-prefs.ts'
 
 export default function SettingsDialog({ onClose }: { onClose: () => void }) {
   const { turnMode, setTurnMode } = useTurnMode()
+  const { turnMode: sharedTurnMode, setTurnMode: setSharedTurnMode } = useSharedTurnMode()
   const { paper, setPaper } = useReaderPaper()
   const { rotateHint, setRotateHint } = useRotateHint()
 
@@ -98,6 +106,58 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
               <span className="prefs__opt-name">自动朗读</span>
               <span className="prefs__opt-note">
                 在阅读器里按一次「自动朗读」，之后一页页自己念、念完自己翻；你翻页它就停下。
+              </span>
+            </span>
+          </label>
+        </fieldset>
+      </section>
+
+      {/* ── 共读版那一节（2026-10-20 加的一节） ─────────────────────────────
+          ★ 与上一节**同形、不同档**：翻页交给谁这件事在两种形态里都问一遍，因为
+            它们落两个键、各选各的（`lib/reading-prefs.ts` 的文件头写了为什么不是一条）。
+            自动那一条的小字在这里多一句"读到选择点会停下来…"——那是共读版独有的一段路，
+            写在两档共用的地方就等于对独读版说了一句它做不到的事。
+
+          ★ 两颗 radio 的 `name` 必须与上一节**不同**：同名会把两组并成一组，
+            症状是"点共读版那一颗，独读版那一颗灭了"。 */}
+      <section className="prefs">
+        <h3 className="prefs__title">共读版</h3>
+        <p className="prefs__lead">
+          读<b>共读版</b>（读到选择点、孩子选一条路的那种）时，翻页这件事交给谁。
+        </p>
+
+        <fieldset className="prefs__opts">
+          <legend className="sr-only">共读版的翻页方式</legend>
+
+          <label className="prefs__opt">
+            <input
+              type="radio"
+              name="reader-turn-mode-shared"
+              value="manual"
+              checked={sharedTurnMode === 'manual'}
+              onChange={() => setSharedTurnMode('manual')}
+            />
+            <span className="prefs__opt-body">
+              <span className="prefs__opt-name">我自己翻</span>
+              <span className="prefs__opt-note">
+                想听就点「朗读」，它只念当前这一页，念完就停，页由你翻。
+              </span>
+            </span>
+          </label>
+
+          <label className="prefs__opt">
+            <input
+              type="radio"
+              name="reader-turn-mode-shared"
+              value="auto"
+              checked={sharedTurnMode === 'auto'}
+              onChange={() => setSharedTurnMode('auto')}
+            />
+            <span className="prefs__opt-body">
+              <span className="prefs__opt-name">自动朗读</span>
+              <span className="prefs__opt-note">
+                在阅读器里按一次，一页页自己念、念完自己翻；读到选择点会停下来，
+                把选项念给孩子听，选完接着念。
               </span>
             </span>
           </label>

@@ -147,6 +147,8 @@ const FORM_RULES: Record<BookForm, string> = {
  *   ★ 2026-10-20 写这条的时候它就当场抓出一次：语料注释写着"单字只有 `死`、`血` 两个"，
  *     而 R-02 的 `踹` 是第三个（`.scratch/prompt-audit/ledger.md` P2-5）。
  *     现取之后，这类矛盾不会再漏到提示词上。
+ *     ★ 用户拍板：`踹` **保留单字**（不拆回 `踹倒`），语料那两处注释当天改成了实话
+ *     ——所以这里点名的仍是三个，而不是"注释里说的那两个"。
  */
 const SINGLE_CHAR_WORDS: readonly string[] = LEXICON_CLAUSES.flatMap(
   (clause) => clause.lexicon ?? [],

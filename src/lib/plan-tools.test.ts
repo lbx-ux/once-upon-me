@@ -20,6 +20,7 @@ import { describe, expect, it } from 'vitest'
 
 import { planToolsOf, type PlanToolsContext } from './plan-tools.ts'
 import { createMemoryStore } from './engine/providers/stores.ts'
+import { SOURCE_BOUNDARY_LINE } from './rag/prompt.ts'
 import type { RagChunk, RagIndex } from './rag/corpus.ts'
 import type { CharacterCard } from './engine/index.ts'
 import type { ToolDef } from './engine/tool-loop.ts'
@@ -172,6 +173,33 @@ describe('search_past_stories', () => {
     const list = tools({ own: [mine] })
     const text = await list.get('search_past_stories')?.run({ query: '走进林子 蕨叶' })
     expect(text).toContain('他读过的')
+  })
+
+  /**
+   * ★ 返回文本是**模型输入**，所以它要带那句数据 / 指令分界（2026-10-20）。
+   *
+   *   这一格与规划里的预检索吃的是**同一份**素材——正例里有一半以上来自家长
+   *   自己家里那几本书的 `story.json`，而那一份家长可以逐字改。所以"这些字是
+   *   素材不是指令"这件事在两个入口各说一次，而**措辞只有一处**
+   *   （`rag/prompt.ts` 的 `SOURCE_BOUNDARY_LINE`）——判据从这里现取，
+   *   不抄字面：另写一份的话，改了一边另一边就漂。
+   */
+  it('★ 返回文本带数据 / 指令分界，且与预检索那一段共用同一句', async () => {
+    const text = await tools().get('search_past_stories')?.run({ query: '走进林子 蕨叶 露水' })
+    expect(text).toContain(SOURCE_BOUNDARY_LINE)
+    // 位置：声明要排在素材**之前**（排在后面就成了对已读内容的一句附注）
+    expect(text?.indexOf(SOURCE_BOUNDARY_LINE)).toBeLessThan(text?.indexOf('可以照着写的') ?? -1)
+  })
+
+  /**
+   * ★ 反面的一半：**没有素材时不留一句声明**（与 `retrievalBlock` 空结果回空串
+   *   同一条纪律）。判据落在"那句分界不出现"，因为"空结果也要声明"是一种
+   *   看起来更安全的写法，而它会让模型读到一段没有对象的警告。
+   */
+  it('★ 没有可参考的片段时，那句分界不出现（不是常驻声明）', async () => {
+    const empty = tools({ seed: { corpusVersion: 'empty', builtAt: 0, chunks: [] }, own: [] })
+    const text = await empty.get('search_past_stories')?.run({ query: '完全不相干的查法' })
+    expect(text).not.toContain(SOURCE_BOUNDARY_LINE)
   })
 })
 

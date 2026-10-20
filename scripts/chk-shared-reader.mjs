@@ -34,6 +34,11 @@
  *
  * ★ 音频**不会自己下**（`preload="none"`，按一下才播），所以"音频也没被请求"这条
  *   要**按一下朗读**才算数：不按的话两边都是零，那是一条没有判别力的断言。
+ *
+ * ★ 2026-10-20 加的判据 7b / 7c：**共读版的自动朗读**。7b 量的是"念到选择点停下、
+ *   把提问与两个选项念完、选完接着念"这一趟的**次序与停车位置**（含那条活 bug 的反面：
+ *   整趟一次都不许到封底）；7c 量的是**两档偏好互不干扰**（两个方向都量）。
+ *   两者都要真帧、都要先清 `localStorage`——理由写在各自那一节里。
  */
 import { spawn } from 'node:child_process'
 import { rm, writeFile } from 'node:fs/promises'
@@ -72,6 +77,12 @@ const VW = Number(flag('w', '1440'))
 const VH = Number(flag('h', '900'))
 /** 缺图那一本：同一棵树，第 5 页的图没出成（见 `mk-shared-fixture.mjs --missing`） */
 const MISSING_BOOK = flag('missing-book', 'xzj-shared-missing')
+/**
+ * 独读版那本演示书（`判据 7c` 用）。
+ * ★ 那里量的是"共读版那条偏好**不许**影响独读版"，所以它必须是**真盘上的一本**
+ *   ——只读一个键名不算证据，得看那本书的钮说的是什么。
+ */
+const SOLO_BOOK = flag('solo-book', 'xiaoyu-r1-4fe055c5723b')
 const PORT = Number(flag('port', '9347'))
 const CHROME = flag('chrome', 'C:/Program Files/Google/Chrome/Application/chrome.exe')
 const PROFILE = resolve(dirname(fileURLToPath(import.meta.url)), '..', '.out', 'chrome-shared')
@@ -680,6 +691,226 @@ check(
   badOf(BOOK).length === 0,
   badOf(BOOK).slice(0, 3).join(' | '),
 )
+
+/* ── 判据 7b：共读版的自动朗读（2026-10-20）────────────────────────────────────
+ *
+ * 用户要的那条路：**有分支出现时就停下来、把分支那段音频念一下，选完再接着自动播**。
+ * 这一条**只有真做才会不同**的地方有三处，三处都量：
+ *   ① `currentSrc` 的**次序**（正文三页 → 提问 → 选项 A → 选项 B，一个不少、顺序不错）；
+ *   ② 走完那三段之后**停在第 3 页**：底栏还是第 3 页、整趟**一次都没到封底**
+ *      （2026-10-20 之前这里一路翻过选择点到「读完啦」——`maxLeafOf` 挡的是 `›`
+ *      那颗钮，挡不住这条链，而那正是这个功能要修的活 bug）；
+ *   ③ 按下某一支之后起来的是**那一支**的音（b 支 = page-5.mp3），而 a 支的
+ *      `page-4.*` 在这一趟里一次都没被请求。
+ *
+ * ★ 这一节必须真帧（不能在预览面板里点）：自动朗读那条链要 `settled` 为真，
+ *   而那个面板隐藏时把 rAF 冻住了（文件头那条）。
+ * ★ 音频会把整趟拖到分钟级：探针把 `playbackRate` 提到 8 倍**压缩等待**——
+ *   压的是时间，不是行为（没有一条判据在读时长，判的是次序与停车的位置）。
+ * ★ 进度条那三张读数都不是判据的**唯一**来源：网络那一栏（`page-4.*` 没被取过）
+ *   与 DOM 那两栏（底栏、按钮）各自独立，错一个地方不会三栏一起绿。
+ */
+
+await send('Emulation.setEmulatedMedia', { features: [] })
+await send('Page.navigate', { url: `${BASE}/reader/${BOOK}` })
+await sleep(2000)
+
+/** 这一节里**新**取过的资产。★ `mineOf` 是累计的：前面几节在这本书上早就取过 page-4 了 */
+const freshFrom = mineOf(BOOK).length
+const freshAssets = () => [...new Set(mineOf(BOOK).slice(freshFrom))].sort()
+
+/**
+ * ★ 两个前提都要先弄干净，缺一个这条判据就变成"没有判别力的绿"：
+ *   · `turn.shared` = `'auto'` —— 这一节测的就是共读版那一档；
+ *   · **整个 `localStorage` 先清掉** —— 前面几节在这本书上选过 a、又改选过 b，
+ *     那个"已经选过"会让路径直接走通、选择点不再拦路，于是这一趟**根本不会停**，
+ *     而屏幕上照样好看（"第 3 页 + ■ 停止"）。清掉之后这本书才是"第一次站上岔口"。
+ */
+await evaluate(`localStorage.clear()`)
+await evaluate(`localStorage.setItem('xiaozhujue.reader.turn.shared', 'auto')`)
+await send('Page.navigate', { url: `${BASE}/reader/${BOOK}` })
+await sleep(2500)
+
+const buttonText = () => evaluate(`document.querySelector('.reader__audio')?.textContent ?? null`)
+const noteText = () =>
+  evaluate(`document.querySelector('.reader__meta--note')?.textContent ?? null`)
+
+const audioCount = await evaluate(`document.querySelectorAll('audio').length`)
+check(
+  '★ 这一屏只剩**一个** `<audio>`（正文与选择点那三段走同一条链）',
+  audioCount === 1,
+  `audio 元素 ${audioCount} 个`,
+)
+check(
+  '★ 共读版读的是**它自己的**那个键（写了 shared 键 → 钮是「▶ 自动朗读」）',
+  (await buttonText()) === '▶ 自动朗读',
+  `钮=${await buttonText()}`,
+)
+
+/** 一次采样：顺带把语速提到 8 倍（同一个元素，换源之后 `defaultPlaybackRate` 才留得住） */
+const snap = () =>
+  evaluate(`(() => {
+    const a = document.querySelector('audio')
+    if (a && a.playbackRate !== 8) { a.playbackRate = 8; a.defaultPlaybackRate = 8 }
+    return {
+      src: a?.src ? a.src.split('/').pop() : null,
+      playing: !!a && !a.paused && a.currentTime > 0,
+      // ★ ended 才是"这一段真的念完了"：只看 paused 会把**刚换源、还没起播**
+      //   那一瞬也读成"念完了"（第一版就是这么假过的：它在最后一段的**开头**就判定
+      //   "停住了"，于是"停住"与"小字说清了为什么"两条都绿在一个还没念完的时刻上）
+      //   ※ 塞进模板字符串里的注释**不能有反引号**——有的话报错指向的不是真错处
+      ended: a?.ended === true,
+      readout: document.querySelector('.reader__readout')?.firstChild?.textContent?.trim() ?? null,
+      button: document.querySelector('.reader__audio')?.textContent ?? null,
+      note: document.querySelector('.reader__meta--note')?.textContent ?? null,
+    }
+  })()`)
+
+const timeline = []
+const record = async () => {
+  const now = await snap()
+  const last = timeline[timeline.length - 1]
+  if (
+    !last ||
+    last.src !== now.src ||
+    last.readout !== now.readout ||
+    last.playing !== now.playing ||
+    last.ended !== now.ended
+  )
+    timeline.push({ at: Date.now(), ...now })
+  return now
+}
+
+// 在封面上按一下 = 从第 1 页念起（规则 1 的两个端点之一）
+await clickAt('.reader__audio')
+const deadline = Date.now() + 90000
+let parked = false
+while (Date.now() < deadline) {
+  const now = await record()
+  // 停车的判据是**三件一起**：最后一段**念完了**、还开着（钮仍是「■ 停止」）、
+  // 而且底栏没有离开选择点那一屏
+  if (
+    now.src?.includes('opt-b.mp3') &&
+    now.ended &&
+    now.button === '■ 停止' &&
+    now.readout === '第 3 页'
+  ) {
+    parked = true
+    break
+  }
+  await sleep(120)
+}
+
+/** 换过源的次序（连着的重复压掉；封面那一帧还没有 src） */
+const seq = []
+for (const item of timeline) if (item.src && item.src !== seq[seq.length - 1]) seq.push(item.src)
+const expected = ['page-1.mp3', 'page-2.mp3', 'page-3.mp3', 'ask.mp3', 'opt-a.mp3', 'opt-b.mp3']
+
+check(
+  '★★ 自动朗读的次序：正文三页 → 提问 → 选项 A → 选项 B（一个不少、顺序不错）',
+  JSON.stringify(seq) === JSON.stringify(expected),
+  seq.join(' → ') || '★ 一次都没换过源',
+)
+check(
+  '★ 六段**每一段都真的响了**（不是只换了个 src —— 播放被拦下时会停在原地）',
+  expected.every((name) => timeline.some((item) => item.src === name && item.playing)),
+  `响过的：${[...new Set(timeline.filter((i) => i.playing).map((i) => i.src))].join(', ')}`,
+)
+check(
+  '★ 走完那三段**停在第 3 页**（选择点那一屏，没有往下翻）',
+  parked === true && timeline[timeline.length - 1]?.readout === '第 3 页',
+  `parked=${parked}；最后一帧 ${JSON.stringify(timeline[timeline.length - 1])}`,
+)
+check(
+  '★★ 整趟**一次都没到封底**（这个功能要修的就是这里：以前会一路翻到「读完啦」）',
+  !timeline.some((item) => item.readout === '封底'),
+  [...new Set(timeline.map((item) => item.readout))].join(' → '),
+)
+check(
+  '停在选择点上时，正文下面那行小字说清了为什么没声',
+  // 小字是 React 渲染出来的，所以给它一个短窗口（真没渲染出来就是红的，不是"再等等"）
+  (await waitFor(
+    `(document.querySelector('.reader__meta--note')?.textContent ?? '').includes('停在选择点上')`,
+    3000,
+    120,
+  )) === true,
+  `note=${await noteText()}`,
+)
+
+// ★ "停了"不等于"卡住了"：再等 3 秒（与每一段音频差不多的量级），页与声音都不许动，
+//   而且**仍然停在那个状态上**——只判"没动"的话，"一路念到封底之后同样没动"也是绿的
+//   （第一次跑就是这样：它在那条被证伪的路上照样通过）
+const stillBefore = await record()
+await sleep(3000)
+const stillAfter = await record()
+check(
+  '★ 停了就是停了：再等 3 秒，页与声音都没动、也仍然停在选择点上',
+  stillBefore.src === stillAfter.src &&
+    stillBefore.readout === stillAfter.readout &&
+    stillAfter.playing === false &&
+    stillAfter.readout === '第 3 页' &&
+    stillAfter.note?.includes('停在选择点上') === true,
+  `${stillBefore.src} / ${stillBefore.readout} → ${stillAfter.src} / ${stillAfter.readout}；note=${stillAfter.note}`,
+)
+
+await pick(1)
+const resumed = await waitFor(
+  `(() => { const a = document.querySelector('audio'); return !!a && a.src.includes('page-5.mp3') && !a.paused })()`,
+  20000,
+  200,
+)
+check(
+  '★★ 选完 b 支**接着念**：起来的是 b 支那一页的音（page-5.mp3），不用再按一次',
+  resumed === true,
+  `钮=${await buttonText()}；底栏=${await readout()}`,
+)
+check(
+  '★ 念的是**那一支**：a 支的 page-4.* 在自动这一趟里一次都没被请求',
+  !freshAssets().some((name) => name.startsWith('page-4.')),
+  `这一趟取过：${freshAssets().join(', ') || '什么都没取'}`,
+)
+
+// 人翻页仍然说一不二（规则 2 没有被共读版那条新路推翻）
+await clickAt('[aria-label="下一页"]')
+await sleep(700)
+const tookOver = await record()
+await sleep(2500)
+const afterTakeover = await record()
+check(
+  '★ 人翻页仍然一票否决：声音停、这一趟结束（钮回到「▶ 自动朗读」）、不再自己念下去',
+  tookOver.button === '▶ 自动朗读' &&
+    afterTakeover.playing === false &&
+    afterTakeover.src === tookOver.src,
+  `${JSON.stringify(tookOver)} → ${JSON.stringify(afterTakeover)}`,
+)
+
+/* ── 判据 7c：两档偏好**互不干扰**（两个键的意义全在这里）────────────────────
+ * 两个方向都量，因为两种接错法长得不一样：共读版读了旧键（设置里改没反应），
+ * 或者独读版被顺带改掉（睡前那本自己念起来）。只看一个方向的话，
+ * 另一种错法照样全绿。 */
+
+await evaluate(`localStorage.clear()`)
+await evaluate(`localStorage.setItem('xiaozhujue.reader.turn', 'auto')`)
+await send('Page.navigate', { url: `${BASE}/reader/${BOOK}` })
+await sleep(2500)
+check(
+  '★ 只设**独读版**那一档时，共读版这本书仍然是手动（钮是「▶ 朗读」）',
+  (await buttonText()) === '▶ 朗读',
+  `钮=${await buttonText()}`,
+)
+
+await evaluate(`localStorage.clear()`)
+await evaluate(`localStorage.setItem('xiaozhujue.reader.turn.shared', 'auto')`)
+await send('Page.navigate', { url: `${BASE}/reader/${SOLO_BOOK}` })
+await sleep(2500)
+check(
+  '★ 反过来：只设**共读版**那一档时，独读版那本书仍然是手动',
+  (await buttonText()) === '▶ 朗读',
+  `钮=${await buttonText()}`,
+)
+
+// 收工：偏好清干净，下面两节按老口径（手动）跑
+await evaluate(`localStorage.clear()`)
 
 /* ── 判据 8：静止模式（`prefers-reduced-motion`）——控件在场、有静止终态 ───────── */
 

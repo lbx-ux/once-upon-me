@@ -183,9 +183,11 @@ describe('② 创作史：一个家庭自己的书 → chunks', () => {
     const fields = node.properties.nodes.items.properties
     const scene = fields['scene']?.maxLength ?? 0
     const bodyLines = 4
-    const bodyItem = (node.properties.nodes.items.properties['body'] as unknown as {
-      items: { maxLength?: number }
-    }).items.maxLength
+    const bodyItem = (
+      node.properties.nodes.items.properties['body'] as unknown as {
+        items: { maxLength?: number }
+      }
+    ).items.maxLength
     expect(MAX_CHUNK_CHARS).toBeGreaterThanOrEqual(scene + bodyLines * (bodyItem ?? 0))
   })
 })

@@ -12,6 +12,9 @@
  *   量法与之后的读数在 `scripts/probe-portrait-background.mts`。
  */
 
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+
 import { describe, expect, it } from 'vitest'
 
 import { DEFAULT_ANCHORS } from '@/lib/creation/default-anchors.ts'
@@ -65,5 +68,66 @@ describe('三个版本号', () => {
     ]) {
       expect(version).toMatch(/^character-(sheet|revise|photo)@v\d+$/)
     }
+  })
+})
+
+/**
+ * ★ 家长手输的两格：数据 / 指令分界（2026-10-20 补的判据）。
+ *
+ * 这一份提示词里有两处字是**家长打进来的**：首行那个名字，以及"想改哪里"那一句。
+ * 它们进的是**图像**模型，而图像那条路上没有"内容对不对"的判据可回头查
+ * ——事后只有那一档**不可复现**的画面审核。所以边界靠两件事划：
+ *
+ * 1. **引号 + 标记**：`「…」` 划出"这是被引用的字"，`家长原话` 说明它是谁说的。
+ *    与 `story-plan.ts` 那三格同一个手法（那边的判据在 `story-plan.test.ts`）。
+ * 2. **内容闸**：`cards/revise` 那条路 2026-10-20 起先跑 `reviewInput`，命中红线
+ *    **拒发**。这一条是护栏（源码级），不是证明——理由与 `photo-card.test.ts`
+ *    最后那一组相同：真正的证明在路由里，而路由要一个登录态才打得动。
+ */
+describe('家长手输的两格：数据 / 指令分界', () => {
+  it('名字包进「」（它是家长填的，而三份模板共用这一行）', () => {
+    expect(characterSheetPrompt(BASE)).toContain('「小宇」')
+  })
+
+  it('★ 没有名字时不留一对空引号——`「」` 在模型眼里是一个"空的名字"', () => {
+    expect(characterSheetPrompt({ ...BASE, name: '' })).not.toContain('「」')
+  })
+
+  it('★ "想改哪里"那一句包进「」并标上`家长原话`', () => {
+    const prompt = characterSheetPrompt({ ...BASE, revisionNote: '头发短一点，别改别的' })
+    expect(prompt).toContain('家长原话：「头发短一点，别改别的」')
+  })
+
+  it('★ 不传那一格时标记不出现（不是恒真）', () => {
+    expect(characterSheetPrompt(BASE)).not.toContain('家长原话')
+  })
+
+  it('三份模板的首行是同一行，所以名字那一处只有一个家', () => {
+    const photo = characterSheetPrompt({ ...BASE, fromPhoto: true })
+    expect(photo).toContain('「小宇」')
+    expect(photo).toContain(characterSheetPrompt(BASE).split('\n')[0])
+  })
+})
+
+describe('★ `想改哪里`那一格过了内容闸（grep 证据）', () => {
+  /**
+   * ★ 这一格原来**两道文字闸都不经过**：它不写进故事（躲过 `reviewStory`），
+   *   也不是开书时的表单（躲过规划前那道 `reviewInput`）。补上之前，一句
+   *   "改成脸上有血"在这条路上没有任何东西拦得住。
+   * ★ 判据只看**代码**、不看注释，理由与 `photo-card.test.ts` 那一组相同：
+   *   上面这段说明里就写着 `reviewInput` 四个字，连注释一起搜会恒真。
+   */
+  const code = readFileSync(
+    fileURLToPath(new URL('../../app/api/cards/revise/route.ts', import.meta.url)),
+    'utf8',
+  )
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n')
+    .filter((line) => !line.trim().startsWith('//'))
+    .join('\n')
+
+  it('路由先跑 `reviewInput`，命中就拒发', () => {
+    expect(code).toMatch(/reviewInput\(/)
+    expect(code).toMatch(/verdict !== 'pass'/)
   })
 })

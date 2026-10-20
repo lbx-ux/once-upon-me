@@ -195,6 +195,38 @@ describe('① 词表档', () => {
     }
   })
 
+  /**
+   * ★ 上面那条管**误拦**，这一条管另一半：**收进来的单字要真命中**——否则"收了它"
+   *   只是注释里的说法。
+   *
+   *   现在收的是**三个**：`死`（R-03）、`血`（R-01）、`踹`（R-02）。
+   *   ★ `踹` 是 2026-10-20 用户拍板**保留单字**的（不拆回 `踹倒`），理由写在
+   *     `rag/review-corpus.ts` 第三节：它的日常用法只有"踢"这一个意思，
+   *     而踢踹这类动作本来就不该出现在这本书里（提示词那侧也逐个点名了它）。
+   *   ★ 判据两边都从词表**现取**、并**要求每个单字都有例子**：以后再加一个单字，
+   *     这条会红——那一刻正是"它进提示词了吗、真书里有例子吗"该被问一次的时候。
+   */
+  it('★ 收进来的单字要真命中，且每个单字都得有一个例子', () => {
+    const examples: Record<string, string> = {
+      死: '笑死了，他跑得飞快。',
+      血: '红得像血。',
+      踹: '他一脚踹开门，跑进院子。',
+    }
+    const singles = [
+      ...new Set(
+        REVIEW_CLAUSES.flatMap((clause) => clause.lexicon ?? []).filter(
+          (word) => [...word].length === 1,
+        ),
+      ),
+    ]
+    expect([...singles].sort()).toEqual(Object.keys(examples).sort())
+    for (const word of singles) {
+      const hit = reviewText(examples[word] as string)
+      expect(hit, `单字「${word}」在例子里没有命中`).not.toEqual([])
+      expect(hit[0]?.word).toBe(word)
+    }
+  })
+
   it('空串与纯空白不是"命中"，也不是"有问题"', () => {
     expect(reviewText('')).toEqual([])
     expect(reviewText('   \n ')).toEqual([])

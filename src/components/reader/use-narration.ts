@@ -17,7 +17,7 @@
  *   由组件自己换算——所以 `audioFailed` 报出来的也是屏序号。
  *
  * ---------------------------------------------------------------------------
- * 自动朗读那一趟的三条规则
+ * 自动朗读那一趟的四条规则
  *
  * 1. **按一下才开始**，而且按下那一刻就决定从哪儿念：在某一页上 = 从这一页往后念；
  *    在**封面或封底**上 = 从第 1 页念起（`autoCueOf` 的两个端点，那两屏不是页，
@@ -31,12 +31,26 @@
  *    走法——所以 ‹ › 永远说一不二，"按了 › 又自己翻回来"那种事不会发生。
  * 3. **声音跟着"翻到位的那一屏"走**（`settled`）。补间跑着的时候不起声音：
  *    不然孩子听见的是下一页的字、眼睛还停在上一页（翻页要 0.6 秒上下）。
+ * 4. **共读版：走到还拦着路的选择点就停下来**（2026-10-20，用户要的那条）。
+ *    这一屏的正文念完**不往下翻**，接着念选择点的三段（引导提问 → 选项 A → 选项 B），
+ *    然后**停在这儿等孩子选**；选完那一支接着念下去（`continueAfterPick()`）。
+ *    ★ 走到这里才知道要停：`stopAt` 是组件给的那一屏，而"这一屏还拦着路"
+ *      （`reader-model.ts` 的 `blocked`）是它唯一的来源。选过之后这一屏就是一页
+ *      普通的页，自动朗读照常念过去——没有要决定的事，就不该停。
+ *    ★ 按选择点那两颗按钮**不是"人翻页"**（规则 2 说的是 ‹ › 与滑动），
+ *      所以它停的是**声音**，不是这一趟。
  *
  * 两条防守，都是"不加就会以最难看的方式坏掉"：
  * · 音频读不出来 → **把这一趟关掉**。不关的话 `onEnded` 永远不来，
  *   这一屏就卡在"开着、却没声"，而界面上没有任何东西在说它卡住了。
  * · 正在念的那一屏不重放。这条链的依赖里有几个每次渲染都会换身份的东西，
  *   少了这一句，一次无关的 re-render 就会把进度拽回 0 秒（听感是一次结巴）。
+ *
+ * ★ 选择点那三段走的是**同一个 `<audio>`**（2026-10-20）。
+ *   原先它们住在 `ChoicePoint` 自己那份里，可自动朗读也要念这三段——两个元素
+ *   就有两条互不知道的播放链（一处按了停，另一处还在响），而这一屏的声音本来就
+ *   只有一个出处。所以搬运过来，`speaking`（正文）与 `clipStep`（选项）的互斥
+ *   由三个入口把关：`speak` / `toggleChoice` / `stop`。
  */
 
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
@@ -53,8 +67,20 @@ export type NarrationOptions = {
   settled: boolean
   /** 翻到第 k 屏。**只有自动朗读这一趟会调它**——手动翻页走组件自己那条 `turn()` */
   goTo: (opening: number) => void
-  /** 用户的阅读偏好（`lib/reading-prefs.ts`） */
+  /** 用户的阅读偏好（`lib/reading-prefs.ts`）。共读版那一档由组件挑好了再喂进来 */
   mode: TurnMode
+  /**
+   * **这一屏**选择点的三段：引导提问 → 选项 A → 选项 B（`reader-model.ts` 的
+   * `choiceClipsOf` 给的就是它）。`null` = 这一屏没有选择点（独读版恒为 `null`）。
+   * ★ 它管的是"这一屏有没有那三段可念"，与下面"要不要停在这儿"是两件事：
+   *   选过之后回到选择点，那三段仍然能按一下念一遍，只是不该再拦住这一趟。
+   */
+  choiceClips?: readonly (string | null)[] | null
+  /**
+   * 这一趟要**停在这一屏**等孩子选（`null` = 一路念到底）。
+   * ★ 只有"还拦着那个选择点"的一屏才算（规则 4）：组件的 `blocked` 是它唯一的来源。
+   */
+  stopAt?: number | null
 }
 
 /**
@@ -89,19 +115,48 @@ export type Narration = {
   onEnded: () => void
   /** 挂到 `<audio onError>` 上 */
   onError: () => void
+  /** 选择点的三段正在念（那颗「念一遍」按钮的文案用） */
+  choiceSpeaking: boolean
+  /** 这三段**齐了**没有。缺一段那颗按钮就换成一行小字（与判据 ① 同一条纪律） */
+  choiceCanSpeak: boolean
+  /** 「念一遍」按下去：念 / 停。★ 自动朗读走到选择点也走它 */
+  toggleChoice: () => void
+  /** 这一趟停在选择点上，等孩子选（规则 4） */
+  awaitingPick: boolean
+  /** 孩子选了哪一支 —— 停声，但**这一趟继续**（规则 4 末一条） */
+  continueAfterPick: () => void
 }
 
-export function useNarration({ urls, opening, settled, goTo, mode }: NarrationOptions): Narration {
+export function useNarration({
+  urls,
+  opening,
+  settled,
+  goTo,
+  mode,
+  choiceClips = null,
+  stopAt = null,
+}: NarrationOptions): Narration {
   const audioRef = useRef<HTMLAudioElement>(null)
   const [speaking, setSpeaking] = useState<number | null>(null)
   const [audioFailed, setAudioFailed] = useState<number | null>(null)
   const [autoOn, setAutoOn] = useState(false)
+  /** 选择点那三段念到第几段（`null` = 没在念）。★ 与 `speaking` 互斥 */
+  const [clipStep, setClipStep] = useState<number | null>(null)
+  /** 这一趟停在选择点上等孩子选。★ 它守着"念过的那一屏不再重念"（规则 4） */
+  const [awaitingPick, setAwaitingPick] = useState(false)
 
   const screenCount = urls.length
   const fullyNarrated = screenCount > 0 && urls.every((url) => url !== null)
   /** 落定的这一屏有得念（封面与封底没有，没录的那一屏也没有） */
   const canSpeak = opening >= 1 && opening <= screenCount && (urls[opening - 1] ?? null) !== null
+  const choiceCanSpeak =
+    choiceClips !== null && choiceClips.length > 0 && choiceClips.every((url) => url !== null)
 
+  /**
+   * 把所有声音停掉。★ **这是唯一的"停声"**（人翻页、按停、选完一支都走它）：
+   * 正文与选择点共用同一个 `<audio>`，少清一个 state 就会留下"界面说在念、
+   * 其实早停了"或反过来的那种假象。
+   */
   const stop = useCallback(() => {
     const el = audioRef.current
     if (el) {
@@ -109,12 +164,14 @@ export function useNarration({ urls, opening, settled, goTo, mode }: NarrationOp
       el.currentTime = 0
     }
     setSpeaking(null)
+    setClipStep(null)
   }, [])
 
   /**
    * 念第 k 屏。
    * ★ 换屏必须**重设 `src`**：不重设就会从上一屏的播放位置接着放
    *   （症状是"点了没声"，因为上一段已经放完了）。
+   * ★ 它顺手把 `clipStep` 清掉：同一个元素上两种声音不能并存（见文件头末段）。
    */
   const speak = useCallback(
     (screen: number) => {
@@ -123,6 +180,7 @@ export function useNarration({ urls, opening, settled, goTo, mode }: NarrationOp
       if (!el || !url) return
       el.src = url
       setAudioFailed(null)
+      setClipStep(null)
       // ★ `play()` 返回 promise；被浏览器拦下或文件读不到时它会 reject。
       //   不接住的话控制台一条 unhandled rejection，而界面上什么都没发生——
       //   正是判据 ② 要挡的那种"静默没声"。
@@ -140,7 +198,36 @@ export function useNarration({ urls, opening, settled, goTo, mode }: NarrationOp
   /** 离开这一屏时把声音停掉。不然翻到别的页面，书还在念 */
   useEffect(() => () => audioRef.current?.pause(), [])
 
-  /* ── 自动朗读：声音跟着"翻到位的那一屏"走（规则 1、3）───────────────────── */
+  /* ── 选择点那三段（规则 4）─────────────────────────────────────────────── */
+
+  /**
+   * 念选择点三段里的第 `step` 段。
+   * ★ 起不来的处理与 `speak` 的**后半条不同**：这里**不关这一趟**——这一趟已经停在
+   *   选择点上了（家长就在旁边），关掉它反而让人以为自动朗读坏了。停声、就地等着选。
+   * ★ `awaitingPick` 只在**自动这一趟**里置位：手动按一下念一遍、读不出来就只是回到
+   *   安静（那颗钮还在，可以再按一次），"正在等孩子选"这句话在那时是不成立的。
+   */
+  const playClip = useCallback(
+    (step: number) => {
+      const el = audioRef.current
+      const url = choiceClips?.[step] ?? null
+      if (!el || !url) {
+        setClipStep(null)
+        return
+      }
+      el.src = url
+      setAudioFailed(null)
+      setSpeaking(null)
+      void el.play().catch(() => {
+        setClipStep(null)
+        setAwaitingPick(autoOn)
+      })
+      setClipStep(step)
+    },
+    [choiceClips, autoOn],
+  )
+
+  /* ── 自动朗读：声音跟着"翻到位的那一屏"走（规则 1、3、4）───────────────── */
 
   useEffect(() => {
     if (!autoOn || !settled) return
@@ -155,6 +242,10 @@ export function useNarration({ urls, opening, settled, goTo, mode }: NarrationOp
       setAutoOn(false)
       return
     }
+    // ★ 停在这一屏等孩子选：正文与选项都念过了，**不许再重念一遍**
+    if (awaitingPick && cue.screen === stopAt) return
+    // ★ 选项那三段正念着：让位给它（同一个 `<audio>`，谁先起谁说了算）
+    if (clipStep !== null) return
     // 正在念的那一屏不重放（见文件头那条防守）
     if (speaking === cue.screen) return
     if ((urls[cue.screen - 1] ?? null) === null) {
@@ -163,17 +254,33 @@ export function useNarration({ urls, opening, settled, goTo, mode }: NarrationOp
       return
     }
     speak(cue.screen)
-  }, [autoOn, settled, opening, screenCount, goTo, speaking, urls, speak])
+  }, [
+    autoOn,
+    settled,
+    opening,
+    screenCount,
+    goTo,
+    awaitingPick,
+    stopAt,
+    clipStep,
+    speaking,
+    urls,
+    speak,
+  ])
 
   const toggle = useCallback(() => {
     if (mode === 'auto') {
       if (autoOn) {
         setAutoOn(false)
+        setAwaitingPick(false)
         stop()
         return
       }
       // 封面与封底上按下去都是"从头念一遍"（规则 1）
       if (autoCueOf(opening, screenCount).kind !== 'speak') goTo(1)
+      // ★ 停在选择点上再按一次，是"从这一屏重念一遍"：不清掉"正在等"的话，
+      //   上面那条守卫会把这一趟原样吃掉——按钮亮着、一句都不念
+      setAwaitingPick(false)
       setAutoOn(true)
       return
     }
@@ -187,28 +294,84 @@ export function useNarration({ urls, opening, settled, goTo, mode }: NarrationOp
   const takeOver = useCallback(() => {
     stop()
     setAutoOn(false)
+    setAwaitingPick(false)
   }, [stop])
+
+  /**
+   * 孩子按下选择点上的某一支（`ReaderBook.pickVia` 调它）。
+   *
+   * ★ 停声，但**不关这一趟**——它与 `takeOver()` 就差这一处，而这一处正是共读版
+   *   自动朗读的定义："选完接着念"（规则 4）。按那颗按钮不是"人翻页"，
+   *   `ReaderBook.pickVia` 的文件头为同一件事写过一遍。
+   */
+  const continueAfterPick = useCallback(() => {
+    stop()
+    setAwaitingPick(false)
+  }, [stop])
+
+  /** 「念一遍」那颗按钮。★ 自动朗读走到选择点时也调它（经由 `playClip`） */
+  const toggleChoice = useCallback(() => {
+    if (clipStep !== null) {
+      stop()
+      return
+    }
+    if (!choiceCanSpeak) return
+    playClip(0)
+  }, [clipStep, choiceCanSpeak, playClip, stop])
 
   /**
    * 一段念完了。手动：回到安静就完事（"念完就停"是这一屏一直以来的规矩）；
    * 自动：往下翻一屏，剩下的交给上面那条 effect。
    * ★ 最后一屏念完就是"翻到封底"，于是那条 effect 判到 `done`，自己收工。
+   * ★ 选择点那三段与正文共用这一个处理器：谁在念由 `clipStep` 分（文件头末段）。
    */
   const onEnded = useCallback(() => {
+    if (clipStep !== null) {
+      const next = clipStep + 1
+      if (next < (choiceClips?.length ?? 0)) {
+        playClip(next)
+        return
+      }
+      setClipStep(null)
+      // ★ 只有自动朗读这一趟才"等"：手动按一下念一遍，念完就安静下来，页由人翻
+      if (autoOn) setAwaitingPick(true)
+      return
+    }
+
     setSpeaking(null)
-    if (mode === 'auto' && autoOn) goTo(opening + 1)
-  }, [mode, autoOn, opening, goTo])
+    if (mode !== 'auto' || !autoOn) return
+
+    /**
+     * ★★ 到选择点了：正文念完**不再往下翻**（规则 4）。
+     *   2026-10-20 之前这里是 `goTo(opening + 1)`，而在共读版没选之前那等于
+     *   **一路翻过选择点、直接到「读完啦」**——`maxLeafOf` 挡的是 `›` 那颗钮，
+     *   挡不住这条链。所以那本共读版演示书按自动朗读会"选都没选就读完了"。
+     */
+    if (stopAt !== null && opening === stopAt) {
+      if (choiceCanSpeak) playClip(0)
+      // 这一屏的选项没录全（那行小字已经说了"念给孩子听吧"）：正文念完就停在这儿
+      else setAwaitingPick(true)
+      return
+    }
+    goTo(opening + 1)
+  }, [clipStep, choiceClips, playClip, autoOn, mode, stopAt, opening, choiceCanSpeak, goTo])
 
   /**
    * 音频读不出来。★ 除了记下"是哪一屏"，还要**把自动朗读停掉**：
    * 不关的话 `onEnded` 永远不来，这一趟就卡在"开着却没声"——而界面上
    * 没有任何东西在说它卡住了（判据 ② 要的就是不让这种沉默发生）。
+   * ★ 选项那三段走的是同一个元素，但它自己那条链里已经接住了（`playClip` 的 catch）。
    */
   const onError = useCallback(() => {
+    if (clipStep !== null) {
+      setClipStep(null)
+      setAwaitingPick(autoOn)
+      return
+    }
     if (speaking !== null) setAudioFailed(speaking)
     setSpeaking(null)
     setAutoOn(false)
-  }, [speaking])
+  }, [clipStep, autoOn, speaking])
 
   const button: NarrationButton =
     mode === 'auto'
@@ -247,5 +410,10 @@ export function useNarration({ urls, opening, settled, goTo, mode }: NarrationOp
     takeOver,
     onEnded,
     onError,
+    choiceSpeaking: clipStep !== null,
+    choiceCanSpeak,
+    toggleChoice,
+    awaitingPick,
+    continueAfterPick,
   }
 }

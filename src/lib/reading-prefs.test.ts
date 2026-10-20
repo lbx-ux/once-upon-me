@@ -8,7 +8,12 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { DEFAULT_TURN_MODE, parseTurnMode } from './reading-prefs.ts'
+import {
+  DEFAULT_TURN_MODE,
+  SHARED_TURN_MODE_KEY,
+  TURN_MODE_KEY,
+  parseTurnMode,
+} from './reading-prefs.ts'
 
 describe('parseTurnMode · 认不出来的值退到哪一边', () => {
   it('只有 auto 这一个字面量能打开自动朗读', () => {
@@ -26,5 +31,18 @@ describe('parseTurnMode · 认不出来的值退到哪一边', () => {
     for (const junk of ['', 'Auto', 'AUTO', 'on', 'true', '1', '{"mode":"auto"}', 'auto ']) {
       expect(parseTurnMode(junk)).toBe('manual')
     }
+  })
+})
+
+describe('两个键：独读版与共读版各一份（2026-10-20）', () => {
+  it('★ 是两个键 —— 同一个键会让两节设置变成同一个开关', () => {
+    expect(SHARED_TURN_MODE_KEY).not.toBe(TURN_MODE_KEY)
+  })
+
+  it('★ 老键**不许改名** —— 改名等于把所有已经选过的人的偏好静默退回默认', () => {
+    // 想把它"整理"成 `xiaozhujue.reader.turn.solo` 的话，读完这条再决定：
+    // 省下的是键名好看，付出的是"我明明设过自动朗读"变成没人查得出来的坏法
+    expect(TURN_MODE_KEY).toBe('xiaozhujue.reader.turn')
+    expect(SHARED_TURN_MODE_KEY).toBe('xiaozhujue.reader.turn.shared')
   })
 })

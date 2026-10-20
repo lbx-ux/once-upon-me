@@ -20,6 +20,10 @@
  *
  * ★ 不做跨标签页同步（`storage` 事件）：设置弹窗与阅读器不会同时开着——
  *   两个阅读器都不在 `(studio)` 路由组里，侧栏压根不出现。
+ *
+ * ★ 2026-10-20：`useTurnMode` 一个变两个（`useSharedTurnMode`），因为阅读偏好里
+ *   多了一节「共读版」，两档各落一个键。两者共用下面那个 `useStoredTurnMode`——
+ *   它们只该在"读哪个键"上不同。
  */
 
 import { useCallback, useEffect, useState } from 'react'
@@ -31,7 +35,14 @@ import {
   saveReaderPaper,
   type ReaderPaperOption,
 } from './reader-paper.ts'
-import { DEFAULT_TURN_MODE, loadTurnMode, saveTurnMode, type TurnMode } from './reading-prefs.ts'
+import {
+  DEFAULT_TURN_MODE,
+  loadSharedTurnMode,
+  loadTurnMode,
+  saveSharedTurnMode,
+  saveTurnMode,
+  type TurnMode,
+} from './reading-prefs.ts'
 import {
   DEFAULT_ROTATE_HINT,
   loadRotateHint,
@@ -43,19 +54,49 @@ export function useTurnMode(): {
   turnMode: TurnMode
   setTurnMode: (mode: TurnMode) => void
 } {
-  const [turnMode, apply] = useState<TurnMode>(DEFAULT_TURN_MODE)
+  const [turnMode, setTurnMode] = useStoredTurnMode(loadTurnMode, saveTurnMode)
+  return { turnMode, setTurnMode }
+}
+
+/**
+ * 共读版那一档（2026-10-20）。与上面那个**同形、同一份实现**，只是读另一个键
+ * （`SHARED_TURN_MODE_KEY`）——两档各选各的，理由写在 `reading-prefs.ts` 的文件头。
+ * ★ 阅读器按 `story.form` 二选一喂给朗读那一套，所以这一屏最多读两个 `localStorage`
+ *   键、各一次，代价可以忽略。
+ */
+export function useSharedTurnMode(): {
+  turnMode: TurnMode
+  setTurnMode: (mode: TurnMode) => void
+} {
+  const [turnMode, setTurnMode] = useStoredTurnMode(loadSharedTurnMode, saveSharedTurnMode)
+  return { turnMode, setTurnMode }
+}
+
+/**
+ * 「挂载后只读一次、选一下就落盘」这一套的**唯一一份**。
+ * ★ 两个 turn-mode 钩子共用它，是刻意的：它们只该在**读哪个键**上不同，
+ *   连初值或落盘时机上有一点差别都会变成"两种形态里同一个偏好的脾气不一样"。
+ */
+function useStoredTurnMode(
+  load: () => TurnMode,
+  save: (mode: TurnMode) => void,
+): [TurnMode, (mode: TurnMode) => void] {
+  const [mode, apply] = useState<TurnMode>(DEFAULT_TURN_MODE)
 
   useEffect(() => {
-    apply(loadTurnMode())
-  }, [])
+    apply(load())
+  }, [load])
 
   /** 选一下就落盘：这层没有"保存"按钮，也没有第二个家 */
-  const setTurnMode = useCallback((mode: TurnMode): void => {
-    apply(mode)
-    saveTurnMode(mode)
-  }, [])
+  const setMode = useCallback(
+    (next: TurnMode): void => {
+      apply(next)
+      save(next)
+    },
+    [save],
+  )
 
-  return { turnMode, setTurnMode }
+  return [mode, setMode]
 }
 
 /**

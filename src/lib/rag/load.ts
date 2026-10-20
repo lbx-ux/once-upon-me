@@ -165,7 +165,9 @@ export async function ownChunksOf(store: AssetStore, owner: RagOwner): Promise<R
         pages: (Array.isArray(draft.doc.nodes) ? draft.doc.nodes : []).map((node, index) => ({
           pageNo: index + 1,
           scene: typeof node?.scene === 'string' ? node.scene : '',
-          body: Array.isArray(node?.body) ? node.body.filter((line) => typeof line === 'string') : [],
+          body: Array.isArray(node?.body)
+            ? node.body.filter((line) => typeof line === 'string')
+            : [],
         })),
       }),
     )

@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   autoCueOf,
+  choiceClipsOf,
   choiceScreenOf,
   leafCountOf,
   maxLeafOf,
@@ -309,6 +310,24 @@ describe('选择点那一屏', () => {
 
   it('路比一到那儿就短了（选完 b 支之后再问第 4 屏）→ null，不抛', () => {
     expect(choiceScreenOf(storyPath(SHARED, null), 4)).toBeNull()
+  })
+})
+
+describe('选择点要念的三段：顺序就是按钮的左右顺序', () => {
+  it('★ 提问 → 选项 A → 选项 B（options[0] 就是 via=a 那一支）', () => {
+    // 顺序错的症状：念的是"我想去找找星星屋"、亮起来的是左边那颗彩虹桥——
+    // 屏幕上没有任何东西会说出这件事，所以它只能靠这条断言守着
+    expect(choiceClipsOf(CHOICE)).toEqual(['a/ask.mp3', 'a/走左边.mp3', 'a/走右边.mp3'])
+  })
+
+  it('★ 缺一段就**留在原位**当 null，不把数组压短', () => {
+    // 压短的后果是下标与选项对不上：`clips[1]` 会变成右边的选项，
+    // 而"缺一段就不念"那条判据（`every(url => url !== null)`）本来就在调用方
+    const missing: StoryChoiceView = {
+      ...CHOICE,
+      options: [{ ...option('走左边'), audioUrl: null }, option('走右边')],
+    }
+    expect(choiceClipsOf(missing)).toEqual(['a/ask.mp3', null, 'a/走右边.mp3'])
   })
 })
 
