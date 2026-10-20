@@ -31,6 +31,7 @@ import {
 } from '@/lib/prompts/character-sheet.ts'
 import { assetRoot } from '@/lib/books-runtime.ts'
 import { createCardStore, promptFragmentOf } from '@/lib/engine/index.ts'
+import { reviewInput, reviewInputText } from '@/lib/engine/review.ts'
 // ★ 直接取**图像**那一个，不用 `createProviders`：那一个会把文本/视觉/语音一起建起来，
 //   于是"没填文本模型"会让"再画一版"报一句"还差：文本模型名"——而这件活根本不用文本模型。
 //   一个按组构造的适配器工厂，就该按组用（同样的用法在 /api/settings/probe 里）。
@@ -69,6 +70,23 @@ function parseBody(raw: unknown): { body?: Body; problems: string[] } {
   // ★ 空建议不收：那等于"再画一张一样的"，而这一版是按次计费的。要重画请说明改哪里
   if (suggestion === '') problems.push('还没写想改哪里——空着点一次就是按原样重画一张，白花钱')
   if (suggestion.length > 200) problems.push('想改的地方写短一点（200 字以内）')
+
+  /**
+   * ★ 内容闸（2026-10-20）。这一格与单页重画那句 `fixNote`（`lib/rerun-api.ts`）
+   *   是**同一类**：家长手输、原样进**图像**提示词（`prompts/character-sheet.ts` 的
+   *   `revisionNote` 那一段）、而两道文字闸都不经过——它不写进故事（躲过 `reviewStory`），
+   *   也不是开书时的表单（躲过 `reviewInput`）。补上之前，一句"改成脸上有血"在这条路上
+   *   没有任何东西拦得住，唯一的事后拦截是那一档**不可复现**的画面审核。
+   *   ★ 处置与另外两处同一条口径：**拒发**（`review.ts` 文件头那句"这是别人的话，
+   *   没有'我们替你重写一版'这条路"）。用的是**同一份条款库**，所以家长在不同入口
+   *   撞到的是同一套词表、同一句措辞。
+   */
+  if (suggestion !== '') {
+    const review = reviewInput([{ label: '想改的地方', text: suggestion }])
+    if (review.verdict !== 'pass') {
+      problems.push(`${review.problems.map(reviewInputText).join('；')}。改一下再来`)
+    }
+  }
 
   if (problems.length > 0) return { problems }
   return {

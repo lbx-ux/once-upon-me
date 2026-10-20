@@ -27,6 +27,7 @@ import { createReplayImage, createReplayText, type ReplayManifest } from './repl
 import type {
   AssetStore,
   ImageGenerator,
+  PictureReviewer,
   ProviderBundle,
   ProviderMode,
   TextGenerator,
@@ -158,13 +159,16 @@ export function imageProviderOf(env: Env): ImageGenerator {
 }
 
 /**
- * 视觉那一路。★ 返回的是**两个接口的交集**（2026-10-15）：同一个适配器既做
- * 「这两张图是不是同一个人」（`compare`，给一致性 Agent 用），也做
- * 「这张照片里的孩子长什么样」（`analyzePortrait`，给 /character/new 用）。
- * 用交集而不是两个工厂：两者用的是同一个模型、同一把 key、同一套 HTTP 管道，
- * 分成两个 `visionProviderOf` 只会多一处"某个调用点忘了配超时"。
+ * 视觉那一路。★ 返回的是**三个接口的交集**（第三个 2026-10-19 加）：同一个适配器
+ * 既做「这两张图是不是同一个人」（`compare`，给一致性 Agent 用）、
+ * 「这张照片里的孩子长什么样」（`analyzePortrait`，给 /character/new 用），
+ * 也做「这张画里有没有不该出现的东西」（`reviewPicture`，给内容审核用）。
+ * 用交集而不是三个工厂：三者用的是同一个模型、同一把 key、同一套 HTTP 管道，
+ * 分成三个 `visionProviderOf` 只会多三处"某个调用点忘了配超时"。
  */
-export function visionProviderOf(env: Env): (VisionComparator & PortraitAnalyzer) | null {
+export function visionProviderOf(
+  env: Env,
+): (VisionComparator & PortraitAnalyzer & PictureReviewer) | null {
   const visionKey = env['VISION_API_KEY'] || env['LLM_API_KEY'] || ''
   const visionModel = env['VISION_MODEL'] || ''
   if (!visionKey || !visionModel) return null
@@ -198,6 +202,15 @@ export function visionProviderOf(env: Env): (VisionComparator & PortraitAnalyzer
       //   将来真撞线时，改它比改一个共用的数更不容易误伤读数那条路。
       compareMaxTokens:
         numberOf(env, 'VISION_COMPARE_MAX_TOKENS') ?? numberOf(env, 'VISION_MAX_TOKENS'),
+      /**
+       * 画面审核那条路的预算（`.scratch/safety` 工单 01）。
+       *
+       * ★ 缺省回落 `VISION_MAX_TOKENS`，**不回落 `VISION_COMPARE_MAX_TOKENS`**：
+       *   比对那一格是单独调过的（它的思考链最长），而审核这一问与读数同一量级。
+       *   回落错了的表现是"只调了比对的预算，审核那条跟着涨"，而两边都看不出来。
+       */
+      safetyMaxTokens:
+        numberOf(env, 'VISION_SAFETY_MAX_TOKENS') ?? numberOf(env, 'VISION_MAX_TOKENS'),
     },
   )
 }

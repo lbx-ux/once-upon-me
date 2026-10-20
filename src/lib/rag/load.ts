@@ -149,10 +149,23 @@ export async function ownChunksOf(store: AssetStore, owner: RagOwner): Promise<R
         theme: draft.input.theme,
         form: draft.input.form,
         ageBand: draft.input.child.ageBand,
-        pages: draft.doc.nodes.map((node, index) => ({
+        /**
+         * ★ 每一格都**现兜一次类型**（2026-10-20），不是洁癖。
+         *
+         *   `readStory` 只做**信封校验**（`story-draft.ts` 的 `isStoryDoc`：title 是字符串、
+         *   nodes 是对象数组），而 `PUT /api/books/<id>/story` 就是拿它把关的——
+         *   所以盘上那一份里 `{"nodes":[{}]}` **是合法的**，`node.scene` 是 undefined。
+         *   原来这里直接把它递给 `chunksFromStoryBook`，那边一句 `page.scene.trim()` 当场抛；
+         *   抛出去被 `plan.ts` 的 `retrieveOnce` 接住——那一步刻意不拖垮规划——于是症状是
+         *   **这一片存储的检索从此永远不工作**，而屏幕上只有"这次没检索到"。
+         *   一句话：一页存坏的草稿，会让**整个账号**的检索静默停摆。
+         *   ★ 兜成空串而不是补一个默认值：缺的值就是缺的（同 `RagChunk` 那条"不许填
+         *     一个像样的默认值"），空场景 + 空正文的那一页会被 `chunksFromStoryBook` 跳过。
+         */
+        pages: (Array.isArray(draft.doc.nodes) ? draft.doc.nodes : []).map((node, index) => ({
           pageNo: index + 1,
-          scene: node.scene,
-          body: node.body,
+          scene: typeof node?.scene === 'string' ? node.scene : '',
+          body: Array.isArray(node?.body) ? node.body.filter((line) => typeof line === 'string') : [],
         })),
       }),
     )

@@ -117,6 +117,48 @@ function requiredString(source: Record<string, unknown>, key: string, what: stri
   return text
 }
 
+/**
+ * 一个自由文本参数的**上界**（2026-10-20 补的）。
+ *
+ * ★ 为什么这条路上尤其要有：`theme` 与 `wish` 由**外部客户端的模型**给，
+ *   而它们原样进故事规划的提示词（`prompts/story-plan.ts`）。在这之前
+ *   `requiredString` 只 trim —— 网页那三个入口都是有上界的
+ *   （`book-api.ts` 的 `MAX_TEXT = 200`、`rerun-api.ts` 的 `MAX_FIX_NOTE = 200`、
+ *   `rewrite` 的 `MAX_REVISE_NOTE = 200`），只有这条没有。
+ *   ★ 文案要写成"你哪里写错了、该写什么"：这句话会**原样喂回给模型**
+ *     （文件头第 3 条），它据此自己改参数重试。
+ *   ★ 数与那三个入口同一档——`rerun-api.ts` 文件头那句
+ *     「同一类东西不该因为走了另一个入口就换一套长度规矩」在这里同样成立。
+ */
+const MAX_FREE_TEXT = 200
+
+function boundedString(
+  source: Record<string, unknown>,
+  key: string,
+  what: string,
+): string | undefined {
+  const text = optionalString(source, key)
+  if (text === undefined) return undefined
+  if (text.length > MAX_FREE_TEXT) {
+    fail(
+      `${key} 太长了（${text.length} 字，上限 ${MAX_FREE_TEXT} 字）：${what}。` +
+        `把 ${key} 缩到一句话再调一次`,
+    )
+  }
+  return text
+}
+
+/** 必填 + 带上界。★ 与 `requiredString` / `optionalString` 同一个形状，便于对照着读 */
+function requiredBounded(
+  source: Record<string, unknown>,
+  key: string,
+  what: string,
+): string {
+  const text = boundedString(source, key, what)
+  if (text === undefined) fail(`缺 ${key}：${what}`)
+  return text
+}
+
 function optionalString(source: Record<string, unknown>, key: string): string | undefined {
   const value = source[key]
   if (value === undefined || value === null) return undefined
@@ -529,8 +571,10 @@ export function createToolRuntime(ctx: ToolContext): ToolRuntime {
 
       case 'plan_book': {
         const childId = requiredString(args, 'child', '孩子的 childId')
-        const theme = requiredString(args, 'theme', '主题，一句话')
-        const wish = optionalString(args, 'wish')
+        // ★ 这两格走带上界的读法（见 `boundedString` 那段）：它们原样进提示词，
+        //   而这条路上的调用方是一个**外部模型**，不是我们自己的表单
+        const theme = requiredBounded(args, 'theme', '主题，一句话')
+        const wish = boundedString(args, 'wish', '家长想讲的那句话，一句话')
         const form = oneOf<BookForm>(args, 'form', BOOK_FORMS, 'shared')
         const pages = optionalInt(args, 'pages', 3, 24)
 

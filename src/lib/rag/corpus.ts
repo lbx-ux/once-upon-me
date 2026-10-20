@@ -222,11 +222,41 @@ export function chunksFromStoryBook(book: StoryBookSource): RagChunk[] {
       ageBand: book.ageBand ?? ANY,
       theme: book.theme ?? ANY,
       form: book.form ?? ANY,
-      text: [scene, ...body].filter((line) => line !== '').join('\n'),
+      text: clampChunkText([scene, ...body].filter((line) => line !== '').join('\n')),
       source: `《${book.title}》第 ${page.pageNo} 页`,
     })
   }
   return chunks
+}
+
+/**
+ * 一条 chunk 的正文进提示词之前的**字上界**。
+ *
+ * ★ 为什么这里必须有上界：`story.json` 只过**信封校验**——`story-draft.ts` 的
+ *   `isStoryDoc` 只认"title 是字符串、nodes 是对象数组"（那个文件头写着为什么
+ *   它刻意只管信封）。于是家长存回来的那一份里 `scene` / `body` 的**长度没有任何东西在管**，
+ *   而 chunk 的正文会**原样**进故事规划的提示词（`rag/prompt.ts` 的 `retrievalBlock`）。
+ *   一个 100 kB 的 scene 足以把整条用户消息淹没——那时模型丢掉的是"要输出 JSON"这件事本身，
+ *   而屏幕上的症状是"生成失败"，看不出跟检索有关。
+ *
+ * ★ 这个数是**算出来的，不是拍的**：它正好等于 codec 允许的一页上限
+ *   （`schemas/story.ts`：`scene` ≤ 200，`body` ≤ 4 条 × 120 字 = 480，合计 680），
+ *   所以它**永远不会截断一条合法的页**。
+ *   ★ 两个来源的实测分布（2026-10-20，`data` 见 `.scratch/prompt-audit/ledger.md`）：
+ *     种子语料 96 条 **47–65 字**；盘上 11 本真书的 79 页 **40–103 字**。
+ *     两处都离 680 很远——这道闸挡的是病态输入，不是正常内容。
+ *   ★ 改了它要连带看一眼 codec：`rag/corpus.test.ts` 有一条判据盯着
+ *     "上界 ≥ codec 允许的一页"（放宽 codec 而不抬这个数，那条会红）。
+ */
+export const MAX_CHUNK_CHARS = 680
+
+/** 截断留个记号：**不静默**——"这一段被削过"是读的人该知道的一件事 */
+const ELLIPSIS = '…'
+
+/** 太长就削到上界并留一个 `…`。★ 按**码点**算，一个 emoji 不该被腰斩成半个 */
+function clampChunkText(text: string): string {
+  const points = [...text]
+  return points.length <= MAX_CHUNK_CHARS ? text : points.slice(0, MAX_CHUNK_CHARS).join('') + ELLIPSIS
 }
 
 /* ───────────────────────── 指纹与解析 ───────────────────────── */

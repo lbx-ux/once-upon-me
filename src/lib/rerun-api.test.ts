@@ -10,6 +10,8 @@
  *    否则引擎会拿一段空正文去要音频，而厂商那边要么报错要么回一段静音——
  *    两种都不会在界面上说清"这一页没有正文了"。
  * 3. **上界**。`fixNote` 进的是提示词、`body` 是书里那一页的字，两者都没有别的把关处。
+ * 4. **内容**。`fixNote` 是唯一一格家长手输、直达出图提示词、两道文字闸都不经过的文本
+ *    （2026-10-20 补的，见下面那一组）。
  */
 
 import { describe, expect, it } from 'vitest'
@@ -47,7 +49,7 @@ describe('fixNote（重画那句补充）', () => {
     expect(ok({ kind: 'image', fixNote: '  头发太长了  ' }).fixNote).toBe('头发太长了')
   })
 
-  it('太长要拦：它进的是提示词，没有别的把关处', () => {
+  it('太长要拦：它进的是提示词，上界只有这一处', () => {
     expect(problems({ kind: 'image', fixNote: 'x'.repeat(MAX_FIX_NOTE + 1) })).toContain(
       '补充说明太长',
     )
@@ -55,6 +57,33 @@ describe('fixNote（重画那句补充）', () => {
 
   it('不是文字就拦', () => {
     expect(problems({ kind: 'image', fixNote: 42 })).toContain('fixNote 要是一段文字')
+  })
+
+  /**
+   * ★ 内容闸（2026-10-20）。这一句是**唯一**一格家长手输、直达出图提示词、
+   *   而**两道**文字闸都不经过的文本：它不写进故事（躲过 `reviewStory`），
+   *   也不是开书时的表单（躲过 `reviewInput`）。补上之前，一条"画一个拿刀的人"
+   *   在这条路上没有任何东西拦得住，唯一的事后拦截是那一档**不可复现**的画面审核。
+   */
+  it('★ 写着红线里的内容要拦下（这一格原来两道文字闸都不经过）', () => {
+    expect(problems({ kind: 'image', fixNote: '刚打过架，旁边流着血' })).toContain('R-01')
+  })
+
+  it('拦人的那句话里带条款 id 与命中的词（判据 5 要"具体到哪一条"）', () => {
+    const said = problems({ kind: 'image', fixNote: '角落里放一把刀，地上有一滩血' })
+    expect(said).toContain('补充说明')
+    expect(said).toContain('R-01')
+    expect(said).toContain('「血」')
+  })
+
+  it('★ 说得清"改一下再来"——这是拒发，不是"我们替你重写"', () => {
+    expect(problems({ kind: 'image', fixNote: '让他自杀' })).toContain('改一下再来')
+  })
+
+  it('正常的一句补充照旧过（闸不是在拦所有人）', () => {
+    expect(ok({ kind: 'image', fixNote: '头发短一点，别戴帽子，笑得自然些' }).fixNote).toContain(
+      '头发短一点',
+    )
   })
 })
 

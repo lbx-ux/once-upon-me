@@ -240,9 +240,19 @@ export function describeEvent(event: EngineEvent): string {
       //   ★ 又因为规划期的 `retry` **没有页号**，它只能落进画桌底部那一栏"不属于任何一页的提醒"，
       //     离它说的事最远——所以 `frames.ts` 把它单独收进 `desk.planning`，
       //     摆回"正在编故事"那一行底下（那边有注释）。
+      //
+      // ★ 2026-10-19 加了第三个分枝，起因是同一句假话又长出来一次：**画面审核**
+      //   （`.scratch/safety` 工单 01）也会触发重画，而那一页可能**画得很像**，
+      //   只是图里有个不该出现的东西。套上"不太像"会让家长去找一个根本不存在的相似度问题。
+      //   ★ 分辨它靠的仍然是 `stage`，所以那条 `retry` 发的是 `'auditing'` 而不是 `'retrying'`
+      //     （见 `illustrate.ts` 里那个调用点的注释）。第三个分枝加在这里，而不是
+      //     给事件载荷加一个 `why` 字段：`stage` 已经是这条事件上现成的判别位，
+      //     再立一个就是"同一件事有两个说法"。
       return event.stage === 'planning'
         ? `这一版故事没通过校验，正在重写（第 ${event.attempt ?? '?'} / ${event.maxAttempts} 次）：${event.reason}`
-        : `${page}不太像，正在重画（第 ${event.attempt ?? '?'} / ${event.maxAttempts} 次）：${event.reason}`
+        : event.stage === 'auditing'
+          ? `${page}的画里有不该给孩子看的东西，正在重画（第 ${event.attempt ?? '?'} / ${event.maxAttempts} 次）：${event.reason}`
+          : `${page}不太像，正在重画（第 ${event.attempt ?? '?'} / ${event.maxAttempts} 次）：${event.reason}`
     case 'review': {
       // ★ 2026-10-19（`.scratch/rag` 工单 05）：**这条分支到这一天为止从未被走到过**
       //   （`review` 事件全仓库没有 emit 过，`frames.ts` 那条注释原来指的就是这件事）。

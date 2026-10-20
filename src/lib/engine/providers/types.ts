@@ -336,6 +336,54 @@ export interface PortraitAnalyzer {
   ): Promise<PortraitAnalysisResponse>
 }
 
+/* ── 审一张画好的图：里面有没有不该出现的东西（2026-10-19，`.scratch/safety` 工单 01）──
+ *
+ * ★ 与 `VisionComparator` **分开成一个接口**，理由与 `PortraitAnalyzer` 那条一样：
+ *   问的问题、产物的形状、失败的读数含义都不一样。比对问的是
+ *   "这两张图是不是同一个人"（产物是一个 0–1 的分），审核问的是
+ *   "这张图里有没有条款禁掉的东西"（产物是条款 id）。
+ * ★ 方向也不同，而且这一点决定了它**不是判据**：比对是**核对**（一个已知的东西在不在），
+ *   审核是**找**（不知道有没有）。前者能定阈值，后者只能当兜底——
+ *   所以 `illustrate.ts` 里那一档的处置与比对那一档不一样，见 `IllustrateOptions.pictureReview`。
+ * ★ 它比比对**便宜一半的流量**：只送一张图，不送参考图（审核与"是不是同一个孩子"无关）。
+ */
+export type PictureReviewRequest = {
+  /** 刚画好的那一张（页图或封面） */
+  pageDataUrl: string
+  /**
+   * 逐条核对的条款：`id` + **条款原文**。★ 给的是原文不是词表词——
+   *   词表是给文字用的，一张图上没有"血"这个字，只有一片红。
+   *   清单由**调用方**拼（与 `CompareRequest.checklist` 同一条），
+   *   适配器不认识我们的条款库。
+   */
+  clauses: readonly { id: string; text: string }[]
+}
+
+export type PictureFinding = {
+  /** 命中的条款 id（`R-01`…）。★ "具体到哪一条"是这一栏判据的原文要求 */
+  clauseId: string
+  /** 一句话说在画面**哪儿**。人要去翻那张图核对，就得知道看哪儿 */
+  where: string
+}
+
+export type PictureReviewResponse = {
+  /**
+   * 读到的条目。★ **读不到是 `null`，不是 `[]`**——与 `CompareResponse.score` 那条
+   *   `number | null` 同一条纪律：「没审成」与「审了、一条都没有」处置完全不同
+   *   （前者不重画、标"没审过"；后者放行）。
+   */
+  findings: readonly PictureFinding[] | null
+  reason?: string
+  modelId: string
+  traceId?: string
+}
+
+export interface PictureReviewer {
+  readonly id: string
+  readonly modelId: string
+  reviewPicture(req: PictureReviewRequest, budget?: CallBudget): Promise<PictureReviewResponse>
+}
+
 /* ───────────────────────── 语音（W4 落地，接口先立） ───────────────────────── */
 
 export type CloneRequest = {
@@ -424,7 +472,17 @@ export type ProviderBundle = {
   mode: ProviderMode
   text: TextGenerator
   image: ImageGenerator
-  vision: VisionComparator | null
+  /**
+   * 视觉那一个模型能做**两件不同的事**，所以这里写的是两个接口的**交集**：
+   * `compare` 给一致性 Agent（像不像），`reviewPicture` 给内容审核（画面里有没有
+   * 不该出现的东西，`.scratch/safety` 工单 01）。
+   *
+   * ★ 不用两个字段、两个工厂：它们用的是同一个模型、同一把 key、同一套 HTTP 管道，
+   *   分成两格只会多一处"某个调用点忘了配超时"。与 `visionProviderOf` 那段同一个理由。
+   * ★ 与 `null` 的语义仍是"这台机器没有视觉能力"——**两件事一起没有**。
+   *   只想要其中一件是不可能的：它们背后是同一个端点的同一个模型。
+   */
+  vision: (VisionComparator & PictureReviewer) | null
   voice: VoiceSynthesizer | null
   store: AssetStore
 }

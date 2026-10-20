@@ -15,8 +15,10 @@
  */
 
 import { describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 
-import { parseCreateBody } from './book-api.ts'
+import { MAX_TEXT, parseCreateBody } from './book-api.ts'
 
 function body(extra: Record<string, unknown> = {}): Record<string, unknown> {
   return {
@@ -130,5 +132,48 @@ describe('gender：它决定模型画男孩还是女孩', () => {
     const parsed = withChild({ gender: 'male' })
     expect(parsed.ok).toBe(false)
     if (!parsed.ok) expect(parsed.problems.join()).toContain('性别只能是 boy / girl')
+  })
+})
+
+/**
+ * ★ 「人写的一句话」的上界只有**一处**（2026-10-20）。
+ *
+ * `MAX_TEXT` 原来只服务这一条路由，而同一类东西在别的入口各写了一个数：
+ * `optimize` 的 `wish`、`rewrite` 的 `note` 都是**只判非空**（2026-10-20 补上），
+ * `rerun-api.ts` 的 `MAX_FIX_NOTE` 自己写了一个 200 —— 而那个文件的文件头把这条规矩
+ * 写得很清楚：「同一类东西（人写的一句话）不该因为走了另一个入口就换一套长度规矩」。
+ *
+ * ★ 这一条读的是**源码**，它是一道护栏而不是一次证明（同 `photo-card.test.ts` 那一节）：
+ *   真正的证明是那两条路由 import 了同一个常量，而这件事只有读源码看得出来。
+ *   判据是"**没有第二个数**"——写死一个 200 在这两个文件里，就是下一次漂移的起点。
+ */
+describe('★ 三个入口共用同一个上界，不各写一个数', () => {
+  /**
+   * 只看**代码**，不看注释——`photo-card.test.ts` 那一节立的规矩。
+   * ★ 这条不是洁癖：**第一版判据就是被自己的注释绊倒的**（注释里写着
+   *   "`MAX_TEXT = 200`" 这句话，而它恰好长得像一个赋值）。
+   *   不剥注释的话，"把这条纪律写下来"本身会把判据弄红，于是下一个人会把注释删掉。
+   */
+  const codeOf = (relative: string): string =>
+    readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .split('\n')
+      .filter((line) => !line.trim().startsWith('//'))
+      .join('\n')
+
+  it('optimize 那条 import 了 MAX_TEXT，且自己不写第二个数', () => {
+    const code = codeOf('../app/api/optimize/route.ts')
+    expect(code).toContain("import { MAX_TEXT } from '@/lib/book-api.ts'")
+    expect(code).not.toMatch(/=\s*200\b/)
+  })
+
+  it('rewrite 那条 import 了 MAX_TEXT，且自己不写第二个数', () => {
+    const code = codeOf('../app/api/books/[bookId]/story/rewrite/route.ts')
+    expect(code).toContain("import { MAX_TEXT } from '@/lib/book-api.ts'")
+    expect(code).not.toMatch(/=\s*200\b/)
+  })
+
+  it('MAX_TEXT 是 200（改它可以，改完三条路一起变）', () => {
+    expect(MAX_TEXT).toBe(200)
   })
 })

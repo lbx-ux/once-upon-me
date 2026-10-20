@@ -417,6 +417,10 @@ export async function illustrateBook(
   const { illustrations, errors } = await illustrateAll(linearOrder(tree), {
     image: providers.image,
     vision: providers.vision,
+    // ★ 画面审核与比对**是同一个 provider**（`ProviderBundle.vision` 是两个接口的交集）：
+    //   它们背后是同一个端点的同一个模型。分成两个字段是因为问的问题不一样，
+    //   不是因为可以分别配——见 `IllustrateOptions.pictureReview` 那段
+    pictureReview: providers.vision,
     store: providers.store,
     card: request.card,
     referenceDataUrl,
@@ -443,6 +447,11 @@ export async function illustrateBook(
     card: request.card,
     bookId: bookIdOf(request),
     title: tree.title,
+    // 封面也要过画面审核（`.scratch/safety` 工单 01）：它是孩子在货架上第一眼看见的那张。
+    // 这一档与页图**共用一个重画次数**（`maxIllustrationAttempts`）——再开一个旋钮
+    // 只会多一处"改了那个没改这个"，而它们要表达的是同一件事：愿意为一张图花几次钱
+    pictureReview: providers.vision,
+    maxAttempts: request.maxIllustrationAttempts,
     emit: forward,
     now,
   })
@@ -708,6 +717,11 @@ export async function rerunPage(request: PageRerunRequest, deps: RerunDeps): Pro
   const illustration = await illustrateNode(node, {
     image: providers.image,
     vision: providers.vision,
+    // ★ 单页重画也走画面审核（`.scratch/safety` 工单 01）：重画出来的那一张
+    //   与第一版一样要过这道闸。**不开这个口子**的理由与 `referenceForPages: false`
+    //   那一段同源——"重画的时候顺便把闸门关掉"是那种没人会写在文档里的豁免，
+    //   而它正好发生在"上一版刚被拦下"之后。
+    pictureReview: providers.vision,
     store: providers.store,
     card: request.card,
     referenceDataUrl: toDataUrl(referenceBytes, request.card.reference.mime),

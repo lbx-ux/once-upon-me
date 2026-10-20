@@ -23,6 +23,7 @@ import type { NextRequest } from 'next/server'
 import { textProviderOf } from '@/lib/engine/providers/registry.ts'
 import { requireCapability } from '@/lib/auth/session.ts'
 import { serverEnv } from '@/lib/settings/server-env.ts'
+import { MAX_TEXT } from '@/lib/book-api.ts'
 import { userFailureOf } from '@/lib/provider-messages.ts'
 import {
   cleanSuggestion,
@@ -50,6 +51,21 @@ type Body = {
   themeLabel?: string
 }
 
+/**
+ * 家长写的那句话的**上界**（2026-10-20 补的）。
+ *
+ * ★ 在这之前这一格**只判了非空**，而它原样进提示词（`prompts/optimize.ts` 的
+ *   `optimizeUser`）。同一类东西在别的入口都是有上界的，三个数还是同一档：
+ *   `book-api.ts` 的 `MAX_TEXT = 200`（开书时的主题与 wish）、
+ *   `rerun-api.ts` 的 `MAX_FIX_NOTE = 200`（重画时那句补充）。
+ *   ★ 那个文件头把这条规矩写得很清楚：「同一类东西（人写的一句话）不该因为走了
+ *     另一个入口就换一套长度规矩」——这一格正是漏掉的那一个入口。
+ *   ★ 超了**拒收而不是截断**：截一半的句子会被"优化"成一句完整的话，
+ *     而家长看不到自己那半句被丢了（与 `OPTIMIZE_MAX_CHARS` 那条"超长只说长了一点、
+ *     不截断"是同一条判断：截断会把"我写多了"伪装成"模型读懂了"）。
+ */
+const MAX_NAME = 20
+
 function parseBody(raw: unknown): { body?: Body; problems: string[] } {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     return { problems: ['请求体要是一个 JSON 对象'] }
@@ -62,13 +78,17 @@ function parseBody(raw: unknown): { body?: Body; problems: string[] } {
   // ★ 空句**不在这里兜一个默认主题**：没有要改的句子就没有这件事，
   //   编一句"关于友情的故事"顶上就是把一个空输入变成一次收费的调用
   if (wish === '') problems.push('要优化的那句话是空的——先写一句想讲什么')
+  else if (wish.length > MAX_TEXT) problems.push(`想讲什么写短一点（${MAX_TEXT} 字以内）`)
+
+  const childName = str(source['childName'])
+  if (childName.length > MAX_NAME) problems.push(`孩子的名字太长了（${MAX_NAME} 字以内）`)
   if (problems.length > 0) return { problems }
 
   return {
     problems: [],
     body: {
       wish,
-      ...(str(source['childName']) === '' ? {} : { childName: str(source['childName']) }),
+      ...(childName === '' ? {} : { childName }),
       ...(str(source['themeLabel']) === '' ? {} : { themeLabel: str(source['themeLabel']) }),
     },
   }

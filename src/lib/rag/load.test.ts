@@ -121,6 +121,43 @@ describe('② 创作史：现场扫这一片存储', () => {
   it('一片空存储 → 空数组（不是抛错）：头一本书就是这个样子', async () => {
     expect(await ownChunksOf(createMemoryStore(), 'u/12')).toEqual([])
   })
+
+  /**
+   * ★ 只过了**信封**的草稿不能让检索停摆（2026-10-20 修的）。
+   *
+   *   `readStory` 用的是 `isStoryDoc`——它只认"title 是字符串、nodes 是对象数组"，
+   *   而 `PUT /api/books/<id>/story` 正是拿它把关的。所以盘上**真的可能出现**
+   *   `{"nodes":[{}]}` 和 `{"nodes":[{"scene":123}]}` 这两种。
+   *   修之前 `chunksFromStoryBook` 一句 `page.scene.trim()` 当场抛，
+   *   抛出去被 `plan.ts` 的 `retrieveOnce` 接住（那一步刻意不拖垮规划）——
+   *   于是症状是**这一片存储的检索从此永远不工作**，而屏幕上只有"这次没检索到"。
+   *   判据因此两边都要：**不抛**，而且**好的那几页照常出来**。
+   */
+  it('★ 一页存成 `{}` 的草稿不会让整片检索停摆，好页照常出来', async () => {
+    const store = createMemoryStore()
+    await store.putJson({
+      path: storyPathOf('bk_empty_node'),
+      value: { ...draftOf('bk_empty_node', '缺字段的那本', 'cloud'), doc: { title: '缺字段的那本', nodes: [{}] } },
+    })
+    const chunks = await ownChunksOf(store, 'u/12')
+    // 那一页一个字都没有 → 它本来就不是语料（与"空的跨页不产 chunk"同一条）
+    expect(chunks).toEqual([])
+  })
+
+  it('★ 字段类型写错了（`scene` 是数字）也只跳过那一页，不抛', async () => {
+    const store = createMemoryStore()
+    await store.putJson({
+      path: storyPathOf('bk_bad_type'),
+      value: {
+        ...draftOf('bk_bad_type', '类型写错的那本', 'cloud'),
+        doc: { title: '类型写错的那本', nodes: [{ scene: 123, body: [7, '还留着的一句话。'] }] },
+      },
+    })
+    const chunks = await ownChunksOf(store, 'u/12')
+    expect(chunks).toHaveLength(1)
+    // ★ 兜成空串而不是补一个默认值：缺的就是缺的（同 `RagChunk` 那条纪律）
+    expect(chunks[0]?.text).toBe('还留着的一句话。')
+  })
 })
 
 describe('合成：种子 + 自家', () => {

@@ -62,18 +62,17 @@
  *   上面第 2 条只在键盘用户**想到要 Tab** 时成立。删掉那颗暂停键是产品决定，
  *   不是无障碍改进 —— 已记进 docs/known-tradeoffs.md「已知取舍」，将来要恢复就照 git 里那一版拿回来。
  *
- * ## 键盘：只在本节内部接，并且 stopPropagation
+ * ## 键盘：只在本节内部接
  *
- * `StorybookFlip` 在 `window` 上无条件接 ← →（**哪怕书在屏幕外也会翻一页**）。
- * React 的监听器挂在 root container 上，位置在 window 之前，
- * 所以本节里的 `e.stopPropagation()` 挡得住它 —— 这是不改对方文件的唯一办法，
- * 而那个文件此刻正被另一条会话编辑。对方那个全局接法本身是 bug，
- * 已记进 docs/known-tradeoffs.md「已知取舍」，等那一边落地再单独修。
+ * `onKeyDown` 挂在 `<section>` 上（不在 `window` 上）：焦点不在本节里就根本不触发，
+ * 于是 ← → 只翻这一节的轮播，不影响别处。Tab 进来 → 自动播停住 → ← → / Home / End
+ * 自己翻 → Tab 出去 → 恢复。
  *
- * ★ 2026-10-19：这一段中间曾经删掉过一轮（那一版首页把第二屏那本书整节下架了，
- *   全局监听跟着走，`stopPropagation` 就没有对象了）。当天稍后用户澄清
- *   **"只删手机那一档，web 端首页和以前一样"**，那本书回到 web 端，
- *   于是这一条连同它的解释**照原样回来** —— 让步仍然是让步，没有变好。
+ * ★ 这里原先还有一句 `e.stopPropagation()`，挡的是首页第二屏那本书挂在 `window` 上
+ *   的全局 ← →（"哪怕书在屏幕外也会翻一页"）。**2026-10-20 那一边把 bug 修在了根上**：
+ *   书只在**自己铺在这一屏上**时才接这两个键（`StorybookFlip` 里那个
+ *   `ownsArrowKeys`），于是这句拦截没有对象了 —— 留着它就是留一句会过期的解释，
+ *   连同它一起删掉。`preventDefault` 留着：那挡的是**浏览器自己的**横向滚动与回到页首。
  */
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
@@ -574,11 +573,9 @@ export function HighlightsReel() {
     viaPointerRef.current = false
     const delta = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0
     if (!delta && e.key !== 'Home' && e.key !== 'End') return
-    /* ★ `stopPropagation` 挡的是**首页第二屏那本书**那个挂在 `window` 上的
-       全局 ← →（"哪怕书在屏幕外也会翻一页"）—— React 的监听器在 root container，
-       位置在 window 之前，所以这里挡得住。对方那个接法本身是 bug，见文件头。
-       `preventDefault` 挡的是**浏览器自己的**横向滚动与回到页首。 */
-    e.stopPropagation()
+    /* `preventDefault` 挡的是**浏览器自己的**横向滚动与回到页首。
+       ★ 这里原先还有一句 `stopPropagation`（挡第二屏那本书的全局 ← →）——
+       2026-10-20 对方把它修在了根上，那句拦截没有对象了，连同理由一起删掉。 */
     e.preventDefault()
     if (e.key === 'Home') goTo(0)
     else if (e.key === 'End') goTo(count - 1)

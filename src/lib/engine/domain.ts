@@ -550,6 +550,32 @@ export type ConsistencyResult = {
   reason?: string
 }
 
+/**
+ * 画面审核的结论（2026-10-19，`.scratch/safety` 工单 01）。
+ *
+ * ★ 它与 `ConsistencyResult` 的 `verdict` 同名同义（`pass` / `flag` / `unavailable`），
+ *   但**判据完全不同**，这就是它为什么是另一个类型而不是给它加一个 `kind` 字段：
+ *   - 一致性：一个 0–1 的分对一个阈值 —— **可复现**，所以它算得上一道判据；
+ *   - 画面审核：一个视觉模型的"看见/没看见" —— **不可复现**，所以它是**兜底**。
+ *   把两者塞进一个类型，下一个人会以为它们可以共用一个阈值。
+ *   ★ 因此这里也**没有分数**：画面这一档只有"有/没有"，没有程度。编一个 0.8 出来
+ *     只会让人以为它可以校准。
+ *
+ * ★ `problems` 里的 `clauseId` 是**真的条款 id**（`R-01`…，与文字面那道闸同一份语料），
+ *   所以"这一页是哪一条没过"在 `book.json` 里查得到。类别与处置**不记在这里**——
+ *   它们是条款库的属性，抄一份进清单就是第二个真相来源。
+ */
+export type PictureReviewResult = {
+  pageNo: number
+  attempt: number
+  /** 通过 / 有发现（这一版不该出去）/ 没审成（视觉模型未配置或这一次调用失败） */
+  verdict: 'pass' | 'flag' | 'unavailable'
+  /** 命中的条款与"画面上在哪儿"。★ `pass` 时是空数组；`unavailable` 时**必然**是空的
+   *  （没审成 != 审了没问题，这两件事由 `verdict` 分开，不靠这个数组的长短去猜） */
+  problems: readonly { clauseId: string; where: string }[]
+  reason?: string
+}
+
 export type Illustration = {
   pageNo: number
   attempt: number
@@ -558,6 +584,16 @@ export type Illustration = {
   /** 供应商回传的实付金额（元）。实测图像一口价 0.20 元/张，与尺寸无关 */
   costCny?: number
   consistency?: ConsistencyResult
+  /**
+   * 画面审核的结论。★ **缺席 = 这一页根本没走到那一步**，有两种成因，两种都不是"通过了"：
+   *   - 这台机器**没有视觉能力**（`vision` 与 `pictureReview` 都是 null）：
+   *     `illustrateNode` 在那一步之前就停了，理由写在 `consistency.reason` 里
+   *     （"未配置视觉模型，这一页没有核对过（像不像与画面都没查）"）；
+   *   - 这一页在出图/落盘那两跳就失败了，压根没到核对那一步。
+   *   ★ 而"配了审核、但这一次调用没跑成"是**写进来的** `verdict: 'unavailable'`，
+   *     不是缺席——两者都要收进 `needsHumanReview`，但记录里要分得出是哪一种。
+   */
+  pictureReview?: PictureReviewResult
   /** 用尽重画次数仍不达标 → 标记人工介入（降级 B 的入口），而不是整本书失败 */
   needsHumanReview: boolean
 }
@@ -619,6 +655,16 @@ export type Cover = {
   asset: AssetRef
   provenance: Provenance
   costCny?: number
+  /**
+   * 封面上的画面审核结论（`.scratch/safety` 工单 01）。`pageNo` 恒为 0——那是封面的约定。
+   *
+   * ★ 它只可能是 `pass` 或 `unavailable`：**`flag` 到不了这里**。
+   *   封面被拦下时 `illustrateCover` 当场抛错（那条注释写了为什么它没有第二次机会），
+   *   所以一本有清单的书，封面要么审过、要么没审成。
+   *   ★ 也正是这个原因，`Cover` 上**没有** `needsHumanReview`：页图那个字段的读法是
+   *     "这一页有人得看一眼"，而封面这一档的处置是"当场拒绝"，它没有"留着让人看"这条路。
+   */
+  pictureReview?: PictureReviewResult
 }
 
 /** 一本书 = 一堆资产 + 一份清单。★ 它是资产，不是一次调用（ADR-0003） */

@@ -250,10 +250,12 @@ describe('提示词与出处', () => {
     for (const anchor of ANCHORS) expect(prompt).toContain(anchor.value)
   })
 
-  it('provenance 记的是 `character-photo@v2`：这条路的提示词与"从零描述"那份不是一份', async () => {
+  it('provenance 记的是 `character-photo@v3`：这条路的提示词与"从零描述"那份不是一份', async () => {
     const { deps } = await depsOf()
     const result = await cardFromPhoto(await request(), deps)
-    expect(result.card.provenance.promptVersion).toBe('character-photo@v2')
+    // ★ 2026-10-20 从 @v2 抬到 @v3：首行那个名字包进了「」（三份模板共用那一行），
+    //   所以这一条路的 output 也变了。判据与 v1→v2 同一条：**发出去的字节变了才升**。
+    expect(result.card.provenance.promptVersion).toBe('character-photo@v3')
   })
 
   it('归一化做了什么，逐条回给界面（"我们处理了你的照片"那句话的原料）', async () => {

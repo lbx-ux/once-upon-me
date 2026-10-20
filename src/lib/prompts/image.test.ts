@@ -19,6 +19,7 @@ import {
   COVER_IMAGE_SIZE,
   DEFAULT_IMAGE_SIZE,
   IMAGE_PROMPT_VERSION,
+  anchorNoteOf,
   coverPrompt,
   pagePrompt,
 } from './image.ts'
@@ -118,6 +119,85 @@ describe('页图的 prompt 仍然是按跨页写的', () => {
   })
 })
 
+/**
+ * ── 锚点回灌（2026-10-20，计划表 B7）─────────────────────────────────────────
+ *
+ * 这一组钉的是"重画那一次到底有没有带上结论"。`card` 那张假卡只有两条锚点
+ * （骨相/头发），够用：缺的那条要能被补上、认不出的那条要原样留下。
+ */
+describe('anchorNote：把"哪几条不像"翻成一句能喂回去的话', () => {
+  it('★ 半截话要认出来并把卡上的原文补回去', () => {
+    // 真书里录下来的原文就是这种形状（模型把清单里冒号后面那截丢了）：
+    // `events.jsonl` 的 missedAnchors 是 ["头身比是否一致"]、"眼睛是否一致"…
+    expect(anchorNoteOf(card, ['头发是否一致'])).toBe('头发：左上方翘一撮')
+  })
+
+  it('多条之间用「；」连成一句', () => {
+    expect(anchorNoteOf(card, ['骨相是否一致', '头发是否一致'])).toBe(
+      '骨相：圆脸；头发：左上方翘一撮',
+    )
+  })
+
+  it('★ 认不出的原样带上，不许在这一层丢掉', () => {
+    // 丢掉等于替模型决定"这句没用"，而这一层没有那个资格
+    expect(anchorNoteOf(card, ['右下角那只玩偶的眼睛'])).toBe('右下角那只玩偶的眼睛')
+  })
+
+  it('认得出的与认不出的混在一起时，两种都留', () => {
+    const note = anchorNoteOf(card, ['头发是否一致', '左手多了一根手指', '头发是否一致'])
+    expect(note).toBe('头发：左上方翘一撮；左手多了一根手指')
+  })
+
+  it('★ 空清单回 undefined —— 没有结论就不编一句结论', () => {
+    expect(anchorNoteOf(card, [])).toBeUndefined()
+    expect(anchorNoteOf(card, ['   ', ''])).toBeUndefined()
+  })
+})
+
+describe('pagePrompt 接住 anchorNote', () => {
+  const base = { card, page: '坐在云上', scene: '云像棉花糖', mood: 'wonder' }
+
+  it('★ 不传 anchorNote 的那份，两个可选块一个都没被塞进来', () => {
+    const bare = pagePrompt(base)
+    expect(bare).not.toContain('上一版经核对')
+    expect(bare).not.toContain('这一版要改掉上一版的问题')
+    /**
+     * ★ 2026-10-20 改了这三行：`@v5` 在页级三项之后**无条件**多了一句优先级
+     *   （`PRECEDENCE_BLOCK`），所以"紧接着就是构图"这句话不再成立。
+     *   要守的不变式一个字没变——**页级三项之后没有任何"这一次才有"的东西**：
+     *   `情绪` → `优先级`（每页都有）→ `构图`（每页都有），中间空着。
+     *   ★ 这条测试原来是拿行号钉的，所以它同时钉住了"模板长什么样"；
+     *     模板一改就必须来改它——那正是它该红的时候，不该绕开。
+     */
+    const lines = bare.split('\n')
+    expect(lines[4]).toContain('情绪：')
+    expect(lines[5]).toContain('优先级：')
+    expect(lines[6]).toContain('构图：')
+  })
+
+  it('传了就写成一句"上一版哪里不像"，并且落在页级三项之后', () => {
+    const prompt = pagePrompt({ ...base, anchorNote: '头发：左上方翘一撮' })
+    expect(prompt).toContain('上一版经核对')
+    expect(prompt).toContain('头发：左上方翘一撮')
+    expect(prompt.indexOf('情绪：')).toBeLessThan(prompt.indexOf('上一版经核对'))
+    expect(prompt.indexOf('上一版经核对')).toBeLessThan(prompt.indexOf('构图：'))
+  })
+
+  it('★ 两个修正块同时在时，人那句排在模型那句之后', () => {
+    // 人写的是命令、模型那句是诊断，命令排在后面
+    const prompt = pagePrompt({
+      ...base,
+      anchorNote: '头发：左上方翘一撮',
+      fixNote: '把帽子去掉',
+    })
+    expect(prompt.indexOf('上一版经核对')).toBeLessThan(prompt.indexOf('这一版要改掉上一版的问题'))
+  })
+
+  it('★ 空白串当作没传（`trim()` 之后才判），不会留下一行空壳', () => {
+    expect(pagePrompt({ ...base, anchorNote: '   ' })).toBe(pagePrompt(base))
+  })
+})
+
 describe('封面的 prompt', () => {
   const prompt = coverPrompt({ card, title: '云朵小船去旅行' })
 
@@ -145,6 +225,14 @@ describe('封面的 prompt', () => {
     // ★ 同一天再抬到 @v3：模板多了一行**恒定输出**的「主角是同一个人，不要换性别」
     //   （见上面那一组用例）。这一行与 fixNote 不同——它对每一页都生效，
     //   所以 v2 那批图与 v3 那批图**不是同一份模板出的**，通过率不能混着算。
-    expect(IMAGE_PROMPT_VERSION).toBe('image-page@v3')
+    // ★ 2026-10-20 抬到 @v4：多了一个**可选**的 `anchorNote`（比对模型上一轮的结论，
+    //   回灌进下一次重画，见上面那一组）。它与 v2 那次是**不同**的情形：
+    //   第 1 次的提示词逐字节仍等于 v3，**首次通过率照样可比**；
+    //   不可比的是"重画后通过率"——那正是这次要改的东西。要分档看 `attempt`。
+    // ★ 2026-10-20 抬到 @v5：多了**一句对每一页都生效**的优先级
+    //   （`PRECEDENCE_BLOCK`：角色描述与「避免出现」压过这一页的描述），
+    //   并把 `本页画面` / `情节` 两个值包进了「」。与 v2/v4 那两次"可选块"不同
+    //   ——**这一次每一页都变了**，所以 v4 那批读数到此封箱，跨版本不能混着比。
+    expect(IMAGE_PROMPT_VERSION).toBe('image-page@v5')
   })
 })

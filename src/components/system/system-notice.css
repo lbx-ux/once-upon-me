@@ -1,0 +1,193 @@
+/* ============================================================================
+ * system-notice.css —— 三个「系统页」共用的那一张纸
+ *
+ * 与 SystemNotice.tsx 同名同目录，在 app/globals.css 里 @import（与其余各套一致）。
+ * 类名 `notice` 全站唯一，不与前几屏的 .hero__ / .book__ / .hl__ 命名空间相撞。
+ *
+ * 谁在读它：`app/error.tsx`（React 抛了）、`app/loading.tsx` 与
+ * `app/(studio)/loading.tsx`（正在打开）、`app/not-found.tsx`（404）。
+ * 每一档的差别只有三处：要不要延迟显形、标题是什么、有没有按钮 ——
+ * 理由都写在 SystemNotice.tsx 的文件头，这里只管长相。
+ *
+ * ★ 颜色一律走令牌（`var(--x)`），一个十六进制都不写：
+ *   `scripts/check-color-tokens.mts` 扫的正是组件样式表里「面与墨」位置上的字面量，
+ *   而这一张纸的颜色（纸、墨、发丝边）全部已经有对应的令牌。
+ * ========================================================================== */
+
+.notice {
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  /* 页面这一级铺满一屏：404 与错误页都是"整屏只有这一张纸"。 */
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: clamp(24px, 6vh, 72px) clamp(20px, 5vw, 40px);
+}
+
+/* 工作台那一档落在 `.studio` 的内容区里 —— **不铺满视口**：
+   壳（侧栏 / 顶栏）还立着，整屏一张纸会把壳也盖住，读起来像"整个应用重启了"。
+   高度按内容区给一个下限，宁可矮一点也不要一屏空白。 */
+.notice[data-scope='shell'] {
+  min-height: min(58vh, 560px);
+  padding: clamp(22px, 5vh, 56px) clamp(18px, 4vw, 40px);
+}
+
+.notice__paper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(10px, 1.6vh, 16px);
+  box-sizing: border-box;
+  width: min(520px, 100%);
+  padding: clamp(26px, 4.4vw, 38px) clamp(22px, 4vw, 38px) clamp(24px, 4vw, 32px);
+  border: 1px solid var(--hairline);
+  border-radius: var(--card-radius);
+  /* 与那本书的一页、与书单那些样书同一个纸色：系统页也是这个产品的一页，
+     不是浏览器的一张白纸。 */
+  background: var(--page-paper);
+  box-shadow: var(--card-shadow);
+  text-align: center;
+}
+
+.notice__mark {
+  width: clamp(46px, 6vw, 62px);
+  height: auto;
+}
+
+.notice__title {
+  margin: 0;
+  color: var(--ink);
+  font-size: clamp(19px, 2.4vw, 23px);
+  font-weight: 600;
+}
+
+/* 正文用 `--ink-muted`（在 `--page-paper` 上是量过的 ≈5.0:1，过正文级 AA）——
+   它比标题低一档，读起来是"标题 + 一句解释"，而不是两行一样重的话。 */
+.notice__lead {
+  margin: 0;
+  max-width: 30em;
+  color: var(--ink-muted);
+  font-size: 14.5px;
+  line-height: 1.9;
+}
+
+/* 错误编号。等宽 + 一颗浅底药丸，让它在截图里**显眼**——
+   这一行的全部意义就是"能被截图带走"。 */
+.notice__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px 8px;
+  margin: 2px 0 0;
+  color: var(--ink-muted);
+  font-size: 12.5px;
+}
+.notice__meta code {
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: var(--surface-soft);
+  color: var(--ink-soft);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  /* 编号要能整段选中复制，不然"截图给开发者"就只剩截图 */
+  user-select: all;
+}
+.notice__meta-hint {
+  flex-basis: 100%;
+}
+
+.notice__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin-top: clamp(6px, 1.2vh, 12px);
+}
+
+/* 与首页那两颗 CTA 同一支笔（`.btn` / `.btn--ghost`，住在 hero-orbit.css）：
+   系统页上出现的是**同一个产品的按钮**，不是第三种按钮。
+   ★ 刻意复写一遍而不是直接挂 `.btn`：那两颗的样式住在首页那个组件的文件里，
+     一份 404 页不该依赖"首页那个文件还在不在"。这里只抄长相，不抄文件。 */
+.notice__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* 44px：过最小可点尺寸那条线（与 `.book-choice__btn` 同一档） */
+  min-height: 44px;
+  padding: 0 26px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--surface);
+  font: inherit;
+  font-size: 14.5px;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    transform 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.18s ease;
+  box-shadow: 0 8px 22px rgba(23, 23, 29, 0.16);
+}
+.notice__btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(23, 23, 29, 0.22);
+}
+.notice__btn:active {
+  transform: translateY(0);
+}
+/* 全站其余三十几处的焦点圈都是这一条（`2px solid var(--accent)`、offset 3px）——
+   这一屏不在 `.shell` 下，所以那条通用规则够不到它，得自己写一遍。 */
+.notice__btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.notice__btn--ghost {
+  background: rgba(var(--surface-rgb), 0.86);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px rgba(var(--ink-rgb), 0.1);
+}
+
+/* ----------------------------------------------------------------------------
+ * 「正在打开」这一档：**晚 120ms 才显形**
+ *
+ * 与 AppShell 的 `PENDING_SHOW_AFTER_MS`（120）是同一条规矩、同一个数：
+ * 工作台来回切的实测是 45–62ms，立刻显形的加载态在那条路上只会闪一下。
+ * 延迟写在 CSS 里而不是 setTimeout 里 —— 导航比门槛快时这个组件会被整个卸载，
+ * 定时器那套还得自己收尸（AppShell 那边是因为 `useLinkStatus` 本来就在 React 里，
+ * 只能那么写；这里能交给 CSS 就交给 CSS）。
+ *
+ * ★ `forwards` + 底下的 `opacity: 0`：延迟那一段必须真的**看不见**，
+ *   而不是"看不见但盖在别的东西上"。
+ * ★ 只有 loading 这一档延迟。错误页与 404 要**立刻**出现 ——
+ *   它们不是"等一下就好"，晚 120ms 只会让人以为页面坏了。
+ * -------------------------------------------------------------------------- */
+.notice[data-kind='loading'] .notice__paper {
+  opacity: 0;
+  animation: notice-reveal 0.3s ease-out 0.12s forwards;
+}
+
+@keyframes notice-reveal {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* 静止模式：**延迟保留，渐显去掉** —— 要停的是"动"，不是"等"。
+   （duration 取 1ms 而不是 `animation: none`：后者会把整条动画连同延迟一起取消，
+   于是这一档在静止模式下变成"立刻显形"，又回到那个会闪的样子。） */
+@media (prefers-reduced-motion: reduce) {
+  .notice[data-kind='loading'] .notice__paper {
+    animation-duration: 1ms;
+  }
+  /* hover 的抬起是"动"，停掉；按钮本身（形状、颜色、焦点圈）一个都不改。 */
+  .notice__btn {
+    transition: none;
+  }
+  .notice__btn:hover {
+    transform: none;
+  }
+}

@@ -383,7 +383,148 @@ async function falsePositives(): Promise<{ where: string; clauseId: string; word
   return hits
 }
 
-/* ───────────────────────────── 报告 ───────────────────────────── */
+/* ─────────────── 家长那句自由输入：过闸（2026-10-19，`.scratch/safety` 工单 02） ───────────────
+ *
+ * ★ 这一组与上面那十条**判据形状不一样**，所以是单独一段：
+ *   上面那十条量的是"模型写出来的东西拦不拦得住"，这一组量的是
+ *   "**家长打进去的字会不会先到模型那里**"。
+ *   区分它们的那一格是 `calls`：输入过闸的价值有一半在于**省掉那次调用**——
+ *   拦在模型之后只能算补救，拦在它之前才叫"那段内容根本没接触过模型"。
+ *   （`ClauseDisposition` 里 `block` 那条理由说的就是这个。）
+ *
+ * ★ 反例那一批尤其要紧，而且**不能拿样书正文凑**：家长打的是短句，
+ *   与童书正文的用词分布不是一回事。这一批是**人真的会打的那几句**。
+ */
+
+type InputCase = {
+  label: string
+  theme: string
+  wish?: string
+  reviseNote?: string
+  /** 该被拦下的是哪一条（`''` = 该放行） */
+  clause: string
+}
+
+/** 一页都不改的那一份：`planJsonOf` 拿它回那一版干净的故事（`page: -1` 就是"不动"） */
+const CLEAN_CASE: Case = {
+  label: '「一页都不改」用',
+  page: -1,
+  field: 'body',
+  text: '',
+  clause: '',
+  expect: 'blocked',
+}
+
+const INPUT_CASES: readonly InputCase[] = [
+  {
+    label: '主题里直接写死亡',
+    theme: '小狗死掉的故事',
+    clause: 'R-03',
+  },
+  {
+    label: '主题里写流血',
+    theme: '小猫流血了怎么办',
+    clause: 'R-02',
+  },
+  {
+    label: '★「你想让孩子得到的」那一格越线（自伤，当场拒发）',
+    theme: 'cloud',
+    wish: '让他知道自杀有多可怕',
+    clause: 'R-04',
+  },
+  {
+    label: '改稿要求里越线（重写一版那条路也吃自由文本）',
+    theme: 'cloud',
+    reviseNote: '把第 2 页改成怪兽狰狞地尖叫',
+    clause: 'R-01',
+  },
+  {
+    label: '主题里写可模仿的危险动作',
+    theme: '他自己玩火的故事',
+    clause: 'R-06',
+  },
+]
+
+/**
+ * 家长**真的会打**的那些话。一条都不该被拦。
+ *
+ * ★ 这一批是照着"这句话在不在词表里"逐个挑过的——挑的时候被咬过一次：
+ *   起初想写「不想让他觉得自己是笨蛋」（家长真的会这么说），
+ *   而 `笨蛋` 在 R-05 的词表里，于是它**会被拦**。
+ *   那一条没有删掉，它进了下面 `INPUT_FALSE_POSITIVES_KNOWN` 那一栏：
+ *   与其把词表放宽（改词表要重新跑 96 段样书），不如把这条边界钉在纸上。
+ */
+const INPUT_FALSE_POSITIVES: readonly { label: string; theme: string; wish?: string }[] = [
+  { label: '12 个预设主题名', theme: '恐龙' },
+  { label: '怕黑', theme: '一小朵云', wish: '他怕黑，想让他胆子大一点' },
+  { label: '上幼儿园分离', theme: '一朵云', wish: '刚上幼儿园，想让他知道妈妈会回来' },
+  { label: '想当消防员', theme: 'cloud', wish: '他最近迷上消防车' },
+  { label: '学骑车摔了一跤', theme: 'cloud', wish: '学骑自行车摔了一跤，想让他别怕' },
+  { label: '爷爷住院了', theme: 'cloud', wish: '爷爷住院了，他总问什么时候回来' },
+  { label: '挑食', theme: 'cloud', wish: '他不爱吃青菜' },
+  { label: '抢玩具', theme: 'cloud', wish: '在幼儿园抢玩具，想让他学会轮流' },
+  { label: '妹妹出生了', theme: 'cloud', wish: '妹妹刚出生，他有点不高兴' },
+  { label: '打针不怕', theme: 'cloud', wish: '下周要打针，想让他别哭' },
+  { label: '慢吞吞的乌龟（样书主题）', theme: '慢慢来，也很棒' },
+  { label: '发现（样书主题）', theme: '他捡到一颗奇怪的蛋' },
+]
+
+/**
+ * ★ **已知会被拦的家长输入**：它们是正常的家长话，但命中了词表。
+ *
+ * 为什么留着而不是放宽词表：`R-05` 的 `笨蛋` / `傻子` 是"按外貌或能力贬低角色"那条
+ * 唯一的机械抓手，放宽它等于把那一整条交还给模型；而要放宽得**先拿 96 段样书重跑一遍**。
+ * 所以这一栏是**写下来的边界**，不是失败——与那条委婉说法反例（预期漏过）同一个用法。
+ */
+const INPUT_FALSE_POSITIVES_KNOWN: readonly {
+  label: string
+  theme: string
+  wish: string
+  clause: string
+}[] = [
+  { label: '家长用贬义词描述孩子的处境', theme: 'cloud', wish: '他总说自己是笨蛋', clause: 'R-05' },
+]
+
+async function runInputCase(item: InputCase): Promise<{
+  blocked: boolean
+  clauseIds: string[]
+  calls: number
+  message: string
+}> {
+  // ★ 模型回的那一版**永远是干净的**（`page: -1` = 一页都不改）。
+  //   这是刻意的：这一组要量的是"家长那句输入有没有到模型那里"，
+  //   所以模型那一侧的产物必须是一个常量，否则分不清拦下来的是输入还是输出。
+  const { text, calls } = stubText(planJsonOf({ ...CLEAN_CASE }))
+  try {
+    await planBook(
+      {
+        child: {
+          childId: 'review-cases-child',
+          name: '小乐',
+          nameReading: 'xiǎo lè',
+          ageBand: '4-6',
+          gender: 'girl',
+          lookTags: ['短发'],
+          interestTags: ['云'],
+        },
+        card: CARD,
+        theme: item.theme,
+        ...(item.wish === undefined ? {} : { wish: item.wish }),
+        form: 'solo',
+        pages: CLEAN.length,
+      },
+      {
+        providers: providers(text),
+        ...(item.reviseNote === undefined ? {} : { reviseNote: item.reviseNote }),
+      },
+    )
+    return { blocked: false, clauseIds: [], calls: calls(), message: '发得出来' }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    const clauseIds = [...new Set(message.match(/R-\d+/g) ?? [])]
+    return { blocked: clauseIds.length > 0, clauseIds, calls: calls(), message }
+  }
+}
 
 async function main(): Promise<void> {
   console.log('内容审核闸门 · 判据 5（`planBook` 那一层，模型是脚本内的替身）\n')
@@ -437,6 +578,54 @@ async function main(): Promise<void> {
   )
   for (const hit of hits) console.log(`    ★ ${hit.where}：${hit.clauseId}「${hit.word}」`)
 
+  // ── 家长那句自由输入过闸（`.scratch/safety` 工单 02）─────────────────────
+  console.log('\n── 家长那句自由输入（`/create` 的第一句与"重写一版"的要求）──\n')
+  let inputWrong = 0
+  for (const item of INPUT_CASES) {
+    const result = await runInputCase(item)
+    const ok = result.blocked && result.clauseIds.includes(item.clause)
+    // ★ **调用次数是这一组的核心判据**：拦截的价值有一半在于"那段内容根本没接触过模型"。
+    //   拦在模型之后只能算补救；一次都没调 = 压根没让它看见。
+    const cheap = result.calls === 0
+    if (!ok || !cheap) inputWrong += 1
+    console.log(
+      `${ok ? '拦下' : '★ 与预期不符'} · 该管的是 ${item.clause}` +
+        ` · 命中 ${result.clauseIds.join(',') || '无'}` +
+        ` · **调模型 ${result.calls} 次**${cheap ? '（一句话都没发出去）' : '（★ 该是 0）'}`,
+    )
+    console.log(
+      `    ${item.label}：主题「${item.theme}」${item.wish ? `，那句话「${item.wish}」` : ''}${item.reviseNote ? `，改稿要求「${item.reviseNote}」` : ''}`,
+    )
+    console.log(`    ${result.message.split('\n')[0]}\n`)
+  }
+
+  let inputHits = 0
+  for (const item of INPUT_FALSE_POSITIVES) {
+    const result = await runInputCase({ ...item, clause: '' })
+    if (result.blocked) {
+      inputHits += 1
+      console.log(
+        `    ★ 误拦：主题「${item.theme}」${item.wish ? `，那句话「${item.wish}」` : ''} → ${result.clauseIds.join(',')}`,
+      )
+    }
+  }
+  console.log(
+    `家长输入反例：${INPUT_FALSE_POSITIVES.length} 句真人会打的话 → 误拦 ${inputHits} 条` +
+      (inputHits === 0 ? '（一条都没有）' : ''),
+  )
+
+  // ★ 已知边界：**列出来，不算失败**，但也**不许悄悄从表里删掉**
+  const known: string[] = []
+  for (const item of INPUT_FALSE_POSITIVES_KNOWN) {
+    const result = await runInputCase({ ...item, clause: item.clause })
+    if (!result.blocked) {
+      known.push(`★ ${item.label}：今天**没有**被拦下（词表放宽了或改了）——这条边界要重新钉`)
+      continue
+    }
+    known.push(`漏过（已知）：${item.label} → ${result.clauseIds.join(',')}（${item.clause}）`)
+  }
+  for (const line of known) console.log(`    ${line}`)
+
   console.log('')
   if (surprised > 0) {
     console.log(
@@ -444,12 +633,15 @@ async function main(): Promise<void> {
         '别让这个脚本继续把"拦住了"记成"不符预期"（尤其那条委婉说法：它是语义档落地的信号）。',
     )
   }
-  if (wrong > 0 || hits.length > 0) {
-    console.log(`✗ 没过：正例漏了 ${wrong} 条、反例误拦 ${hits.length} 条`)
+  if (wrong > 0 || hits.length > 0 || inputWrong > 0 || inputHits > 0) {
+    console.log(
+      `✗ 没过：故事正例漏了 ${wrong} 条、故事反例误拦 ${hits.length} 条、` +
+        `家长输入漏了/不省钱 ${inputWrong} 条、家长输入误拦 ${inputHits} 条`,
+    )
     process.exitCode = 1
     return
   }
-  console.log('✓ 过了：该拦的全拦下，真人写过的文本一条都没误拦')
+  console.log('✓ 过了：该拦的全拦下，真人写过的文本一条都没误拦，家长那句输入一次都没发出去')
 }
 
 await main()

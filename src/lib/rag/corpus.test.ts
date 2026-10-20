@@ -23,10 +23,12 @@ import {
   chunksFromBooklist,
   chunksFromStoryBook,
   corpusVersionOf,
+  MAX_CHUNK_CHARS,
   parseRagIndex,
   type RagChunk,
   type StoryBookSource,
 } from './corpus.ts'
+import { planJsonSchema } from '../schemas/story.ts'
 
 const SAMPLE_BOOKS = [
   {
@@ -143,6 +145,48 @@ describe('② 创作史：一个家庭自己的书 → chunks', () => {
     expect(bare[0]?.ageBand).toBe(ANY)
     expect(bare[0]?.theme).toBe(ANY)
     expect(bare[0]?.form).toBe(ANY)
+  })
+
+  /**
+   * ★ 上界（2026-10-20）。`story.json` 只过**信封校验**（`isStoryDoc` 只认
+   *   "title 是字符串、nodes 是对象数组"），所以家长存回来的 `scene` / `body`
+   *   长度**没有任何东西在管**，而 chunk 的正文会**原样**进故事规划的提示词。
+   *   一个 100 kB 的 scene 足以把整条用户消息淹没，症状是"生成失败"，
+   *   看不出跟检索有关。
+   */
+  it('★ 病态长的正文被削到上界，并留下 `…`（不静默）', () => {
+    const huge = chunksFromStoryBook({
+      bookId: 'bk_huge',
+      owner: 'u/9',
+      title: '一页塞了一本书',
+      pages: [{ pageNo: 1, scene: '场'.repeat(5000), body: ['正文'.repeat(3000)] }],
+    })
+    const text = huge[0]?.text ?? ''
+    expect([...text].length).toBe(MAX_CHUNK_CHARS + 1) // 削过之后 + 一个省略号
+    expect(text.endsWith('…')).toBe(true)
+  })
+
+  it('正常长度的正文一个字都不动（这道闸挡的是病态输入，不是内容）', () => {
+    expect(chunks[0]?.text).not.toContain('…')
+    expect(chunks[0]?.text).toBe('纸箱火箭摆在客厅中间\n她把三个座位都画上了。\n其中一个留给妈妈。')
+  })
+
+  /**
+   * ★ 这个数与 codec **同源**：它必须 ≥ codec 允许的一页上限
+   *   （`scene` ≤ 200 + `body` ≤ 4 × 120 = 680），否则它会开始削**合法**的页。
+   *   放宽 codec 而不抬这个数，这一条会红。
+   */
+  it('★ 上界不小于 codec 允许的一页（放宽 codec 忘了抬这个数就会红）', () => {
+    const node = planJsonSchema() as {
+      properties: { nodes: { items: { properties: Record<string, { maxLength?: number }> } } }
+    }
+    const fields = node.properties.nodes.items.properties
+    const scene = fields['scene']?.maxLength ?? 0
+    const bodyLines = 4
+    const bodyItem = (node.properties.nodes.items.properties['body'] as unknown as {
+      items: { maxLength?: number }
+    }).items.maxLength
+    expect(MAX_CHUNK_CHARS).toBeGreaterThanOrEqual(scene + bodyLines * (bodyItem ?? 0))
   })
 })
 

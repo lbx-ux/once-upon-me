@@ -25,11 +25,19 @@
  *    只要手上有过一张画完的图，那一页就该是"图在这儿、只是没通过比对"，
  *    而不是"这一页没做出来"——后者是**假话**。判据与实测见 `produceFailed`。
  *    ★ 与第 3 条同源：第 3 条管"失败的图别删"，第 5 条管"别把它从书里摘出去"。
+ * 6. **重画要带着上一轮的诊断去画**（2026-10-20，计划表 B7）。在这之前提示词是
+ *    循环外算一次、重画原样再用一遍的：比对模型说出了"哪几条锚点不像"，而那句话
+ *    只进了 `retry` 事件（给人看）。于是"自己判断 → 自己重画"这半截闭环里
+ *    **诊断没有回到执行器**，机器只是拿同一张指令再抽一次签，闭环靠人合上。
+ *    现在每一轮现算 prompt，把 `missedAnchors` 拼成 `anchorNote` 注进去（见 `anchorNote`）。
+ *    ★ 但它**只认最新一次的结论**，而且画面审核那一档**不参与**——两条理由都写在
+ *    「③-c」那一段里，改之前先读那一段。
  */
 
 import {
   pagePrompt,
   coverPrompt,
+  anchorNoteOf,
   DEFAULT_IMAGE_SIZE,
   COVER_IMAGE_SIZE,
   IMAGE_PROMPT_VERSION,
@@ -37,20 +45,24 @@ import {
 import { checklistOf } from './character-card/card.ts'
 import { toDataUrl } from './providers/http.ts'
 import { extensionOf } from './providers/stores.ts'
+import { pictureProblemText, toPictureProblems } from './review.ts'
+import { PICTURE_CLAUSES } from '../rag/review-corpus.ts'
 import type {
   CharacterCard,
   ConsistencyResult,
   Cover,
   Illustration,
+  PictureReviewResult,
   Provenance,
   StoryNode,
 } from './domain.ts'
 import type { EngineEventPayload } from './events.ts'
-import { asEngineError } from './errors.ts'
+import { asEngineError, EngineError } from './errors.ts'
 import type {
   AssetStore,
   ImageGenerator,
   ImageResponse,
+  PictureReviewer,
   VisionComparator,
 } from './providers/types.ts'
 
@@ -61,6 +73,25 @@ export type IllustrateOptions = {
   image: ImageGenerator
   /** null = 没有比对能力，走"未核对"路径（见文件头第 1 条） */
   vision: VisionComparator | null
+  /**
+   * 画面审核（`.scratch/safety` 工单 01）。null = 没有这个能力，走"没审过"路径。
+   *
+   * ★ 它是**必填的**，不是 `?`：省略一个可选字段的症状是"这一档静悄悄地没跑"，
+   *   而那个症状与"审过了、没问题"在 `book.json` 上分不出来。与 `vision: … | null`
+   *   同一个写法——**调用方必须表态**。
+   * ★ 与 `vision` 是**同一个对象**（`ProviderBundle.vision` 是两个接口的交集）：
+   *   它们背后是同一个端点的同一个模型，不存在"配了一个没配另一个"。
+   *   分成两个字段是因为**问的问题不一样**（见 `providers/types.ts` 那段），
+   *   而不是因为可以分别配。
+   *
+   * ★ **它是一道兜底，不是一道判据。** 文字面那道闸有词表（可枚举、可复核、
+   *   读数天天一样），图上没有——栅格图里没有一个字可扫。所以这一档只能问视觉模型，
+   *   而它**不可复现**。两个后果写死在代码里：
+   *   ① 它**不参与评分表 #5 的那两个数**（`scripts/review-cases.mts` 一个都不靠它）；
+   *   ② `unavailable` 时**不重画**——没有判据的重画是烧钱抽签（文件头第 1 条）。
+   *   它**不许**被说成"覆盖了画面红线"，能说的只有"跑过的图里它报了什么、误报多少"。
+   */
+  pictureReview: PictureReviewer | null
   store: AssetStore
   card: CharacterCard
   /** 角色卡参考图的 data URL，比对与锁脸都用它 */
@@ -106,6 +137,8 @@ export type IllustrateOptions = {
    * ★ 它只进 prompt，**不进任何记录**：`provenance` 记的是模型、模板版本、卡版本，
    *   而这句话是人的一句话，进不了那几个字段里的任何一个。要追"这一版为什么长这样"，
    *   读的是 `events.jsonl` 里那几页前后的事件，不是清单。
+   * ★ 与它**同形但不同源**的还有一个 `anchorNote`：那是比对模型上一轮的结论，
+   *   由这一层自己拼（`anchorNoteOf`），**不从外面传**——它不是人的输入。
    */
   fixNote?: string
   /**
@@ -130,19 +163,31 @@ export async function illustrateNode(
   /** 这一次的尝试编号区间。缺省就是 1..maxAttempts（见 `attemptBase` 那段） */
   const firstAttempt = (opts.attemptBase ?? 0) + 1
   const lastAttempt = firstAttempt + maxAttempts - 1
-  const prompt = pagePrompt({
-    card: opts.card,
-    page: node.imagePrompt,
-    scene: node.scene,
-    mood: node.mood,
-    ...(opts.fixNote ? { fixNote: opts.fixNote } : {}),
-    // ★ 身份那一行（"整本书就是这个孩子"）**总是**进 prompt；`childWord` 只是把
-    //   "那个孩子"写成"那个孩子（小男孩）"。所以这里不是"有才加"，见 `pagePrompt` 那段
-    ...(opts.childWord ? { childWord: opts.childWord } : {}),
-  })
+  /**
+   * 要喂给**下一次重画**的那句「上一版哪几条锚点不像」（`anchorNoteOf` 拼）。
+   *
+   * ★ 2026-10-20 之前，提示词是在循环外**只算一次**的：自动重画那一轮用的是
+   *   与上一轮逐字节相同的 prompt，锚点级的结论只进了 `retry` 事件（给人看）。
+   *   于是"自己判断像不像、自己决定重画"这半截闭环里，**诊断没有回到执行器**——
+   *   机器只是拿同一张指令再抽一次签，而 `fixNote` 只有**家长**点重画时才进得来。
+   *   计划表 B7 与 `docs/business.md` §2.2 把这条折算过：每本 ¥1.8–5.3、每页 ≈154 秒。
+   *
+   * ★ 它**只认最新一次的结论**：比对过了就清空（见下面那个赋值点）。
+   *   不这么做的话，"第 1 次不像、第 2 次像了、第 2 次被画面审核拦下"这一串里，
+   *   第 3 次会拿到一句**已经过时**的"哪里不像"——那是在给模型指一条它已经走对的路。
+   */
+  let anchorNote: string | undefined
 
   let lastAsset: Illustration['asset'] | null = null
   let lastConsistency: ConsistencyResult | undefined
+  /**
+   * 最后**留下的那一张**图上的画面审核结论（`.scratch/safety` 工单 01）。
+   *
+   * ★ `undefined`（一次都没审）与 `verdict: 'unavailable'`（审了、没审成）是两件事，
+   *   两者都不算通过——`needsHumanReview` 两个都收。这一条与 `consistency` 那段
+   *   "没通过 ≠ 失败"是同一个口径：**缺席不许被读成通过**。
+   */
+  let lastPicture: PictureReviewResult | undefined
   let provenance: Provenance | null = null
 
   /**
@@ -227,6 +272,23 @@ export async function illustrateNode(
       pageNo: node.pageNo,
       attempt,
       total: lastAttempt,
+    })
+
+    /**
+     * ★ **每一轮现算**（2026-10-20 从循环外挪进来，见 `anchorNote` 那段）。
+     *   第 1 次算出来的那一份逐字节与挪之前相同（`anchorNote` 是空的），
+     *   所以"首次通过率"这个数不受这次改动影响；变的是第 2 次起。
+     */
+    const prompt = pagePrompt({
+      card: opts.card,
+      page: node.imagePrompt,
+      scene: node.scene,
+      mood: node.mood,
+      ...(anchorNote ? { anchorNote } : {}),
+      ...(opts.fixNote ? { fixNote: opts.fixNote } : {}),
+      // ★ 身份那一行（"整本书就是这个孩子"）**总是**进 prompt；`childWord` 只是把
+      //   "那个孩子"写成"那个孩子（小男孩）"。所以这里不是"有才加"，见 `pagePrompt` 那段
+      ...(opts.childWord ? { childWord: opts.childWord } : {}),
     })
 
     // 走哪条路由由**策略**（referenceForPages）与**能力**（有没有 edit）同时决定。
@@ -315,7 +377,13 @@ export async function illustrateNode(
         node.pageNo,
         attempt,
         threshold,
-        '未配置视觉比对模型，这一页没有核对过',
+        // ★ 这句话有两种读法，取决于**画面审核那一档有没有跑**（2026-10-19）：
+        //   两个都没有时说的是"这一页整页没核对过"，只有比对缺席时说的只是那一半。
+        //   分开写是因为它们的下一步不一样——前者是"这台机器没有视觉能力"，
+        //   后者是"配了审核没配比对"，而后者今天在本仓库里不该出现（同一个 provider）。
+        opts.pictureReview
+          ? '未配置视觉比对模型，这一页的"像不像"没有核对过'
+          : '未配置视觉模型，这一页没有核对过（像不像与画面都没查）',
       )
       opts.emit({
         kind: 'consistency',
@@ -324,6 +392,9 @@ export async function illustrateNode(
         attempt,
         ...shape(lastConsistency),
       })
+      // ★ 没有视觉能力时**两道核对都没做**，所以这里直接停手。
+      //   画面那一档也不跑：`!opts.vision` 意味着这台机器没有视觉端点，
+      //   而 `pictureReview` 与 `vision` 在 `ProviderBundle` 里是**同一个对象**。
       break
     }
 
@@ -338,7 +409,11 @@ export async function illustrateNode(
     //
     //   这正是文件头第 1 条说的那种情况：**裁判没到场，不是选手没跑**。
     //   没到场就标"未核对"（降级 B 的入口，见第 1 条），图留着，书是完整的。
-    let compared: Awaited<ReturnType<VisionComparator['compare']>>
+    //
+    //   ★ 2026-10-19 改了一处形状：它**不再当场 break**，而是先记下来。
+    //     理由在下面那段（画面审核还要跑，而这一张图在"一致性没结论"时是**会被留下**的）。
+    let compared: Awaited<ReturnType<VisionComparator['compare']>> | null = null
+    let compareError = ''
     try {
       compared = await opts.vision.compare({
         referenceDataUrl: opts.referenceDataUrl,
@@ -346,34 +421,26 @@ export async function illustrateNode(
         checklist: checklistOf(opts.card),
       })
     } catch (err) {
-      lastConsistency = unjudgeable(
-        node.pageNo,
-        attempt,
-        threshold,
-        `比对调用没跑成，这一页没有核对过：${asEngineError(err).message}`,
-      )
-      opts.emit({
-        kind: 'consistency',
-        stage: 'checking',
-        pageNo: node.pageNo,
-        attempt,
-        ...shape(lastConsistency),
-      })
-      break
+      compareError = asEngineError(err).message
     }
 
-    const score = compared.score
-    const verdict: ConsistencyResult['verdict'] =
-      score === null ? 'unavailable' : score >= threshold ? 'pass' : 'fail'
-    lastConsistency = {
-      pageNo: node.pageNo,
-      attempt,
-      score,
-      verdict,
-      threshold,
-      missedAnchors: compared.missed as ConsistencyResult['missedAnchors'],
-      reason: compared.reason,
-    }
+    lastConsistency = compared
+      ? {
+          pageNo: node.pageNo,
+          attempt,
+          score: compared.score,
+          verdict:
+            compared.score === null ? 'unavailable' : compared.score >= threshold ? 'pass' : 'fail',
+          threshold,
+          missedAnchors: compared.missed as ConsistencyResult['missedAnchors'],
+          reason: compared.reason,
+        }
+      : unjudgeable(
+          node.pageNo,
+          attempt,
+          threshold,
+          `比对调用没跑成，这一页没有核对过：${compareError}`,
+        )
     opts.emit({
       kind: 'consistency',
       stage: 'checking',
@@ -382,14 +449,57 @@ export async function illustrateNode(
       ...shape(lastConsistency),
     })
 
-    if (verdict === 'pass') break
-
-    if (verdict === 'unavailable') {
-      // 判不了就停手（文件头第 1 条）：重画是烧钱抽签
-      break
+    /**
+     * ── ③-b **画面审核**（2026-10-19，`.scratch/safety` 工单 01）───────────────
+     *
+     * ★ 它**只对"这一张可能被留下"的图跑**，这一个判断省的是真钱：
+     *   一致性没过、而且还有重画次数时，这一张**马上就要被替掉**，
+     *   给它再花一次审核调用的钱等于买一份关于废纸的报告。
+     *   反过来，"一致性判不了（`unavailable`）"的那一张**是会留下的**，
+     *   所以它照样审——那条路上比对本身已经不工作了，画面这一档是唯一的核对。
+     * ★ 这一档的处置与一致性**有一条关键的不同**：`unavailable` 一律不重画
+     *   （下面 ④ 只对 `flag` 重画）。理由比一致性那条更硬——一致性至少还有一个分，
+     *   而画面这一档连分都没有，"没审成"时重画就纯粹是抽签。
+     */
+    if (!(lastConsistency.verdict === 'fail' && attempt < lastAttempt)) {
+      lastPicture = await reviewPictureOf(opts.pictureReview, node.pageNo, attempt, pageDataUrl)
+      opts.emit({
+        kind: 'review',
+        stage: 'auditing',
+        pageNo: node.pageNo,
+        attempt,
+        check: 'safety',
+        verdict: lastPicture.verdict,
+        ...(lastPicture.reason ? { reason: lastPicture.reason } : {}),
+      })
     }
 
-    if (attempt < lastAttempt) {
+    /**
+     * ── ③-c **把结论回灌给下一次重画**（2026-10-20，计划表 B7）───────────────
+     *
+     * ★ 只认**最新一次**的比对结论：`fail` 就按它重新拼一句，其余（`pass` /
+     *   `unavailable`）一律**清空**。三种情形各有理由：
+     *   · `pass`：该改的已经改对了，带着旧账去画下一轮会指错路；
+     *   · `unavailable`：没有结论。`missedAnchors` 是空的时候 `anchorNoteOf`
+     *     本来也回 `undefined`（见它那段），但**缺席不许被读成"我知道该改哪里"**
+     *     这条口径值得写在这里，而不是靠那个函数的行为顺带成立；
+     *   · `fail`：这才是这一版新增的那条路。拼不出来（一条都没对上）时仍然是
+     *     `undefined`，那一轮就跟以前一样"再抽一次签"——**没有结论就不编一句结论**。
+     *
+     * ★ 画面审核那一档**不参与**回灌，而且现在与比对这一档**分家了**：
+     *   它报的是"图里有不该出现的东西"，不是"不像"。把"有绳套"写回出图 prompt
+     *   等于把那个概念再写进提示词一次（`reviewPictureOf` 第 5 条讲的就是这件事）。
+     *   所以由它触发的重画拿不到 `anchorNote`——`pass` 那条清空正好兼管了这件事。
+     */
+    anchorNote =
+      lastConsistency.verdict === 'fail'
+        ? anchorNoteOf(opts.card, lastConsistency.missedAnchors)
+        : undefined
+
+    // ── ④ 停，还是再来一次 ───────────────────────────────────────────────
+    //   两个理由各归各的一条：它们的**下一步是同一件事**（重画），
+    //   但要说的话不一样，而且一起报时家长会以为是同一件事出了两遍。
+    if (lastConsistency.verdict === 'fail' && attempt < lastAttempt) {
       opts.emit({
         kind: 'retry',
         stage: 'retrying',
@@ -398,7 +508,27 @@ export async function illustrateNode(
         maxAttempts: lastAttempt,
         reason: describeMiss(lastConsistency),
       })
+      continue
     }
+
+    if (lastPicture?.verdict === 'flag' && attempt < lastAttempt) {
+      opts.emit({
+        kind: 'retry',
+        // ★ 这条 retry 的 `stage` 是 `'auditing'` 而不是 `'retrying'`，
+        //   与一致性那条**刻意不一样**：`describeEvent` 靠 `stage` 分辨该说哪句话，
+        //   而"不太像，正在重画"套在内容审核上是**一句假话**（图可能画得很像，
+        //   只是里头有个不该有的东西）。2026-10-18 修过同一个形状的错
+        //   （规划期的 retry 被念成"不太像"），这里是它的第三个分枝。
+        stage: 'auditing',
+        pageNo: node.pageNo,
+        attempt,
+        maxAttempts: lastAttempt,
+        reason: lastPicture.reason ?? '这一页画面上有不该出现的东西',
+      })
+      continue
+    }
+
+    break
   }
 
   const asset =
@@ -441,8 +571,25 @@ export async function illustrateNode(
       generatedAt: opts.now(),
     },
     consistency,
-    // 没通过 ≠ 失败：交给人，书仍然完整（降级 B）
-    needsHumanReview: lastConsistency === undefined || lastConsistency.verdict !== 'pass',
+    // ★ 画面审核的结论（`.scratch/safety` 工单 01）。**只有真跑过那一次才写**——
+    //   `unavailable`（审了没审成）也写，因为"没审成"本身是要记的事；
+    //   而 `undefined`（这一档根本没跑）就让它缺席，读法与 `consistency` 缺席一致。
+    ...(lastPicture === undefined ? {} : { pictureReview: lastPicture }),
+    /**
+     * 没通过 ≠ 失败：交给人，书仍然完整（降级 B）。
+     *
+     * ★ 2026-10-19 起它收**四**种情况，不是两种：一致性没通过 / 没核对成 /
+     *   **画面审核没通过 / 没审成 / 根本没审**。四个都要收，理由是同一条：
+     *   这个字段的读法是"这一页**有人得看一眼**"，而"我们没审过它"正是要人看一眼的理由。
+     *   ★ 缺席（`lastPicture === undefined`）也收——**缺席不许被读成通过**。
+     *     这条口径下，"没配视觉模型"的书每一页都是 `needsHumanReview: true`，
+     *     而这**正是今天的行为**（`consistency` 那半边本来就收它），没有变松也没有变紧。
+     */
+    needsHumanReview:
+      lastConsistency === undefined ||
+      lastConsistency.verdict !== 'pass' ||
+      lastPicture === undefined ||
+      lastPicture.verdict !== 'pass',
     // 这一次这一页实付的总额（含重画）。★ 四舍五入到分：0.2 × 3 在浮点里是
     // 0.6000000000000001，直接写进 `book.json` 会让"账目对不对"变成一道小数题
     ...(spentCny === undefined ? {} : { costCny: Math.round(spentCny * 100) / 100 }),
@@ -450,18 +597,30 @@ export async function illustrateNode(
 }
 
 /**
- * 封面：**一次单独的出图**，3:4 竖版。
+ * 封面：**单独一条出图的路**，3:4 竖版。
  *
- * ★ 与页图的三处不同，都是有理由的：
+ * ★ 与页图的四处不同，都是有理由的：
  *
- * 1. **不比对、不重画**。页图的判据是"和标准像像不像"，而封面没有上一页可比；
- *    它也不是"这一页画错了"的那种错，重画三次救不了一个构图不对的封面。
+ * 1. **不比对**。页图的一致性判据是"和标准像像不像"，而封面没有上一页可比。
  *    所以这里不引入一致性这条路——测不了的东西不要假装测过（CLAUDE.md「不糊弄」）。
+ *    ★ 但**画面审核走**（`.scratch/safety` 工单 01）：它问的不是"像不像"，
+ *      是"里头有没有不该出现的东西"，而封面上当然可以有那种东西——
+ *      它还是孩子在货架上**第一眼看见**的那张。
  * 2. **尺寸是 3:4**（`COVER_IMAGE_SIZE`），与首页演示书的 `cover.webp` 同比例。
  * 3. **事件里 `pageNo: 0`**，由 `describeEvent` 翻成"封面"（见 events.ts 那条注释）。
+ * 4. **重画只由画面审核触发，不由一致性触发**。这正是判断 1 那句"重画三次救不了一个
+ *    构图不对的封面"不适用于画面审核的原因：那一档报的不是"这张图不好看"，
+ *    是"**这张图坏了**"——而坏图重画一次是真的可能画好的（prompt 是干净的，
+ *    靠模型重新采样）。所以这里的循环与页图那个**语义上是一回事**，只是少了比对那一半。
  *
- * 它**失败就让整本书失败**，不像页图那样降级：没有封面的书在货架上认不出来，
+ * ★ **它失败就让整本书失败**，不像页图那样降级：没有封面的书在货架上认不出来，
  * 而"这一页缺"是可以接受的（书还是完整的）。这个取舍是刻意的。
+ * ★ 画面审核两次都没过时也走这条：**当场抛**，而不是"标记一下照样发"。
+ *   理由是这条路**没有第二次机会**——`POST /books/<id>/illustrate` 见到 `book.json`
+ *   就回 409（防止一次误点重画整本），所以一本已经有清单的书，封面**永远改不了**。
+ *   标记着发出去 = 给家长一本封面有问题、而他没有任何办法改的书。
+ *   ★ 代价要说明白：这是这一档**最贵的一处**——封面被拦下 = 整本重做（页图已经画完、
+ *     已经付过钱）。这是已知的、刻意接受的代价，不是漏了。
  */
 export async function illustrateCover(opts: {
   image: ImageGenerator
@@ -469,46 +628,119 @@ export async function illustrateCover(opts: {
   card: CharacterCard
   bookId: string
   title: string
+  /** 画面审核（`.scratch/safety` 工单 01）。null = 没有这个能力，走"没审过"那条路 */
+  pictureReview: PictureReviewer | null
+  /** 出图 + 画面审核最多几次。缺省见 `DEFAULT_MAX_ATTEMPTS` */
+  maxAttempts?: number
   emit: (payload: EngineEventPayload) => void
   now: () => number
 }): Promise<Cover> {
-  opts.emit({
-    kind: 'stage',
-    stage: 'illustrating',
-    phase: 'begin',
-    pageNo: 0,
-    attempt: 1,
-    total: 1,
-  })
-  const response = await opts.image.generate({
-    prompt: coverPrompt({ card: opts.card, title: opts.title }),
-    size: COVER_IMAGE_SIZE,
-  })
-  const asset = await opts.store.put({
-    path: `books/${opts.bookId}/cover${extensionOf(response.mime)}`,
-    bytes: response.bytes,
-    mime: response.mime,
-    originUrl: response.originUrl,
-    originExpiresAt: response.originExpiresAt,
-  })
-  opts.emit({
-    kind: 'illustration',
-    stage: 'illustrating',
-    pageNo: 0,
-    attempt: 1,
-    assetPath: asset.path,
-    modelId: response.modelId,
-    costCny: response.costCny,
-  })
-  return {
-    asset,
-    provenance: {
+  const maxAttempts = opts.maxAttempts ?? DEFAULT_MAX_ATTEMPTS
+  /**
+   * 出图的提示词**整个循环只算一次**。
+   *
+   * ★ 这一条**只对封面成立，而且理由与页图那条（见文件头第 6 条）不同**：
+   *   封面根本没有比对（判断 1 的理由），所以这里**没有任何结论**可以喂回去；
+   *   它重画的唯一理由是画面审核报了"图里有不该出现的东西"，而那一档
+   *   按 `reviewPictureOf` 第 5 条**刻意不回灌**（回灌等于把那个概念再写进提示词一次）。
+   *   所以这里不是"漏了"，是**没有可回灌的东西**——页图那一侧已经改了，别照抄过去。
+   */
+  const prompt = coverPrompt({ card: opts.card, title: opts.title })
+
+  let lastAsset: Cover['asset'] | null = null
+  let provenance: Provenance | null = null
+  let lastReview: PictureReviewResult | undefined
+  let spentCny: number | undefined
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    opts.emit({
+      kind: 'stage',
+      stage: 'illustrating',
+      phase: 'begin',
+      pageNo: 0,
+      attempt,
+      total: maxAttempts,
+    })
+    const response = await opts.image.generate({ prompt, size: COVER_IMAGE_SIZE })
+    // ★ 文件名带 attempt，与页图同一个理由（文件头第 3 条）：被替掉的那几张留着，
+    //   "上一版为什么不行"要看得见。留下的是 `Cover.asset.path` 指的那一张。
+    lastAsset = await opts.store.put({
+      path: `books/${opts.bookId}/cover-a${attempt}${extensionOf(response.mime)}`,
+      bytes: response.bytes,
+      mime: response.mime,
+      originUrl: response.originUrl,
+      originExpiresAt: response.originExpiresAt,
+    })
+    provenance = {
       modelId: response.modelId,
       promptVersion: IMAGE_PROMPT_VERSION,
       cardRevision: opts.card.revision,
       generatedAt: opts.now(),
-    },
-    ...(response.costCny === undefined ? {} : { costCny: response.costCny }),
+    }
+    // 钱在这一行之前就花掉了，所以先记（与 `illustrateNode` 同一个次序）
+    if (response.costCny !== undefined) spentCny = (spentCny ?? 0) + response.costCny
+    opts.emit({
+      kind: 'illustration',
+      stage: 'illustrating',
+      pageNo: 0,
+      attempt,
+      assetPath: lastAsset.path,
+      modelId: response.modelId,
+      costCny: response.costCny,
+    })
+
+    lastReview = await reviewPictureOf(
+      opts.pictureReview,
+      0,
+      attempt,
+      toDataUrl(response.bytes, response.mime),
+    )
+    opts.emit({
+      kind: 'review',
+      stage: 'auditing',
+      pageNo: 0,
+      attempt,
+      check: 'safety',
+      verdict: lastReview.verdict,
+      ...(lastReview.reason ? { reason: lastReview.reason } : {}),
+    })
+
+    if (lastReview.verdict !== 'flag') break
+    if (attempt < maxAttempts) {
+      opts.emit({
+        kind: 'retry',
+        // 与页图那条同一条理由：`stage` 是 `describeEvent` 分辨该说哪句话的依据，
+        // 而"不太像，正在重画"套在内容审核上是一句假话
+        stage: 'auditing',
+        pageNo: 0,
+        attempt,
+        maxAttempts,
+        reason: lastReview.reason ?? '封面画面上有不该出现的东西',
+      })
+    }
+  }
+
+  if (!lastAsset || !provenance) {
+    // 到不了：`maxAttempts` 至少是 1。写出来是为了让 TS 收窄，也为了让"0 次"这件事
+    // 万一被谁传进来时**当场报错**而不是回一本没有封面的书
+    throw new EngineError('invalid-request', `封面的重画次数是 ${maxAttempts}，至少要 1 次`)
+  }
+
+  if (lastReview?.verdict === 'flag') {
+    throw new EngineError(
+      'review-blocked',
+      `封面被内容审核拦下了（画了 ${maxAttempts} 次都没过）：${lastReview.reason}。` +
+        `这一本得重做一次——已经在盘上的那些页图不作数`,
+      { detail: lastReview.problems.map((problem) => `0:${problem.clauseId}`) },
+    )
+  }
+
+  return {
+    asset: lastAsset,
+    provenance,
+    ...(lastReview === undefined ? {} : { pictureReview: lastReview }),
+    // ★ 四舍五入到分，与页图同一个理由（浮点加法写进 `book.json` 会让账目变成小数题）
+    ...(spentCny === undefined ? {} : { costCny: Math.round(spentCny * 100) / 100 }),
   }
 }
 
@@ -554,6 +786,92 @@ export async function illustrateAll(
     }
   }
   return { illustrations, errors }
+}
+
+/**
+ * 一张画好的图过一遍**画面审核**（`.scratch/safety` 工单 01）。
+ *
+ * ★ 五条纪律，逐条都有代价：
+ *
+ * 1. **读不到就回 `unavailable`，绝不回 `pass`。** 三种读不到：没配视觉模型、
+ *    这一问的调用抛了、模型没按 JSON 答。三种都不算"审过了"——
+ *    与 `compare` 那条 `score: number | null` 同一条纪律。
+ * 2. **`unavailable` 不重画**（由调用方保证：只有 `flag` 才重画）。这一档**连分都没有**，
+ *    "没审成"时重画是纯抽签，而一致性那一档至少还有一个分可以比。见文件头第 1 条。
+ * 3. **报出来的每一条都带条款 id**，与文字面那道闸同一个要求（判据 5）：
+ *    家长要能去翻条款，而不是读到一句"这一页不合适"。
+ * 4. **`where` 也要带上**。"第 3 页有恐怖内容"没法核对，"第 3 页左下角那只玩偶的眼睛"
+ *    可以——这一档的产物本来就是给人**去翻图**用的，不是给机器判的。
+ * 5. **不把结论喂回出图 prompt**：喂回去等于把那个概念又写进提示词一次
+ *    （"画面里有绳套"→ prompt 里出现"绳套"），而重画用的那个 prompt 本来是干净的，
+ *    重画靠的是模型这一次重新采样。
+ *    ★ 2026-10-20 起这一条**与一致性那一档分家了**，别再照着页图那边抄：
+ *      页图现在**会**把比对模型的锚点结论喂回去（`anchorNote`，文件头第 6 条）。
+ *      两档的区别不在"要不要回灌"，而在**回灌的是什么**：
+ *      一致性那句是"要画成什么样"（锚点原文 + 卡上的值，**没有新概念**），
+ *      审核这一句是"这里面有个不该有的东西"（**引入的正是那个概念本身**）。
+ */
+async function reviewPictureOf(
+  reviewer: PictureReviewer | null,
+  pageNo: number,
+  attempt: number,
+  pageDataUrl: string,
+): Promise<PictureReviewResult> {
+  if (!reviewer) {
+    return {
+      pageNo,
+      attempt,
+      verdict: 'unavailable',
+      problems: [],
+      reason: '未配置视觉模型，这一页的画面没有审过',
+    }
+  }
+
+  let response: Awaited<ReturnType<PictureReviewer['reviewPicture']>>
+  try {
+    response = await reviewer.reviewPicture({
+      pageDataUrl,
+      // ★ 清单从条款库来，不是从适配器来——与 `checklistOf(opts.card)` 同一条：
+      //   适配器不认识我们的条款，"审哪几条"是引擎的决定。
+      clauses: PICTURE_CLAUSES,
+    })
+  } catch (err) {
+    // 与比对那条 catch 同源：审不了 ≠ 这张图没画成。图留着，这一页标"没审过"
+    return {
+      pageNo,
+      attempt,
+      verdict: 'unavailable',
+      problems: [],
+      reason: `画面审核的调用没跑成，这一页没有审过：${asEngineError(err).message}`,
+    }
+  }
+
+  if (response.findings === null) {
+    return {
+      pageNo,
+      attempt,
+      verdict: 'unavailable',
+      problems: [],
+      reason: response.reason ?? '画面审核的模型没有按格式回答，这一页没有审过',
+    }
+  }
+
+  const problems = toPictureProblems(response.findings)
+  return {
+    pageNo,
+    attempt,
+    // ★ `problems.length > 0` 就是全部判据——这里**故意没有阈值**：
+    //   画面这一档只有"有/没有"，编一个 0.8 出来只会让人以为它可以校准（见 domain.ts）。
+    verdict: problems.length > 0 ? 'flag' : 'pass',
+    problems: problems.map((problem) => ({ clauseId: problem.clauseId, where: problem.where })),
+    // 有发现时这句话是给事件、给画桌、给 `book.json` 三处共用的那一句；
+    // 没发现时留模型自己那句（它不会上屏——`pass` 那条事件不占行）
+    ...(problems.length > 0
+      ? { reason: problems.map((problem) => pictureProblemText(problem, pageNo)).join('；') }
+      : response.reason === undefined
+        ? {}
+        : { reason: response.reason }),
+  }
 }
 
 function unjudgeable(

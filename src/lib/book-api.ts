@@ -75,7 +75,20 @@ export type CreateBookBody = {
 export type ParseResult<T> = { ok: true; value: T } | { ok: false; problems: string[] }
 
 const MAX_TAGS = 8
-const MAX_TEXT = 200
+
+/**
+ * 「人写的一句话」的上界。★ 2026-10-20 **导出**它，因为消费它的人从一个变成了四个。
+ *
+ * 原来是这一条路由内部的一个数，而同一类东西（家长手打的一句话）在别的入口
+ * 各有各的数——`rerun-api.ts` 的 `MAX_FIX_NOTE`、`optimize` 那条的 `MAX_WISH`、
+ * `rewrite` 那条的 `MAX_REVISE_NOTE`。`rerun-api.ts` 的文件头把这条规矩写得很清楚：
+ * 「同一类东西（人写的一句话）不该因为走了另一个入口就换一套长度规矩」，
+ * 而它自己就是被这个数**催出来**的。四个数写死四处，就是四次各自漂移的机会。
+ * ★ 所以"开书时的主题与 wish"与"改稿要求"现在共用这一个：它们的下界都是"一句话"，
+ *   上界也就该是同一个。`rerun-api.ts` 的 `MAX_BODY`（一页正文）**不并进来**——
+ *   那是另一种东西（一页绘本的字），它有自己的量级。
+ */
+export const MAX_TEXT = 200
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)

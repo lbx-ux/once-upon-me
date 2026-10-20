@@ -26,6 +26,7 @@
 
 import type { NextRequest } from 'next/server'
 import { createCardStore, createProviders, planBook, type EngineEvent } from '@/lib/engine/index.ts'
+import { MAX_TEXT } from '@/lib/book-api.ts'
 import { encodeBookFrameToText, type BookStreamFrame } from '@/lib/book-stream.ts'
 import { createFsEventLog } from '@/lib/event-log.ts'
 import { assetRoot, bookExists, finishRun, runKeyOf, tryStartRun } from '@/lib/books-runtime.ts'
@@ -72,6 +73,22 @@ export async function POST(
       : ''
   if (note === '') {
     return jsonError(400, 'invalid-request', '先写一句想让故事怎么变——不然重写出来的还是原来那一版')
+  }
+  /**
+   * ★ 上界（2026-10-20 补）。这一格原来**只判非空**，而它原样进提示词
+   *   （`prompts/story-plan.ts` 的 `reviseNote` 那一段）。
+   *   数与同一类东西的另外三个入口同档：`book-api.ts` 的 `MAX_TEXT = 200`、
+   *   `rerun-api.ts` 的 `MAX_FIX_NOTE = 200`、`optimize` 那条的 `MAX_WISH = 200`
+   *   ——「同一类东西不该因为走了另一个入口就换一套长度规矩」。
+   *   ★ 超了拒收，不截断：截断之后那句"按要求重写整篇"会带着半句话去重写，
+   *     而家长看不到自己那半句被丢了。
+   */
+  if (note.length > MAX_TEXT) {
+    return jsonError(
+      400,
+      'invalid-request',
+      `想改的地方写短一点（${MAX_TEXT} 字以内）——一句话说清方向就够，细节可以改完再看`,
+    )
   }
 
   const root = assetRoot()

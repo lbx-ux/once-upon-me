@@ -19,6 +19,7 @@ import {
   anchorsObjectOf,
   lookTagsFromAnalysis,
   parseLooseJson,
+  pictureFindingsOf,
 } from './openai-vision.ts'
 
 describe('parseLooseJson', () => {
@@ -514,5 +515,174 @@ describe('analyzePortrait 认得出模型实际回的形状', () => {
     expect(system).toContain('不要因为照片不完整就整张都不答')
     // 表名那句锁（减少形状彩票，但读回来那一侧不靠它成立）
     expect(system).toContain('固定放在顶层 `anchors`')
+  })
+})
+
+/* ── 画面审核（2026-10-19，`.scratch/safety` 工单 01）───────────────────────────
+ *
+ * ★ 这一组钉的是**三件只有真跑才看得出来、而错法都很安静的事**：
+ *   ① 模型的键名不固定（与 `anchorsObjectOf` 那一段同源）——认不出来就等于
+ *      "审了、一条都没有"，而那是**一次静默的假通过**；
+ *   ② 归不到条款上的条目**不许静默丢**（丢掉一条安全发现是这一档唯一不能犯的错）；
+ *   ③ 读不到时回 `findings: null` 而不是 `[]`——"没审成"与"审了没问题"必须分得开。
+ */
+describe('画面审核', () => {
+  const CLAUSES = [
+    { id: 'R-01', text: '不得出现血腥、惊悚、怪物恐吓' },
+    { id: 'R-06', text: '不得出现可被模仿的危险动作' },
+  ]
+  const REQ = { pageDataUrl: 'data:image/png;base64,AA', clauses: CLAUSES }
+
+  const deps = (replies: unknown[], sent: unknown[] = []) => ({
+    baseUrl: 'https://example.invalid/v1',
+    apiKey: 'k',
+    fetchImpl: async (_url: string | URL | Request, init?: RequestInit) => {
+      sent.push(JSON.parse(String(init?.body)))
+      const body = replies[Math.min(sent.length - 1, replies.length - 1)]
+      return new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    },
+  })
+
+  const reply = (content: string) => ({
+    choices: [{ finish_reason: 'stop', message: { role: 'assistant', content } }],
+  })
+
+  it('★ 缺省预算是 4096（推理模型的思考链先花掉预算，这一问不例外）', async () => {
+    const sent: { max_tokens?: number }[] = []
+    const provider = createOpenAiVision(deps([reply('{"findings":[],"reason":"干净"}')], sent), 'm')
+    await provider.reviewPicture(REQ)
+    expect(sent[0]?.max_tokens).toBe(4096)
+  })
+
+  it('送出去的清单是**条款原文**，而且是封闭的那几条（不是词表词）', async () => {
+    const sent: { messages: { content: unknown }[] }[] = []
+    const provider = createOpenAiVision(deps([reply('{"findings":[]}')], sent), 'm')
+    await provider.reviewPicture(REQ)
+    const user = JSON.stringify(sent[0]?.messages[1]?.content)
+    expect(user).toContain('R-01')
+    // ★ 条款原文进得去，而词表词（`血` / `尸体`）不该出现在这里——
+    //   图上没有"血"这个字，只有一片红。给词等于给了一把用不上的尺子
+    expect(user).toContain('怪物恐吓')
+    expect(user).not.toContain('尸体')
+  })
+
+  it('读不到时回 `findings: null`，**不是空数组**（"没审成"与"审了没问题"必须分得开）', async () => {
+    const provider = createOpenAiVision(deps([reply('这家什么都没回')]), 'm')
+    const out = await provider.reviewPicture(REQ)
+    expect(out.findings).toBeNull()
+    expect(out.reason).toContain('画面审核')
+    expect(out.reason).toContain('预算 4096')
+  })
+
+  it('**没有重试**：读数可以重试，审核不行（一次要送一张 1440² 的图）', async () => {
+    const sent: unknown[] = []
+    const provider = createOpenAiVision(deps([reply('不是 JSON')], sent), 'm')
+    await provider.reviewPicture(REQ)
+    expect(sent).toHaveLength(1)
+  })
+
+  it('认得出清单里的条款 id，`where` 原样带回来', async () => {
+    const provider = createOpenAiVision(
+      deps([
+        reply(
+          JSON.stringify({
+            findings: [{ clauseId: 'R-06', where: '左下角的火柴' }],
+            reason: '有火',
+          }),
+        ),
+      ]),
+      'm',
+    )
+    const out = await provider.reviewPicture(REQ)
+    expect(out.findings).toEqual([{ clauseId: 'R-06', where: '左下角的火柴' }])
+  })
+
+  it('同一条条款只报一次（家长要改的是那一张图，不是三处）', async () => {
+    const provider = createOpenAiVision(
+      deps([
+        reply(
+          JSON.stringify({
+            findings: [
+              { clauseId: 'R-01', where: '左边' },
+              { clauseId: 'R-01', where: '右边' },
+            ],
+          }),
+        ),
+      ]),
+      'm',
+    )
+    const out = await provider.reviewPicture(REQ)
+    expect(out.findings).toHaveLength(1)
+  })
+
+  it('★ 归不到条款上的条目**不静默丢**：数量与回包原文并进 `reason`', async () => {
+    const provider = createOpenAiVision(
+      deps([
+        reply(
+          JSON.stringify({
+            findings: [
+              { clauseId: 'R-99', where: '左上角' },
+              { clauseId: 'R-01', where: '右边' },
+            ],
+            reason: '看到两处',
+          }),
+        ),
+      ]),
+      'm',
+    )
+    const out = await provider.reviewPicture(REQ)
+    // 认得的那一条照常回来
+    expect(out.findings).toEqual([{ clauseId: 'R-01', where: '右边' }])
+    // ★ 认不得的那一条**看得见**：丢掉一条安全发现是这一档唯一不能犯的错
+    expect(out.reason).toContain('另有 1 条归不到清单里的条款上')
+  })
+})
+
+describe('pictureFindingsOf 的宽容度（模型的键名与后缀都不固定）', () => {
+  const CLAUSES = [{ id: 'R-01' }, { id: 'R-02' }]
+
+  it('`findings` 之外的键名也认（`issues` / `problems` / `results`）', () => {
+    for (const key of ['findings', 'issues', 'problems', 'results', 'items']) {
+      const out = pictureFindingsOf({ [key]: [{ clauseId: 'R-01', where: 'x' }] }, CLAUSES)
+      expect({ key, out }).toEqual({
+        key,
+        out: { findings: [{ clauseId: 'R-01', where: 'x' }], unmatched: 0 },
+      })
+    }
+  })
+
+  it('★ id 后面缀着条款名也认（实测这类模型爱写「R-01 恐怖」）', () => {
+    expect(
+      pictureFindingsOf({ findings: [{ clauseId: 'R-01 恐怖', where: 'x' }] }, CLAUSES),
+    ).toEqual({
+      findings: [{ clauseId: 'R-01', where: 'x' }],
+      unmatched: 0,
+    })
+    // 大小写也放宽
+    expect(pictureFindingsOf({ findings: [{ clause: 'r-02', where: 'x' }] }, CLAUSES)).toEqual({
+      findings: [{ clauseId: 'R-02', where: 'x' }],
+      unmatched: 0,
+    })
+  })
+
+  it('`where` 缺席时给一句占位，不把这条丢掉', () => {
+    expect(pictureFindingsOf({ findings: [{ clauseId: 'R-01' }] }, CLAUSES)).toEqual({
+      findings: [{ clauseId: 'R-01', where: '（模型没说到位置）' }],
+      unmatched: 0,
+    })
+  })
+
+  it('一处条目都没有（键不在）→ 空数组、零未匹配，**不是"没审成"**', () => {
+    expect(pictureFindingsOf({ reason: '干净' }, CLAUSES)).toEqual({ findings: [], unmatched: 0 })
+  })
+
+  it('坏条目只算未匹配，不抛', () => {
+    expect(pictureFindingsOf({ findings: [null, 'x', 3, { clauseId: 'R-07' }] }, CLAUSES)).toEqual({
+      findings: [],
+      unmatched: 4,
+    })
   })
 })

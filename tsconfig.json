@@ -45,6 +45,7 @@
     ".next-gate/types/**/*.ts",
     ".next-hl/types/**/*.ts",
     ".next-insp/types/**/*.ts",
+    ".next-mobile/types/**/*.ts",
     ".next-own/types/**/*.ts",
     ".next-pfbg/types/**/*.ts",
     ".next-session/types/**/*.ts",
@@ -56,7 +57,7 @@
     ".next-verify/types/**/*.ts",
     ".next/types/**/*.ts",
     "next-env.d.ts",
-    ".next-mobile/types/**/*.ts"
+    ".next-perf/types/**/*.ts"
   ],
   "exclude": ["node_modules"]
 }

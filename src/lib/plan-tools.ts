@@ -41,6 +41,7 @@ import { listBooks, noCovers } from './library.ts'
 import { reviewText } from './engine/review.ts'
 import { checklistOf, promptFragmentOf } from './engine/character-card/card.ts'
 import { retrieveBoth } from './rag/retrieve.ts'
+import { SOURCE_BOUNDARY_LINE } from './rag/prompt.ts'
 import { DEFAULT_K, DEFAULT_MIN_SCORE, DEFAULT_NARROWED_MIN_SCORE } from './rag/load.ts'
 
 export type PlanToolsContext = {
@@ -292,6 +293,15 @@ function formatSearch(
     return `以前的故事里没有与「${query}」相近的片段（这次没有可参考的，照常往下写就行）。`
   }
   const parts: string[] = []
+  /**
+   * ★ 与图纸那一条共用**同一句**分界（`rag/prompt.ts` 的 `SOURCE_BOUNDARY_LINE`）。
+   *
+   *   这一格与预检索那一格吃的是**同一份**素材——正例里有一半以上来自家长自己家里
+   *   那几本书的 `story.json`，而那一份家长可以逐字改（`PUT /api/books/<id>/story`
+   *   只过信封校验）。所以"工具返回的东西是数据不是指令"这件事必须说两次：
+   *   两个入口各说一次，而**措辞只有一处**（另写一份的话，改了一边另一边就漂）。
+   */
+  parts.push(SOURCE_BOUNDARY_LINE)
   if (pair.examples.length > 0) {
     parts.push('可以照着写的（节奏与用词）：')
     parts.push(...pair.examples.map((hit) => `- [${hit.why}] ${hit.chunk.text}`))

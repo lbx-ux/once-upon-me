@@ -22,11 +22,22 @@
  *     事实没被改写。"演示卡为什么是 v1"的答案就是"它们是居中的那一版画的"。
  *   ★ 三个版本号同进，是因为那一段【构图】**三份共用**（标准像 / 再画一版 / 用照片）。
  *     只升一份的后果是另外两份的图版本号骗人——而它们也变成白底了。
+ *
+ * ★ 2026-10-20：**三个版本号一起进到 `@v3`**，改的是两处**共用**的行
+ *   ——首行那个名字包进「」，以及「这一版要改的地方」那句家长原话包进「」并标上
+ *   `家长原话`（`.scratch/prompt-audit` 那一轮）。
+ *   ★ 判据与上一次完全同一条，只是方向相反的半边：**发出去的字节变了才升**。
+ *     名字那一行三份都发（所以三份都升），而 `家长原话` 那一段只有"再画一版"那条路
+ *     会发——但它与首行同属这一个模板，所以三个号跟着一起走，免得下次有人只改一处
+ *     而三个号分家。
+ *   ★ 这次改的不是画风也不是构图，**图上不会看出差别**（除非家长那句话本身含指令字）。
+ *     所以它不是"画出来的东西变了"，而是"这一段输入从此按数据读"——
+ *     版本号在这里答的是"这张图是哪份模板出的"，那一句变了，答案就该变。
  */
 
 import type { CharacterAnchor, StyleLock } from '../engine/domain.ts'
 
-export const CHARACTER_SHEET_VERSION = 'character-sheet@v2'
+export const CHARACTER_SHEET_VERSION = 'character-sheet@v3'
 
 /**
  * 「再画一版」用的提示词版本（工单 03）。
@@ -39,7 +50,7 @@ export const CHARACTER_SHEET_VERSION = 'character-sheet@v2'
  *   那一段，其余逐字节相同。
  * ★ 版本号从 `@v1` 进到 `@v2` 是同一天的事（背景改白底），理由写在文件头那一段。
  */
-export const CHARACTER_REVISE_VERSION = 'character-revise@v2'
+export const CHARACTER_REVISE_VERSION = 'character-revise@v3'
 
 /**
  * 「用他的照片出一张形象」用的提示词版本（工单 03 的第二条路）。
@@ -50,7 +61,7 @@ export const CHARACTER_REVISE_VERSION = 'character-revise@v2'
  *   （要**转成插画**，不能照抄构图）。亮出来的是同一张脸，但依据那份输入完全不同，
  *   所以 provenance 必须分得开：答辩时"这两张的提示词一样吗"要答得上。
  */
-export const CHARACTER_PHOTO_VERSION = 'character-photo@v2'
+export const CHARACTER_PHOTO_VERSION = 'character-photo@v3'
 
 /** 画风段。与 `docs/demo-book-art-prompts.md` 的既定描述一致（26 张成图都是这一套出来的） */
 export const DEFAULT_STYLE_FRAGMENT =
@@ -120,7 +131,9 @@ export function characterSheetPrompt(input: CharacterSheetInput): string {
   const style = input.style?.promptFragment || DEFAULT_STYLE_FRAGMENT
   const note = input.revisionNote?.trim() ?? ''
   return [
-    `画一张儿童绘本的**角色标准像**：${input.name}，东亚面孔，${input.ageLabel}${input.childWord}。`,
+    // ★ 名字包进「」（2026-10-20）：它是家长填的，而三份模板共用这一行。
+    //   与「家长原话」那几处同一个手法——引号划出"这是被引用的字"。
+    `画一张儿童绘本的**角色标准像**：${input.name === '' ? '' : `「${input.name}」，`}东亚面孔，${input.ageLabel}${input.childWord}。`,
     '',
     '【身份锚点——每一条都必须画出来，它们是后续所有页的核对依据】',
     ...input.anchors.map((anchor, index) => `${index + 1}. ${anchor.value}`),
@@ -134,7 +147,15 @@ export function characterSheetPrompt(input: CharacterSheetInput): string {
       : []),
     ...(note === ''
       ? []
-      : ['【这一版要改的地方——家长看过上一版之后提的，只改这里，别处保持与上一版一致】', note, '']),
+      : [
+          '【这一版要改的地方——家长看过上一版之后提的，只改这里，别处保持与上一版一致】',
+          // ★ 与故事规划那三格同一个手法（2026-10-20）：家长手打的那句话包进「」并标上
+          //   `家长原话`，读的人一眼知道这是**被引用的字**，不是"这一段是给你的新要求"。
+          //   ★ 这句话进的是**图像**提示词，而它原来是两道文字闸都不经过的一格
+          //     （2026-10-20 起 `cards/revise/route.ts` 补了 `reviewInput` 这道闸）。
+          `家长原话：「${note}」`,
+          '',
+        ]),
     '【构图】竖构图居中，单人，站姿正面略偏 15 度，双手自然垂放，全身入画（头顶与脚底各留约 8% 空间）。',
     // ★ 白底（2026-10-16 第 21 刀，用户："生成的人物也要是白底的"，截图里三张角色卡：
     //   `public/demo/cards/` 那两张（小满/小宇）是白底，现场生成的那张是暖米色——

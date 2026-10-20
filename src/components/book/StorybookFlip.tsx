@@ -59,6 +59,15 @@
  * 文案（`▶ 朗读` / `■ 停止` / `aria-label`）全部来自 `reader/use-narration.ts`，
  * 与两个阅读器**同一份** —— 它是"朗读钮该说什么"的唯一来源（其中 `aria-label`
  * 尤其容易漂，而它是读屏唯一的入口）。
+ *
+ * ---------------------------------------------------------------------------
+ * 键盘 ← →（2026-10-20 修）
+ *
+ * **只在书铺在这一屏上时**才接管这两个键，其余时候原样放行给浏览器 —— 判据与
+ * 为什么不复用 `useScrollDriver` 的 `onActiveChange`，写在下面那个 effect 里。
+ * 原先是在 `window` 上无条件接键：滚到第三屏按方向键，屏幕外那本书会默默翻一页，
+ * 而 `preventDefault` 又让整页再也滚不动。那是唯一一条会被评审当场看见的 bug
+ * （第三屏一度用自己那层的 `stopPropagation` 临时挡着，那半条已随这次修复撤掉）。
  */
 
 import Link from 'next/link'
@@ -541,18 +550,50 @@ export default function StorybookFlip({ audio }: { audio: DemoBookAudio }) {
   )
 
   useEffect(() => {
+    /**
+     * ★ 这一节现在是不是"这一屏"（2026-10-20 修的那条 bug 的唯一判据）。
+     *
+     * ← → 是**页面的**方向键，不是这本书的。原来这里在 `window` 上无条件接键，
+     * 于是在第三屏（亮点那一节）按方向键，**屏幕外那本书会默默翻一页**，
+     * 而且 `preventDefault` 把那两个键从浏览器手里也抢走了 —— 唯一一条会被评审
+     * 当场看见的 bug。第三屏一度用自己那层的 `stopPropagation` 临时挡住
+     * （见 `HighlightsReel.tsx` 的文件头，那半条已随这次修复一起撤掉）。
+     *
+     * 判据取"**视口中线落在这一节里**"，三个形态共用同一条：
+     *   · 动效模式：本节 340vh、舞台钉在 top: 0，中线落在本节里 ⟺ 书正铺在这一屏上
+     *     （也就是 p 0.11–0.89 那一段：进入时书已升起半屏，退场时还没走完）；
+     *   · 静止模式：本节是 `height: auto` 的普通一节（storybook-flip.css §7），
+     *     "铺满视口"永远不成立 —— 拿"完全盖住视口"当判据的话，键盘用户在这一档
+     *     会连 ← → 都按不动，而那一档恰恰只有按钮和键盘两样能翻页；
+     *   · 手机那一档本节 `display: none`（同 CSS §8）：rect 全 0，判据自然为假。
+     *
+     * ★ 刻意**不用** `useScrollDriver` 的 `onActiveChange`（那是 IntersectionObserver，
+     *   `rootMargin: '160px 0px'`）：它在书滚出视口**之后还有 160px 算"活跃"**，
+     *   而那 160px 正好落在与第三屏的接缝上 —— 评审顺着第三屏往下看的时候按一下 →
+     *   翻的仍然是那本看不见的书。要用 IO 就得给它一条与这里不同的 rootMargin，
+     *   那是把同一个判据写两遍。直接在按键那一刻量一次（一次 keydown 一次
+     *   getBoundingClientRect）反而更准，也不用管 resize / 转屏的失效时机。
+     */
+    const ownsArrowKeys = () => {
+      const wrap = wrapRef.current
+      if (!wrap) return false
+      const r = wrap.getBoundingClientRect()
+      const mid = window.innerHeight / 2
+      return r.top <= mid && r.bottom >= mid
+    }
+
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return
       const el = e.target as HTMLElement | null
       if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable))
         return
-      if (e.key === 'ArrowRight') {
-        e.preventDefault()
-        goTo(pageRef.current + 1)
-      } else if (e.key === 'ArrowLeft') {
-        e.preventDefault()
-        goTo(pageRef.current - 1)
-      }
+      if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return
+      /* ★ 不是这一屏就**原样放行** —— 这里连 `preventDefault` 都不许调，
+         否则等于把整页的方向键永远锁在书里（那正是这条 bug 的另一半：
+         滚到第三屏之后，方向键再也滚不动页面了）。 */
+      if (!ownsArrowKeys()) return
+      e.preventDefault()
+      goTo(pageRef.current + (e.key === 'ArrowRight' ? 1 : -1))
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)

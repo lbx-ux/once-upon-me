@@ -14,6 +14,7 @@
 
 import type { ParseResult } from './book-api.ts'
 import { voiceIdProblem } from './voices/id.ts'
+import { reviewInput, reviewInputText } from './engine/review.ts'
 
 /** 「这一次哪里不对」那句补充的上界 */
 export const MAX_FIX_NOTE = 200
@@ -70,6 +71,28 @@ export function parseRerunBody(raw: unknown): ParseResult<RerunBody> {
   const fixNote = typeof fixNoteRaw === 'string' ? fixNoteRaw.trim() : ''
   if (fixNote.length > MAX_FIX_NOTE) {
     problems.push(`补充说明太长了（${MAX_FIX_NOTE} 字以内）`)
+  }
+
+  /**
+   * ★ 内容闸（2026-10-20）。**`fixNote` 是唯一漏网的那一格**。
+   *
+   *   盘上另外几处家长手输的地方都有一道闸：开书那三格（`plan.ts` 的 `reviewInput`）、
+   *   书名与每页正文（`illustrateBook` 开头的 `reviewStory`）。而这一句
+   *   **两者都不经过**——它不写进故事（所以躲过 `reviewStory`），也不是开书时的表单
+   *   （所以躲过 `reviewInput`），却**原样拼进出图提示词**（`prompts/image.ts` 的 `fixNote`
+   *   那一段）。一条家长写进去的"画一个拿刀的人"在这条路上没有任何东西拦得住，
+   *   唯一的事后拦截是那一档**不可复现**的画面审核。
+   *   ★ 处置与另外两处同一条口径：**拒发**。这是别人的话，没有"我们替你重写一版"这条路
+   *     （`review.ts` 文件头那句）。`flag` 与 `block` 在这一道闸上是同一件事。
+   *   ★ 用的是**同一份条款库**（`rag/review-corpus.ts`），所以家长在不同入口
+   *     撞到的是同一套词表、同一句措辞——各写一份的症状是"同一句话在 A 入口被拦、
+   *     在 B 入口放过去"。
+   */
+  if (fixNote !== '') {
+    const review = reviewInput([{ label: '补充说明', text: fixNote }])
+    if (review.verdict !== 'pass') {
+      problems.push(`${review.problems.map(reviewInputText).join('；')}。改一下再来`)
+    }
   }
 
   let lines: string[] | undefined

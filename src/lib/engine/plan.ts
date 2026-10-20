@@ -25,7 +25,7 @@ import { EngineError } from './errors.ts'
 import { completeWithTools, type ToolDef } from './tool-loop.ts'
 import type { BookForm, RetrievalProvenance, RetrievedChunkRef, StoryTree } from './domain.ts'
 import { branchPagesOf, buildTree, type TreeProblem } from './tree.ts'
-import { reviewProblemText, reviewStory } from './review.ts'
+import { reviewInput, reviewInputText, reviewProblemText, reviewStory } from './review.ts'
 import type { EngineEventPayload } from './events.ts'
 import type { TextDelta, TextGenerator, TextRequest } from './providers/types.ts'
 import type { RetrievePair } from '../rag/retrieve.ts'
@@ -143,6 +143,42 @@ export async function planStory(input: StoryPlanInput, opts: PlanOptions): Promi
     throw new EngineError(
       'invalid-request',
       '`tools` 与 `onDelta` 不能同时给：工具循环要的是完整回包，不是流式增量',
+    )
+  }
+
+  /**
+   * ⓪ **家长那句自由输入过闸**（2026-10-19，`.scratch/safety` 工单 02）。
+   *
+   * ★ 为什么它非有不可：这一层下面紧接着的两件事都**原样吃家长写的字**——
+   *   `retrieveOnce` 把那句话送去 embedding，`storyPlanUser` 把它拼进提示词
+   *   （`主题：${input.theme}` / `家长希望孩子从中得到：${input.wish}` /
+   *   `家长看完第一版之后的新要求：…`）。在这之前，那三处是**任意文本直达**。
+   * ★ 为什么在最前面，而不是"反正出图前还有一道"：下面那两道闸审的是**模型写出来的东西**。
+   *   家长写"小狗流血死掉的故事"，模型**照做**的概率远高于它自己想起来写——
+   *   那就变成"先让它写一版越线的、再拦下、再让它重写"，多花一次文本调用，
+   *   而且让模型看了一遍那段内容（`ClauseDisposition` 里 `block` 那条理由）。
+   * ★ 处置是**拒发**，`flag` 与 `block` 一样：这是别人的话，没有"重写一版"这条路。
+   */
+  const inputReview = reviewInput([
+    { label: '主题', text: input.theme },
+    ...(input.wish === undefined ? [] : [{ label: '你想让孩子得到的', text: input.wish }]),
+    ...(input.reviseNote === undefined ? [] : [{ label: '改稿要求', text: input.reviseNote }]),
+  ])
+  if (inputReview.verdict !== 'pass') {
+    const reason = inputReview.problems.map(reviewInputText).join('；')
+    opts.emit({
+      kind: 'review',
+      stage: 'planning',
+      check: 'safety',
+      verdict: inputReview.verdict,
+      reason,
+    })
+    throw new EngineError(
+      'review-blocked',
+      `你写的那句话里有不适合放进孩子的书里的内容：${reason}。改一下再来`,
+      {
+        detail: inputReview.problems.map((problem) => `${problem.field}:${problem.clauseId}`),
+      },
     )
   }
 

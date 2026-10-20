@@ -27,7 +27,7 @@
  *   只是补救办法是**重写**而不是**拒发**。一个会放行的警告不叫闸门。
  *
  * ---------------------------------------------------------------------------
- * 三、`unavailable` 今天几乎用不上，而这件事要写在明处
+ * 三、**词表这一档不出 `unavailable`**，而这件事要写在明处
  *
  *   `review-corpus.ts` 里有三条 `detect: 'semantic'` 的条款（说教 / 情绪接住 / 适龄），
  *   它们**要模型读**，而**今天没有跑那一档**。于是"这一页到底审没审全"这个问题
@@ -40,6 +40,21 @@
  *   ★ 与一致性核对那条纪律（"不可用就判 `未核对`，它不是通过也不是失败"）不冲突：
  *     那边**确实有**一个会跑、会失败的比较器；这边那一档**根本还不存在**。
  *     等语义档落地（工单 05 的剩余项），它的失败才该走 `unavailable`。
+ *     ——★ 2026-10-19 补一句：**画面那一档**就是"确实有比较器"的那种，所以它读不到时
+ *     走的正是 `unavailable`（`PictureReviewResult.verdict`，见下第五节）。这句话
+ *     现在有两个实例可以对照，别再把它读成"`unavailable` 用不上"。
+ *
+ * ---------------------------------------------------------------------------
+ * 三之二、家长那句自由输入（2026-10-19，`.scratch/safety` 工单 02）
+ *
+ *   `reviewInput` 用的是**同一份词表**，但处置**只有一种：拒发**。
+ *   `flag` 与 `block` 在这道闸上的下一步是同一件事——**这是别人的话，
+ *   没有"我们替你重写一版"这条路**（替家长改他写的那句话，改出来的是谁的意思？）。
+ *   事件里的 `verdict` 仍然如实报是哪一种，让界面说得清。
+ *
+ *   ★ 它在 `planStory` 的**最前面**：比第一句提示词早，也比检索那次 embedding 早。
+ *     拦在这儿的意义一半是安全（那段内容根本没接触过模型），一半是钱
+ *     （不用先编一版越线的、再拦下、再重写）。判据脚本量的就是那个"0 次调用"。
  *
  * ---------------------------------------------------------------------------
  * 四、词表档的边界（**不许含糊**）
@@ -51,17 +66,27 @@
  *     工单 05 那条**故意用谐音绕过**的反例就是用来把这句话钉在纸上的。
  *
  * ---------------------------------------------------------------------------
- * 五、**画面**里的那一道还不存在（写在这里，免得下一个人以为审过了）
+ * 五、**画面**那一档（2026-10-19 起存在，`.scratch/safety` 工单 01）
  *
- *   今天审的是**字**：正文、`scene`、`imagePrompt`、选择点的两句话、书名。
+ *   本文件上半审的是**字**：正文、`scene`、`imagePrompt`、选择点的两句话、书名。
  *   而"图上画出了不该出现的东西"是另一件事——图不是文字，词表扫不到。
- *   它该落在**出图那一次调用之后**（一次视觉模型调用可以顺带问第二个问题），
- *   而不是这一层：这一层是纯函数，不认识图。
- *   ★ 所以 `reviewStory` 通过**只说明文字这一关过了**。视觉档留在 B3 的另一个动作里，
- *     本轮不做（工单 05「不做」那一节）。
+ *   ★ 那一档**不在这个模块里**，而且**不是判据**：
+ *     - 落点在 `providers/openai-vision.ts` 的 `reviewPicture`（一次视觉模型调用），
+ *       与 `illustrate.ts` 里那个调用点（出图之后）；
+ *     - 问的清单是 `rag/review-corpus.ts` 的 `PICTURE_CLAUSES`（那 6 条**条款原文**，
+ *       不是词表词——图上没有"血"这个字，只有一片红）；
+ *     - 它**不可复现**，所以不参与本文件那两个数（9/10 拦下、0 误拦），
+ *       唯一的读数是 `scripts/picture-review-cases.mts` 量出来的**误报率**。
+ *   ★ 本文件只做**翻译**（`toPictureProblems` / `pictureProblemText`：条款 id →
+ *     类别 + 人话）。判断在哪一次调用里，别把 `reviewStory` 和它接起来——
+ *     那会让"通过的审核"这句话分不清说的是哪一档。
+ *
+ *   ★ 所以：`reviewStory` 通过**只说明文字这一关过了**；`pass` 的 `verdict` 一个字
+ *     都没有说画面。要知道一页的画面审没审、审出什么，读 `Illustration.pictureReview`。
  */
 
 import {
+  clauseById,
   LEXICON_CLAUSES,
   REVIEW_CLAUSES,
   type ClauseCategory,
@@ -213,4 +238,116 @@ export function reviewProblemText(page: PageReview): string {
   const where = page.pageNo === 0 ? '书名' : `第 ${page.pageNo} 页`
   const more = page.problems.length > 1 ? `（这一页还有 ${page.problems.length - 1} 处）` : ''
   return `${where}：${first.category}（${first.clauseId}）——出现了「${first.word}」${more}`
+}
+
+/* ─────────────────── 家长那句自由输入过闸（2026-10-19，`.scratch/safety` 工单 02） ───────────────────
+ *
+ * ★ 与 `reviewStory` **同一套条款、同一个词表**，但处置**只有一种**：拒发。
+ *   出图那道闸上写过同一个道理（`index.ts` 里那段）：**这是别人的话，
+ *   没有"重写一版"这条路**——我们替家长改他写的那句话，改出来的是谁的意思？
+ *   所以 `rewrite` 与 `block` 在这里的下一步是同一件事，只是错误消息说得清是哪一种。
+ *
+ * ★ 为什么它必须在**提示词之前、也在检索之前**跑：见 `planStory` 那个调用点。
+ *   在这里只记一句——`reviewInput` 是纯函数，它不关心自己站在流水线的哪一格。
+ */
+
+/** 家长写的一格自由文本。`label` 是它在那句错误消息里叫什么（"主题"/"改稿要求"） */
+export type InputField = {
+  label: string
+  text: string
+}
+
+/** 多一格 `field`：家长要改的是**那一格**，不是整份表单 */
+export type InputProblem = ReviewProblem & { field: string }
+
+export type InputReview = {
+  verdict: ReviewVerdict
+  problems: readonly InputProblem[]
+}
+
+/**
+ * 家长那几格自由文本过一遍词表。**空的那几格不跑**（与 `reviewText` 同一条）。
+ *
+ * ★ 只审**家长打进去的字**：主题、那句"希望孩子得到什么"、以及"重写一版"的要求。
+ *   主角名字（`childName` / `nameReading`）不在这张表里，是有意的：
+ *   它是**孩子档案**上的字段，不是这一屏的自由输入，而且它进提示词的那一句
+ *   （"名字念 X，别念错"）是把它当**拼音标注**用的，不是当故事内容用的。
+ */
+export function reviewInput(fields: readonly InputField[]): InputReview {
+  const problems = fields
+    .filter((field) => field.text.trim() !== '')
+    .flatMap((field) =>
+      reviewText(field.text).map((problem) => ({ ...problem, field: field.label })),
+    )
+  return { verdict: verdictOf(problems), problems }
+}
+
+/**
+ * 家长那句输入没过时的一句话。**把 `reviewProblemText` 那句换成"哪一格"**，
+ * 其余（条款 id、命中的词）一个字不差——两处的判据是同一份条款库，
+ * 措辞再各写一份就会漂。
+ */
+export function reviewInputText(problem: InputProblem): string {
+  return `${problem.field}：${problem.category}（${problem.clauseId}）——出现了「${problem.word}」`
+}
+
+/* ─────────────────── 画面审核：**兜底，不是判据**（2026-10-19，`.scratch/safety` 工单 01） ───────────────────
+ *
+ * ★ 这一档与上面所有东西**不是一类**，混淆它俩是这一节唯一的风险：
+ *
+ *   |          | 文字（本文件上半）        | 画面（本节）                    |
+ *   | -------- | ------------------------- | ------------------------------- |
+ *   | 判据     | 词表，确定性、可复现      | **一个视觉模型的判断，不可复现** |
+ *   | 身份     | 判据                      | **兜底**                        |
+ *   | 能宣称的 | "命中的一律拦下，词可复核" | "跑过的图里它报了什么、误报多少" |
+ *
+ *   所以本文件在这里只做**翻译**（条款 id → 类别 / 人话），**不做判断**：
+ *   判断在 `providers/openai-vision.ts` 那次调用里，落点在 `illustrate.ts`。
+ *   `reviewStory` / `reviewText` 与本节**没有任何调用关系**——别把它们接起来。
+ * ★ 为什么职责划在这儿：条款库里有什么类别，是**这一个文件**的知识。
+ *   让 `illustrate.ts` 自己去查 `clauseById`，那份知识就散出去了。
+ */
+
+/**
+ * 画面审核命中的一条。**没有 `word`，多一个 `where`**——
+ * 图上没有一个字可扫，只有"画面哪儿"，所以这两个字段与 `ReviewProblem` 正好换了个方向。
+ */
+export type PictureProblem = {
+  clauseId: string
+  category: ClauseCategory
+  disposition: ClauseDisposition
+  /** 那句话说的东西在画面哪个位置、是什么东西（模型给的原文） */
+  where: string
+}
+
+/**
+ * 视觉模型报回来的条目 → 带上类别与处置。
+ *
+ * ★ **认不出的 id 一律归「恐怖」并保留原文**，不丢也不抛：
+ *   认不出只有两种成因——模型把 id 写歪了，或者条款库改了名。
+ *   两种情况下那条发现都可能是真的，而**丢掉一条安全发现**是这一档唯一不能犯的错。
+ *   `clauseId` 原样留着，所以"归到哪一条"这件事在 `book.json` 里仍然查得到。
+ */
+export function toPictureProblems(
+  findings: readonly { clauseId: string; where: string }[],
+): PictureProblem[] {
+  return findings.map((finding) => {
+    const clause = clauseById(finding.clauseId)
+    return {
+      clauseId: finding.clauseId,
+      category: clause?.category ?? '恐怖',
+      disposition: clause?.disposition ?? 'rewrite',
+      where: finding.where,
+    }
+  })
+}
+
+/**
+ * 一条画面审核结论的人话。**与 `reviewProblemText` 同一个形状**（页码 + 类别 + 条款 id），
+ * 只把"出现了「某个词」"换成"画面上有：某处"——这两句不能各写一份的理由是同一条：
+ * 屏幕上并排出现两种措辞时，读的人会以为它们是两件事。
+ */
+export function pictureProblemText(problem: PictureProblem, pageNo: number): string {
+  const where = pageNo === 0 ? '封面' : `第 ${pageNo} 页`
+  return `${where}：${problem.category}（${problem.clauseId}）——画面上有：${problem.where}`
 }

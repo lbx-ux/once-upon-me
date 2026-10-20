@@ -47,8 +47,12 @@ import type {
   TextResponse,
 } from './providers/types.ts'
 import { buildTree } from './tree.ts'
-import { reviewPages, reviewStory, reviewText } from './review.ts'
+import { reviewInput, reviewInputText, reviewPages, reviewStory, reviewText } from './review.ts'
+import { THEMES } from '../themes.ts'
 import type { StoryPlanInput } from '../prompts/story-plan.ts'
+
+/** 12 个预设主题的中文名。★ 从 `THEMES` 取而不是抄一份：抄的那一份会漂 */
+const THEME_LABELS = THEMES.map((theme) => theme.label)
 
 /** 一版干净的故事：三页、独读版、无一处碰词表 */
 const CLEAN_PAGES: NodeDraft[] = [
@@ -511,5 +515,94 @@ describe('⑦ illustrateBook 的审核：拦在第一张图之前', () => {
       //   而那时该做的是去看处置表，不是把断言顺手改掉。
       verdict: 'flag',
     })
+  })
+})
+
+/* ───────── 家长那句自由输入过闸（2026-10-19，`.scratch/safety` 工单 02）───────── */
+
+describe('⑧ 家长那句自由输入：同一份词表，但处置只有一种', () => {
+  it('命中就给得出条款 id、类别与**是哪一格**', () => {
+    const review = reviewInput([
+      { label: '主题', text: '小狗死掉的故事' },
+      { label: '改稿要求', text: '让他别玩火' },
+    ])
+    expect(review.verdict).toBe('block')
+    expect(review.problems.map((problem) => [problem.field, problem.clauseId])).toEqual([
+      ['主题', 'R-03'],
+      ['改稿要求', 'R-06'],
+    ])
+    expect(reviewInputText(review.problems[0]!)).toBe('主题：死亡（R-03）——出现了「死」')
+  })
+
+  it('空的那几格不跑（与 `reviewText` 同一条），空白不算命中', () => {
+    expect(reviewInput([{ label: '主题', text: '   ' }]).verdict).toBe('pass')
+    expect(reviewInput([{ label: '主题', text: 'cloud' }]).verdict).toBe('pass')
+    expect(reviewInput([]).verdict).toBe('pass')
+  })
+
+  it('★ 直接走 `planStory`：拒发、**一次模型调用都不发**、事件里带条款 id', async () => {
+    const { text, calls } = fakeText([CLEAN_JSON])
+    const { events, emit } = emitter()
+    await expect(
+      planStory({ ...INPUT, theme: '小狗死掉的故事' }, { text, form: 'solo', emit }),
+    ).rejects.toMatchObject({ code: 'review-blocked' })
+
+    // ★ 这条是这一档**全部价值的一半**：拦在模型之前，那段内容根本没接触过模型。
+    //   只断言"抛了错"的话，把闸门挪到第一次调用之后也照样绿
+    expect(calls()).toBe(0)
+    const review = events.find((event) => event.kind === 'review')
+    // ★ `flag` 而不是 `block`：`R-03` 的处置是"重写一版"，而这道闸上**两种处置的
+    //   下一步是同一件事**（都是拒发）——这是别人的话，没有"我们替你重写"这条路。
+    //   事件里的 `verdict` 仍然如实报是哪一种，让界面说得清。
+    expect(review).toMatchObject({ stage: 'planning', check: 'safety', verdict: 'flag' })
+    expect((review as { reason: string }).reason).toContain('R-03')
+    // 一个字都没开始编，所以没有 plan-ready
+    expect(events.some((event) => event.kind === 'plan-ready')).toBe(false)
+  })
+
+  it('★ 命中 `block` 那一类时事件如实报 block（处置一样是拒发，但话说得不一样）', async () => {
+    const { text, calls } = fakeText([CLEAN_JSON])
+    const { events, emit } = emitter()
+    await expect(
+      planStory({ ...INPUT, wish: '让他知道自杀有多可怕' }, { text, form: 'solo', emit }),
+    ).rejects.toMatchObject({ code: 'review-blocked' })
+    expect(calls()).toBe(0)
+    expect(events.find((event) => event.kind === 'review')).toMatchObject({ verdict: 'block' })
+  })
+
+  it('★ 三道自由文本都过闸：主题 / 那句话 / 改稿要求', async () => {
+    for (const [where, patch] of [
+      ['主题', { theme: '小猫流血了' }],
+      ['那句话', { wish: '让他知道自杀有多可怕' }],
+      ['改稿要求', { reviseNote: '加一段怪兽狰狞地尖叫' }],
+    ] as const) {
+      const { text, calls } = fakeText([CLEAN_JSON])
+      const { emit } = emitter()
+      await expect(
+        planStory({ ...INPUT, ...patch }, { text, form: 'solo', emit }),
+      ).rejects.toMatchObject({ code: 'review-blocked' })
+      expect({ where, calls: calls() }).toEqual({ where, calls: 0 })
+    }
+  })
+
+  it('反例：12 个预设主题名与常见那句"希望孩子得到"，一条都不拦', async () => {
+    for (const theme of THEME_LABELS) {
+      expect({ theme, verdict: reviewInput([{ label: '主题', text: theme }]).verdict }).toEqual({
+        theme,
+        verdict: 'pass',
+      })
+    }
+    for (const wish of [
+      '他怕黑，想让他胆子大一点',
+      '刚上幼儿园，想让他知道妈妈会回来',
+      '学骑自行车摔了一跤，想让他别怕',
+      '爷爷住院了，他总问什么时候回来',
+      '妹妹刚出生，他有点不高兴',
+    ]) {
+      expect({
+        wish,
+        verdict: reviewInput([{ label: '你想让孩子得到的', text: wish }]).verdict,
+      }).toEqual({ wish, verdict: 'pass' })
+    }
   })
 })

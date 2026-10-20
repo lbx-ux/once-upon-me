@@ -11,17 +11,26 @@
  * | 负极清单必须同时写"要出现什么" | 同上 §五：只写"不要什么"会失效 |
  * | 角色段只从角色卡派生，页级 prompt 不许描述长相 | 本项目的架构决定：一处真相，见 card.ts |
  *
- * 组装顺序固定：**画风 → 角色段 → 页级 → 负极清单 → 构图**。
+ * 组装顺序固定：**画风 → 角色段 → 身份行 → 页级三项 → 负极清单 → 构图**，
+ * 中间夹着两个**可选**的修正块（`anchorNote` 模型上一轮的结论 → `fixNote` 人的更正），
+ * 不写就是没有它们。
  * 顺序不是审美选择，是横评可比性的前提（ADR-0002 第二个理由）。
  */
 
-import type { CharacterCard } from '../engine/domain.ts'
+import { ANCHOR_LABELS, type CharacterCard } from '../engine/domain.ts'
 import { promptFragmentOf } from '../engine/character-card/card.ts'
 
 /**
  * 提示词模板的版本。★ 改模板就要改它，理由不是洁癖：
  *   `provenance.promptVersion` 记在每一张图上，而 W1 横评那些数字
  *   （同一份 prompt 的通过率、首次通过率）**只有同一版本之间可比**。
+ *
+ * ★ 2026-10-20 抬到 `@v5`：多了**一句优先级**（`PRECEDENCE_BLOCK`），并把
+ *   `本页画面` / `情节` 两个值包进「」。
+ *   ★ 这一版**与前几版都不再逐字节可比**（每一页都多了那一句），所以
+ *     "首次通过率""重画率"这些跨版本读数到此为止要按 `@v4` 封箱。
+ *     v2 / v4 那两次"可选块，所以首次逐字节相同"的判断**不适用于这一次**——
+ *     别照着那两段话抄。
  *
  * ★ 2026-10-16 从 `@v1` 抬到 `@v2`：模板多了一个**可选**的尾块 `fixNote`
  *   （用户逐页重画时写的"这一次哪里不对"，见 `pagePrompt`）。
@@ -33,8 +42,18 @@ import { promptFragmentOf } from '../engine/character-card/card.ts'
  *   ★ 这一版**与前两版不再逐字节可比**：v1/v2 跑出来的那些数字（首次通过率、
  *     重画率）是"没有身份不变式"那个模板的成绩，与 v3 不是同一件事。
  *     抬版本号正是为了让这件事在 `provenance` 里看得见。
+ *
+ * ★ 2026-10-20 抬到 `@v4`：模板多了一个**可选**的 `anchorNote`——比对模型上一轮
+ *   「哪几条锚点不像」的结论，回灌进**下一次重画**（见 `anchorNoteOf`）。
+ *   ★ 这一版与前几版的关系**与 v2→v3 那一次不同，别照着那句话抄**：
+ *     第 1 次的提示词里没有 `anchorNote`（那时还没有任何结论），
+ *     所以它**逐字节仍然等于 v3**，**首次通过率照样可比**；
+ *     变的是**重画那一次**——它从此不再是一句"同一张指令再抽一次签"。
+ *     所以"重画后通过率"这个数在 v3/v4 之间**不是同一件事**，
+ *     而按 `provenance` 分档时两类图仍然混在一栏里（一页书的第 1 次与第 2 次
+ *     记的是同一个 `promptVersion`）。要分开算，看的是 `attempt`，不是版本号。
  */
-export const IMAGE_PROMPT_VERSION = 'image-page@v3'
+export const IMAGE_PROMPT_VERSION = 'image-page@v5'
 
 /** 负极清单。每条后面都跟一句"要出现什么"——只写不要，模型会画出一个它认为不要的反面 */
 const NEGATIVE_BLOCK = [
@@ -47,6 +66,28 @@ const NEGATIVE_BLOCK = [
 /** 跨页构图约束：正文叠在**左页下角**，所以那块地方不能有重要内容（首页第二屏实测过） */
 const COMPOSITION_BLOCK =
   '构图：主体偏右或居中，左下方约四分之一留出相对干净、可叠字的区域（不要画成白纸，只是不要放关键内容）。'
+
+/**
+ * ★ 谁说了算那一句（2026-10-20 加）。
+ *
+ * 这一份提示词里有三类会打架的东西，而在它之前**没有一处说明冲突时谁赢**：
+ *
+ * | 类别 | 来自 | 能不能改 |
+ * | --- | --- | --- |
+ * | 角色段 + 身份行 | 角色卡（`promptFragmentOf` / `identityBlock`） | **不可改**，它回答"这个孩子是谁" |
+ * | 本页画面 / 情节 | `story.json`，**家长可以逐字改**（那个 PUT 只过信封校验） | 可以改 |
+ * | `fixNote` | 家长在重画对话框里手输 | 可以改 |
+ * | 构图 / 负极清单 | 代码里的两段常量 | **不可改**，它是这套提示词唯一的红线 |
+ *
+ * 不说清谁赢，一句"这一次改成两只手各拿一把刀"就会与负极清单正面撞上，而模型照哪一条
+ * 全看运气——出图这条路**没有文字闸**，事后只有那一档**不可复现**的画面审核兜着。
+ * ★ 所以这一句不是在给模型加限制，是把它本来就在做的那件事**写下来**：
+ *   负极清单（"避免出现：血与伤口…"）不该被任何一页的具体描述盖过。
+ *   ★ 少写这一句的症状不是报错，是"偶尔画出一张不该出现的图"，而它没有可复现的判据。
+ */
+const PRECEDENCE_BLOCK =
+  '优先级：角色描述、构图、「避免出现」这三段，**压过**书名、这一页的情节描述、' +
+  '以及任何"改成…"的要求。两者冲突时，**按前三段来画**。'
 
 export type PagePromptInput = {
   card: CharacterCard
@@ -64,6 +105,26 @@ export type PagePromptInput = {
    * ★ 不写就是没有这一块（`filter(Boolean)`），所以没写过补充的页逐字节与 v1 相同。
    */
   fixNote?: string
+  /**
+   * **上一轮重画被否掉的那几条锚点**，由 `anchorNoteOf` 从比对模型的结论拼出来。
+   * 只有"这一页上一次没过、于是要再画一次"时才有（`illustrate.ts`）。
+   *
+   * ★ 它与 `fixNote` **同形但不是一回事**，两个差别都要留住：
+   *   · `fixNote` 是**人**写的更正（"上一版哪里不对"，家长点重画时才有）；
+   *     这一句是**比对模型**上一版的结论（"清单里这几条不像"）。
+   *   · 所以人和模型同时说话时，**人要排在后面**——人那句话是命令，
+   *     模型这一句是诊断。拼装顺序见 `pagePrompt` 里那两个 `★` 块。
+   *
+   * ★ 为什么非要回灌它（2026-10-20，计划表 B7）：在那之前，自动重画那一轮用的是
+   *   **跟上一轮逐字节相同的提示词**——锚点级的结论只进了 `retry` 事件（给家长看），
+   *   没进模型。于是"闭环"是靠**人**合上的：机器只是拿同一张指令再抽一次签。
+   *   `docs/business.md` §2.2 把这条缺口折算过价钱：每本多花 ¥1.8–5.3 与每页 ≈154 秒，
+   *   因为五本真书的"每次/页"落在 1.33–2.00——画出来有四分之一到一半是被替掉的。
+   *
+   * ★ **内容里不许出现"不要什么"**。它是"要画成什么"（锚点原文 + 卡上的值），
+   *   与负极清单那条纪律同源：只写"不要"会失效（见文件头那张表的第三行）。
+   */
+  anchorNote?: string
   /**
    * 这一页的**主角称呼**（小男孩 / 小女孩 / 孩子），由 `childWordOf` 从孩子那两样
    * （选的性别、外貌标签）算出来。
@@ -94,23 +155,70 @@ export type PagePromptInput = {
  */
 export function pagePrompt(input: PagePromptInput): string {
   const fix = input.fixNote?.trim()
+  const anchor = input.anchorNote?.trim()
   return [
     promptFragmentOf(input.card),
     identityBlock(input.childWord),
-    `本页画面：${input.page}`,
-    `情节：${input.scene}`,
+    // ★ 这两行的值来自 `story.json`（家长可逐字改），所以包进「」当**内容**读，
+    //   与 `fixNote` / 检索片段那几处同一个手法：引号划出"这是被引用的字"，
+    //   而不是"这是给你的要求"。谁说了算由下面那句 `PRECEDENCE_BLOCK` 定。
+    `本页画面：「${input.page}」`,
+    `情节：「${input.scene}」`,
     `情绪：${MOOD_HINTS[input.mood] ?? input.mood}`,
+    // ★ 比对模型上一轮的结论（只有重画那一次才有）。前缀与位置与下面那句同源：
+    //   措辞写死在这里，别让调用方各拼一份。
+    //   位置在 `fixNote` **之前**：两句同时在的时候（家长写了更正、而第 1 次又没过），
+    //   人那句是命令、模型这句是诊断，命令排在后面。
+    anchor ? `★ 上一版经核对，这几处画得不像，这一版必须照上面的角色描述改对：${anchor}` : '',
     // ★ 家长自己写的那句更正（逐页重画时才有）。前缀写死在这里而不是由调用方拼：
     //   拼在别处的话，这句话的措辞就有了两个家，而它正是模型最该看懂的一句。
     //   位置在页级三项**之后**、构图与负极清单**之前**——接在最后的话，
     //   它会与那一长串"避免出现…"抢注意力，而它说的是"上一张哪里错了"，
     //   比那三行通用约束更要紧。
     fix ? `★ 这一版要改掉上一版的问题：${fix}` : '',
+    // ★ 它落在最后两个修正块与那两段通用约束**之间**：往前它读作"上面那些话谁算数"，
+    //   往后紧跟着的就是它点名的那两段（构图 / 负极清单）。换位置要重读上面那段 ★。
+    PRECEDENCE_BLOCK,
     COMPOSITION_BLOCK,
     NEGATIVE_BLOCK,
   ]
     .filter(Boolean)
     .join('\n')
+}
+
+/**
+ * 比对模型报出的「这几条不像」→ 一句能喂回出图模型的 `anchorNote`。
+ *
+ * ★ **它认的是半截话，因为模型回的就是半截话。** 真书里录下来的原文
+ *   （`.out/web/u/1/books/xiaoman-r1-638df001b4e9/events.jsonl`）是
+ *   `["头身比是否一致"]`、`["眼睛是否一致","头发是否一致","头身比是否一致"]` ——
+ *   我们发给它核对的是 `checklistOf` 那一条条「头发是否一致：<值>」，
+ *   而它把冒号后面**丢掉了**。所以这里按 `ANCHOR_LABELS` 的槽位名做**包含匹配**，
+ *   匹配上就把卡上那条锚点的原文补回去——补回去的这一步才是这一整件事的意义：
+ *   模型上一版错在哪，模型自己说的是"头发"，它需要听到的是"头发：齐耳短发、
+ *   右侧别一枚黄色小鸭发卡"。
+ * ★ **认不出来的原样带上，不丢**。丢掉等于替模型决定"这句没用"，而这一层
+ *   没有那个资格（它与"画面审核报的条款 id 一个都不许少"是同一条纪律）。
+ * ★ 一条都对不上（或者清单本来就是空的）⇒ `undefined`：**没有结论就不编一句结论**，
+ *   那一轮仍然是"再抽一次签"。这与"画面审核 `unavailable` 时不重画"同一条口径——
+ *   缺席不许被读成"我知道该改哪里"。
+ *
+ * ★ 它**不进任何记录**，与 `fixNote` 同一条先例：`provenance` 记的是模型、
+ *   模板版本、卡版本，而这句是模型的一句诊断。要追"这一版为什么长这样"，
+ *   读的是 `events.jsonl` 里那一页前后两条 `consistency`（第一次的 `missedAnchors`
+ *   就是这句话的来源），不是清单。
+ */
+export function anchorNoteOf(card: CharacterCard, missed: readonly string[]): string | undefined {
+  const items: string[] = []
+  for (const raw of missed) {
+    const text = raw.trim()
+    if (!text) continue
+    // 认得出槽位就补上卡上的原文；认不出就照原样带上
+    const anchor = card.anchors.find((item) => text.includes(ANCHOR_LABELS[item.slot]))
+    const item = anchor ? `${ANCHOR_LABELS[anchor.slot]}：${anchor.value}` : text
+    if (!items.includes(item)) items.push(item)
+  }
+  return items.length > 0 ? items.join('；') : undefined
 }
 
 /**
@@ -183,8 +291,12 @@ export function coverPrompt(input: { card: CharacterCard; title: string }): stri
   return [
     promptFragmentOf(input.card),
     `这是绘本的封面：主角是上面描述的那个孩子，画面要能回答"这本书讲谁"。`,
+    // ★ 书名包在《》里本来就带"这是被引用的字"的意味，但**书名是模型写的、家长可改**
+    //   （`PUT /api/books/<id>/story`），所以它与页图那两行同属"会打架而原来没人说谁赢"
+    //   的那一类——下面那句 `PRECEDENCE_BLOCK` 就是那次补上的判据（2026-10-20）。
     `书名叫《${input.title}》——**不要把书名画进画面**，但请在画面上方留出一条相对干净的区域，书名会由版式叠在那里。`,
     '构图：主角占画面中部偏下，正对或半侧对镜头，姿态安静；背景是这本书里最标志性的那个场景，但要简化、不要堆细节。',
+    PRECEDENCE_BLOCK,
     NEGATIVE_BLOCK,
   ].join('\n')
 }

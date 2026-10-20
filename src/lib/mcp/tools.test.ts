@@ -367,6 +367,49 @@ describe('负例给的是能照着改的话', () => {
     expect(isError).toBe(true)
     expect(text).toContain('JSON 对象')
   })
+
+  /**
+   * ★ 自由文本的上界（2026-10-20 补的）。这条路上尤其要有：`theme` / `wish`
+   *   由**外部客户端的模型**给，而它们原样进故事规划的提示词。在这之前
+   *   `requiredString` 只 trim —— 网页那三个入口都是有上界的。
+   *   ★ 判据两边都要：**拦住**，而且那句拒绝里要给出**改法**（它会被原样喂回给模型，
+   *     模型据此自己改参数重试——这是这一层"负例要能照着改"那条约定的落点）。
+   */
+  it('★ theme 太长要拦，且告诉它缩到多少字', async () => {
+    const fx = await fixture()
+    const { text, isError } = await call(fx, 'plan_book', {
+      child: 'xiaoman',
+      theme: '恐龙'.repeat(150),
+    })
+    expect(isError).toBe(true)
+    expect(text).toContain('theme 太长了')
+    expect(text).toContain('200')
+    expect(text).toContain('再调一次')
+  })
+
+  it('★ wish 太长同样拦（它也是原样进提示词的那一格）', async () => {
+    const fx = await fixture()
+    const { text, isError } = await call(fx, 'plan_book', {
+      child: 'xiaoman',
+      theme: '恐龙',
+      wish: '飞'.repeat(201),
+    })
+    expect(isError).toBe(true)
+    expect(text).toContain('wish 太长了')
+  })
+
+  /**
+   * ★ 正面的一半也要有，否则上面两条只证明"有个数在拦"。
+   *   手法：这一轮的 `providers` 是**刻意会炸**的（`explodingProviders`），
+   *   所以"走到 providers 那一步"恰好就是"参数关已经过了"的证据——
+   *   参数被拦下时返回的是 `isError` 的结果，根本走不到那里。
+   */
+  it('刚好到上界的一句话不会被长度闸拦下（拦它的是后面那一步，不是这里）', async () => {
+    const fx = await fixture()
+    await expect(
+      call(fx, 'plan_book', { child: 'xiaoman', theme: '恐'.repeat(200) }),
+    ).rejects.toThrow('没有配图像密钥')
+  })
 })
 
 /* ───────────────────────── 有卡的正常态 ───────────────────────── */

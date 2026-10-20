@@ -83,7 +83,22 @@ export function stringList(
       return checked ?? ok(out)
     },
     describe() {
-      return { type: 'array', items: item.describe() }
+      const node: JsonSchemaNode = { type: 'array', items: item.describe() }
+      /**
+       * ★ 2026-10-20 补上这两个键。`parse()` **本来就**在用 `countCheck` 卡
+       *   `opts.min` / `opts.max`（`body` 是 1–4 条），而 `describe()` 一个都不发——
+       *   于是"喂给模型的那份 schema"比"我们验收的那份"松一格：模型交了 5 条，
+       *   会被判 `数量过多（5 > 4）`，而它从来没有被告知上限是 4。
+       *
+       *   这不是新规矩，是**补一处与 `array()` 的不一致**：同一个文件里
+       *   `array().describe()` 一直发着 `minItems`/`maxItems`（`nodes` 就靠它拿到
+       *   `minItems: 3, maxItems: 40`），只有 `stringList()` 漏了。
+       *   ★ 文件头那句"分成两份定义迟早会漂"说的正是这种漂——两份定义**在同一个函数里**
+       *     也能漂，只要一份发、一份不发。
+       */
+      if (opts.min !== undefined) node['minItems'] = opts.min
+      if (opts.max !== undefined) node['maxItems'] = opts.max
+      return node
     },
   }
 }
