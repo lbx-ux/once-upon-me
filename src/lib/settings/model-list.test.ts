@@ -1,9 +1,9 @@
 /**
  * model-list.test.ts —— 「从接口地址拉候选」那一条路的判据
  *
- * 全部用假 fetch：这一层值得测的是**形状与失败**，不是"网关今天回什么"
+ * 全部用假 fetch：这一层值得测的是形状与失败，不是"网关今天回什么"
  * （那个数会变，写进测试就是一条会自己烂掉的断言）。
- * ★ 唯一的例外是文件末尾那一组：它钉的是**真网关返回形状的两种变体**
+ * 唯一的例外是文件末尾那一组：它钉的是真网关返回形状的两种变体
  *   （`data[].id` 与 `models[].name`），形状取自 2026-10-17 的实测响应。
  */
 
@@ -57,7 +57,7 @@ describe('fetchModelIds', () => {
     const fetchImpl = vi.fn(async () => jsonResponse({ data: [{ id: 'qwen3.8-flash' }] }))
     const result = await fetchModelIds({
       baseUrl: 'https://gw/v1',
-      // ★ 用一把**独一无二**的假 key：断言"返回值里没有它"才有意义
+      // 用一把独一无二的假 key：断言"返回值里没有它"才有意义
       //   （拿 'k' 去断言会撞上 `ok` 里的那个字母——这条踩过一次）
       apiKey: 'sk-secret-abc123',
       fetchImpl: fetchImpl as never,
@@ -67,7 +67,7 @@ describe('fetchModelIds', () => {
       endpoint: 'https://gw/v1/models',
       ids: ['qwen3.8-flash'],
     })
-    // ★ key 只出现在请求头里，不出现在返回值的任何一处
+    // key 只出现在请求头里，不出现在返回值的任何一处
     const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit]
     expect(url).toBe('https://gw/v1/models')
     expect((init.headers as Record<string, string>)['Authorization']).toBe(

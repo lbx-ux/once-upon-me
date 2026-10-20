@@ -15,10 +15,10 @@ import {
  * lib/reel.ts 的测试
  *
  * 这块逻辑没有一处能靠眼睛查：可见性、tab 序列、读屏三者不一致时，
- * 页面上**看起来完全正常**，只有键盘党与读屏用户会发现有些卡永远到不了。
+ * 页面上看起来完全正常，只有键盘党与读屏用户会发现有些卡永远到不了。
  * 所以这三个量必须由测试钉住，而不是由实现顺手算。
  *
- * ★ 但"环形偏移"这一条是**眼睛查出来的**：第一版 offset = index - active，
+ * 但"环形偏移"这一条是眼睛查出来的：第一版 offset = index - active，
  *   当前卡是第 1 条时左边一个卡位都没有，截图上就是轮播左边空一大片。
  *   下面那条「两侧永远被填满」的不变量就是为它补的。
  */
@@ -60,7 +60,7 @@ describe('reelState', () => {
     const slots = reelState(0, 5)
     // 下标 1：点它该翻过去，但对读屏是隐藏的
     expect(slots[1]).toMatchObject({ advanceOnClick: true, exposed: false })
-    // 下标 2：只露一条缝，点它**不该**翻 —— 翻过去要点两下才够近
+    // 下标 2：只露一条缝，点它不该翻 —— 翻过去要点两下才够近
     expect(slots[2]).toMatchObject({ advanceOnClick: false, exposed: false })
     // 当前卡：可被读到，但点自己没有意义
     expect(slots[0]).toMatchObject({ advanceOnClick: false, exposed: true })
@@ -77,7 +77,7 @@ describe('reelState', () => {
   it('★ 每一条都在返回列表里，哪怕它排在舞台外', () => {
     // 这条测试替一个真实缺陷写：第一版有 `rendered`（|offset| <= 2 才进 DOM），
     // 而首页是静态预渲染的 —— active 初值 0，左边没有卡位，于是 5 条亮点里
-    // 只有 3 条出现在 HTML 里，另外两条对爬虫与禁用 JS 的人**根本不存在**，
+    // 只有 3 条出现在 HTML 里，另外两条对爬虫与禁用 JS 的人根本不存在，
     // 而页面上完全看不出来。现在这一层不再决定 DOM 里有没有这张卡。
     expect(reelState(0, 5)).toHaveLength(5)
     expect(reelState(4, 5)).toHaveLength(5)
@@ -255,7 +255,7 @@ describe('reelJumped —— 谁这一拍跨过了接缝（组件据此关掉它�
     // 我一开始把这条写成"普通一步不该有人跨界"——那是错的，而且错得值得留着：
     // 环上往前进一步，最左那张（-2）必然要从左边缘绕回右边缘（+2），
     // 这是环形轮播的固有形状，跟"走到第 5 条再绕回第 1 条"是同一件事。
-    // 所以组件每拍都会关掉**一张**的补间，而不是偶尔。
+    // 所以组件每拍都会关掉一张的补间，而不是偶尔。
     for (let active = 0; active < 4; active++) {
       const prev = at(active)
       const next = at(active + 1)

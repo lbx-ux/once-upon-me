@@ -1,10 +1,10 @@
 import { noNegZero, smoothstep } from './math'
 
 /**
- * orbit.ts —— 环形轨道上**一张卡**的摆位，纯函数
+ * orbit.ts —— 环形轨道上一张卡的摆位，纯函数
  *
  * 这段数学原来内联在 `HeroOrbit.frame()` 的逐卡循环里（§5–§6 那一段）。
- * 搬出来不是因为要改它，是因为它现在有**两个消费者**，而它们必须在
+ * 搬出来不是因为要改它，是因为它现在有两个消费者，而它们必须在
  * 同一帧画出同一个环：
  *
  *   1. `HeroOrbit.frame()` —— 每帧调一次，写 inline style；
@@ -12,26 +12,26 @@ import { noNegZero, smoothstep } from './math'
  *      在服务端渲染时就写进 `<figure>` 的 style 属性。
  *
  * 预渲染那一帧是这次流畅度修复的核心：原来 12 张卡在 CSS 里是 `opacity: 0`
- * （"JS 接管前不可见"），而预渲染 HTML 里**一个 inline style 都没有** ——
+ * （"JS 接管前不可见"），而预渲染 HTML 里一个 inline style 都没有 ——
  * 首帧是一张空环，这一页的 LCP（就是这 12 张图）被 hydration 挡在门外，
- * JS 挂了也永远是一张空环。修法是把 t=0 那一帧**构建期就算出来**。
+ * JS 挂了也永远是一张空环。修法是把 t=0 那一帧构建期就算出来。
  *
- * ## t=0 时整个环是纯常量，除了半轴
+ * t=0 时整个环是纯常量，除了半轴
  *
  * phase 0、sceneX/Y 0、fadeOut 1、lift 0 代进去，每张卡的角度
  * `a = 0 + i/n·TAU` 是常量 ⇒ 深度、scale、rot、blur、opacity、zIndex 全是常量，
- * **与视口无关**，构建期就能算。唯一不知道的是椭圆半轴 rx / ry —— 那是
+ * 与视口无关，构建期就能算。唯一不知道的是椭圆半轴 rx / ry —— 那是
  * 浏览器布局出来的数（`clientWidth × 0.56` / `clientHeight × 0.38`）。
  *
- * 所以静态帧的 x / y 存的是**系数**，交给 CSS 乘上 `--orbit-rx` / `--orbit-ry`
+ * 所以静态帧的 x / y 存的是系数，交给 CSS 乘上 `--orbit-rx` / `--orbit-ry`
  * （那两个变量在 `hero-orbit.css` 的 `.hero` 上，cqw/cqh 认的就是同一个内容盒）。
  * 系数不另写一份公式 —— 用同一个 `placeCard` 取两次（`rx=1,ry=0` 与
  * `rx=0,ry=1`）解出来，见 `restInlineStyle`。x 对 rx、y 对 ry 都是线性的，
- * 这么解是**精确**的，只有浮点结合律上的 ulp 级差（<1e-12px）。
+ * 这么解是精确的，只有浮点结合律上的 ulp 级差（<1e-12px）。
  *
- * ## 与 HeroOrbit 的契约
+ * 与 HeroOrbit 的契约
  *
- * `frame()` 里的 `phase` 时钟因此改成了**相对挂载时刻**（`ts - phaseBase`），
+ * `frame()` 里的 `phase` 时钟因此改成了相对挂载时刻（`ts - phaseBase`），
  * 不然第一帧 JS 会把环从静态帧的 0° 直接跳到「加载耗时 × 角速度」那个角度。
  * 这三件事是一组的：本文件、`frame()` 的 phaseBase、`hero-orbit.css` 的
  * 两个半轴变量 —— 改任何一个都要想到另外两个。
@@ -104,7 +104,7 @@ export function placeCard(inp: OrbitInputs): OrbitPlacement {
 }
 
 /**
- * 模糊半径 → filter 字符串。**量化到 0.25px**，这是性能参数不是审美参数：
+ * 模糊半径 → filter 字符串。量化到 0.25px，这是性能参数不是审美参数：
  * 自转每帧让 blur 变约 0.02px，不量化的话任意时刻约 6 张卡每帧都要
  * 重新栅格化一次；量化后一张卡的半径约每 12 帧才变一档，最大偏差 0.125px
  * （blur 值本身 2–5px，肉眼无感）。`> 0.08` 是量化前就有的阈值，留着当兜底
@@ -128,13 +128,13 @@ const REST: Omit<OrbitInputs, 'i' | 'n' | 'rx' | 'ry'> = {
 }
 
 /**
- * 写进 `calc()` 的数：**系数 6 位、常数项 3 位**。
+ * 写进 `calc()` 的数：系数 6 位、常数项 3 位。
  *
  * 位数不是随手取的，它是静态帧的精度预算：系数 6 位 × 半轴上限 1420px
  * ⇒ 误差 ≤0.0007px；常数项 3 位 ⇒ ≤0.0005px。合起来静态帧与 JS 第一帧
  * 的差远小于一个物理像素，而字符串不至于把 HTML 撑肥。
  *
- * 顺带吃掉 `-0.000000` 这种**负零字符串**：`cos(3π/2)` 在浮点里是 −1.8e-16，
+ * 顺带吃掉 `-0.000000` 这种负零字符串：`cos(3π/2)` 在浮点里是 −1.8e-16，
  * 格式化出来就是一个负号加一串零。它进 `calc()` 无害，但读起来像出了错。
  */
 function fixed(v: number, digits: number): string {

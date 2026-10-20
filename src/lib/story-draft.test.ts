@@ -1,5 +1,5 @@
 /**
- * story-draft.test.ts —— 故事草稿的**存与读**（闸门那一份盘上状态）
+ * story-draft.test.ts —— 故事草稿的存与读（闸门那一份盘上状态）
  *
  * 这一层是"编故事"与"逐页画"之间唯一的连接物：中间隔着家长看故事的那几分钟、
  * 甚至隔着一次刷新。所以它要钉住的不是"能存进去"，而是**存进去的东西读得回来、
@@ -7,12 +7,12 @@
  *
  * 三组：
  *
- * 1. **信封的边界**：盘上的东西不可信（半截 JSON、别人塞的文件、字段类型不对）。
- *    判据与写的那一侧**同一个函数**（`isStoryDoc`）——写下去一份读不回来的东西，
+ * 1. 信封的边界：盘上的东西不可信（半截 JSON、别人塞的文件、字段类型不对）。
+ *    判据与写的那一侧同一个函数（`isStoryDoc`）——写下去一份读不回来的东西，
  *    症状是"存上了、刷新之后这一本没了"。
- * 2. **故事内容不在这里校验**。家长把一页正文删空、正要重写的那几秒里存盘不该失败
+ * 2. 故事内容不在这里校验。家长把一页正文删空、正要重写的那几秒里存盘不该失败
  *    （见文件头那段）；那件事由 `story-problems.ts` 在界面上与服务端那一关管。
- * 3. **`editedAt` 的三态**：没改过（没有这个字段）/ 改过（有）/ 重写之后（又没有了）。
+ * 3. `editedAt` 的三态：没改过（没有这个字段）/ 改过（有）/ 重写之后（又没有了）。
  */
 
 import { describe, expect, it } from 'vitest'
@@ -177,7 +177,7 @@ describe('storyInputOf / storyRequestOf', () => {
       3,
     )
     expect(input.cardRevision).toBe(3)
-    // ★ 没给的字段**不进对象**（与请求体那几个可选字段同一条写法）：
+    // 没给的字段不进对象（与请求体那几个可选字段同一条写法）：
     //   一个 `wish: undefined` 与"没有 wish"在读代码时是两件事
     expect(input).not.toHaveProperty('wish')
     expect(input).not.toHaveProperty('voiceId')
@@ -198,7 +198,7 @@ describe('storyInputOf / storyRequestOf', () => {
     expect(asStoryDraft({ ...raw, bookId: 'written' }, 'from-dir')?.bookId).toBe('written')
   })
 
-  /* ─────────── 检索的出处（2026-10-19，.scratch/rag 工单 04）─────────── */
+  /* 检索的出处（2026-10-19，.scratch/rag 工单 04） */
 
   it('★ 检索的出处**写得出去也读得回来**（不对称是那种"等有人要显示它时才发现"的坏）', () => {
     const retrieval = {

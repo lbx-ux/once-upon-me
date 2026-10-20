@@ -1,8 +1,8 @@
 /**
  * audio/wav.test.ts —— 那 44 个字节逐字段钉住
  *
- * ★ 为什么值得这么细：RIFF 的 chunk 长度写错（写成整个文件的长度）时，
- *   Chrome 与 ffmpeg 都**照样能放**，只有厂商那边会 400，而那时候我们已经
+ * 为什么值得这么细：RIFF 的 chunk 长度写错（写成整个文件的长度）时，
+ *   Chrome 与 ffmpeg 都照样能放，只有厂商那边会 400，而那时候我们已经
  *   把一段语音发出去了。所以这里断言的是一份能被别家读的字节，不是"我们的播放器能放"。
  */
 
@@ -21,7 +21,7 @@ describe('encodeWav', () => {
 
     expect(bytes.byteLength).toBe(44 + 16_000 * 2)
     expect(text(view, 0, 4)).toBe('RIFF')
-    // ★ 36 + 数据长度，不是整个文件的长度
+    // 36 + 数据长度，不是整个文件的长度
     expect(view.getUint32(4, true)).toBe(36 + 32_000)
     expect(text(view, 8, 4)).toBe('WAVE')
     expect(text(view, 12, 4)).toBe('fmt ')
@@ -69,7 +69,7 @@ describe('sampleProblem', () => {
     expect(sampleProblem(5_000)?.level).toBe('warn')
     expect(sampleProblem(35_000)?.level).toBe('warn')
     expect(sampleProblem(15_000)).toBeNull()
-    // ★ 边界：卡在 3 秒上不算"太短"（不拦），但仍然偏短（提醒）。
+    // 边界：卡在 3 秒上不算"太短"（不拦），但仍然偏短（提醒）。
     //   写成"3 秒就通过且不说话"会让一个刚够格但明显偏短的样本悄悄过掉
     expect(sampleProblem(3_000)?.level).toBe('warn')
     expect(sampleProblem(2_999)?.level).toBe('block')

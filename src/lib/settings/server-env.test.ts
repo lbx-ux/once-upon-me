@@ -1,9 +1,9 @@
 /**
- * settings/server-env.test.ts —— 密钥那张表的**读法**
+ * settings/server-env.test.ts —— 密钥那张表的读法
  *
- * ★ 前身是 `lib/voices/request.test.ts` 里那两条 `envFromBody` 的测试与
+ * 前身是 `lib/voices/request.test.ts` 里那两条 `envFromBody` 的测试与
  *   `lib/settings/state.test.ts` 里那五条 `toEnv` 的测试。函数换了（从"读请求体"
- *   换成"读 `process.env`"），**纪律一条都没丢**，所以断言也是一条一条搬过来的：
+ *   换成"读 `process.env`"），纪律一条都没丢，所以断言也是一条一条搬过来的：
  *   这三条判据都是踩过才知道的，重写一遍没有意义，漏掉一条才有。
  */
 
@@ -56,7 +56,7 @@ describe('serverEnv', () => {
   })
 
   /**
-   * ★ 这条是那份**显式清单**换来的东西。写成 `startsWith('LLM_')` 一样能跑，
+   * 这条是那份显式清单换来的东西。写成 `startsWith('LLM_')` 一样能跑，
    *   而且第一次跑不出问题——问题出现在有人加了一个 `LLM_DEBUG_DUMP=1` 或者
    *   一个不该进引擎的数上：它会跟着被送进引擎，而症状在很远的下游。
    */
@@ -68,9 +68,9 @@ describe('serverEnv', () => {
   })
 
   /**
-   * ★ 视觉不回落到文本、图像也不回落。接口形状不同（对话 vs `images/generations`），
+   * 视觉不回落到文本、图像也不回落。接口形状不同（对话 vs `images/generations`），
    *   回落只会把"配置错了"变成一个运行期 400，而那一句报错读起来像"模型坏了"。
-   *   这一条原来是 `toEnv` 的测试，它防的是**映射表**写错，与密钥从哪儿来无关，
+   *   这一条原来是 `toEnv` 的测试，它防的是映射表写错，与密钥从哪儿来无关，
    *   所以换时代不换判据。
    */
   it('配了文本不配视觉：视觉那一格是空的，不回落到文本那把 key', () => {

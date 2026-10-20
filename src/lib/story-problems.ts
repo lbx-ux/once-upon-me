@@ -1,25 +1,25 @@
 /**
- * story-problems.ts —— 一份故事表**还能不能拿去画**（纯函数，浏览器安全）
+ * story-problems.ts —— 一份故事表还能不能拿去画（纯函数，浏览器安全）
  *
  * 它是「故事闸门」上的那道判据：家长在 `StorySheet` 上逐条改故事，而
- * 「就按这个画」那颗按钮**什么时候该亮**、亮不了时**为什么**，都由这里回答。
+ * 「就按这个画」那颗按钮什么时候该亮、亮不了时为什么，都由这里回答。
  *
- * ## 判据只有一处，两端都用它
+ * 判据只有一处，两端都用它
  *
- * 校验跑的是**引擎发出去的那两个东西**，一个字都不重写：
+ * 校验跑的是引擎发出去的那两个东西，一个字都不重写：
  *
  * | 管什么 | 谁 | 查出来的问题长什么样 |
  * | --- | --- | --- |
  * | 形状（字段在不在、长度、枚举） | `schemas/story.ts` 的 `planDraftCodec` | `nodes[2].body[1]：过长（121 > 120）` |
  * | 语义（父节点引用、选择点分支数、形态约束） | `engine/tree.ts` 的 `buildTree` | `第 4 页：父节点序号 9 不合法` |
  *
- * ★ 为什么不能在两处各写一份"最短 4 个字、最长 200 个字"：那是**同一个判断的两个家**，
+ * ★ 为什么不能在两处各写一份"最短 4 个字、最长 200 个字"：那是同一个判断的两个家，
  *   而它们漂移的症状是"界面上说可以画了，服务端 400"。这个仓库已经为同一类事
  *   付过学费（`state.ts` 里 `toBookBody` 那段"两处一起改"）。
- * ★ 所以这个模块**只做两件事**：把两端的结果翻成人话、并把它们绑到界面上那一格去。
+ * 所以这个模块只做两件事：把两端的结果翻成人话、并把它们绑到界面上那一格去。
  *   它不新增任何一条校验规则。
  *
- * ## 为什么它不在 `story-draft.ts` 里（那个文件是服务端的）
+ * 为什么它不在 `story-draft.ts` 里（那个文件是服务端的）
  *
  * `StorySheet` 是客户端组件，而 `story-draft.ts` 要读盘（`node:fs`）。
  * 混在一起的那天起，客户端 bundle 会因为"只想调一个纯函数"而拖进文件系统
@@ -39,7 +39,7 @@ import type { ChoiceCell, NodeDraft, PlanDraft } from './schemas/story.ts'
 export type StoryField = 'title' | 'scene' | 'body' | 'imagePrompt' | 'mood' | 'choice' | 'nodes'
 
 export type StoryProblem = {
-  /** 第几页（1 起）。★ **0 = 不属于任何一页**（书名、整篇的页数） */
+  /** 第几页（1 起）。★ 0 = 不属于任何一页（书名、整篇的页数） */
   pageNo: number
   field: StoryField
   /** 正文的第几句（1 起）。只有 `body` 有 */
@@ -47,21 +47,22 @@ export type StoryProblem = {
   /**
    * 选择点那九格里的哪一格（工单 05）。只有 `field === 'choice'` 且认得出格子时才有。
    *
-   * ★ 加它是为了让那句话挂在**对的那个框**下面：一个选择点有九格，
+   * 加它是为了让那句话挂在对的那个框下面：一个选择点有九格，
    *   而"太短了：至少要 2 个字"这一句在「按钮上的字」下面读和在「念出来的」下面读
-   *   是两件事。★ 顺带修掉一个**真的坏过**的形状：`dedupe` 的键原来不含它，
+   *   是两件事。★ 顺带修掉一个真的坏过的形状：`dedupe` 的键原来不含它，
    *   于是同一页上 `labelA` 与 `spokenA` 都太短时，后一条会被当成重复的丢掉——
    *   家长改完一处，屏幕上另一处还是红的，而清单里从没提过它。
-   * ★ 认不出是哪一格（比如 `iconA` 之外的东西、或者 tree.ts 那句"缺 spokenA"）时
-   *   **不带这个字段**：那一句挂在整组上，不硬塞进某一格。
+   * 认不出是哪一格（比如 `iconA` 之外的东西、或者 tree.ts 那句"缺 spokenA"）时
+   *   不带这个字段：那一句挂在整组上，不硬塞进某一格。
    */
   cell?: ChoiceCell
   /** 一句人话，直接印在那一格下面 */
   message: string
 }
 
-/** 字段在界面上的名字。★ 与 `StorySheet` 的标签是同一套词（改一处就得改两处的是**话**，
- *  而这里只能有一份：按钮上那句"第 3 页的正文…"与输入框旁边那句必须是同一句） */
+/** 字段在界面上的名字。★ 与 `StorySheet` 的标签是同一套词（改一处就得改两处的是话，
+ *  而这里只能有一份：按钮上那句"第 3 页的正文…"与输入框旁边那句必须是同一句）
+ */
 const FIELD_LABELS: Record<StoryField, string> = {
   title: '书名',
   scene: '情节',
@@ -77,10 +78,10 @@ const NODE_PATH = /^nodes\[(\d+)\](?:\.(.+))?$/
 const LINE_PATH = /^body\[(\d+)\]$/
 
 /**
- * 一份故事表 → 一串问题。**空的数组 = 可以拿去画**。
+ * 一份故事表 → 一串问题。空的数组 = 可以拿去画。
  *
  * `form` 要传进来，是因为 `buildTree` 的形态约束（独读版不许有选择点、
- * 共读版至少一个）只有它知道——那一条**不是**形状问题，schema 查不出来。
+ * 共读版至少一个）只有它知道——那一条不是形状问题，schema 查不出来。
  */
 export function storyProblemsOf(form: BookForm, doc: PlanDraft): StoryProblem[] {
   const shape = planDraftCodec.parse(doc, '')
@@ -97,9 +98,9 @@ export function storyProblemsOf(form: BookForm, doc: PlanDraft): StoryProblem[] 
       problems.push({
         // `buildTree` 的 index 就是页号（1 起）；0 = 不属于任何一页
         pageNo: problem.index,
-        // ★ 落在哪一组框上由**树**说（`TreeProblem.field`，工单 05）：选择点那一族问题
+        // 落在哪一组框上由树说（`TreeProblem.field`，工单 05）：选择点那一族问题
         //   （两条分支 / 写了一半 / 多出来的孩子 / 整本一个都没有）归闸门新摊开的那一组，
-        //   `mood` 归语气。**不在这里按消息猜**——猜的那一天起，改一句话就会改掉
+        //   `mood` 归语气。不在这里按消息猜——猜的那一天起，改一句话就会改掉
         //   它落在哪儿，而屏幕上没有任何东西会提示这件事。
         //   没标字段的（父节点序号这类结构问题）仍旧落在「情节」上：那是界面上
         //   唯一一个能承载"这一页结构不对"的框。
@@ -114,14 +115,14 @@ export function storyProblemsOf(form: BookForm, doc: PlanDraft): StoryProblem[] 
 /**
  * 同一个字段上叠了好几条时只留一条。
  *
- * ★ 不是"少报"，是**同一个格子上写不下第二句**：一行正文 121 个字又正好是空的
+ * 不是"少报"，是同一个格子上写不下第二句：一行正文 121 个字又正好是空的
  *   （trim 之后），两句话会挤在同一个输入框下面，而它们说的是同一件事
  *   （"这一句不合规"）。留第一条——codec 是按字段顺序报的，第一条就是最靠前的那处。
  */
 function dedupe(problems: StoryProblem[]): StoryProblem[] {
   const seen = new Set<string>()
   return problems.filter((problem) => {
-    // ★ 键里带 `cell`：同一个选择点的两格各是**各自的问题**（见 `StoryProblem.cell`）
+    // 键里带 `cell`：同一个选择点的两格各是各自的问题（见 `StoryProblem.cell`）
     const key = `${problem.pageNo}:${problem.field}:${problem.line ?? ''}:${problem.cell ?? ''}`
     if (seen.has(key)) return false
     seen.add(key)
@@ -129,8 +130,9 @@ function dedupe(problems: StoryProblem[]): StoryProblem[] {
   })
 }
 
-/** `planDraftCodec` 的一条失败 → 界面上那一格。★ 认不出的路径**照实报成整篇的问题**，
- *  不许丢掉——丢掉的那一条正是"按钮亮着但服务端拒绝"的来源 */
+/** `planDraftCodec` 的一条失败 → 界面上那一格。★ 认不出的路径照实报成整篇的问题，
+ *  不许丢掉——丢掉的那一条正是"按钮亮着但服务端拒绝"的来源
+ */
 function shapeProblemOf(failure: ParseFailure): StoryProblem {
   const path = failure.path === '$' ? '' : failure.path
   const match = NODE_PATH.exec(path)
@@ -158,10 +160,10 @@ function splitPath(rest: string): { field: StoryField; line?: number; cell?: Cho
   const line = LINE_PATH.exec(rest)
   if (line) return { field: 'body', line: Number(line[1]) + 1 }
   const head = rest.split('.')[0] ?? ''
-  // ★ 选择点那九格（平铺在节点上，见 `schemas/story.ts` 那段 ★★）都归到界面上那一组框，
-  //   而且**认得出是哪一格**（`cell`）——那句话要挂在对的输入框下面。
+  // 选择点那九格（平铺在节点上，见 `schemas/story.ts` 那段 ★★）都归到界面上那一组框，
+  //   而且认得出是哪一格（`cell`）——那句话要挂在对的输入框下面。
   //   名字只有一份（`CHOICE_CELLS`），而且有一条用例拿 schema 逐个核对——
-  //   漏掉一格，家长就会在**别的格子**下面读到一句关于这一格的话。
+  //   漏掉一格，家长就会在别的格子下面读到一句关于这一格的话。
   if ((CHOICE_CELLS as readonly string[]).includes(head)) {
     return { field: 'choice', cell: head as ChoiceCell }
   }
@@ -172,10 +174,10 @@ function splitPath(rest: string): { field: StoryField; line?: number; cell?: Cho
 /**
  * codec 的原话 → 给家长看的一句。
  *
- * ★ **认不出来就原样回**（`return message`）。这一条是刻意的：翻译表只覆盖
+ * 认不出来就原样回（`return message`）。这一条是刻意的：翻译表只覆盖
  *   最常见的四种，而"看不懂的话"比"看不见的话"便宜得多——
  *   悄悄吞掉一条，症状是按钮亮着、服务端 400，而屏幕上没有一处说得清为什么。
- * ★ 量词要按字段换（"页" / "句" / "个字"）：`数量不足（0 < 3）` 那句话在**书名**上
+ * 量词要按字段换（"页" / "句" / "个字"）：`数量不足（0 < 3）` 那句话在书名上
  *   说不通，而"至少要 3 页"才是一句家长能照着改的话。
  */
 function friendly(message: string, field: StoryField): string {
@@ -206,7 +208,7 @@ function about(
 /** 一条问题在人话里的位置：「第 3 页的正文第 2 句」「书名」 */
 export function whereOf(problem: StoryProblem): string {
   const label = FIELD_LABELS[problem.field]
-  // ★ 书名与整篇的事不带页号：说成"第 1 页的书名"就是编一个位置出来
+  // 书名与整篇的事不带页号：说成"第 1 页的书名"就是编一个位置出来
   if (problem.pageNo === 0) return label
   const at = `第 ${problem.pageNo} 页的${label}`
   return problem.line === undefined ? at : `${at}第 ${problem.line} 句`
@@ -219,7 +221,7 @@ export function describeProblem(problem: StoryProblem): string {
 
 /**
  * 全部问题合成一句话（按钮的 `title`、`role="alert"` 那一条）。
- * 没问题时是 `null`——**不是空串**：调用方要能一眼分开"没问题"与"问题说的是空"。
+ * 没问题时是 `null`——不是空串：调用方要能一眼分开"没问题"与"问题说的是空"。
  */
 export function storyProblemText(problems: readonly StoryProblem[], limit = 3): string | null {
   if (problems.length === 0) return null

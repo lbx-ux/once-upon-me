@@ -1,11 +1,11 @@
 /**
- * rotate-hint.test.ts —— 「横过来」提示里**纯的那半**：存储里那串字怎么读
+ * rotate-hint.test.ts —— 「横过来」提示里纯的那半：存储里那串字怎么读
  *
- * ★ 不测 `load/save`：vitest 是 `environment: 'node'`（理由写在 vitest.config.ts，
+ * 不测 `load/save`：vitest 是 `environment: 'node'`（理由写在 vitest.config.ts，
  *   "浏览器事实用 preview 实测"），这里没有 `localStorage`。丢进这个文件的断言
- *   只该管一件事——**认不出来的值会退到哪一边**。
+ *   只该管一件事——认不出来的值会退到哪一边。
  *   而它比 `reading-prefs` 那一条更要紧：那边猜错是"书半夜自己念起来"，
- *   这边猜错是**有人永远看不到那个提示**，而他不知道自己在找什么。
+ *   这边猜错是有人永远看不到那个提示，而他不知道自己在找什么。
  */
 
 import { describe, expect, it } from 'vitest'

@@ -1,9 +1,9 @@
 /**
- * reading-prefs.test.ts —— 阅读偏好里**纯的那半**：存储里那串字怎么读
+ * reading-prefs.test.ts —— 阅读偏好里纯的那半：存储里那串字怎么读
  *
- * ★ 不测 `load/save`：vitest 是 `environment: 'node'`（理由写在 vitest.config.ts，
+ * 不测 `load/save`：vitest 是 `environment: 'node'`（理由写在 vitest.config.ts，
  *   "浏览器事实用 preview 实测"），这里没有 `localStorage`。丢进这个文件的断言
- *   只该管一件事——**认不出来的值会退到哪一边**，而那正是一个睡着了的孩子会被吵醒的地方。
+ *   只该管一件事——认不出来的值会退到哪一边，而那正是一个睡着了的孩子会被吵醒的地方。
  */
 
 import { describe, expect, it } from 'vitest'

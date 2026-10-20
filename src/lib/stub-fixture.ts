@@ -1,27 +1,27 @@
 /**
- * stub-fixture.ts —— 固定替身：**不花一分钱、不碰网络**地跑完一本书
+ * stub-fixture.ts —— 固定替身：不花一分钱、不碰网络地跑完一本书
  *
  * 它是「架构验收」那一档的全部原料（`node scripts/engine-run.mts --mode=stub`），
- * 2026-10-19 从 `scripts/engine-run.mts` 里抽出来，因为 MCP 那一侧要**同一份**：
+ * 2026-10-19 从 `scripts/engine-run.mts` 里抽出来，因为 MCP 那一侧要同一份：
  * 判据是「走 MCP 那条路与 `engine-run --mode=stub` 是同一本书、同一串事件」
  * （`.scratch/mcp/spec.md` 判据 2）。不抽的话，那条判据比的是两百行重复代码里
- * 两份"恰好一样"的东西，而不是同一条代码路径——**判据当天就失去意义**。
+ * 两份"恰好一样"的东西，而不是同一条代码路径——判据当天就失去意义。
  *
- * ★★ **它不是引擎的一部分。** 引擎那边一个字都不认它：
+ * ★ 它不是引擎的一部分。 引擎那边一个字都不认它：
  *   `createProviders` 走的是 `env` 那一套，这里的东西只在脚本与 MCP server 的
  *   `--mode=stub` 里出现。放在 `src/lib/` 而不是 `src/lib/engine/` 就是为了这件事
  *   ——引擎目录里躺着"替身供应商"，下一个人会以为生产有可能走到它。
  *
- * 三件产物，都必须是**可复现**的：
+ * 三件产物，都必须是可复现的：
  *
- * 1. **故事表**：`scripts/fixtures/demo-plan.json`（随仓库提交，不与模型交互）
- * 2. **成图**：`public/book/spread-*.webp`（演示绘本那 5 张，按顺序轮流发）
- * 3. **角色卡**：由 `public/book/cover.webp` 与一组写死的锚点造出来 —— 与
- *    `docs/demo-book-art-prompts.md` 里那份描述**逐条对应**，所以这本书画出来的
+ * 1. 故事表：`scripts/fixtures/demo-plan.json`（随仓库提交，不与模型交互）
+ * 2. 成图：`public/book/spread-*.webp`（演示绘本那 5 张，按顺序轮流发）
+ * 3. 角色卡：由 `public/book/cover.webp` 与一组写死的锚点造出来 —— 与
+ *    `docs/demo-book-art-prompts.md` 里那份描述逐条对应，所以这本书画出来的
  *    与首页第二屏那本是同一个孩子。
  *
- * ★ 时间也是参数（`now`）。`engine-run` 传一个固定值，于是同一份输入两次跑出来
- *   的 `book.json` 去掉时间字段之后**逐字节相同**——那是判据 2 能成立的前提。
+ * 时间也是参数（`now`）。`engine-run` 传一个固定值，于是同一份输入两次跑出来
+ *   的 `book.json` 去掉时间字段之后逐字节相同——那是判据 2 能成立的前提。
  */
 
 import { readFile } from 'node:fs/promises'
@@ -47,8 +47,8 @@ export const STUB_CARD_ID = 'xiaolu-r1'
 
 /**
  * 锚点按 `docs/demo-book-art-prompts.md` 的既定描述写死。
- * ★ 六条（不是五条）：`validateCard` 只要求五条硬锚点，而这本书的参考图是演示绘本的
- *   封面，它的画面里**有衣服**——所以 wardrobe 一并写下来，让"画师会拿到的那一段"
+ * 六条（不是五条）：`validateCard` 只要求五条硬锚点，而这本书的参考图是演示绘本的
+ *   封面，它的画面里有衣服——所以 wardrobe 一并写下来，让"画师会拿到的那一段"
  *   与那五张成图对得上。
  */
 const STUB_ANCHORS = [
@@ -77,7 +77,7 @@ export async function loadStubPlanJson(): Promise<string> {
 /**
  * 两个假供应商。
  *
- * ★ `stream()` 也实现了，而且报 `streamed: false`：**录下来的本来就是一整段**，
+ * `stream()` 也实现了，而且报 `streamed: false`：录下来的本来就是一整段，
  *   把它演成打字机是 ADR-0003 明令禁止的那种假（`TextDelta.streamed` 的注释）。
  *   stub 这一档跑的是脚本与验收，不走流式；实现它只是为了让形状与真适配器一致。
  */
@@ -123,9 +123,9 @@ export function stubFormIsSupported(form: BookForm): boolean {
 }
 
 /**
- * 把这一档要的角色卡**确保存在**（已经有一张就不重造）。
+ * 把这一档要的角色卡确保存在（已经有一张就不重造）。
  *
- * ★ 幂等是必须的：MCP server 每次启动都会调它，而卡是**内容寻址**的
+ * ★ 幂等是必须的：MCP server 每次启动都会调它，而卡是内容寻址的
  *   （`ref.<指纹>.webp`），重复造只会多写一份一模一样的字节，
  *   但会多一个 `r2` —— 而 `r2` 会让"同一本书"这个判据当场失效（版号进不出来，
  *   但 `character_card` 会显示第 2 版）。

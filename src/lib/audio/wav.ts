@@ -1,15 +1,15 @@
 /**
  * lib/audio/wav.ts —— 把一串浮点样本写成 WAV（16bit PCM、单声道）
  *
- * 为什么自己写这 44 个字节，而不是找一个库：我们要的格式是**厂商文档写死的那一种**
+ * 为什么自己写这 44 个字节，而不是找一个库：我们要的格式是厂商文档写死的那一种
  * （WAV 16bit），而浏览器自己产不出 WAV——`MediaRecorder` 给的是 webm/opus，
  * 厂商不收（见 `engine/providers/qwen-speech.ts` 的 `SAMPLE_MIMES`）。
  * 一个几十行的写头函数比起引一个转码库，少一个依赖、也看得清每一个字节是谁。
  *
- * ★ 三条容易写错的地方，都在下面标出来了：
- *   1. RIFF 的 chunk 长度是**从 `WAVE` 之后算起**的字节数（= 36 + 数据长度），
+ * 三条容易写错的地方，都在下面标出来了：
+ *   1. RIFF 的 chunk 长度是从 `WAVE` 之后算起的字节数（= 36 + 数据长度），
  *      写成总长度是常见的错，多数播放器还照样能放——所以测试里逐字段断言；
- *   2. 16bit 定点要**先钳到 [-1, 1]** 再乘 32767，不然爆音的样本会绕回反面；
+ *   2. 16bit 定点要先钳到 [-1, 1] 再乘 32767，不然爆音的样本会绕回反面；
  *   3. 小端。WAV 是小端格式，而 JS 有 `DataView` 的 `littleEndian` 参数兜住这件事。
  */
 
@@ -27,7 +27,7 @@ function toPcm16(sample: number): number {
  * 单声道 WAV 字节。
  *
  * @param samples     -1..1 的浮点样本（单声道）
- * @param sampleRate  写进头的采样率。★ 它与 samples 的**实际**采样率必须一致——
+ * @param sampleRate  写进头的采样率。★ 它与 samples 的实际采样率必须一致——
  *                    重采样是调用方（`capture.ts`）的事，这里只管写
  */
 export function encodeWav(samples: Float32Array, sampleRate: number): Uint8Array<ArrayBuffer> {
@@ -40,7 +40,7 @@ export function encodeWav(samples: Float32Array, sampleRate: number): Uint8Array
   }
 
   ascii(0, 'RIFF')
-  // ★ 第 1 条：36 + 数据长度，不是整个文件的长度
+  // 第 1 条：36 + 数据长度，不是整个文件的长度
   view.setUint32(4, 36 + dataBytes, LITTLE_ENDIAN)
   ascii(8, 'WAVE')
   ascii(12, 'fmt ')

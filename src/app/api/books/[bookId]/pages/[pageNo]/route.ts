@@ -1,5 +1,5 @@
 /**
- * /api/books/[bookId]/pages/[pageNo] —— 重画 / 重配**一页**（工单 01）
+ * /api/books/[bookId]/pages/[pageNo] —— 重画 / 重配一页（工单 01）
  *
  * ```
  *   POST  /api/books/<bookId>/pages/<pageNo>   { kind: 'image' | 'audio', env, voiceId? }
@@ -8,16 +8,16 @@
  * 这一条与 `POST /api/books`（整本）共用同一套帧协议（`lib/book-stream.ts`），
  * 所以客户端只需要一个解码器、一个事件处理器——实时、重放、单页重做三条路走同一段渲染代码。
  *
- * 四条与整本那条**不同**的处置，每条都有理由：
+ * 四条与整本那条不同的处置，每条都有理由：
  *
- * 1. **日志是 append，不 truncate**。截断只发生在一轮整本开始时（那时它要把上一轮的过程
- *    丢掉）。单页重做是这一本**过程的续写**——重放时先看到整本怎么画的、再看到第 3 页
+ * 1. 日志是 append，不 truncate。截断只发生在一轮整本开始时（那时它要把上一轮的过程
+ *    丢掉）。单页重做是这一本过程的续写——重放时先看到整本怎么画的、再看到第 3 页
  *    被重画了一遍，那正是发生过的事。
- * 2. **序号要接上去**（`maxSeqOf`）。工厂每本书从 1 起，不接续的话日志里会出现两条
+ * 2. 序号要接上去（`maxSeqOf`）。工厂每本书从 1 起，不接续的话日志里会出现两条
  *    `seq: 1`，而 `seq` 正是"重放能重建同一串界面状态"与"断线重连后对齐"的依据。
- * 3. **租约与整本共用**（`tryStartRun`）。否则重画与整本重跑会同时写同一个目录：
+ * 3. 租约与整本共用（`tryStartRun`）。否则重画与整本重跑会同时写同一个目录：
  *    一份日志被两轮事件交叉写入，后写的还会覆盖 `book.json`。
- * 4. **卡按清单说的那一版去读**（`book.cardId` + `book.cardRevision`），不是"最新的那一版"。
+ * 4. 卡按清单说的那一版去读（`book.cardId` + `book.cardRevision`），不是"最新的那一版"。
  *    用最新版重画一页会出现"这一页按第 3 版画、其余 19 页按第 1 版画"——
  *    而那本书的清单上写着它整本是第 1 版的。
  */
@@ -67,10 +67,10 @@ export async function POST(
     return jsonError(400, 'invalid-request', `页码要是正整数，收到 ${pageNoRaw}`)
   }
 
-  // ★ 闸门按**这一次要重做的东西**要能力，不是按整本书要：重画一页只要图像，
+  // 闸门按这一次要重做的东西要能力，不是按整本书要：重画一页只要图像，
   //   重配一段朗读只要语音。要成"文本 + 图像"的话，一个只有图像权限的人
   //   连"把这一页重画一遍"都做不了——而他做的确实是图像那一件事。
-  //   ★ 顺序是"先解析再判"：要哪一项能力由 `kind` 决定，而 `kind` 是解析出来的。
+  //   顺序是"先解析再判"：要哪一项能力由 `kind` 决定，而 `kind` 是解析出来的。
   //     先判的话只能一律要图像，那对"重配朗读"就是拦错了人。
   let raw: unknown
   try {
@@ -79,7 +79,7 @@ export async function POST(
     return jsonError(400, 'bad-json', '请求体不是合法的 JSON')
   }
 
-  // ★ 契约在 `lib/rerun-api.ts`（纯函数、有测试），这里只转发。
+  // 契约在 `lib/rerun-api.ts`（纯函数、有测试），这里只转发。
   //   校验写在路由里的话，只能靠手工发请求去测（`book-api.ts` 文件头那条）
   const parsed = parseRerunBody(raw)
   if (!parsed.ok) return jsonError(400, 'invalid-request', parsed.problems.join('；'))
@@ -102,7 +102,7 @@ export async function POST(
     return jsonError(404, 'book-not-found', `盘上没有这本书（${bookId}）。刷新一下书架看看`)
   }
 
-  // ★ 按**清单说的那一版**读卡：见文件头第 4 条
+  // 按清单说的那一版读卡：见文件头第 4 条
   const card = await cardStore.load(book.cardId, book.cardRevision)
   if (!card) {
     return jsonError(
@@ -113,13 +113,13 @@ export async function POST(
   }
 
   /**
-   * 重画也要带上那个**称呼**（小男孩 / 小女孩 / 孩子）。
+   * 重画也要带上那个称呼（小男孩 / 小女孩 / 孩子）。
    *
-   * ★ 不是可选的礼貌：不带它，重画出来的 prompt 与第一次跑**不是同一份**，
+   * 不是可选的礼貌：不带它，重画出来的 prompt 与第一次跑不是同一份，
    *   而"同一本书里的每一页出自同一个模板"是 `provenance.promptVersion` 承诺的事
    *   （`image-page@v3` 那一段）。少了这一行，重画那一页恰好会退回"性别靠猜"。
    * ★ 卡读出来的是锚点，锚点里没有性别（这正是那个 bug 的根因），所以这里要按
-   *   **卡上的 childId** 多读一次档案（`Book` 上没有 childId，卡上有）。
+   *   卡上的 childId 多读一次档案（`Book` 上没有 childId，卡上有）。
    *   读不到就用中性词——不是报错：重画的诱因多半是"这一页画歪了"，
    *   不该因为档案没了就连重画都不给。
    */
@@ -144,7 +144,7 @@ export async function POST(
     )
   }
 
-  // 序号从日志里已有的最大值接上去（文件头第 2 条）。**不 truncate**（第 1 条）
+  // 序号从日志里已有的最大值接上去（文件头第 2 条）。不 truncate（第 1 条）
   const log = await createFsEventLog(userSliceRoot(root, guard.session.userId))
   const { events: already } = await log.read(bookId)
   const startSeq = maxSeqOf(already)
@@ -159,7 +159,7 @@ export async function POST(
         try {
           controller.enqueue(encoder.encode(encodeBookFrameToText(frame)))
         } catch {
-          // 浏览器关了这一页：从这里往后不入流，但**落盘照旧**
+          // 浏览器关了这一页：从这里往后不入流，但落盘照旧
           clientGone = true
         }
       }

@@ -7,41 +7,41 @@
  *
  * 四条约定：
  *
- * 1. **路径越界由 store 拒**，这里不自己写字符串检查。「`../` 这种事不能靠信任」
+ * 1. 路径越界由 store 拒，这里不自己写字符串检查。「`../` 这种事不能靠信任」
  *    （`stores.ts` 的原话）已经在那层实现过一次，第二遍实现就是第二遍会漏的地方。
- * 2. **缓存头按内容指纹来**。我们的资产文件名里就带指纹（`ref.<指纹>.png`），
+ * 2. 缓存头按内容指纹来。我们的资产文件名里就带指纹（`ref.<指纹>.png`），
  *    所以可以放心让浏览器长期缓存；不带指纹的（`book.json`、`events.jsonl`）
  *    一律 `no-store`——那些会在同一路径上被改写。
- * 3. **只读，只认这几个前缀，而且只认你自己那一片**。`cards/`、`books/`、`assets/`
+ * 3. 只读，只认这几个前缀，而且只认你自己那一片。`cards/`、`books/`、`assets/`
  *    是引擎与卡存储写的三处；别的一律 404，免得这个出口变成"整个磁盘的读接口"。
- *    ★ 2026-10-17（工单 16）补上后一半：这条路原来**不认人**——书号是"卡 + 主题指纹"
+ *    2026-10-17（工单 16）补上后一半：这条路原来不认人——书号是"卡 + 主题指纹"
  *    推出来的，猜得出来，所以知道 id 就能拿到别人的整本 `book.json`（含每页 prompt）
- *    与朗读音频。现在它要求登录，并且读的是**请求者自己那一片**
+ *    与朗读音频。现在它要求登录，并且读的是请求者自己那一片
  *    （`asset-scope.ts` 的 `createUserStore`）：别人的 id 在你自己那一片里
- *    根本不存在，于是 404——**不是"读了再判"，是那一片里没有这个键**。
- *    ★ 演示书与灵感书单不受影响：那两条走 `public/demo`、`public/booklist`，
+ *    根本不存在，于是 404——不是"读了再判"，是那一片里没有这个键。
+ *    演示书与灵感书单不受影响：那两条走 `public/demo`、`public/booklist`，
  *    是静态文件，压根不经这条路。
- *    ★ 2026-10-17 当天稍后：**示例角色卡是例外，而且是有意的**。
+ *    2026-10-17 当天稍后：示例角色卡是例外，而且是有意的。
  *    `createUserStore` 现在把 `public/demo/cards/` 垫在每个人那一片底下
  *    （`card-source.ts`），所以 `/api/assets/cards/xiaoman-r1/ref.<指纹>.jpg`
- *    对任何**已登录**的人都读得到。这是刻意的：示例卡不属于任何人，
+ *    对任何已登录的人都读得到。这是刻意的：示例卡不属于任何人，
  *    它是"先看看效果"的那两张，界面上本来就要给每个人看；而它的参考图还要被
- *    出图那一步当锁脸的输入用。★ 那条真正的隔离（**别人的**东西拿不到）
+ *    出图那一步当锁脸的输入用。★ 那条真正的隔离（别人的东西拿不到）
  *    一个字没变：别把这一条例外读成"这条路开始认公共内容了"——
  *    `books/` 与 `children/` 仍然是纯粹的自己那一片。
- *    ★ 代价一条，写在这里免得下次有人惊讶：示例卡的缩略图会缓存进**请求者**
+ *    ★ 代价一条，写在这里免得下次有人惊讶：示例卡的缩略图会缓存进请求者
  *    那一片（`u/<id>/thumbs/...`）。它是派生物、不是作品，管理页那一列按目录名数，
  *    不会把它算成人家的书或卡。
- * 4. **`?w=<档>` 要缩略图**（`lib/thumbs.ts` 那五个档）。缩出来的 WebP 落盘缓存，
- *    第二次就是纯读盘。★ 缩不动（图坏了、sharp 装不上）时**回原图**而不是 500：
+ * 4. `?w=<档>` 要缩略图（`lib/thumbs.ts` 那五个档）。缩出来的 WebP 落盘缓存，
+ *    第二次就是纯读盘。★ 缩不动（图坏了、sharp 装不上）时回原图而不是 500：
  *    一个性能优化不该变成一次故障——这是这一层与"密钥没配"那类错误唯一的不同。
- * 5. **`Range` 要支持，而且 `Content-Length` 要回**（2026-10-18 补）。
+ * 5. `Range` 要支持，而且 `Content-Length` 要回（2026-10-18 补）。
  *    在这一天之前，这条出口回的是 `Transfer-Encoding: chunked`、也不认 `Range`；
  *    后果是「重配这一页」那个播放器打开时显示 `0:00`、进度条拖不动——
  *    实测与理由在 `lib/http-range.ts` 的文件头，逐条读数与复现命令在
  *    `.scratch/w3-shared-reading/issues/09-audio-range.md`（那 16 个 TTS 产物
- *    **一个 Xing 头都没有**，所以时长只能靠"读末尾"得到，而那就需要 Range）。
- *    ★ 原来的注释写着"对朗读音频是可以接受的"——那句话是**没有量过的推测**，
+ *    一个 Xing 头都没有，所以时长只能靠"读末尾"得到，而那就需要 Range）。
+ *    原来的注释写着"对朗读音频是可以接受的"——那句话是没有量过的推测，
  *      量过之后它是错的：`seekable` 恒为 0，"从头播完就够"只是没人去拖而已。
  */
 
@@ -97,7 +97,7 @@ function byteResponse(
   const size = bytes.byteLength
   const wanted = parseRange(rangeHeader, size)
 
-  // ★ 要不到那一段：416 + `bytes */size`，让浏览器知道这一份有多大
+  // 要不到那一段：416 + `bytes */size`，让浏览器知道这一份有多大
   if (wanted === 'unsatisfiable') {
     return new Response(null, {
       status: 416,
@@ -119,9 +119,9 @@ function byteResponse(
       status: 200,
       headers: {
         'Content-Type': contentType,
-        // ★ 这三条头是 2026-10-18 补的（用户："我点开是0秒"）：
+        // 这三条头是 2026-10-18 补的（用户："我点开是0秒"）：
         // · `Content-Length`：不写它 Next 会走 `Transfer-Encoding: chunked`，
-        //   浏览器**连这一份多大**都不知道——而 mp3 没有 Xing 头时，
+        //   浏览器连这一份多大都不知道——而 mp3 没有 Xing 头时，
         //   时长只有"读末尾"这一条路（见 `http-range.ts` 文件头）；
         // · `Accept-Ranges`：告诉浏览器"可以来要某一段"；
         // · `Cache-Control` 见上。
@@ -174,7 +174,7 @@ export async function GET(
   const store = await createUserStore(assetRoot(), guard.session.userId)
   const name = relative.split('/').pop() ?? ''
   const cacheable = FINGERPRINTED.test(name)
-  /** ★ 那个 `<audio>` 拖得动、也知道时长，全靠这一条（见 `http-range.ts` 文件头） */
+  /** 那个 `<audio>` 拖得动、也知道时长，全靠这一条（见 `http-range.ts` 文件头） */
   const rangeHeader = req.headers.get('range')
 
   const width = thumbWidthOf(new URL(req.url).searchParams.get('w'))

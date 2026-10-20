@@ -1,17 +1,17 @@
 /**
- * plan-retry.test.ts —— 规划期 `retry` 事件的**上界**（2026-10-20）
+ * plan-retry.test.ts —— 规划期 `retry` 事件的上界（2026-10-20）
  *
- * 这一组用例盯的是一句话：**引擎只在真的还有下一次时，才说"正在重写"**。
+ * 这一组用例盯的是一句话：引擎只在真的还有下一次时，才说"正在重写"。
  *
  * 起因是一次通读：`plan.ts` 的三处 `retry`（schema 没过 / 树形不合法 / 内容审核没过）
- * 在 `attempt === maxAttempts` 时**照样发**，然后循环结束、抛
+ * 在 `attempt === maxAttempts` 时照样发，然后循环结束、抛
  * `schema-validation-failed`——屏幕上最后留下的那句话是
  * 「这一版故事没通过校验，正在重写（第 3 / 3 次）」，而下面根本没有第 3 次以后的重写。
  * 那是这一屏唯一还在说的话，收尾的 fatal 帧把它换掉之前它一直站着。
  *
- * ★ 判据是现成的：同一个引擎里 `illustrate.ts` 的两处 `retry`
+ * 判据是现成的：同一个引擎里 `illustrate.ts` 的两处 `retry`
  *   （一致性没过 / 画面没过）都带着 `attempt < lastAttempt`。
- *   此处对齐它，并用例锁死：发出去的每一条 `retry` 的 `attempt` 都**严格小于**上界。
+ *   此处对齐它，并用例锁死：发出去的每一条 `retry` 的 `attempt` 都严格小于上界。
  */
 
 import { describe, expect, it } from 'vitest'
@@ -33,7 +33,7 @@ const INPUT: StoryPlanInput = {
 }
 
 /**
- * 三份夹具。★ 都是**三页**：`planDraftCodec` 的 `nodes` 是 `min: 3`
+ * 三份夹具。★ 都是三页：`planDraftCodec` 的 `nodes` 是 `min: 3`
  * （一页两页的书不是这个产品要的），少一页就先在 schema 那一关红，
  * 于是"树形不合法""审核没过"这两条路根本走不到——用例会红在错误的地方。
  */
@@ -131,7 +131,7 @@ describe('规划期 retry 事件的上界', () => {
     // 发出去的每一条都严格小于上界——这就是"还有下一次"的判据
     for (const event of retries) expect(event.attempt ?? 0).toBeLessThan(3)
 
-    // ★ 少发一条事件**不等于少记一次失败**：第 3 次的问题照旧在抛出来的那句里
+    // 少发一条事件不等于少记一次失败：第 3 次的问题照旧在抛出来的那句里
     expect(error?.message).toContain('Schema 校验未过')
     expect(error?.message).toContain('第 3 次')
     expect((error as Error & { detail?: string[] }).detail).toHaveLength(3)

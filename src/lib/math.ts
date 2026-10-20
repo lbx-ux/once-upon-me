@@ -1,22 +1,22 @@
 /**
  * 共用数学 —— 首页动效里被反复手抄的那三个小函数
  *
- * ## 为什么要单独一个文件
+ * 为什么要单独一个文件
  *
  * `clamp` 与 `smoothstep` 在 `HeroOrbit.tsx` 里各有一份，`useScrollDriver.ts` 里
- * 又有一份 `clamp`。第三屏是第四个消费者。**四份手抄的同一个小函数**，
+ * 又有一份 `clamp`。第三屏是第四个消费者。四份手抄的同一个小函数，
  * 改一处忘两处是迟早的事 —— 而这类函数的错误不会崩，只会让某条曲线悄悄不对。
  *
- * ## 但这一批**不迁移**前两屏
+ * 但这一批不迁移前两屏
  *
  * `HeroOrbit` 与 `useScrollDriver` 继续用它们自己那份，本文件只服务新代码。
  * 理由是这条仓库已有的纪律（README §五「刻意未做」）：
  * 搬动已实测的代码要单独一个提交、行为必须一字不变，混进特性提交里
  * 出了问题分不清是谁带的。迁移是单独一件事，记在 README 的未做清单。
  *
- * ## 唯一的行为差别
+ * 唯一的行为差别
  *
- * `smoothstep` 在**退化区间**（`edge0 === edge1`）上返回阶跃而不是 NaN。
+ * `smoothstep` 在退化区间（`edge0 === edge1`）上返回阶跃而不是 NaN。
  * `HeroOrbit` 那份会算 `0/0`，NaN 经 `Math.max/min` 一路传染到 opacity 与 transform。
  * 现有调用点从不传退化区间，所以那不是 bug；但一份要共用的函数不该留着这个坑。
  */
@@ -49,7 +49,7 @@ export function lerp(a: number, b: number, t: number): number {
  * 把 `-0` 归一成 `+0`。
  *
  * 不是洁癖。`(-0).toFixed(2)` 是字符串 `"-0.00"`，于是
- * `rotateY(-0deg)` 与 `rotateY(0deg)` 在**数值上等价、在字符串上不等价**。
+ * `rotateY(-0deg)` 与 `rotateY(0deg)` 在数值上等价、在字符串上不等价。
  * 而这一屏的写入路径靠字符串去重（`useScrollDriver` 的 `setVar` 是
  * `lastVars.get(name) === value` 才跳过），一个取不到的负号会退化成
  * 每帧一次无意义的样式重算 —— 正好是要避开的那件事。

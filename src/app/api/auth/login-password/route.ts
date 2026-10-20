@@ -5,11 +5,11 @@
  *   { "account": "123456", "password": "123456" }  →  { "user": {…} }
  * ```
  *
- * ★ 路径叫 `login-password` 而不是 `login`：它与 `/api/auth/verify-code`
- * 是**并列的两条进门路**（一个用码、一个用口令），名字里说清是哪一条。
+ * 路径叫 `login-password` 而不是 `login`：它与 `/api/auth/verify-code`
+ * 是并列的两条进门路（一个用码、一个用口令），名字里说清是哪一条。
  * 上一轮那个前端函数就叫 `loginWithPassword`，这一层跟着它走。
  *
- * ★ 连错 5 次锁 10 分钟在 Java 那边（`LoginAttemptGuard`）——**不在这里**：
+ * 连错 5 次锁 10 分钟在 Java 那边（`LoginAttemptGuard`）——不在这里：
  * 这一层是无状态的，每个请求可能落在不同的实例上，做计数只会做成一份假账。
  */
 
@@ -19,7 +19,7 @@ import { backendFetch } from '@/lib/auth/backend.ts'
 import { badJson, failureResponse, jsonBody } from '@/lib/auth/bff.ts'
 import { sessionCookie } from '@/lib/auth/session.ts'
 
-// ★ 段配置必须是**字面量**：成员表达式 Next 读不了，而它只在 `pnpm build` 那一刻才报（判据见 lib/route-config.test.ts）
+// ★ 段配置必须是字面量：成员表达式 Next 读不了，而它只在 `pnpm build` 那一刻才报（判据见 lib/route-config.test.ts）
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 

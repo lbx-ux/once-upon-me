@@ -1,17 +1,17 @@
 /**
- * theme-handoff.test.ts —— 接力里**能在 node 里验**的那部分
+ * theme-handoff.test.ts —— 接力里能在 node 里验的那部分
  *
  * 与 `useEnterTimeline.test.ts` 同一条口径：只测纯函数与纯状态，
- * **不拉 jsdom**、不假装验过动效。所以这个文件里没有一处 `captureRing` /
+ * 不拉 jsdom、不假装验过动效。所以这个文件里没有一处 `captureRing` /
  * `themeArrival` —— 它们要真 DOM、要真布局，只有真页面能验（README §五 那一条）。
  *
  * 三条值得钉住的：
- *   1. **图心对齐**。墙上那一格比环上那张卡多一行名字，卡心比图心低约 22px；
+ *   1. 图心对齐。墙上那一格比环上那张卡多一行名字，卡心比图心低约 22px；
  *      `x/y` 里那条 `s·(artC − cardC)` 就是为它存在的。少写这一项，
  *      飞行不会崩，只会让每一张都稳稳地偏下一点点——"看起来差不多"是最难发现的那种错。
- *   2. **不出 NaN**。量不到尺寸时比例会变成 `x/0`，而 GSAP 拿到 NaN 会让
- *      **整条时间线静默失效**（症状：什么都没动）。
- *   3. **载荷是"看一眼"不是"拿走"**。`peek` 认领会让 React 严格模式下的第二次
+ *   2. 不出 NaN。量不到尺寸时比例会变成 `x/0`，而 GSAP 拿到 NaN 会让
+ *      整条时间线静默失效（症状：什么都没动）。
+ *   3. 载荷是"看一眼"不是"拿走"。`peek` 认领会让 React 严格模式下的第二次
  *      初始化器读到空的（dev 下动不动就复现、生产上不会，最难查的那种）。
  */
 
@@ -38,7 +38,7 @@ import { ENTER_STEPS } from './useEnterTimeline.ts'
 const CARD: Rect = { left: 0, top: 0, width: 200, height: 160 }
 const ART: Rect = { left: 0, top: 0, width: 200, height: 112.5 }
 
-/** 把 `flightVars` 的解**代回**元素上，看图上某个点会落到哪儿（与 CSS 同一套算法） */
+/** 把 `flightVars` 的解代回元素上，看图上某个点会落到哪儿（与 CSS 同一套算法） */
 function project(point: { x: number; y: number }, vars: ReturnType<typeof flightVars>) {
   const cx = CARD.left + CARD.width / 2
   const cy = CARD.top + CARD.height / 2
@@ -148,11 +148,11 @@ describe('themeArrival：空载荷不给接力', () => {
 
   it('★ 接力的选择器与 ENTER_STEPS 最后一步**必须是同一个字符串**', () => {
     /* 接管是按 `sel` 字符串对上的（`useEnterTimeline` 里那一句 `takeover.sel === step.sel`），
-       所以这两个常量一旦各改各的，接力会**静默失效**：页面照样进场、什么都不报，
+       所以这两个常量一旦各改各的，接力会静默失效：页面照样进场、什么都不报，
        只是那 12 张改成从下面浮上来了。这条断言就是那次静默的哨兵。 */
     const last = ENTER_STEPS[ENTER_STEPS.length - 1]
     expect(WALL_ITEM).toBe(last?.sel)
-    // 而且必须是**带交错**的那一步：接力继承它的 `stagger()`，12 张才不是一起落地
+    // 而且必须是带交错的那一步：接力继承它的 `stagger()`，12 张才不是一起落地
     expect(last?.stagger).toBeTypeOf('function')
   })
 })

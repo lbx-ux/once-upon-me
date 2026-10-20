@@ -3,45 +3,44 @@
 /**
  * ShelfDashboard —— 书架
  *
- * ---------------------------------------------------------------------------
- * 2026-10-16：这一屏从"仪表盘"改成一排**真的书架**
+ * 2026-10-16：这一屏从"仪表盘"改成一排真的书架
  *
  * 用户给的是一句要求和一张参考图：「书架就应该像一个真正的书架一样」——
  * 参考图里是一格木头书架，书立着、封面朝外，书名写在每本下面。
- * 同时**划线圈掉了旧版顶部那一整块**（问候语 + 四格统计 + 「只记在这台设备上」
+ * 同时划线圈掉了旧版顶部那一整块（问候语 + 四格统计 + 「只记在这台设备上」
  * 那句 + 「继续上次创作」卡 + 最近/主题模板两个 tab），并说明了"圈里的字都不要了"。
  *
- * 于是这一屏现在的形状只剩两样东西：**一排立着的书** + **一本虚线的新书**。
+ * 于是这一屏现在的形状只剩两样东西：一排立着的书 + 一本虚线的新书。
  *
- * ★ **第二轮（同日）**：第一版把书与板圈在一块 `--card-paper` 的暖纸里（`.shelf__case`，
+ * 第二轮（同日）：第一版把书与板圈在一块 `--card-paper` 的暖纸里（`.shelf__case`，
  *   当书架的背板用，参考图里那格木头书架就是这么个形状）。用户看着那一版圈出右半边说
- *   「和背景有点突兀」——**暖色硬边压在天空背景上太硬**。所以圈撤了，书与板现在直接
+ *   「和背景有点突兀」——暖色硬边压在天空背景上太硬。所以圈撤了，书与板现在直接
  *   落在天光上。这一轮只动"色"，没动"空"（板仍然通长，没缩到书下面）。
  *   记录见 `.scratch/shelf-on-sky/`；`shelf-bookcase/` 那一册已经冻结，不回头改。
  *
- * ★ **第三轮（同日）**：加一个可见的标题 + 右上角那颗「编辑」。
+ * 第三轮（同日）：加一个可见的标题 + 右上角那颗「编辑」。
  *   用户的第二句话是「左上角写上"书架"这两个字，和其他保持一致，然后右上角有一个编辑
  *   功能，可以移动多个书籍之间的顺序和删除书籍的功能」。两件事都按选项确认过：
- *   **拖拽换位**（不是左右箭头）、**真删磁盘**（删完"书架底下什么也不要留"）。
+ *   拖拽换位（不是左右箭头）、真删磁盘（删完"书架底下什么也不要留"）。
  *
  *   | 谁        | 在哪                                                          |
  *   | --------- | ------------------------------------------------------------- |
- *   | 次序      | `shelf/order.json`（`lib/shelf-order.ts`），**服务端**读写     |
+ *   | 次序      | `shelf/order.json`（`lib/shelf-order.ts`），服务端读写     |
  *   | 删除      | `books/<id>/` + 五个档位的缩略图（`lib/book-deletion.ts`）     |
  *   | 标题/编辑 | `header.shelf__head`，与 `/character` 的 `.cw__head` 同版式   |
  *
- *   ★ 这一屏从纯服务端组件变回**客户端组件**了，但"首屏就有内容"这条没退：
- *     App Router 里客户端组件**在服务端也会渲染出 HTML**，而这里的状态是从 props
+ *   这一屏从纯服务端组件变回客户端组件了，但"首屏就有内容"这条没退：
+ *     App Router 里客户端组件在服务端也会渲染出 HTML，而这里的状态是从 props
  *     接过来的（次序由 `shelf/page.tsx` 排好）——没有 `useEffect` 取数、
  *     没有"挂载前后两副面孔"。上次撤掉 `'use client'` 撤的是那两样，不是这三行指令。
  *
- * ★ 删掉的那几块不是"没做出来"，是**做过、量过、然后判断它不该在这一屏**——
+ * 删掉的那几块不是"没做出来"，是做过、量过、然后判断它不该在这一屏——
  *   免得下一个看到 diff 的人以为丢了一段功能：
  *
  *   | 删掉的              | 它现在在哪                                                       |
  *   | ------------------- | ---------------------------------------------------------------- |
  *   | 四格统计            | 没了。三个数的台账仍在本机（`reading-log.ts`），只是不再摆出来   |
- *   | 「只记在这台设备上」 | 跟着统计一起删——那句话是**为那几个数**写的，数没了它就没有主语   |
+ *   | 「只记在这台设备上」 | 跟着统计一起删——那句话是为那几个数写的，数没了它就没有主语   |
  *   | 继续上次创作        | 用户明确选了"彻底不要"（不是搬走、不是改成书签）                 |
  *   | 最近 / 主题模板 tab | 没了。「主题模板」本来是从 tab「推荐」换过来的（工单 05 §一），   |
  *   |                     | 现在按主题进去做书那条路走 `/booklist` —— 那边 12 个主题各一本   |
@@ -50,33 +49,31 @@
  *   | 「我的故事」小标题  | 没了。侧栏那一格就写着「书架」——但现在页头有了可见的「书架」，   |
  *   |                     | 那条"一屏只有一样东西时不必再说一遍"的理由就不再适用了（第三轮）  |
  *
- * ---------------------------------------------------------------------------
  * 书架是怎么摆出来的
  *
  * 用一个 CSS grid（列宽 `--book-w`、行高 `--row-h`，都在 `shelf.css` 里由同一个数
- * 推出来），**搁板本身是容器上的一张平铺背景**——每 `--row-h` 一格，
+ * 推出来），搁板本身是容器上的一张平铺背景——每 `--row-h` 一格，
  * 底部画一条板。这样不论一行摆几本、末行是不是满的，板都是通长的：
  * 一格一格的板各自画，末行就会缩到最后一本书下面，看着像半截货架。
  *
- * ---------------------------------------------------------------------------
  * 编辑模式（第三轮）
  *
- * 两件事：**挪次序**与**删一本**。三条实现上的讲究：
+ * 两件事：挪次序与删一本。三条实现上的讲究：
  *
- * 1. **指针捕获挂在 `<ul>` 上，不挂在被拖的那一本上。** 被拖的那一本要拿
+ * 1. 指针捕获挂在 `<ul>` 上，不挂在被拖的那一本上。 被拖的那一本要拿
  *    `pointer-events: none` —— 否则 `elementFromPoint` 只会永远返回它自己，
  *    "指针现在压在哪一本上面"就永远问不出答案。捕获挂在不会动的容器上，
  *    这条路才走得通。（同一个理由决定了它必须 `position: fixed`：留在流里的话，
  *    次序一变它自己在格子里的位置就跟着变，"跟手"这件事会变成抖。）
- * 2. **触摸上"按封面拖 = 翻页"，"按抓手拖 = 换位"。** `touch-action: none` 只给
+ * 2. 触摸上"按封面拖 = 翻页"，"按抓手拖 = 换位"。 `touch-action: none` 只给
  *    抓手那颗按钮：整本书都给的话，手机上编辑模式就再也滚不动了（书多了要往下翻）。
- *    手指按在封面上拖时浏览器会发 `pointercancel`，这一层照单全收——**撤销**，不写盘。
- * 3. **写盘失败要回滚。** 拖完立刻 PUT，失败就把次序退回上一次服务端确认过的那一份，
+ *    手指按在封面上拖时浏览器会发 `pointercancel`，这一层照单全收——撤销，不写盘。
+ * 3. 写盘失败要回滚。 拖完立刻 PUT，失败就把次序退回上一次服务端确认过的那一份，
  *    并在页头底下说一句。让界面留着一个没存上的次序，比当场退回去糟得多：
  *    用户以为存上了，下次打开发现书跳回原位，而中间什么都没提示。
  *
- * ★ 删完之后**页面上什么也不留**（用户的原话："书架底下什么也不要留"）。
- *   确认框本身也只有**一句话**（用户的第二句话，2026-10-16：「也不要写这么多，
+ * ★ 删完之后页面上什么也不留（用户的原话："书架底下什么也不要留"）。
+ *   确认框本身也只有一句话（用户的第二句话，2026-10-16：「也不要写这么多，
  *   就一个确认是否删除，还是算了」）——它不列"要失去什么"，因为那一张"预演"的凭据
  *   连同服务端那条 `GET` 一起撤了。这里不做"最近删除"、不做回执行。
  *   （删到一半失败是例外：那不是"留下的记录"，是必须说的话，见 `shelf__confirm` 那个分支。）
@@ -96,12 +93,13 @@ export type ShelfDashboardProps = {
 }
 
 /** 空态那条线出去的成品书（ADR-0003 的演示书）。
- *  ★ 2026-10-17：首页那颗「看一本成品」改指 `/booklist` 了，演示书现在只剩这一个入口。 */
+ *  2026-10-17：首页那颗「看一本成品」改指 `/booklist` 了，演示书现在只剩这一个入口。
+ */
 const DEMO_BOOK_ID = 'xiaoyu-r1-4fe055c5723b'
 
 /**
  * 删除凭据的一行（`lib/book-deletion.ts` 的 `DeletionPlace` 的界面版）。
- * ★ 只声明**用得到的**那几个字段：界面不该因为服务端那边多一个字段就要跟着改
+ * 只声明用得到的那几个字段：界面不该因为服务端那边多一个字段就要跟着改
  *   （与 `ChildDetail.tsx` 里那个同名的界面版同一条）。
  */
 type DeletionPlaceView = {
@@ -120,12 +118,13 @@ type ReceiptView = {
 
 /**
  * 正要删的那一本。★ 只有这两个字段：确认框只问一句话，
- * 而书名**本地就有**（`BookSummary.title`），不必为了问一句话去问服务端。
+ * 而书名本地就有（`BookSummary.title`），不必为了问一句话去问服务端。
  */
 type PendingDelete = { bookId: string; title: string }
 
 /** 拖动的暂态。★ 存在 ref 里而不是 state 里：每 move 一次都重渲染一次就够慢了，
- *  再把"这次拖到哪儿"也塞进渲染循环，等于让 React 替一个手势记账 */
+ *  再把"这次拖到哪儿"也塞进渲染循环，等于让 React 替一个手势记账
+ */
 type DragState = {
   pointerId: number
   bookId: string
@@ -143,7 +142,7 @@ export default function ShelfDashboard({ books }: ShelfDashboardProps) {
   const confirmRef = useRef<HTMLElement | null>(null)
 
   /**
-   * 书架上现在的次序。**初值就是服务端排好的那一份**（`shelf/page.tsx` 已经按
+   * 书架上现在的次序。初值就是服务端排好的那一份（`shelf/page.tsx` 已经按
    * `shelf/order.json` 排过），所以第一帧画出来的就是对的。
    */
   const [order, setOrder] = useState<string[]>(() => books.map((book) => book.bookId))
@@ -152,7 +151,7 @@ export default function ShelfDashboard({ books }: ShelfDashboardProps) {
   const [drag, setDrag] = useState<{ bookId: string; dx: number; dy: number } | null>(null)
   const [confirming, setConfirming] = useState<PendingDelete | null>(null)
   /**
-   * 删到一半没删干净的位置。★ 它**只在失败时**有东西——成功时这一屏什么也不留
+   * 删到一半没删干净的位置。★ 它只在失败时有东西——成功时这一屏什么也不留
    * （用户的"书架底下什么也不要留"）。
    */
   const [failed, setFailed] = useState<DeletionPlaceView[] | null>(null)
@@ -169,7 +168,7 @@ export default function ShelfDashboard({ books }: ShelfDashboardProps) {
 
   /**
    * 服务端给了新的一份（`router.refresh()` 之后、或者另一处删了一本）就跟着走。
-   * 依赖用**拼出来的字符串**而不是那个数组：数组每次渲染都是新身份，
+   * 依赖用拼出来的字符串而不是那个数组：数组每次渲染都是新身份，
    * 用它当依赖会让这一段每渲染一次就跑一次（而那正是"两副面孔"的写法）。
    */
   const serverKey = books.map((book) => book.bookId).join('\u0000')
@@ -180,10 +179,10 @@ export default function ShelfDashboard({ books }: ShelfDashboardProps) {
   }, [serverKey])
 
   /**
-   * 确认框出来的时候**把它带进视口**。
+   * 确认框出来的时候把它带进视口。
    *
-   * ★ 这是实测出来的一条：书多了以后（探针夹子里九本，两排）确认框挂在整排书的
-   *   **下面**，而点 ✕ 的那本书多半在屏幕中间——面板就落在屏幕外面一点。
+   * 这是实测出来的一条：书多了以后（探针夹子里九本，两排）确认框挂在整排书的
+   *   下面，而点 ✕ 的那本书多半在屏幕中间——面板就落在屏幕外面一点。
    *   那时的症状是"点了 ✕ 什么都没发生"，人只会再点一次。
    *   `block: 'nearest'` 是"能看见就够"：它不会为了居中把已经看得到的整屏推走。
    */
@@ -193,22 +192,22 @@ export default function ShelfDashboard({ books }: ShelfDashboardProps) {
 
   const byId = useMemo(() => new Map(books.map((book) => [book.bookId, book])), [books])
   /**
-   * ★ **还没画成一本书的**都进这一栏（工单 03，2026-10-17 扩了一档）。
+   * 还没画成一本书的都进这一栏（工单 03，2026-10-17 扩了一档）。
    *
    * 那一排成品书架是"我做过什么"，而它整套交互都建立在"每一本都读得完"上：
    * 点开是阅读器、拖动是给成品排序。还没画完的书塞进去，会得到一个点开就跳到
    * "这本书还没做完"的阅读器、以及一个给草稿排位的位置——而"下一篇要接着做的是哪一本"
    * 根本不是那一排要回答的问题。
    *
-   * 所以它们单独一排摆在上面，带着自己那几个动作。★ **它不离场**：藏起来的话，
+   * 所以它们单独一排摆在上面，带着自己那几个动作。★ 它不离场：藏起来的话，
    * 一本被放弃的本子会占着盘、却没有任何入口找回来。
    *
    * | `status` | 盘上有什么 | 那一张卡上的动作 |
    * | --- | --- | --- |
-   * | `'story'` | 只有故事（还没画） | 接着编（整张卡是链接） / 删除。**没有「制作为绘本」** |
+   * | `'story'` | 只有故事（还没画） | 接着编（整张卡是链接） / 删除。没有「制作为绘本」 |
    * | `'draft'` | 画完了没装订 | 继续编辑 / 制作为绘本 / 删除 |
    *
-   * ★ `'story'` 那一档**不给「制作为绘本」**：那一颗打的是 `publish`，而盘上还没有
+   * `'story'` 那一档不给「制作为绘本」：那一颗打的是 `publish`，而盘上还没有
    *   `book.json`——它会以一个 404 告终。一颗必然失败的按钮比没有按钮糟。
    */
   const drafts = useMemo(() => books.filter((book) => book.status !== 'published'), [books])
@@ -216,7 +215,7 @@ export default function ShelfDashboard({ books }: ShelfDashboardProps) {
 
   /**
    * 摆出来的那一列。★ 末尾那一段不是多余的防御：`router.refresh()` 之后`books` 先变、
-   * 上面那个 effect 后跑（effect 在绘制**之后**），中间那一帧 `order` 还是旧的那一份——
+   * 上面那个 effect 后跑（effect 在绘制之后），中间那一帧 `order` 还是旧的那一份——
    * 只认 `order` 的话，新做的那一本会先闪一下不见。补上"order 里没提到的"就没有这一帧。
    */
   const shown = useMemo(() => {
@@ -255,7 +254,7 @@ export default function ShelfDashboard({ books }: ShelfDashboardProps) {
     }
   }
 
-  /* ── 拖 ─────────────────────────────────────────────────────────────── */
+  /* 拖 */
 
   function onPointerDown(event: ReactPointerEvent<HTMLUListElement>): void {
     if (!editing || dragRef.current || event.button !== 0) return
@@ -282,7 +281,7 @@ export default function ShelfDashboard({ books }: ShelfDashboardProps) {
     const state = dragRef.current
     if (!state || event.pointerId !== state.pointerId) return
     const dx = event.clientX - state.fromX
-    // ★ 滚动量在这一层就算进位移里，渲染那边就不必去读 `window`
+    // 滚动量在这一层就算进位移里，渲染那边就不必去读 `window`
     //   （那个渲染在服务端也会跑一遍，`window` 在那儿不存在）
     const dy = event.clientY - state.fromY - (window.scrollY - state.scrollY)
     setDrag({ bookId: state.bookId, dx, dy })
@@ -295,7 +294,7 @@ export default function ShelfDashboard({ books }: ShelfDashboardProps) {
     let target = hitId
     if (!target) {
       // 落在一行的右边空处或两行之间：退到"离指针最近的那一本"。
-      // ★ 只按 x 比会在多行时把上面一行的那本抢过来，所以比的是中心距
+      // 只按 x 比会在多行时把上面一行的那本抢过来，所以比的是中心距
       let best = Number.POSITIVE_INFINITY
       for (const one of rackRef.current?.querySelectorAll('li[data-book-id]') ?? []) {
         const id = one.getAttribute('data-book-id')
@@ -318,7 +317,7 @@ export default function ShelfDashboard({ books }: ShelfDashboardProps) {
     )?.getBoundingClientRect()
     const after = box ? event.clientX > box.left + box.width / 2 : true
     setOrder((current) => {
-      // ★ 目标位置是"在**去掉被拖的那一本**之后的那一列里"数出来的：
+      // 目标位置是"在去掉被拖的那一本之后的那一列里"数出来的：
       //   这正是 `moveTo` 的签名（`shelf-order.ts` 里那段注释）
       const rest = current.filter((id) => id !== state.bookId)
       const at = rest.indexOf(target as string) + (after ? 1 : 0)
@@ -347,7 +346,7 @@ export default function ShelfDashboard({ books }: ShelfDashboardProps) {
     setOrder(savedRef.current)
   }
 
-  /* ── 键盘：正片（拖）之外的等价路径 ─────────────────────────────────── */
+  /* 键盘：正片（拖）之外的等价路径 */
 
   function moveByKey(event: ReactKeyboardEvent, bookId: string, title: string): void {
     if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
@@ -360,17 +359,17 @@ export default function ShelfDashboard({ books }: ShelfDashboardProps) {
     void putOrder(next)
   }
 
-  /* ── 制作 ───────────────────────────────────────────────────────────── */
+  /* 制作 */
 
   /**
    * 「制作为绘本」：草稿 → 成品。
    *
-   * ★ 它打的是**运行视图那颗「确定生成」同一个接口**（`POST /api/books/<id>/publish`，
+   * 它打的是运行视图那颗「确定生成」同一个接口（`POST /api/books/<id>/publish`，
    *   幂等）。不是第二条路径——两条路径的差别只在于用户在哪儿按的那一下，
    *   而"一本书是什么时候从草稿变成成品的"这件事只该有一种答案。
-   * ★ **不问一句"确定吗"**：这一步不销毁任何东西（书还在，只是换了那一栏），
+   * 不问一句"确定吗"：这一步不销毁任何东西（书还在，只是换了那一栏），
    *   而删除那一边要问——两边都弹框会让"要不要紧"这件事失去区分度。
-   * ★ 成功之后 `router.refresh()` 让服务端重读清单：那一本会从这一栏挪到下面的书架上，
+   * 成功之后 `router.refresh()` 让服务端重读清单：那一本会从这一栏挪到下面的书架上，
    *   用户看得见后果。`announce` 那句是给读屏的（这一屏本来就有那条 live region）。
    */
   async function makeBook(bookId: string, title: string): Promise<void> {
@@ -388,15 +387,15 @@ export default function ShelfDashboard({ books }: ShelfDashboardProps) {
     }
   }
 
-  /* ── 删 ─────────────────────────────────────────────────────────────── */
+  /* 删 */
 
   /**
-   * 问一句：**删掉《X》？** ★ 这一步**不发任何请求**。
+   * 问一句：删掉《X》？ ★ 这一步不发任何请求。
    *
    * 第一版这里去 `GET` 一张"删掉这本书会失去什么"的凭据（`ChildDetail.tsx` 那个形状，
    * 数在服务端），确认框把三行位置逐行列出来。2026-10-16 用户看着那份清单说
    * 「也不要写这么多，就一个确认是否删除，还是算了」——于是那一张凭据连同服务端那条
-   * `GET` 一起撤了（见 `lib/book-deletion.ts` 文件头）。**一句话不需要服务端算任何东西**，
+   * `GET` 一起撤了（见 `lib/book-deletion.ts` 文件头）。一句话不需要服务端算任何东西，
    * 书名本地就有。
    */
   function askDeletion(bookId: string, title: string): void {
@@ -408,9 +407,9 @@ export default function ShelfDashboard({ books }: ShelfDashboardProps) {
   /**
    * 第二步：真删。
    *
-   * ★ 成功之后**页面不留任何回执**（用户的"书架底下什么也不要留"），只把书从架上
+   * ★ 成功之后页面不留任何回执（用户的"书架底下什么也不要留"），只把书从架上
    *   拿掉——`router.refresh()` 让服务端那份清单重新读一次。删到一半失败是例外：
-   *   那时确认框**留着**，把 `failed` 的位置标出来。那不是"留下的记录"，是必须说的话。
+   *   那时确认框留着，把 `failed` 的位置标出来。那不是"留下的记录"，是必须说的话。
    */
   async function confirmDeletion(bookId: string): Promise<void> {
     setBusy(true)
@@ -429,7 +428,7 @@ export default function ShelfDashboard({ books }: ShelfDashboardProps) {
         return
       }
       if (receipt) {
-        /* 删到一半失败：确认框**留着**，把没删干净的那几行标出来。
+        /* 删到一半失败：确认框留着，把没删干净的那几行标出来。
            ★ 这一屏是唯一会看见"位置清单"的地方——它不是"留下的记录"，是必须说的话 */
         setFailed(receipt.places.filter((one) => one.failed))
         setError(payload?.message ?? '有些位置没删干净，凭据里标出来了。')
@@ -443,7 +442,7 @@ export default function ShelfDashboard({ books }: ShelfDashboardProps) {
     }
   }
 
-  /* ── 渲染 ───────────────────────────────────────────────────────────── */
+  /* 渲染 */
 
   return (
     <main className="shelf">
@@ -620,7 +619,7 @@ export default function ShelfDashboard({ books }: ShelfDashboardProps) {
                   width: dragRef.current.rect.width,
                   height: dragRef.current.rect.height,
                   margin: 0,
-                  // ★ 见文件头第 1 条：没有这一行，`elementFromPoint` 永远返回它自己
+                  // 见文件头第 1 条：没有这一行，`elementFromPoint` 永远返回它自己
                   pointerEvents: 'none' as const,
                   transform: `translate(${drag.dx}px, ${drag.dy}px)`,
                   zIndex: 3,
@@ -676,11 +675,11 @@ export default function ShelfDashboard({ books }: ShelfDashboardProps) {
               data-dragging={dragging ? 'true' : undefined}
             >
               {editing ? (
-                /* 编辑模式下不是链接：点一本书**不许**跳走，整本就是一个可拖的物件。
-                   ★ 它是一个 `tabIndex=0` 的普通元素，**不是 `role="button"`**——
+                /* 编辑模式下不是链接：点一本书不许跳走，整本就是一个可拖的物件。
+                   它是一个 `tabIndex=0` 的普通元素，不是 `role="button"`——
                      它按下去没有"动作"，给个按钮的语义会让读屏念一个按了没反应的按钮；
                      左右方向键挪一格这件事由 `aria-label` 说清楚。
-                   ★ 抓手那一枚只是**视觉**（`aria-hidden`）：鼠标上整本都能拖，
+                   抓手那一枚只是视觉（`aria-hidden`）：鼠标上整本都能拖，
                      触摸上它靠 `touch-action: none` 把这一小片变成"拖的起点"，
                      这一件事对读屏没有意义，所以它不占一个可聚焦的位置。 */
                 <div
@@ -702,7 +701,7 @@ export default function ShelfDashboard({ books }: ShelfDashboardProps) {
               )}
 
               {editing && (
-                /* 移除那一颗是**真的按钮**（`data-nodrag` 让拖动的 pointerdown 放过它）：
+                /* 移除那一颗是真的按钮（`data-nodrag` 让拖动的 pointerdown 放过它）：
                    它点下去有动作，所以它该有按钮的语义与名字 */
                 <button
                   type="button"

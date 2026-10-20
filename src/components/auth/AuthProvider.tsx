@@ -3,21 +3,21 @@
 /**
  * AuthProvider —— 「现在是谁在用」这一份状态的家（今天：真后端在管）
  *
- * 与上一版相比，它**少了一件麻烦、多了一件事实**。
+ * 与上一版相比，它少了一件麻烦、多了一件事实。
  *
- * ★ 少的麻烦：**首屏那一下闪烁没了**。上一版文件头第 2 条写着"已登录的人刷新
+ * 少的麻烦：首屏那一下闪烁没了。上一版文件头第 2 条写着"已登录的人刷新
  * `/home`，侧栏那一格先是「请登录」、后是「个人主页」"，并注明
  * "等后端落地，这件事会自然消失：那时候身份在服务端的 session cookie 里"。
  * 就是今天：cookie 是 httpOnly 的，客户端挂载后问一次 `/api/auth/me`
- * （一次请求，而不是"先猜一个再纠正"），拿到之前渲染的是那个**中性的**
+ * （一次请求，而不是"先猜一个再纠正"），拿到之前渲染的是那个中性的
  * 头像位（`ready` 仍然是 `false`，界面据此只画壳不画名字）。
  *
- * ★ 多的事实：**三个不同的问题要分开回答**，而它们混成一个布尔之后
+ * 多的事实：三个不同的问题要分开回答，而它们混成一个布尔之后
  * 界面上就再也说不出真话：
  *   · `user`        —— 这个人是谁
- *   · `allowed`     —— **他能不能创作**（一位；2026-10-18 之前是"站长给了他哪几项"）
- *   · `configured`  —— **站里自己配齐了什么**（密钥在不在，这一侧仍是四项独立的）
- * 「能不能生成一本书」= `allowed` **且** 站里配了文本与图像。
+ *   · `allowed`     —— 他能不能创作（一位；2026-10-18 之前是"站长给了他哪几项"）
+ *   · `configured`  —— 站里自己配齐了什么（密钥在不在，这一侧仍是四项独立的）
+ * 「能不能生成一本书」= `allowed` 且 站里配了文本与图像。
  * 缺哪一半，界面上那句话是不一样的："找站长开权限" vs "站里还没配好"。
  *
  * ★ 写账号只走 `lib/auth/client.ts`（与上一版同一条纪律）：漏掉一处 `fetch`
@@ -53,10 +53,10 @@ export type AuthContextValue = {
   rename: (nickname: string) => Promise<void>
   /** 换一个默认头像 */
   /**
-   * 重新问一次"我是谁"，**并把刷新后的那份事实回给调用方**。
+   * 重新问一次"我是谁"，并把刷新后的那份事实回给调用方。
    *
-   * ★ 返回值不是顺手加的：`refresh()` 之后组件里那个 `allowed` 变量
-   *   **还是旧的**（它是这一次渲染的闭包），而"按下的这一刻有没有权限"
+   * 返回值不是顺手加的：`refresh()` 之后组件里那个 `allowed` 变量
+   *   还是旧的（它是这一次渲染的闭包），而"按下的这一刻有没有权限"
    *   恰恰是调用方要的东西。返回它，调用方就不必等下一次渲染再判一遍
    *   ——那样写会变成"先放行、下一帧才发现该拦"。
    *   返回 `null` = 这一次没读回来（后端连不上 / 没登录），调用方按"判不了"处理。
@@ -82,7 +82,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   const refresh = useCallback(async () => {
     const result = await fetchMe()
     if (!result.ok) {
-      // ★ "读不出来"与"没登录"分开：前者要说"账号服务连不上"，
+      // "读不出来"与"没登录"分开：前者要说"账号服务连不上"，
       //   后者只是"请登录"——把前者伪装成后者会让人一直去点登录
       setMeError(result.message)
       return null
@@ -107,7 +107,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   const signIn = useCallback(
     (next: AuthUser) => {
       setUser(next)
-      // ★ 权限与"站里配齐了什么"要再问一次：登录响应里只有权限，
+      // 权限与"站里配齐了什么"要再问一次：登录响应里只有权限，
       //   而 `configured` 是 BFF 现算的（它读的是服务端环境变量）
       void refresh()
     },
@@ -124,7 +124,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
   const rename = useCallback(async (nickname: string) => {
     const result = await updateNickname(nickname)
-    // ★ 失败**抛**而不是吞掉：界面上那一格要说"没改成"，不能说"改好了"
+    // ★ 失败抛而不是吞掉：界面上那一格要说"没改成"，不能说"改好了"
     if (!result.ok) throw new Error(result.message)
     setUser(result.user)
   }, [])

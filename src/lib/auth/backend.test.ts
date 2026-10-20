@@ -5,14 +5,14 @@ import { backendFetch, clientIpFrom } from './backend.ts'
 /**
  * `backend.ts` 的客户端 IP —— 这一层有两个必须钉住的东西，都不是风格问题：
  *
- * 1. **取值顺序**：`X-Real-IP` 优先，退而求其次取 `X-Forwarded-For` 的**最后一段**。
- *    ★ 不能取第一段：Nginx 那条 `$proxy_add_x_forwarded_for` 是**追加**，
- *    所以第一段是**客户端自己填的**，而 Java 读的正是第一段 —— 照抄它等于
+ * 1. 取值顺序：`X-Real-IP` 优先，退而求其次取 `X-Forwarded-For` 的最后一段。
+ *    ★ 不能取第一段：Nginx 那条 `$proxy_add_x_forwarded_for` 是追加，
+ *    所以第一段是客户端自己填的，而 Java 读的正是第一段 —— 照抄它等于
  *    "谁都能换着 IP 绕过按 IP 的频控"（那是挡"一个人换 IP 刷短信"的唯一闸门）。
- * 2. **它真的被发出去了**：`clientIpFrom()` 算得再对，忘了接到请求头上就等于没有。
+ * 2. 它真的被发出去了：`clientIpFrom()` 算得再对，忘了接到请求头上就等于没有。
  *    所以这里打桩 `fetch`，直接看出站请求里有没有那个头。
  *
- * ★ 这两条都属于"只有真做才会不同"：把取值改回第一段、或者把
+ * 这两条都属于"只有真做才会不同"：把取值改回第一段、或者把
  * `headers['X-Forwarded-For']` 那一行删掉，用例会红；只改注释不会。
  */
 

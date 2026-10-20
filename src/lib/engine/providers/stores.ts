@@ -1,11 +1,11 @@
 /**
  * stores.ts —— AssetStore 的两个实现：内存与磁盘
  *
- * 两个实现不是"一个真的一个测试用的"：内存版**同时**是测试替身与
+ * 两个实现不是"一个真的一个测试用的"：内存版同时是测试替身与
  * 单元测试里唯一的存储，磁盘版是 node 脚本与 Route Handler 用的。
  * 有了这一对，`pnpm test` 不碰文件系统也不碰网络，51+ 条测试跑在毫秒级。
  *
- * ★ 两个实现共用 `put` 的语义：**由 store 计算内容指纹并回填 AssetRef**。
+ * 两个实现共用 `put` 的语义：由 store 计算内容指纹并回填 AssetRef。
  *   让调用方自己算指纹，就会有第三处、第四处各算一遍且算法漂移的一天；
  *   指纹是资产的身份证，只能有一个发证的地方。
  */
@@ -64,12 +64,12 @@ export function createMemoryStore(): AssetStore & { all(): string[] } {
 /**
  * 磁盘版。
  *
- * ★ 用 `node:fs/promises` 而不是 `fs`：动态 import 让本文件在 edge 运行时
+ * 用 `node:fs/promises` 而不是 `fs`：动态 import 让本文件在 edge 运行时
  *   也不会因为静态依赖而炸（Next 的 Route Handler 默认 node 运行时，
  *   但"引擎能被 node 脚本直接跑"这条约束要求依赖方向是 engine → node，
  *   而不是 engine → 某个具体运行时）。
  *
- * `root` 之下的路径由 store 自己拼接并**拒绝越界**：
+ * `root` 之下的路径由 store 自己拼接并拒绝越界：
  * 资产路径来自 manifest（可能是别人提交的），`../../` 这种事不能靠信任。
  */
 export async function createFsStore(root: string): Promise<AssetStore> {
@@ -147,12 +147,12 @@ export async function createFsStore(root: string): Promise<AssetStore> {
       const target = resolve(prefix)
       let removed = 0
 
-      // ★ 前缀可能落在一个**文件**上，而不是目录——`profileStore.delete` 就是这样调的
+      // 前缀可能落在一个文件上，而不是目录——`profileStore.delete` 就是这样调的
       //   （`children/<childId>.json`）。这一行是 2026-10-15 补的，症状很具体：
       //   walk 里的 `readdir(文件)` 抛 ENOENT 被吞掉 → 回 0，而下面的
-      //   `rm(target, {recursive:true})` **照样把那个文件删了**。
+      //   `rm(target, {recursive:true})` 照样把那个文件删了。
       //   于是"删了 1 条"报成"删了 0 条"，而内存版对同一个输入回 1（它是键前缀匹配）。
-      //   两个实现不一致的代价不是"哪个对"：这张契约的**全部意义就是报数**
+      //   两个实现不一致的代价不是"哪个对"：这张契约的全部意义就是报数
       //   （`AssetStore.deletePrefix` 的注释：删除凭据要列明各删了多少条），
       //   一个会把 1 报成 0 的实现让那张凭据变成假的。发现它靠的是
       //   `scripts/e2e-delete-child.mts`：预演说 5 条、真删说 4 条，差的那一条是档案。
@@ -194,14 +194,14 @@ export async function createFsStore(root: string): Promise<AssetStore> {
  * mime → 扩展名。资产文件名要能被 `<img src>` / `<audio src>` 与浏览器直接认，
  * 靠猜扩展名会炸。
  *
- * ★ `audio/mpeg` → `.mp3` 这一条是补的，而且是被实测抓出来的：
- *   百炼的语音接口回的 content-type 就是 `audio/mpeg`，而它**不含 "mp3" 这三个字符**，
+ * `audio/mpeg` → `.mp3` 这一条是补的，而且是被实测抓出来的：
+ *   百炼的语音接口回的 content-type 就是 `audio/mpeg`，而它不含 "mp3" 这三个字符，
  *   于是音频资产落成了 `page-1-a1.bin`（2026-10-14，`.out/tts-int.mts` 第一次跑）。
  *   所以顺序很重要：`mpeg` 要先于任何宽泛判断，且不能笼统地写
  *   `includes('mpeg')` —— 那会把 `video/mpeg` 也叫成 mp3。
  */
 export function extensionOf(mime: string): string {
-  // ★ 先剥掉参数：真实的 content-type 长这样 `audio/mpeg; charset=binary`，
+  // 先剥掉参数：真实的 content-type 长这样 `audio/mpeg; charset=binary`，
   //   拿整串去比相等会漏（这一条是 stores.test.ts 抓出来的）
   const m = mime.toLowerCase().split(';')[0]?.trim() ?? ''
   if (m.includes('png')) return '.png'

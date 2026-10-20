@@ -2,12 +2,12 @@
  * library.test.ts —— 书架摘要：每个数都得来自清单本身
  *
  * 两件事值得钉住：
- *   ① **页数与"真的有图的页数"是两件事**。一本 20 页里 3 页没出图是可能的，
+ *   ① 页数与"真的有图的页数"是两件事。一本 20 页里 3 页没出图是可能的，
  *      把两个数合成一个，主页那句"20 页"就在撒谎（domain.ts 对"缺图 vs 未核对"
  *      警告过同一件事，别再犯第三次）。
- *   ② **只列运行期的书**，不列 `public/demo` 里随仓库提交的那本——
+ *   ② 只列运行期的书，不列 `public/demo` 里随仓库提交的那本——
  *      混进来就是往"已创作故事"里灌一个假数。
- *   ③ **封面地址是调用方算好递进来的**（2026-10-16 书架改成"书立在架子上"时要的）：
+ *   ③ 封面地址是调用方算好递进来的（2026-10-16 书架改成"书立在架子上"时要的）：
  *      这里钉住的是"每一本都过一遍那个函数"，不是"怎么拼这个地址"——
  *      拼地址只有一条路（`book-source.ts` 的 `runtimeAssetUrl`），单测在那边。
  */
@@ -23,10 +23,10 @@ import type { StoryDraft } from './story-draft.ts'
 /**
  * 树上的一页。
  *
- * ★ 这个 helper 是 2026-10-18 抽出来的，因为这一组 fixture **原来是假的**：
+ * 这个 helper 是 2026-10-18 抽出来的，因为这一组 fixture 原来是假的：
  *   三个 `next: []`、`pathFromRoot: []` 的节点——那不是一棵树，是三个孤立的点，
- *   而真实的书是 `buildTree` 装订出来的，`next` 与 `pathFromRoot` **一定有**。
- *   页数口径改成**路长**之后（工单 06 §三），假 fixture 会量出 0 页，
+ *   而真实的书是 `buildTree` 装订出来的，`next` 与 `pathFromRoot` 一定有。
+ *   页数口径改成路长之后（工单 06 §三），假 fixture 会量出 0 页，
  *   而那是"数据不对"，不是"代码不对"。要测那条兜底就照实造一个假形状（下面有一条）。
  */
 function treeNode(
@@ -47,11 +47,11 @@ function treeNode(
 }
 
 /**
- * 一棵**真的共读版**的树：主干 4 页 → 第 4 页分岔 → A 支 3 页（路长 7）、
+ * 一棵真的共读版的树：主干 4 页 → 第 4 页分岔 → A 支 3 页（路长 7）、
  * B 支 4 页（路长 8），一共 11 个节点。
  *
- * ★ 它就是验收判据里那个形状：「一本 8 页路长、11 个节点的书，架子写 8 不写 11」。
- *   两条支不一样长是**常态**（`buildTree` 只要求差 ≤ 1），所以这条 fixture 也钉住
+ * 它就是验收判据里那个形状：「一本 8 页路长、11 个节点的书，架子写 8 不写 11」。
+ *   两条支不一样长是常态（`buildTree` 只要求差 ≤ 1），所以这条 fixture 也钉住
  *   "取长的那一条"这个选择（另一条用例钉两条一样长的情形）。
  */
 function sharedTree(): StoryTree {
@@ -68,7 +68,7 @@ function sharedTree(): StoryTree {
     10: [11],
   }
   const paths = new Map<number, string[]>()
-  /** ★ `pathFromRoot` **含自己**（引擎的 `computePaths` 就是这么填的，别少一个） */
+  /** ★ `pathFromRoot` 含自己（引擎的 `computePaths` 就是这么填的，别少一个） */
   const walk = (pageNo: number, soFar: string[]): void => {
     const here = [...soFar, `n${pageNo}`]
     paths.set(pageNo, here)
@@ -119,7 +119,7 @@ function book(parts: Partial<Book> & { bookId: string }): Book {
 
 /**
  * 封面地址这一项，这几条用例都不测（它由调用方算好递进来，见 `listBooks` 那条）。
- * 传 `null` 是如实的：这些 fixture 里的书**真的没有** `cover` 字段。
+ * 传 `null` 是如实的：这些 fixture 里的书真的没有 `cover` 字段。
  */
 const NO_COVER: string | null = null
 
@@ -164,11 +164,11 @@ describe('summarize', () => {
     expect(summary.illustratedCount).toBe(2)
   })
 
-  /* ── 页数口径：路长 vs 全树节点数（工单 06 §三，2026-10-18） ───────────── */
+  /* 页数口径：路长 vs 全树节点数（工单 06 §三，2026-10-18） */
 
   it('★ 共读版：页数是**路长**，不是全树节点数（8 页 / 11 个节点）', () => {
     const summary = summarize(book({ bookId: 'b1', form: 'shared', tree: sharedTree() }), NO_COVER)
-    // 两条路是 7 页与 8 页 —— 取长的那一条（孩子**最多**读到 8 页）
+    // 两条路是 7 页与 8 页 —— 取长的那一条（孩子最多读到 8 页）
     expect(summary.pageCount).toBe(8)
     // 而这本书真的要画 11 页的图（那一支走不到也得画）——所以这个数另记
     expect(summary.nodeCount).toBe(11)
@@ -182,7 +182,7 @@ describe('summarize', () => {
 
   it('清单里没有路径（手工摆的假树）时退回节点数，不写 0 页', () => {
     // 真实的书不会有这个形状：`buildTree` 装订出来的树每页都有 `next` 与
-    // `pathFromRoot`。但清单是**盘上的 JSON**，读到一个没有路径的表时，
+    // `pathFromRoot`。但清单是盘上的 JSON，读到一个没有路径的表时，
     // 架子上写 0 页是一句假话，写节点数是这棵树上唯一数得出的东西。
     const shapeless = book({
       bookId: 'b1',
@@ -234,7 +234,7 @@ describe('summarize', () => {
 /**
  * 草稿那一档的页数（工单 06 §三）。
  *
- * ★ 它与成品那一档**必须是同一个口径**：一本共读版在闸门那一屏写"读下来 4 页"，
+ * ★ 它与成品那一档必须是同一个口径：一本共读版在闸门那一屏写"读下来 4 页"，
  *   而书架上写"5 页"，家长看到的是同一本书上的两个数（草稿存的是平铺的页表，
  *   路长要从它派生——用的是闸门那一屏同一个 `storyShapeOf`）。
  */
@@ -367,9 +367,9 @@ describe('listBooks', () => {
     expect(books[0]?.coverUrl).toBe('/api/assets/books/b1/cover.png?w=384')
   })
 
-  /* ── 故事草稿（2026-10-17，故事闸门） ─────────────────────────────────── */
+  /* 故事草稿（2026-10-17，故事闸门） */
 
-  /** 一份最小但**合法**的故事草稿。★ 页数取自 `doc.nodes`，所以这里给三页 */
+  /** 一份最小但合法的故事草稿。★ 页数取自 `doc.nodes`，所以这里给三页 */
   function draft(bookId: string, createdAt: number, title = '绿天空') {
     return {
       bookId,
@@ -405,7 +405,7 @@ describe('listBooks', () => {
       status: 'story',
       title: '绿天空',
       // 页数来自故事里的页数；而"有几页有图"是 0——它真的还没画
-      // ★ 独读版草稿的页数**等于**表里的页数（路长与节点数在这一档上相等）
+      // 独读版草稿的页数等于表里的页数（路长与节点数在这一档上相等）
       pageCount: 3,
       nodeCount: 3,
       form: 'solo',
@@ -433,7 +433,7 @@ describe('listBooks', () => {
     const books = await listBooks(store, noCovers)
     expect(books[0]?.status).toBe('story')
     expect(books[0]?.illustratedCount).toBe(2)
-    // ★ 封面不算：那是装订那一步的产物，而这一本还没装订
+    // 封面不算：那是装订那一步的产物，而这一本还没装订
     await store.put({ path: 'books/s1/cover.png', bytes: new Uint8Array([1]), mime: 'image/png' })
     expect((await listBooks(store, noCovers))[0]?.illustratedCount).toBe(2)
     // ★ 别的书的页图不算在自己头上（前缀里带着书号那一段斜杠）
@@ -488,11 +488,11 @@ describe('listBooks', () => {
 })
 
 /**
- * ★ 草稿 / 成品（工单 03）。
+ * 草稿 / 成品（工单 03）。
  *
- * 这一组钉的是**缺省值**，不是一个字段的有无：盘上已经有两种没有 `status` 的书
+ * 这一组钉的是缺省值，不是一个字段的有无：盘上已经有两种没有 `status` 的书
  * （随仓库提交的演示书、这个字段之前跑出来的运行期书）。把它们判成草稿的话，
- * 它们会**凭空从书架消失**——而用户只会以为书丢了。
+ * 它们会凭空从书架消失——而用户只会以为书丢了。
  */
 describe('status：缺省是成品，只有明确写着 draft 的才是草稿', () => {
   it('没有这个字段 → 成品（老的 book.json 与演示书都靠这一条活着）', () => {

@@ -1,73 +1,63 @@
 'use client'
 
 /**
- * StorybookFlip —— 首页第二屏：滚动翻页绘本
+ * StorybookFlip —— 首页第二屏：滚动翻页绘本。
  *
- * 首屏回答的是"能做什么"（12 个不同的孩子）；这一节回答的是产品真正的承诺 ——
- * **每一页都是同一个他**。论点不靠文字说，靠翻给人看。
+ * 首屏回答的是"能做什么"（12 个不同的孩子）；这一节回答的是产品真正的承诺——每一页都是
+ * 同一个他。论点不靠文字说，靠翻给人看。
  *
- * ---------------------------------------------------------------------------
  * 结构
  *
  *   <section.storybook>            高 340vh，只提供滚动距离与叠入量
  *     <div.storybook__stage ref>   sticky 满屏 —— useScrollDriver 的契约：
- *                                  **ref 指 sticky 那层，它的直接父元素是撑高的那一节**
+ *                                  ref 指 sticky 那层，它的直接父元素是撑高的那一节
  *       .storybook__book/.book     5 片叶，绕书脊 rotateY
  *       .book-spine                右侧刻度
  *       .storybook__end            最后一页才升起的 CTA
  *       .storybook__listen         这一页的朗读（★ 5 段全在盘上才出现）
  *       <audio>                    朗读那一段的播放器，`preload="none"`
- *       .storybook__static ↗       静止模式（reduced-motion）那一套，两块 DOM 都渲染，
- *       .storybook__live  ↗        靠 CSS 的 display 切 —— 这样首帧就是对的
- *       .storybook__pager ↗
+ *       .storybook__static / .storybook__live / .storybook__pager
+ *                                  静止模式（reduced-motion）那一套，两块 DOM 都渲染，
+ *                                  靠 CSS 的 display 切——这样首帧就是对的
  *
- * ---------------------------------------------------------------------------
- * 滚动映射（p → q）写在 P_Q 表里，**成对的停顿让每一页真的停得住**：
- * 翻页只占一小段，其余是"停在这一页让你读完"。改这张表要连着看两件事：
+ * 滚动映射（p → q）写在 P_Q 表里，成对的停顿让每一页真的停得住：翻页只占一小段，其余是
+ * "停在这一页让你读完"。改这张表要连着看两件事：useScrollDriver 的 enter-exit 区间
+ * （p=0 是书顶边触到视口下沿那一刻）；以及 `PUSH_OUT_P`——书被顶出视口那一刻的 p = 0.7727，
+ * 每一个要让人读的停顿都必须落在它之前。★ 这一条以前只是注释，表还是排到了 0.86，于是
+ *   最后一页整个是在书已经离场之后才翻开的（症状就是"最后一页展开了，书不在中间"）。
+ *   现在有常量，也有开发期断言。
  *
- *   1. useScrollDriver 的 enter-exit 区间（p=0 是书顶边触到视口下沿那一刻）；
- *   2. ★ `PUSH_OUT_P` —— 书被顶出视口那一刻的 p = 0.7727。
- *      **每一个要让人读的停顿都必须落在它之前。** 这一条以前只是注释，
- *      表还是排到了 0.86，于是最后一页整个是在书已经离场之后才翻开的
- *      （症状就是"最后一页展开了，书不在中间"）。现在有常量，也有开发期断言。
+ * 角度一律用插值后的 qDisplay，不用 qTarget：鼠标滚轮是离散格，不插值就是一顿一顿
+ * （触控板连续，看不出这个问题，只有真拿滚轮滚才会暴露）。
  *
- * 角度一律用插值后的 qDisplay，不用 qTarget：鼠标滚轮是离散格，
- * 不插值就是一顿一顿（触控板连续，看不出这个问题，只有真拿滚轮滚才会暴露）。
- *
- * ---------------------------------------------------------------------------
  * 朗读（2026-10-18 接上）
  *
- * 这一节的承诺句里有"用你的声音朗读"，而画面证不了声音，所以这一条只能靠一个
- * 真的会响的控件来证。它是**做过又拆过、现在按满配重新做回来**的那一个：
- * 拆的理由是"全篇只录得到第 1 页，一个只对四分之一的控件证的是反面"
- * （README §五），所以回来的前提是**5 段全在盘上**——闸门在
- * `lib/demo-book-audio.ts` 的 `complete`，它在**两支分支都齐**时才算数。
+ * 这一节的承诺句里有"用你的声音朗读"，而画面证不了声音，所以这一条只能靠一个真的会响的控件
+ * 来证。它是做过又拆过、现在按满配重新做回来的那一个：拆的理由是"全篇只录得到第 1 页，
+ * 一个只对四分之一的控件证的是反面"，所以回来的前提是 5 段全在盘上——闸门在
+ * `lib/demo-book-audio.ts` 的 `complete`，它在两支分支都齐时才算数。
  *
  * 三条口径，每条都是为了不变成"看起来能响"：
  *
- * 1. **只做手动，不做"自动朗读"。** 两个阅读器那套自动朗读是"念完一页自己翻过去"，
- *    而这一节的"翻页"是**滚动位置**——替人滚页面是另一件事（那是在替他读网页），
- *    不是替他翻书。所以这里把 `mode` 钉成 `'manual'`：按下念**当前这一页**，
- *    念完就停。★ 正因为如此，`settled`（自动那一趟用来等页翻到位的信号）
- *    在这一节永远没人读，传 `true` 只是把这个空位说明白。
- * 2. **翻页就停：朗读是「这一页的」。** 滚到下一页 = 人接管（`takeOver`），
- *    与两个阅读器里那句一样的规矩。
- * 3. **离开视口 / 切走标签页也停**（`onActiveChange`）。这是 `useScrollDriver`
- *    文件头专门留的那个口子——"谁先往这两节里加音频，第一个撞上的就是它"：
- *    循环一停，这一节就再收不到帧，不在这儿掐断的话声音会在屏幕外接着解码。
+ * 1. 只做手动，不做"自动朗读"。两个阅读器那套自动朗读是"念完一页自己翻过去"，而这一节的
+ *    "翻页"是滚动位置——替人滚页面是另一件事，不是替他翻书。所以这里把 `mode` 钉成
+ *    `'manual'`：按下念当前这一页，念完就停。★ 正因为如此，`settled`（自动那一趟用来等页
+ *      翻到位的信号）在这一节永远没人读，传 `true` 只是把这个空位说明白。
+ * 2. 翻页就停：朗读是「这一页的」。滚到下一页 = 人接管（`takeOver`）。
+ * 3. 离开视口 / 切走标签页也停（`onActiveChange`）。这是 `useScrollDriver` 文件头专门留的
+ *    那个口子——循环一停，这一节就再收不到帧，不在这儿掐断的话声音会在屏幕外接着解码。
  *
- * 文案（`▶ 朗读` / `■ 停止` / `aria-label`）全部来自 `reader/use-narration.ts`，
- * 与两个阅读器**同一份** —— 它是"朗读钮该说什么"的唯一来源（其中 `aria-label`
- * 尤其容易漂，而它是读屏唯一的入口）。
+ * 文案（`▶ 朗读` / `■ 停止` / `aria-label`）全部来自 `reader/use-narration.ts`，与两个
+ * 阅读器同一份——它是"朗读钮该说什么"的唯一来源（其中 `aria-label` 尤其容易漂，
+ * 而它是读屏唯一的入口）。
  *
- * ---------------------------------------------------------------------------
  * 键盘 ← →（2026-10-20 修）
  *
- * **只在书铺在这一屏上时**才接管这两个键，其余时候原样放行给浏览器 —— 判据与
- * 为什么不复用 `useScrollDriver` 的 `onActiveChange`，写在下面那个 effect 里。
- * 原先是在 `window` 上无条件接键：滚到第三屏按方向键，屏幕外那本书会默默翻一页，
- * 而 `preventDefault` 又让整页再也滚不动。那是唯一一条会被评审当场看见的 bug
- * （第三屏一度用自己那层的 `stopPropagation` 临时挡着，那半条已随这次修复撤掉）。
+ * 只在书铺在这一屏上时才接管这两个键，其余时候原样放行给浏览器——判据与为什么不复用
+ * `useScrollDriver` 的 `onActiveChange`，写在下面那个 effect 里。原先是在 `window` 上
+ * 无条件接键：滚到第三屏按方向键，屏幕外那本书会默默翻一页，而 `preventDefault` 又让整页
+ * 再也滚不动。那是唯一一条会被评审当场看见的 bug（第三屏一度用自己那层的 `stopPropagation`
+ * 临时挡着，那半条已随这次修复撤掉）。
  */
 
 import Link from 'next/link'
@@ -99,7 +89,7 @@ import {
 } from './demoBook'
 
 /**
- * 书被顶出视口那一刻的 p —— **所有"要让人读"的停顿都必须排在这个数之前**。
+ * 书被顶出视口那一刻的 p —— 所有"要让人读"的停顿都必须排在这个数之前。
  *
  * 推导（与 useScrollDriver 的 enter-exit 同一套几何）：
  *
@@ -108,47 +98,46 @@ import {
  *     stage 从 y = T 起钉住，到"本节底边贴住视口底"被顶走：y = T + H − V
  *     ⟹ p = (T + H − V − (T − V)) / (H + V) = H / (H + V)
  *
- * 本节 H = 340vh、V = 100vh ⟹ 340/440 = **0.7727**。vh 上下同约，V 消掉了，
+ * 本节 H = 340vh、V = 100vh ⟹ 340/440 = 0.7727。vh 上下同约，V 消掉了，
  * 所以这个数与视口高度无关；1440×900 下在浏览器里量到 0.7727，对得上。
  *
- * ★ 也就是说 enter-exit 这个量程**最后 23% 天生是退场**，不是"停在最后一页"。
+ * 也就是说 enter-exit 这个量程最后 23% 天生是退场，不是"停在最后一页"。
  *   把最后一个跨页排在 0.86，等于排在书已经往屏幕外走的路上 ——
  *   p=1 时 stage 的顶边在 −900px，整本书在视口上方。这就是
  *   "最后一页展开完整了，绘本却在中间偏上、还被切掉一截"的根因。
  *
- * ★ 这个数与 CSS 是咬死的：它由 `.storybook { height: 340vh }` 推出来。
- *   改那一行必须同时改这里。另外它假设**本节下面还有内容**（第三屏），
+ * 这个数与 CSS 是咬死的：它由 `.storybook { height: 340vh }` 推出来。
+ *   改那一行必须同时改这里。另外它假设本节下面还有内容（第三屏），
  *   所以 enterExitSpan 不会被夹到文档尽头（实测 clamped=false）；
  *   若哪天本节又成最后一页，量程会被夹短，这个数要重新量。
  */
 const PUSH_OUT_P = 340 / (340 + 100)
 
-/* ---------------------------------------------------------------------------
- * 滚动预算：p → 已翻过多少叶
+/* 滚动预算：p → 已翻过多少叶
  *
  * p 的 0 与 1 都是"真实可达"的两端（useScrollDriver 把 enter-exit 夹到了文档尽头）：
  *   p = 0  书顶边触到视口下沿
  *   p ≈ 0.29 舞台钉住（从这一刻起书不再往上走）
  *   p = 1  本节底边触到视口下沿，也就是页面滚到底
  *
- * ★ 但**书真正开始离开屏幕比 p = 1 早得多**，见下面 P_PUSH_OUT 的推导。
+ * 但书真正开始离开屏幕比 p = 1 早得多，见下面 P_PUSH_OUT 的推导。
  *   这一条以前写在注释里（"最后一页的停顿要早于 0.773 开始"），
  *   然后 P_Q 还是把最后一个跨页排到了 0.86 —— 注释没拦住表，实测也没人看：
  *   结果就是"最后一页翻开时书不在中间"（它已经被顶上去 165px，顶边切掉）。
  *   现在这个数变成一个常量，并且有开发期断言摁着。
  *
  * 现在的分段（p 值，括号里是 1440×900 下的实际像素滚动量）：
- * p 0.00–0.18  书从下面升上来（**合着**，封面这一拍要留出来）
+ * p 0.00–0.18  书从下面升上来（合着，封面这一拍要留出来）
  * p 0.18–0.32  封面翻开 —— 与"钉住"那一刻交错，"书落定，才翻第一页"
  * p 0.32–0.37  停 S1（像什么？）
  * p 0.37–0.43  翻到 S2
  * p 0.43–0.465 停 S2（上去了）
  * p 0.465–0.525 翻到 S3
- * p 0.525–0.615 停 S3 —— **选择点的窗口**（两个按钮挂在这一段）
+ * p 0.525–0.615 停 S3 —— 选择点的窗口（两个按钮挂在这一段）
  * p 0.615–0.68  翻到 S4（分支页）
- * p 0.68–0.7727 停 S4 —— 正文 + 收尾 CTA，**全部留在钉住的那一段里**
+ * p 0.68–0.7727 停 S4 —— 正文 + 收尾 CTA，全部留在钉住的那一段里
  * p 0.7727–1.0  书被顶出视口；这一段是"退场"，不是"给人读的一页"
- * ------------------------------------------------------------------------- */
+ */
 const P_Q: ReadonlyArray<readonly [number, number]> = [
   [0.0, 0],
   [0.18, 0],
@@ -166,9 +155,9 @@ const P_Q: ReadonlyArray<readonly [number, number]> = [
 const SMOOTHING = 0.12
 
 /**
- * 选择点的窗口。**与 P_Q 里 p 0.525–0.615 那段停顿对齐**，前面留 .02 的余量：
+ * 选择点的窗口。与 P_Q 里 p 0.525–0.615 那段停顿对齐，前面留 .02 的余量：
  * 按钮要比"停稳"早一点浮出来（不然人还没看见就过去了）。
- * ★ 后面**不留**余量：收口正好压在 0.615（开始翻走那一刻）——
+ * 后面不留余量：收口正好压在 0.615（开始翻走那一刻）——
  *   上一版收到 0.78，比翻走的 0.76 还晚，等于让按钮跟着书一起被翻出去。
  *   而且 0.78 已经在 PUSH_OUT_P 之后，那一段书正在离场，按钮还亮着。
  */
@@ -259,8 +248,7 @@ function leafVars(i: number): CSSProperties {
   } as unknown as CSSProperties
 }
 
-/* ---------------------------------------------------------------------------
- * 一面
+/* 一面
  *
  * 半页不切文件：同一张 3:2 跨页图挂两次，data-half 决定取哪一半（见 CSS §2）。
  * 平衡性靠 .book__shade —— shade = sin(θ)，平放时 0、立起来时 1。
@@ -268,7 +256,7 @@ function leafVars(i: number): CSSProperties {
  * `showImage` 是跨页图什么时候挂上去的开关（见组件里 spreadsReady 那段）：
  * 关着的时候这一面露的是 `.book__face` 自己的纸色（#fbf7ef）—— 一张还没印上
  * 画的纸，不是"坏了"。封面与封底不走这个开关：封面是第二屏的第一拍，等不起。
- * ------------------------------------------------------------------------- */
+ */
 function Face({
   face,
   side,
@@ -328,7 +316,7 @@ export default function StorybookFlip({ audio }: { audio: DemoBookAudio }) {
   const stageRef = useRef<HTMLDivElement>(null)
   const wrapRef = useRef<HTMLElement>(null)
 
-  /** ★ 全页唯一一处用 React state 驱动图片切换的地方 —— 其余全部 DOM 直写 */
+  /** 全页唯一一处用 React state 驱动图片切换的地方 —— 其余全部 DOM 直写 */
   const [branch, setBranch] = useState<BranchKey>(DEFAULT_BRANCH)
   const leaves = useMemo(() => buildLeaves(branch), [branch])
   const labels = useMemo(() => spineLabels(branch), [branch])
@@ -336,10 +324,10 @@ export default function StorybookFlip({ audio }: { audio: DemoBookAudio }) {
   /**
    * 每一面（0 = 封面，1–4 = 跨页）的三朵主色，给"整个阅读器被当前页染一层色"用。
    *
-   * 表是 `scripts/sample-tints.py` 从图里取出来的生成物，**换了图要重跑**
+   * 表是 `scripts/sample-tints.py` 从图里取出来的生成物，换了图要重跑
    * （命令写在生成文件的头上）。按 `pageImage(branch, k)` 查，所以分支一切换
    * （4a ↔ 4b）染的就是新那一页的颜色，不用另写映射。
-   * 查不到就是 undefined → 那一面**不染色**，而不是染一个猜出来的颜色。
+   * 查不到就是 undefined → 那一面不染色，而不是染一个猜出来的颜色。
    */
   const tints = useMemo(
     () => Array.from({ length: LEAF_COUNT }, (_, k) => SPREAD_TINTS[pageImage(branch, k)]),
@@ -353,10 +341,10 @@ export default function StorybookFlip({ audio }: { audio: DemoBookAudio }) {
   const [choiceOn, setChoiceOn] = useState(false)
 
   /**
-   * 跨页图挂上去没有。**这是首屏的带宽账**，不是省事：
+   * 跨页图挂上去没有。这是首屏的带宽账，不是省事：
    * 四条跨页（去重后 4 个文件、约 370KB）原来在预渲染 HTML 里就以
    * `background-image` 出现 —— 它不受 `loading="lazy"` 管，元素一进布局就请求，
-   * 于是在**初次加载的关键窗口里和首屏那 12 张封面（1.16MB）抢带宽**，
+   * 于是在初次加载的关键窗口里和首屏那 12 张封面（1.16MB）抢带宽，
    * 而要看它们得先滚过一屏半。关着的时候露的是纸色（见 Face 上面那段）。
    *
    * 两个开闸条件，各管一种走法：
@@ -365,7 +353,7 @@ export default function StorybookFlip({ audio }: { audio: DemoBookAudio }) {
    *     那种走法下 `page > 0` 就是同一个信号。
    * 刷新落在页面中间（scrollY > 0）直接算就绪，不然会先看见一页纸。
    *
-   * ★ 这不算"内容缺失"：跨页图只能靠 JS 翻出来（翻页本身是 JS 驱动的），
+   * 这不算"内容缺失"：跨页图只能靠 JS 翻出来（翻页本身是 JS 驱动的），
    *   禁 JS 的人看到的是合着的书 + 封面，那两张图本来就取不到。
    *   正文另有 `.storybook__live` 那段 aria-live 在，不依赖这些图。
    */
@@ -397,12 +385,12 @@ export default function StorybookFlip({ audio }: { audio: DemoBookAudio }) {
    * 正常模式 = 滚到那一面的停顿段（p ↔ scrollY 是线性的，反推即可，见 useScrollDriver）；
    * 静止模式 = 直接换页。
    *
-   * ★ 反推用的量程必须与 hook 算进度用的是**同一套算法**（enterExitSpan），
+   * ★ 反推用的量程必须与 hook 算进度用的是同一套算法（enterExitSpan），
    *   不能在这里自己加 wrap.offsetHeight + innerHeight 了事：这一节是页面最后一节，
    *   量程要夹到文档滚得到的地方，不夹的话每一格都多滚约 30% ——
    *   点刻度第 3 格会直接跳到第 4 页上。
    *
-   * ★ 它定义在 `useScrollDriver` **之前**，是为了下面那套朗读：`onActiveChange`
+   * 它定义在 `useScrollDriver` 之前，是为了下面那套朗读：`onActiveChange`
    *   要在渲染期就引到 `stopNarration`，而 `const` 在声明之前读不到（ReferenceError）。
    */
   const goTo = useCallback(
@@ -429,7 +417,7 @@ export default function StorybookFlip({ audio }: { audio: DemoBookAudio }) {
 
   /* ── 朗读这一页 ──────────────────────────────────────────────────────────
    * 整块逻辑在 `reader/use-narration.ts`，与 `/reader/<bookId>`、书单那本样书
-   * **共用同一份**（三代人了，理由在那个文件头）。这一层只提供它算不出来的两样：
+   * 共用同一份（三代人了，理由在那个文件头）。这一层只提供它算不出来的两样：
    * 当前是第几页、怎么翻页。
    */
 
@@ -438,7 +426,7 @@ export default function StorybookFlip({ audio }: { audio: DemoBookAudio }) {
     urls: audio.url[branch],
     /** 封面是 0、四个跨页是 1–4，与 `use-narration.ts` 的屏序号口径一致 */
     opening: page,
-    /** ★ 只有"自动朗读"那一趟读它，而这一节钉死了 `mode: 'manual'`（见文件头）。 */
+    /** 只有"自动朗读"那一趟读它，而这一节钉死了 `mode: 'manual'`（见文件头）。 */
     settled: true,
     goTo,
     mode: 'manual',
@@ -448,7 +436,7 @@ export default function StorybookFlip({ audio }: { audio: DemoBookAudio }) {
 
   /**
    * 人翻页了 —— 停声（文件头第 2 条）。
-   * ★ 走 `page` 而不是在 `onFrame` 里判：`page` 就是"已经翻到位的那一面"
+   * 走 `page` 而不是在 `onFrame` 里判：`page` 就是"已经翻到位的那一面"
    *   （它是 `Math.round(q)`，补间跑着的时候不会变），所以不会有"还在翻就掐"的抖动。
    */
   useEffect(() => {
@@ -459,11 +447,11 @@ export default function StorybookFlip({ audio }: { audio: DemoBookAudio }) {
     range: 'enter-exit',
     // 这一段从书露头到滚出去全程都在动，别提前掉到 30fps
     fastWindow: [0.01, 0.99],
-    /* ★ 2026-10-18 把这个口子接回来了 —— 这一节现在有长跑的媒体（那一页的朗读）。
+    /* 2026-10-18 把这个口子接回来了 —— 这一节现在有长跑的媒体（那一页的朗读）。
        `useScrollDriver` 的文件头就是为这件事留的：循环一停，这一节再收不到帧，
-       "从可见变成不可见"这个**下降沿**除了 hook 自己没有别人知道，不在这儿掐断，
+       "从可见变成不可见"这个下降沿除了 hook 自己没有别人知道，不在这儿掐断，
        声音会在屏幕外（乃至后台标签页里）接着解码。
-       ★ reduced 下同样有效：IntersectionObserver 在静止模式里照常跑，
+       reduced 下同样有效：IntersectionObserver 在静止模式里照常跑，
          `renderStatic` 只是把首帧补上。 */
     onActiveChange: (active) => {
       if (!active) stopNarration()
@@ -523,7 +511,7 @@ export default function StorybookFlip({ audio }: { audio: DemoBookAudio }) {
   }, [])
 
   /**
-   * 选择点上换的是**另一张**图（4a ↔ 4b）。到窗口打开才预取：
+   * 选择点上换的是另一张图（4a ↔ 4b）。到窗口打开才预取：
    * 放进首屏会白拉 60KB；等点了再拉，翻页那一拍会看得见白。
    */
   useEffect(() => {
@@ -535,7 +523,7 @@ export default function StorybookFlip({ audio }: { audio: DemoBookAudio }) {
   }, [choiceOn, branch])
 
   /**
-   * 选定一朵云，并**当场替他翻过去**。
+   * 选定一朵云，并当场替他翻过去。
    *
    * 停在原地等他自己往下滚，读起来像是没生效 —— 按钮的语义是"去那一朵"，
    * 那就该出发。这跟"不阻塞"不冲突：不点照样能一路滚到底（默认 A），
@@ -551,15 +539,15 @@ export default function StorybookFlip({ audio }: { audio: DemoBookAudio }) {
 
   useEffect(() => {
     /**
-     * ★ 这一节现在是不是"这一屏"（2026-10-20 修的那条 bug 的唯一判据）。
+     * 这一节现在是不是"这一屏"（2026-10-20 修的那条 bug 的唯一判据）。
      *
-     * ← → 是**页面的**方向键，不是这本书的。原来这里在 `window` 上无条件接键，
-     * 于是在第三屏（亮点那一节）按方向键，**屏幕外那本书会默默翻一页**，
+     * ← → 是页面的方向键，不是这本书的。原来这里在 `window` 上无条件接键，
+     * 于是在第三屏（亮点那一节）按方向键，屏幕外那本书会默默翻一页，
      * 而且 `preventDefault` 把那两个键从浏览器手里也抢走了 —— 唯一一条会被评审
      * 当场看见的 bug。第三屏一度用自己那层的 `stopPropagation` 临时挡住
      * （见 `HighlightsReel.tsx` 的文件头，那半条已随这次修复一起撤掉）。
      *
-     * 判据取"**视口中线落在这一节里**"，三个形态共用同一条：
+     * 判据取"视口中线落在这一节里"，三个形态共用同一条：
      *   · 动效模式：本节 340vh、舞台钉在 top: 0，中线落在本节里 ⟺ 书正铺在这一屏上
      *     （也就是 p 0.11–0.89 那一段：进入时书已升起半屏，退场时还没走完）；
      *   · 静止模式：本节是 `height: auto` 的普通一节（storybook-flip.css §7），
@@ -567,8 +555,8 @@ export default function StorybookFlip({ audio }: { audio: DemoBookAudio }) {
      *     会连 ← → 都按不动，而那一档恰恰只有按钮和键盘两样能翻页；
      *   · 手机那一档本节 `display: none`（同 CSS §8）：rect 全 0，判据自然为假。
      *
-     * ★ 刻意**不用** `useScrollDriver` 的 `onActiveChange`（那是 IntersectionObserver，
-     *   `rootMargin: '160px 0px'`）：它在书滚出视口**之后还有 160px 算"活跃"**，
+     * 刻意不用 `useScrollDriver` 的 `onActiveChange`（那是 IntersectionObserver，
+     *   `rootMargin: '160px 0px'`）：它在书滚出视口之后还有 160px 算"活跃"，
      *   而那 160px 正好落在与第三屏的接缝上 —— 评审顺着第三屏往下看的时候按一下 →
      *   翻的仍然是那本看不见的书。要用 IO 就得给它一条与这里不同的 rootMargin，
      *   那是把同一个判据写两遍。直接在按键那一刻量一次（一次 keydown 一次
@@ -588,7 +576,7 @@ export default function StorybookFlip({ audio }: { audio: DemoBookAudio }) {
       if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable))
         return
       if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return
-      /* ★ 不是这一屏就**原样放行** —— 这里连 `preventDefault` 都不许调，
+      /* ★ 不是这一屏就原样放行 —— 这里连 `preventDefault` 都不许调，
          否则等于把整页的方向键永远锁在书里（那正是这条 bug 的另一半：
          滚到第三屏之后，方向键再也滚不动页面了）。 */
       if (!ownsArrowKeys()) return

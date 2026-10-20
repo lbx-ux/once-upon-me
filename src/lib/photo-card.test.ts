@@ -1,13 +1,13 @@
 /**
- * photo-card.test.ts —— 「用他的照片出一张形象」这条路上**必须被盯住**的几件事
+ * photo-card.test.ts —— 「用他的照片出一张形象」这条路上必须被盯住的几件事
  *
  * 这个文件里最要紧的一组是「照片一个字节都没落盘」。隐私设计 §七 那一行是一句承诺，
- * 而这个仓库的规矩是：**承诺要么有一条会红的用例撑着，要么它就是注释**。
+ * 而这个仓库的规矩是：承诺要么有一条会红的用例撑着，要么它就是注释。
  * 做法是把 `deps.store` 换成一个记账的假 store，然后逐条看它收到了什么字节——
- * 照片的字节是**可辨认的**（下面用一段有特征的内容当"照片"），
+ * 照片的字节是可辨认的（下面用一段有特征的内容当"照片"），
  * 于是"它有没有被写下去"这个问题的答案是确定的，不靠读代码时的注意力。
  *
- * 其余几组盯的是同一个思路：**每一个"不该发生的事"都要有一条会红的用例**——
+ * 其余几组盯的是同一个思路：每一个"不该发生的事"都要有一条会红的用例——
  * 没勾同意时不该调模型、模型没带参考图时不该存卡、失败时不该留下半张卡。
  */
 
@@ -33,11 +33,11 @@ const ANCHORS: CharacterAnchor[] = [
 ]
 
 /**
- * 一段**能被认出来**的"照片"。
+ * 一段能被认出来的"照片"。
  *
- * ★ 它不是随手造的随机字节：随机字节没法回答"这几个字节是不是那一张照片"。
+ * 它不是随手造的随机字节：随机字节没法回答"这几个字节是不是那一张照片"。
  *   这里先画一张 400×400 的真 PNG（`normalizeReference` 要解得出宽高），
- *   再在**元数据**里留一个只有这张图才有的标记——PNG 尾部追加的字节
+ *   再在元数据里留一个只有这张图才有的标记——PNG 尾部追加的字节
  *   会被 sharp 忽略，但"这段字节有没有出现在别处"是可判定的。
  */
 const PHOTO_MARKER = 'PHOTO-MARKER-4f1a9c-DO-NOT-STORE'
@@ -50,7 +50,7 @@ async function fakePhoto(): Promise<Uint8Array> {
   return new Uint8Array(Buffer.concat([png, Buffer.from(PHOTO_MARKER, 'utf8')]))
 }
 
-/** 记账的 store：每次 put 都把**字节**留下来，好在事后问它"见过这段吗" */
+/** 记账的 store：每次 put 都把字节留下来，好在事后问它"见过这段吗" */
 function recordingStore(): AssetStore & { written: PutEntry[]; saw(text: string): boolean } {
   const inner = createMemoryStore()
   const written: PutEntry[] = []
@@ -145,7 +145,7 @@ describe('★ 照片一个字节都没落盘（隐私设计 §七 那一行的�
     await cardFromPhoto(req, deps)
 
     // 归一化会改字节（压平 + 缩到 1440），所以那一段标记多半已经被 sharp 丢掉——
-    // 于是这里换一个更强的判据：**参考图那一笔的字节数**必须恰好是模型回来那 8 个。
+    // 于是这里换一个更强的判据：参考图那一笔的字节数必须恰好是模型回来那 8 个。
     // 若那张 400×400 的 PNG（或它归一化之后的版本）被写下去过一次，这里会是几万字节
     const refs = store.written.filter((entry) => entry.path.includes('/ref.'))
     expect(refs.map((entry) => entry.bytes.length)).toEqual([8])
@@ -164,7 +164,7 @@ describe('★ 照片一个字节都没落盘（隐私设计 §七 那一行的�
       usedAt: 1_700_000_000_000,
       deletedAt: 1_700_000_000_000,
     })
-    // ★ 这个字段里**没有**任何能还原那张照片的东西：两个数是时间，不是内容
+    // 这个字段里没有任何能还原那张照片的东西：两个数是时间，不是内容
     expect(Object.keys(result.card.sourcePhoto ?? {})).toEqual(['usedAt', 'deletedAt'])
   })
 })
@@ -253,8 +253,8 @@ describe('提示词与出处', () => {
   it('provenance 记的是 `character-photo@v3`：这条路的提示词与"从零描述"那份不是一份', async () => {
     const { deps } = await depsOf()
     const result = await cardFromPhoto(await request(), deps)
-    // ★ 2026-10-20 从 @v2 抬到 @v3：首行那个名字包进了「」（三份模板共用那一行），
-    //   所以这一条路的 output 也变了。判据与 v1→v2 同一条：**发出去的字节变了才升**。
+    // 2026-10-20 从 @v2 抬到 @v3：首行那个名字包进了「」（三份模板共用那一行），
+    //   所以这一条路的 output 也变了。判据与 v1→v2 同一条：发出去的字节变了才升。
     expect(result.card.provenance.promptVersion).toBe('character-photo@v3')
   })
 
@@ -286,9 +286,9 @@ describe('上限', () => {
 /**
  * 照片不进日志、不进事件流。
  *
- * ★ 这一条**不是靠读代码时的注意力**，是靠结构：这条路根本不认识写日志的地方。
+ * ★ 这一条不是靠读代码时的注意力，是靠结构：这条路根本不认识写日志的地方。
  *   所以用例读的是这三个文件的源码，问的是"里面有没有写日志的路"。
- *   它是一道**护栏**，不是一次证明——真正的证明在 `runBook` 那边（事件的唯一写入方），
+ *   它是一道护栏，不是一次证明——真正的证明在 `runBook` 那边（事件的唯一写入方），
  *   而它拿到的是卡，卡里只有插画与 `sourcePhoto` 的两个时间戳。
  */
 describe('★ 照片不进日志、不进事件流（grep 证据）', () => {
@@ -297,7 +297,7 @@ describe('★ 照片不进日志、不进事件流（grep 证据）', () => {
   it('这三个文件里没有 console、没有 event-log 的 import', () => {
     for (const relative of files) {
       const source = readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf8')
-      // 只看**代码**，不看注释：注释里出现"日志"两个字是允许的（上面就写着这条纪律）
+      // 只看代码，不看注释：注释里出现"日志"两个字是允许的（上面就写着这条纪律）
       const code = source
         .replace(/\/\*[\s\S]*?\*\//g, '')
         .split('\n')

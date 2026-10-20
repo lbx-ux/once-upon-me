@@ -1,23 +1,23 @@
 /**
- * split.test.ts —— 「编故事」与「逐页画」拆开之后，**仍然是同一条流水线**
+ * split.test.ts —— 「编故事」与「逐页画」拆开之后，仍然是同一条流水线
  *
  * 2026-10-17 的故事闸门把 `runBook` 拆成 `planBook` + `illustrateBook`：界面要在两步
- * 之间把那一版故事摊给家长改，所以两步必须能分开调用。这一组用例盯的**不是**新功能，
+ * 之间把那一版故事摊给家长改，所以两步必须能分开调用。这一组用例盯的不是新功能，
  * 而是拆分本身不许改行为——它说的是一句可以被证伪的话：
  *
  * > `runBook(request, deps)` 与 `illustrateBook(request, planBook(request).tree, …)`
- * > 产出**同一串事件、同一本书**。
+ * > 产出同一串事件、同一本书。
  *
- * ★ 为什么值得一条用例（而不是"看着两段代码一样"）：脚本、横评、离线跑测走的是
+ * 为什么值得一条用例（而不是"看着两段代码一样"）：脚本、横评、离线跑测走的是
  *   `runBook`，而线上产品走的是拆开的那两个——两条路分家的那天起，
  *   量出来的数就不是线上那件事了（docs/known-tradeoffs.md「测量」那一条的同一个教训）。
- *   分成两段之后有三处**只会悄悄错**的地方，这里逐条盯住：
+ *   分成两段之后有三处只会悄悄错的地方，这里逐条盯住：
  *
- *   1. **事件序号接续**。②是另一个调用，`createEventFactory` 从 1 重来的话，
+ *   1. 事件序号接续。②是另一个调用，`createEventFactory` 从 1 重来的话，
  *      日志里会出现两条 `seq: 1`——而 `seq` 正是重放重建界面状态的依据
  *      （`frames.ts` 的 `deskOf` 只按顺序扫，它不会发现号重复了）。
- *   2. **`stats.elapsedMs` 的口径**（①的机器时间 + ②的机器时间，不含家长看故事的时间）。
- *   3. **`doc` 能原样变成 `tree`**。家长改的是 `doc`（书名 + 每页草稿），画的是 `tree`；
+ *   2. `stats.elapsedMs` 的口径（①的机器时间 + ②的机器时间，不含家长看故事的时间）。
+ *   3. `doc` 能原样变成 `tree`。家长改的是 `doc`（书名 + 每页草稿），画的是 `tree`；
  *      两者对不上的话，家长在屏幕上改的东西与真正画出来的东西就是两份数据，
  *      而屏幕上不会有任何东西提示这件事。
  */
@@ -35,7 +35,7 @@ import type {
   TextResponse,
 } from './providers/types.ts'
 
-/* ───────────────────────── 假的三个供应商 ───────────────────────── */
+/* 假的三个供应商 */
 
 /** 一张 3 页的合法故事表。★ 3 页是 `planDraftCodec` 的下界，不是随手挑的数 */
 const STORY = {
@@ -80,7 +80,7 @@ function fakeText(): { text: TextGenerator; prompts: () => string[] } {
       async stream(req, _budget, onDelta) {
         prompts.push(req.user ?? '')
         const response = respond()
-        // `streamed: false` 是**离线回放的写法**（见 types.ts 那段），
+        // `streamed: false` 是离线回放的写法（见 types.ts 那段），
         // 但这里是假生成器：它确实一次给全，所以也照实报 false
         onDelta({ text: response.text, streamed: false })
         return response
@@ -109,7 +109,7 @@ function fakeImage(): ImageGenerator {
 }
 
 /**
- * 一张**合格**的卡：五条硬锚点一条都不能少（`validateCard` 逐条查，
+ * 一张合格的卡：五条硬锚点一条都不能少（`validateCard` 逐条查，
  * 「缺骨相」这种话不是防御性编程，是建卡那一屏真的会漏掉的字段）。
  */
 const CARD: CharacterCard = {
@@ -147,7 +147,7 @@ const REQUEST: BookRequest = {
   pages: 3,
 }
 
-/** 一份**能跑完一本书**的依赖：文本是假的，图是假的，比对与配音都不接 */
+/** 一份能跑完一本书的依赖：文本是假的，图是假的，比对与配音都不接 */
 async function bundle(): Promise<{ providers: ProviderBundle; prompts: () => string[] }> {
   const store = createMemoryStore()
   // 卡上的参考图必须真在 store 里：②第一件事就是读它，读不到直接拒跑
@@ -165,7 +165,7 @@ async function bundle(): Promise<{ providers: ProviderBundle; prompts: () => str
 
 const EVENT_SHAPE = (event: { kind: string; seq: number }): string => `${event.seq}:${event.kind}`
 
-/* ───────────────────────── 用例 ───────────────────────── */
+/* 用例 */
 
 describe('流水线拆开之后仍然是同一条', () => {
   it('runBook 与 planBook + illustrateBook 产出同一串事件、同一本书', async () => {
@@ -193,7 +193,7 @@ describe('流水线拆开之后仍然是同一条', () => {
     })
 
     expect(secondEvents.map(EVENT_SHAPE)).toEqual(firstEvents.map(EVENT_SHAPE))
-    // ★ 书本身逐字段相等：`stats` 一起比，因为 `elapsedMs` 的口径正是这条用例要守的东西
+    // 书本身逐字段相等：`stats` 一起比，因为 `elapsedMs` 的口径正是这条用例要守的东西
     expect(split).toEqual(oneGo)
   })
 

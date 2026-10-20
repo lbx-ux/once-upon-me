@@ -1,15 +1,15 @@
 /**
- * story-problems.test.ts —— 闸门那道判据：**改了的故事还能不能画**
+ * story-problems.test.ts —— 闸门那道判据：改了的故事还能不能画
  *
  * 这一组盯的是一件很具体的事：家长在 `StorySheet` 上改坏了一格时，
- * 屏幕上那句人话与**服务端拒绝的那句话**必须是同一句。
+ * 屏幕上那句人话与服务端拒绝的那句话必须是同一句。
  *
- * ★ 所以这里有两类用例，缺一类这道闸门就有一个洞：
+ * 所以这里有两类用例，缺一类这道闸门就有一个洞：
  *
- * 1. **判据来自引擎那两个东西**（`planDraftCodec` + `buildTree`），不是这里另写的规则。
- *    用例直接在**边界**上取数（书名 20 / 21 个字、正文 120 / 121 个字）：
+ * 1. 判据来自引擎那两个东西（`planDraftCodec` + `buildTree`），不是这里另写的规则。
+ *    用例直接在边界上取数（书名 20 / 21 个字、正文 120 / 121 个字）：
  *    换个数字，错的不是这一条用例，是"改完还能画"这句话本身。
- * 2. **位置要报对**（第几页、哪个框、第几句）。报错位置错了的症状不是"看不见问题"，
+ * 2. 位置要报对（第几页、哪个框、第几句）。报错位置错了的症状不是"看不见问题"，
  *    而是"在错的地方找一个不存在的问题"——那比不报还费人。
  */
 
@@ -59,7 +59,7 @@ describe('storyProblemsOf', () => {
     expect(storyProblemsOf('solo', story({ title: '绿'.repeat(20) }))).toEqual([])
 
     // 正文一句 120 个字合法，121 个字报在第 1 页第 1 句上
-    // ★ 三页都要给全：页数不够（<3）会先报"页数"，那就测不到这一格了
+    // 三页都要给全：页数不够（<3）会先报"页数"，那就测不到这一格了
     const max = '啊'.repeat(120)
     const atMax = story({ nodes: [node({ body: [max] }), node(), node()] })
     expect(storyProblemsOf('solo', atMax)).toEqual([])
@@ -108,7 +108,7 @@ describe('storyProblemsOf', () => {
     // 写了提问却没写选项 = 选择点写了一半（形状那关先拦）
     const halfChoice = story({ nodes: [node({ ask: '你选哪个？' }), node(), node()] })
     expect(storyProblemsOf('solo', halfChoice).length).toBeGreaterThan(0)
-    // 而一条**写全了**的共读版故事，在独读版下要被树挡住
+    // 而一条写全了的共读版故事，在独读版下要被树挡住
     const shared = story({
       nodes: [
         node({
@@ -133,7 +133,7 @@ describe('storyProblemsOf', () => {
 
   it('★ 选择点那九格的名字与 schema 是同一份（漂了就会把问题报在别的格子上）', () => {
     // 这条用例的存在理由：`splitField` 靠名字把失败路径翻回界面上的框，
-    // 而名字对不上时的症状不是"报错"——是**在错的格子里读到一句关于别处的话**。
+    // 而名字对不上时的症状不是"报错"——是在错的格子里读到一句关于别处的话。
     // 只写在注释里的约定会漂，所以在这里拿 schema 逐个核对。
     const schema = planJsonSchema() as {
       properties: { nodes: { items: { properties: Record<string, unknown> } } }
@@ -194,7 +194,7 @@ describe('选择点的问题落在哪一格上（工单 05 §一）', () => {
   })
 
   it('★ 同一个选择点的两格各报各的——`dedupe` 不再把它们当成同一条', () => {
-    // 这条钉的是一个**真的坏过**的形状：键里不带 `cell` 时，
+    // 这条钉的是一个真的坏过的形状：键里不带 `cell` 时，
     // 同一页上 `labelA` 与 `spokenA` 都太短，后一条会被当重复的丢掉，
     // 于是家长改完一处、另一处还是红的，而清单里从没提过它
     const problems = storyProblemsOf(
@@ -236,7 +236,7 @@ describe('树上的问题是哪一组框的（工单 05）', () => {
   })
 
   it('语气的问题落在「语气」上（字段名与界面上那一档对齐）', () => {
-    // ★ 这一条**由 schema 报出来**，不是树：`enumOf(MOODS)` 先拦下（实测过——
+    // 这一条由 schema 报出来，不是树：`enumOf(MOODS)` 先拦下（实测过——
     //   树里那句"不在枚举里"在 `planStory` 那条路上到不了）
     const problems = storyProblemsOf(
       'solo',

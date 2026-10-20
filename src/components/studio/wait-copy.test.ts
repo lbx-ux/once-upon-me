@@ -1,10 +1,10 @@
 /**
  * wait-copy.test.ts —— 等待那几句话的三条纪律
  *
- * ★ 它钉住的不是文案好不好听，是**三件会被后人顺手破坏的事**：
+ * 它钉住的不是文案好不好听，是三件会被后人顺手破坏的事：
  *   ① 只有一次请求的活不许有三步（凑三步 = 编进度）；
  *   ② 那几句轮播的话里不许出现数字与百分号（同上）；
- *   ③ 那两句"收起 ≠ 取消"的实话是**用户逐字给的**（2026-10-18 第 30 刀）——
+ *   ③ 那两句"收起 ≠ 取消"的实话是用户逐字给的（2026-10-18 第 30 刀）——
  *      它们不是我们的文案，是一个已经改过两版的产品决定，重写前先问人。
  *   三条都不花钱、不用起服务器就能验，所以它们该在闸门里。
  */
@@ -27,7 +27,7 @@ describe('等待时说什么', () => {
       '把读到的填进右边那几格',
     ])
     expect(copy.steps.map((step) => step.state)).toEqual(['done', 'now', 'todo'])
-    // 没给大小就不带那对括号：**不许**编一个"（未知）"填进去
+    // 没给大小就不带那对括号：不许编一个"（未知）"填进去
     expect(waitCopyOf('analyze').steps[0]?.text).toBe('照片已选好')
   })
 
@@ -61,7 +61,7 @@ describe('等待时说什么', () => {
 
   it('★ 轮播那几句里不出现数字与百分号（"只说还在办，不说办到哪儿了"）', () => {
     for (const job of WAIT_JOBS) {
-      // ★ 用 `stage: 'image'` 取那一份：`draw` 在存档案那一段本来就**没有**话（上一条）
+      // 用 `stage: 'image'` 取那一份：`draw` 在存档案那一段本来就没有话（上一条）
       const copy = waitCopyOf(job, { stage: 'image' })
       for (const line of copy.lines) {
         expect(line).not.toMatch(/[0-9%]/)
@@ -83,7 +83,7 @@ describe('等待时说什么', () => {
 
   it('★ 那两句实话是用户逐字给的（2026-10-18 第 30 刀），一个字都不许被顺口改掉', () => {
     const image = '先收起也没关系，它会继续重画；完成后页面会自动更新。'
-    // 三件画图的活说**同一句**：`draw` 在存档案那一段（`stage: 'profile'`）也是它
+    // 三件画图的活说同一句：`draw` 在存档案那一段（`stage: 'profile'`）也是它
     expect(waitCopyOf('revise').aside).toBe(image)
     expect(waitCopyOf('first').aside).toBe(image)
     expect(waitCopyOf('draw', { stage: 'image' }).aside).toBe(image)

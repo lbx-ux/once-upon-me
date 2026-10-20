@@ -4,7 +4,7 @@
  * 数据来源：docs/cover-art-prompts.md 的「12 张卡的内容」一节
  * 资源文件：public/art/{key}.webp（封面静帧，1280×720，脚本 scripts/make-webp.py）
  *
- * ★ 数组顺序是有意义的：它决定 12 张卡片在环上的排列顺序，
+ * 数组顺序是有意义的：它决定 12 张卡片在环上的排列顺序，
  *   改动会让首屏整体错位。新增主题请追加到末尾。
  */
 
@@ -58,9 +58,9 @@ export function artPath(key: ThemeKey): string {
 /**
  * 派生小图（`scripts/make-webp.py` 从 `public/art/` 缩/裁出来，不是新出的一批画）
  *
- * ★ 为什么不走 `/api/assets?w=`：静态 `public/` 走不到那条通路——Next 直接发盘上的字节，
+ * 为什么不走 `/api/assets?w=`：静态 `public/` 走不到那条通路——Next 直接发盘上的字节，
  *   查询串它看不懂，挂 `?w=` 会静悄悄回原图（docs/known-tradeoffs.md 缩略档那条）。所以预生成。
- * ★ 文件名仍然只由 `key` 决定，与 `artPath` 同一条约定：对不上就是一张裂图。
+ * 文件名仍然只由 `key` 决定，与 `artPath` 同一条约定：对不上就是一张裂图。
  */
 
 /** 工作台主题墙那一格（16:9 / 320px / 实测平均 11 KB） */

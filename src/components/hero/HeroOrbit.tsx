@@ -32,34 +32,33 @@
  *
  * 注意：容器需要一个比视口高的父元素 + 内部 sticky，才能拿到 scrollProgress。
  *
- * 适用范围：**桌面 Web**。环上的卡片数和半轴都按宽屏调过，缩到手机宽度只会糊成一团，
- * 硬做不如不做 —— 所以手机那一档（`hero-orbit.css` §6，≤640）**环整块不演**，
+ * 适用范围：桌面 Web。环上的卡片数和半轴都按宽屏调过，缩到手机宽度只会糊成一团，
+ * 硬做不如不做 —— 所以手机那一档（`hero-orbit.css` §6，≤640）环整块不演，
  * 首屏只剩中心那一摞文案。★ 用户 2026-10-19 的口径是"**只删手机那一档，
  * web 端首页和以前一样**"：这一屏在 web 上是三节里的第一节（环 → 那本书 → 亮点），
  * 在手机上是两节里的第一节（标题 → 亮点）。
  *
- * ★ 这里没有 `matchMedia` 分支 —— "手机上不演"是 CSS 的 `display: none`，
- *   组件不知道自己在哪一档上跑。唯一必须由 JS 知道的一处是**取图**：
+ * 这里没有 `matchMedia` 分支 —— "手机上不演"是 CSS 的 `display: none`，
+ *   组件不知道自己在哪一档上跑。唯一必须由 JS 知道的一处是取图：
  *   浏览器对 `display: none` 里的 `<img>` 照取不误（12 张封面 2.8 MB），
  *   于是每张封面走 `<picture><source media>`，见下面 img 上那段注释。
- *   另一处是**量程退化**：父层被收成一屏之后没有可滚的距离，
+ *   另一处是量程退化：父层被收成一屏之后没有可滚的距离，
  *   交接段整段不成立，见 `measure()` 里那条 `noTravel`。
  *
- * ---------------------------------------------------------------------------
- * ★ 首帧不靠 JS（2026-10-13 加的）
+ * 首帧不靠 JS（2026-10-13 加的）
  *
- * 每张卡的 `<figure>` 带一份**预渲染内联样式**（`lib/orbit.ts` 的
+ * 每张卡的 `<figure>` 带一份预渲染内联样式（`lib/orbit.ts` 的
  * `restInlineStyle`，t=0 那一帧）。理由有两条，第二条比第一条重：
  *
- *   1. 这 12 张图**就是这一页的 LCP**（见下面 img 上那条注释）。原来 CSS 写
+ *   1. 这 12 张图就是这一页的 LCP（见下面 img 上那条注释）。原来 CSS 写
  *      `opacity: 0` 等 JS 接管，等于把 LCP 从"图下载完"推到"hydration + 第一帧"。
  *   2. JS 挂了 / 用户禁了 JS，原来首屏只剩文案和一张空环。第三屏为同一件事
  *      删过一个 `rendered`（"内容缺失才是问题"），首屏现在同一条待遇。
  *
- * 摆位数学因此搬进 `lib/orbit.ts`，由**两个调用方**共用：这个组件的 frame()，
+ * 摆位数学因此搬进 `lib/orbit.ts`，由两个调用方共用：这个组件的 frame()，
  * 与预渲染那一帧。半轴（rx/ry）是浏览器布局出来的数，构建期不知道，所以
  * 静态帧里写的是系数，由 `hero-orbit.css` 的 `--orbit-rx/--orbit-ry` 解 ——
- * 那对变量与这里的 `clientWidth × 0.56` / `clientHeight × 0.38` 是**契约**，
+ * 那对变量与这里的 `clientWidth × 0.56` / `clientHeight × 0.38` 是契约，
  * 改一处要改另一处。等价性由 `src/lib/orbit.test.ts` 摁着。
  */
 
@@ -67,7 +66,7 @@ import { useEffect, useRef } from 'react'
 import { blurFilter, placeCard, restInlineStyle } from '@/lib/orbit'
 
 export type OrbitItem = {
-  /** 封面图。这一屏**刻意不放动效**，理由见 README §五「首屏卡片是静帧不是短片」 */
+  /** 封面图。这一屏刻意不放动效，理由见 README §五「首屏卡片是静帧不是短片」 */
   src: string
   alt?: string
 }
@@ -92,7 +91,7 @@ type Props = {
    * `'bg'`（默认）＝ `.hero` 铺一层不透明的 `--bg`，首屏是"压在灰桌面上"的独立一层。
    * `'none'`＝ 底色让出去，露出页面级的背景层（<SceneBackdrop /> 那三幕场景）。
    *
-   * ★ 为什么做成属性而不是让页面从外面覆盖：`.hero` 同时带着 `isolation: isolate`
+   * 为什么做成属性而不是让页面从外面覆盖：`.hero` 同时带着 `isolation: isolate`
    *   与满屏 sticky，从外面写 `.hero { background: transparent }` 要跨过组件边界去点
    *   别人的类名，改一次组件就得跟着改一次页面。属性选择器落在 hero-orbit.css 里，
    *   这件事就只有这一处知道。
@@ -102,7 +101,7 @@ type Props = {
 }
 
 /* ------------------------------------------------------------------ 常量 */
-/** 手机那一档的 `<picture>` 兜底：1×1 透明，data URI 所以**一个请求都不发**
+/** 手机那一档的 `<picture>` 兜底：1×1 透明，data URI 所以一个请求都不发
     （见下面 img 上那段注释；换成一张真图片就等于把省下的那笔又花回去一半）。 */
 const BLANK_PX =
   'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
@@ -127,14 +126,15 @@ function smoothstep(edge0: number, edge1: number, x: number) {
 const easeOut = (x: number) => 1 - Math.pow(1 - clamp(x), 2)
 
 /* -------------------------------------------------- 交接段（让位给下一节）
- * 与 hero-orbit.css §5 的文案离场时刻是**同一组数**，两处必须一起改。
+ * 与 hero-orbit.css §5 的文案离场时刻是同一组数，两处必须一起改。
  *
  * 三层文案在 --hero-copy-p 上依次离场（跨度 .30，最后一层 --out-start .20），
  * 走完 copy-p = .50；而 copy-p = smoothstep(.06, .84, p)，代回去得 p ≈ .45。
  * 所以交接段从 .45 起 —— 就是"三个差不多消失"的那一刻。
  *
  * 改这里任何一条时间，另一头的 .hero__copy 规则要跟着改，否则会出现
- * "文案还在、轨道已经开始下沉"这种两头不接的状态。 */
+ * "文案还在、轨道已经开始下沉"这种两头不接的状态。
+ */
 const HANDOFF_START = 0.45
 const HANDOFF_END = 0.95
 /** 卡片在交接段结束时保留的不透明度（不归零：留一点余影，下一节压上来时不是硬切） */
@@ -178,11 +178,11 @@ export function HeroOrbit({
     let dragLastX = 0
     let dragLastTs = 0
 
-    /* 自转时钟的零点。★ 原来是 `ts * angularSpeed`，而 `ts` 是**从导航起点**算的：
+    /* 自转时钟的零点。★ 原来是 `ts * angularSpeed`，而 `ts` 是从导航起点算的：
        首帧会把环从"预渲染那一帧"（phase 0，见 lib/orbit.ts）直接跳到
        「加载耗时 × 角速度」那个角度 —— 1 秒 ≈ 0.072rad ≈ 前排卡 46px。
        改成相对这一刻取，第一帧 ≈ 0.9px，静态帧与 JS 第一帧接得上。
-       ★ 转速、scrollTurns、交接段那三个数都不在这条路径上，一个没动。 */
+       转速、scrollTurns、交接段那三个数都不在这条路径上，一个没动。 */
     const phaseBase = performance.now()
 
     let targetX = 0, targetY = 0
@@ -233,17 +233,18 @@ export function HeroOrbit({
     }
 
     /* ------------------------------------------------ 几何测量与滚动量 */
-    /** 父层与这一屏一样高 = **没有可滚的距离**。
+    /** 父层与这一屏一样高 = 没有可滚的距离。
      *
      * 手机那一档把 `.hero-experience` 收成一屏（见 `hero-orbit.css` §6），
      * 于是 `wrap.offsetHeight - heroEl.offsetHeight` 是 0，而下面那条
-     * `Math.max(…, 1)` 会把它兜成 **1px** —— 页面滚一像素，`scrollProgress`
-     * 就跳到 1，三层文案在**离开屏幕之前**就整层淡光了。
+     * `Math.max(…, 1)` 会把它兜成 1px —— 页面滚一像素，`scrollProgress`
+     * 就跳到 1，三层文案在离开屏幕之前就整层淡光了。
      * 那不是"交接段快了点"，是"文案还没滚出去就没了"。
      *
-     * 所以没有量程时不再兜 1px，而是**整段交接作废**：进度恒为 0，
+     * 所以没有量程时不再兜 1px，而是整段交接作废：进度恒为 0，
      * 文案不淡、环不下沉（环在那一档本来也不演）。桌面那一档量程是 68vh，
-     * 这一条碰不到它。 */
+     * 这一条碰不到它。
+ */
     let noTravel = false
 
     function measure() {
@@ -303,7 +304,7 @@ export function HeroOrbit({
 
       /* 4. 椭圆半轴（都用 hero 自身的盒子，不用 window.innerWidth —
             窄于 min-width 的窗口会横向滚动，innerWidth 会比布局宽度小）
-            ★ 这两个数与 hero-orbit.css 的 --orbit-rx / --orbit-ry 是同一对：
+            这两个数与 hero-orbit.css 的 --orbit-rx / --orbit-ry 是同一对：
               静态帧的 transform 就是乘的那两个变量。改这里要同步改那里。 */
       const rx = Math.min(heroEl!.clientWidth * 0.56, 1420)
       const ry = Math.min(heroEl!.clientHeight * 0.38, 285)
@@ -314,7 +315,7 @@ export function HeroOrbit({
       }
 
       /* 6. 逐卡摆位。★ 数学在 lib/orbit.ts 的 placeCard 里，与预渲染那一帧
-            （restInlineStyle）是**同一份** —— 这一屏的静态首帧就是靠这条
+            （restInlineStyle）是同一份 —— 这一屏的静态首帧就是靠这条
             不靠 JS 画出来的（见那个文件头）。搬动等价性由 orbit.test.ts 摁着。 */
       for (let i = 0; i < N; i++) {
         const el = itemEls[i]
@@ -417,7 +418,8 @@ export function HeroOrbit({
     }
 
     /** 藏起来的标签页不跑循环：没人看的时候不该占着机器。
-     *  回到前台由 start() 重新起帧，首帧直接落位到当前滚动量。 */
+     *  回到前台由 start() 重新起帧，首帧直接落位到当前滚动量。
+ */
     const onVisibility = () => {
       visible = !document.hidden
       if (visible) start()
@@ -498,7 +500,7 @@ export function HeroOrbit({
               key={item.src}
               className="hero-orbit__item"
               data-orbit-index={i}
-              /* ★ 预渲染那一帧（phase 0）：JS 跑起来之前，这一屏就该是一张完整的环，
+              /* 预渲染那一帧（phase 0）：JS 跑起来之前，这一屏就该是一张完整的环，
                  而不是 12 张全透明、全叠在中心的卡 —— 这 12 张就是这一页的 LCP，
                  被 hydration 挡在门外等于 LCP 从"图加载完"退到"JS 执行完"。
                  x / y 存的是系数，半轴由 CSS 解（见 lib/orbit.ts 与 hero-orbit.css）。 */

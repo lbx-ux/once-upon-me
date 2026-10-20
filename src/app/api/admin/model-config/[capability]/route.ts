@@ -9,17 +9,17 @@
  *   400 { "code": "bad-base-url"   } / { "code": "unknown-field" } / { "code": "bad-json" }
  * ```
  *
- * ★ **空的 `apiKey` 表示"这次不改"**，不是"清掉它"。清掉是 `DELETE`（界面上是
+ * 空的 `apiKey` 表示"这次不改"，不是"清掉它"。清掉是 `DELETE`（界面上是
  *   「恢复默认」那个按钮）。两件事分开是刻意的：合成一件的话，一个人只想换个
  *   模型名，会把已经配好的 key 一起清掉——而症状要到下一次生成才出现（401），
  *   那时他早就不记得自己刚才动过什么。
  *
- * ★ 写完之后**立刻回一份新的 view**，而不是回 204：界面要显示"现在生效的配置"，
+ * 写完之后立刻回一份新的 view，而不是回 204：界面要显示"现在生效的配置"，
  *   而那正是 `describeProviders(serverEnv())` 现读出来的东西。
  *   回 204 的话界面只能自己拼一份"我以为改成了"的样子——这个仓库里
  *   已经为这件事写过两次注释了（权限开关、申请队列）。
  *
- * ★ 写的是磁盘上那份被 gitignore 的文件。**写之前把值 trim**，
+ * 写的是磁盘上那份被 gitignore 的文件。写之前把值 trim，
  *   与读的时候同一条纪律（复制粘贴带一个尾空格是最常见的"key 明明对却 401"）。
  */
 
@@ -38,7 +38,7 @@ import {
 import type { FieldId } from '@/lib/settings/model-config-state.ts'
 import { readOverrides, writeOverrides } from '@/lib/settings/runtime-config.ts'
 
-// ★ 段配置必须是**字面量**：成员表达式 Next 读不了，而它只在 `pnpm build` 那一刻才报（判据见 lib/route-config.test.ts）
+// ★ 段配置必须是字面量：成员表达式 Next 读不了，而它只在 `pnpm build` 那一刻才报（判据见 lib/route-config.test.ts）
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
@@ -60,7 +60,7 @@ async function open(
   const { capability } = await ctx.params
   const spec = capabilitySpec(capability)
   if (!spec) {
-    // ★ 认不出的能力名要说出来（不是当成 404 页面）：拼错一个字母
+    // 认不出的能力名要说出来（不是当成 404 页面）：拼错一个字母
     //   在界面上看起来就是"保存了但没生效"
     return { ok: false, response: bad('unknown-capability', `没有「${capability}」这个能力`) }
   }
@@ -77,9 +77,9 @@ export async function PUT(
   const body = await jsonBody<Record<string, unknown>>(request)
   if (!body) return badJson()
 
-  // ★ 只校验**这个能力真有**的那几格。
+  // 只校验这个能力真有的那几格。
   //   第一版这里是遍历全部四个字段名，于是「语音」有而别人没有的 `voice`
-  //   让文字/图像/视觉三个能力的保存**全都 400**——而语音那一条是通的，
+  //   让文字/图像/视觉三个能力的保存全都 400——而语音那一条是通的，
   //   所以从外面看起来像"只有语音能用"。端到端验的第四条判据逮住了它。
   const patch: Partial<Record<FieldId, string>> = {}
   for (const field of opened.spec.fields) {
@@ -88,7 +88,7 @@ export async function PUT(
     patch[field.id] = verdict.value
   }
 
-  // ★ 而多出来的字段一律拒——**包括"别的能力那一格"**（给文字送 `voice`）。
+  // ★ 而多出来的字段一律拒——包括"别的能力那一格"（给文字送 `voice`）。
   //   忽略的话，界面把字段名拼错就是"保存成功但什么都没改"
   const mine = new Set(opened.spec.fields.map((field) => field.id))
   for (const key of Object.keys(body)) {
@@ -116,9 +116,9 @@ export async function DELETE(
   const opened = await open(request, ctx)
   if (!opened.ok) return opened.response
 
-  // ★ 把这个能力的几格从文件里去掉，而不是往文件里写一份 `.env` 的值：
+  // 把这个能力的几格从文件里去掉，而不是往文件里写一份 `.env` 的值：
   //   写进去之后基线再改也跟不上（文件压过环境变量），而"恢复默认"的意思
-  //   就是**重新跟着基线走**
+  //   就是重新跟着基线走
   const next = keepKnownKeys(clearCapability(readOverrides(), opened.spec))
   await writeOverrides(next)
 

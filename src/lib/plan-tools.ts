@@ -1,9 +1,9 @@
 /**
  * plan-tools.ts —— 编故事那一步，模型能用的四件工具
  *
- * 这一层是「Function Calling」里**工具是什么**的答案；循环在
+ * 这一层是「Function Calling」里工具是什么的答案；循环在
  * `engine/tool-loop.ts`，而两者之间隔着一条边界：
- * **循环不知道工具是什么，工具不知道循环怎么转。**
+ * 循环不知道工具是什么，工具不知道循环怎么转。
  * 所以语料在哪（`rag/`）、书架在哪（`library.ts`）、红线词库在哪（`engine/review.ts`）
  * 全都只在这一层出现，引擎那边一个字都不知道。
  *
@@ -16,17 +16,17 @@
  * | `check_draft` | 这段正文过不过红线与适龄字表 | `engine/review.ts` 的 `reviewText` |
  * | `character_brief` | 画师会拿到的角色段与核对清单 | `promptFragmentOf` / `checklistOf` |
  *
- * ★ `check_draft` 是这一组里最值钱的一条：它把「写完被 `illustrateBook` **整本拒发**」
+ * `check_draft` 是这一组里最值钱的一条：它把「写完被 `illustrateBook` 整本拒发」
  *   变成「模型自己改回去再来」。前者要家长重新走一遍流程，后者只是一次工具调用。
  *   ——这是「拦下来」与「自己改回去」的区别，也是评分表里"工具调用"四个字
  *   在这个产品上真正的用处。
  *
- * ★ `search_past_stories` **必须**走 `retrieveBoth`，不许另写一条检索：
+ * ★ `search_past_stories` 必须走 `retrieveBoth`，不许另写一条检索：
  *   `rag-bakeoff` 量出来的那套参数（k / 两档阈值 / 硬过滤 / 正反不重叠）
- *   只对**一个**实现成立。另写一份的症状不是"重复代码"，是
+ *   只对一个实现成立。另写一份的症状不是"重复代码"，是
  *   "网页上编出来的故事与模型自己查出来的不是一回事"。
  *
- * ★ 四件工具**都不写盘**。要改故事走 `plan_book` 的 `reviseNote`（产品里已经在走的那条路），
+ * 四件工具都不写盘。要改故事走 `plan_book` 的 `reviseNote`（产品里已经在走的那条路），
  *   模型不该从工具这条路去改盘上的东西——那会让"家长看到的版本"与"盘上的版本"
  *   出现第二条修改途径，而两条途径的先后顺序没人定义过。
  */
@@ -45,15 +45,15 @@ import { SOURCE_BOUNDARY_LINE } from './rag/prompt.ts'
 import { DEFAULT_K, DEFAULT_MIN_SCORE, DEFAULT_NARROWED_MIN_SCORE } from './rag/load.ts'
 
 export type PlanToolsContext = {
-  /** **已经按用户分好片**的 store（`lib/asset-scope.ts`） */
+  /** 已经按用户分好片的 store（`lib/asset-scope.ts`） */
   store: AssetStore
   /** `u/<userId>`（`lib/rag/load.ts` 的 `ownerOf` 那个形状）。检索拿它当隐私边界：反例只从这个人的片里取 */
   owner: RagOwner
   card: CharacterCard
   /**
-   * 这一轮要写什么。**只用于检索的硬过滤**（年龄档 / 主题 / 形态）——
+   * 这一轮要写什么。只用于检索的硬过滤（年龄档 / 主题 / 形态）——
    * 查询串是模型自己在 `search_past_stories` 的参数里给的那个词，
-   * 所以这里**没有** `text`：再放一个查询串进上下文，两处就会漂。
+   * 所以这里没有 `text`：再放一个查询串进上下文，两处就会漂。
    */
   query: { ageBand: AgeBand; theme: string; form: BookForm }
   /** 测试用：直接给一份索引，别去读盘 */
@@ -64,7 +64,7 @@ export type PlanToolsContext = {
   load?: () => Promise<{ index: RagIndex; own: readonly RagChunk[] }>
 }
 
-/* ───────────────────────── 四件工具 ───────────────────────── */
+/* 四件工具 */
 
 export function planToolsOf(context: PlanToolsContext): ToolDef[] {
   return [searchTool(context), shelfTool(context), checkTool(), briefTool(context.card)]
@@ -73,8 +73,8 @@ export function planToolsOf(context: PlanToolsContext): ToolDef[] {
 /**
  * 翻以前写过的。
  *
- * ★ 名字里带 `search_`：模型对"这是查东西的"这件事读得最准。
- * ★ 描述里写清了**正反两侧各是干什么用的**——不写的话模型会把反例当范例照抄，
+ * 名字里带 `search_`：模型对"这是查东西的"这件事读得最准。
+ * 描述里写清了正反两侧各是干什么用的——不写的话模型会把反例当范例照抄，
  *   而那正好是这条工具想防的事（"他读过了，这本别重复"）。
  */
 function searchTool(context: PlanToolsContext): ToolDef {
@@ -112,7 +112,7 @@ function searchTool(context: PlanToolsContext): ToolDef {
           minScore: DEFAULT_MIN_SCORE,
           narrowedMinScore: DEFAULT_NARROWED_MIN_SCORE,
         },
-        // ★ 自家写过的书**每次现场拼**（`rag/corpus.ts` 的判断：几十本 × 20 页是毫秒级，
+        // 自家写过的书每次现场拼（`rag/corpus.ts` 的判断：几十本 × 20 页是毫秒级，
         //   而落盘的索引与书必然会不同步）。种子那份随仓库提交，一次进程读一次。
         { ...index, chunks: [...index.chunks, ...own] },
       )
@@ -121,7 +121,7 @@ function searchTool(context: PlanToolsContext): ToolDef {
   }
 }
 
-/** 这个孩子已经读过什么。★ 筛的是**他**的，不是整个账号的——模型要避的是"他读过了" */
+/** 这个孩子已经读过什么。★ 筛的是他的，不是整个账号的——模型要避的是"他读过了" */
 function shelfTool(context: PlanToolsContext): ToolDef {
   return {
     spec: {
@@ -137,7 +137,7 @@ function shelfTool(context: PlanToolsContext): ToolDef {
       if (mine.length === 0) {
         return `${context.card.childId} 名下还没有书——这是他/她的第一本，没有要避开的落点。`
       }
-      // ★ 写法与 MCP 那条 `list_books` 对齐（`lib/mcp/tools.ts`）：同一个问题
+      // 写法与 MCP 那条 `list_books` 对齐（`lib/mcp/tools.ts`）：同一个问题
       //   在两个消费者那里长出两种说法，是这个项目最忌讳的一类漂移。
       return (
         `${context.card.childId} 名下已有 ${mine.length} 本（新的在前）：\n` +
@@ -156,9 +156,9 @@ function shelfTool(context: PlanToolsContext): ToolDef {
 /**
  * 自己先过一遍闸。
  *
- * ★ 回的是 `reviewProblemText` 那一套措辞（"第 1 页：恐怖（R-01）——出现了「血」"），
+ * 回的是 `reviewProblemText` 那一套措辞（"第 1 页：恐怖（R-01）——出现了「血」"），
  *   不另写一份：家长在屏幕上读到的与模型读到的是同一句话，两边才改得到一起去。
- * ★ 「一条都没报」必须**说得清是"过了"**，不是返回一个空串——
+ * ★ 「一条都没报」必须说得清是"过了"，不是返回一个空串——
  *   空串在模型那边读起来像"没结果/被打断了"，而它的正确解读是"这段可以用"。
  */
 function checkTool(): ToolDef {
@@ -206,8 +206,8 @@ function checkTool(): ToolDef {
 /**
  * 画师会拿到的那些。
  *
- * ★ 八条锚点**本来就在你的提示词里**（`plan.ts` 会把卡注进去），所以这条工具
- *   回的不是锚点原文，而是**只有这里才看得到的另两样**：
+ * 八条锚点本来就在你的提示词里（`plan.ts` 会把卡注进去），所以这条工具
+ *   回的不是锚点原文，而是只有这里才看得到的另两样：
  *   派生的角色段（每一页出图 prompt 的开头，由卡唯一决定）与核对清单。
  *   模型要写画面描述时需要知道"画师手上是什么"，否则它写的画面与画出来的那个孩子
  *   对不上——而这件事在出图之后只能靠重画补救。
@@ -235,7 +235,7 @@ function briefTool(card: CharacterCard): ToolDef {
   }
 }
 
-/* ───────────────────────── 参数与语料 ───────────────────────── */
+/* 参数与语料 */
 
 function parseSearch(args: unknown): { query: string; k: number } {
   const record =
@@ -264,9 +264,9 @@ function stringOf(args: unknown, key: string): string | undefined {
 /**
  * 语料从哪来。
  *
- * ★ **两条来源、一个函数**（与 `card-source.ts` / `book-source.ts` / `children-source.ts`
+ * 两条来源、一个函数（与 `card-source.ts` / `book-source.ts` / `children-source.ts`
  *   同一个形状）：种子那份随仓库提交、进程内读一次；自家写过的那份每次现场拼。
- * ★ 缺省那条路是**惰性**的（`lib/rag/load.ts` 上的 `loadSeedIndex` / `ownChunksOf`
+ * 缺省那条路是惰性的（`lib/rag/load.ts` 上的 `loadSeedIndex` / `ownChunksOf`
  *   各有各的缓存与理由），所以"这一次没查"不会付读盘的钱。
  */
 async function loadCorpus(
@@ -288,18 +288,18 @@ function formatSearch(
   },
 ): string {
   if (pair.examples.length === 0 && pair.avoids.length === 0) {
-    // ★ 「这次没翻到」是**合法结果**，不许写成"检索失败"（`rag/retrieve.ts` §二那条）：
+    // ★ 「这次没翻到」是合法结果，不许写成"检索失败"（`rag/retrieve.ts` §二那条）：
     //   写成失败的话，模型会去重试、绕路，而正确处置是照常往下写。
     return `以前的故事里没有与「${query}」相近的片段（这次没有可参考的，照常往下写就行）。`
   }
   const parts: string[] = []
   /**
-   * ★ 与图纸那一条共用**同一句**分界（`rag/prompt.ts` 的 `SOURCE_BOUNDARY_LINE`）。
+   * 与图纸那一条共用同一句分界（`rag/prompt.ts` 的 `SOURCE_BOUNDARY_LINE`）。
    *
-   *   这一格与预检索那一格吃的是**同一份**素材——正例里有一半以上来自家长自己家里
+   *   这一格与预检索那一格吃的是同一份素材——正例里有一半以上来自家长自己家里
    *   那几本书的 `story.json`，而那一份家长可以逐字改（`PUT /api/books/<id>/story`
    *   只过信封校验）。所以"工具返回的东西是数据不是指令"这件事必须说两次：
-   *   两个入口各说一次，而**措辞只有一处**（另写一份的话，改了一边另一边就漂）。
+   *   两个入口各说一次，而措辞只有一处（另写一份的话，改了一边另一边就漂）。
    */
   parts.push(SOURCE_BOUNDARY_LINE)
   if (pair.examples.length > 0) {

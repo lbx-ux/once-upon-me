@@ -2,11 +2,11 @@
  * schema.ts —— 结构化输出的校验器 + JSON Schema 生成器（自写，约 150 行）
  *
  * 为什么不引 zod：ADR-0004 与 tech-selection §1 定的是"自写结构化输出校验与重试"。
- * 真正的理由不是省一个依赖，是这里只有**一个**需求：把模型吐出来的 JSON
+ * 真正的理由不是省一个依赖，是这里只有一个需求：把模型吐出来的 JSON
  * 变成可信的领域对象，并在失败时说得出"哪一条不对"好让重试提示有的可写。
  * zod 能做得更好，但那是"以后如果字段多了再说"——现在它是多一个运行时依赖换 8 个组合子。
  *
- * ★ 一份定义，两个用途：
+ * 一份定义，两个用途：
  *   `describe()` 出 JSON Schema（喂给模型的 json_schema 档），
  *   `parse()` 出校验结果（拿到模型的输出之后）。
  *   分成两份定义迟早会漂——漂了的症状是"我们告诉模型要 A，却按 B 验收"，
@@ -58,7 +58,7 @@ export function string(opts: { min?: number; max?: number; pattern?: RegExp } = 
 /**
  * 字符串数组，逐条 trim 后丢掉空串。正文一句一段就靠它，空串会让排版出现空气泡。
  *
- * `itemMax` 是**每条**的字数上限（一句正文超过 120 字就不像读给孩子听的了）。
+ * `itemMax` 是每条的字数上限（一句正文超过 120 字就不像读给孩子听的了）。
  * 这个参数一度叫 `item` 而被当成 `min` 用，症状是"正文太短"这种查半天的校验失败——
  * 名字写明确，比留一个靠注释维护的坑便宜。
  */
@@ -85,15 +85,15 @@ export function stringList(
     describe() {
       const node: JsonSchemaNode = { type: 'array', items: item.describe() }
       /**
-       * ★ 2026-10-20 补上这两个键。`parse()` **本来就**在用 `countCheck` 卡
+       * 2026-10-20 补上这两个键。`parse()` 本来就在用 `countCheck` 卡
        *   `opts.min` / `opts.max`（`body` 是 1–4 条），而 `describe()` 一个都不发——
        *   于是"喂给模型的那份 schema"比"我们验收的那份"松一格：模型交了 5 条，
        *   会被判 `数量过多（5 > 4）`，而它从来没有被告知上限是 4。
        *
-       *   这不是新规矩，是**补一处与 `array()` 的不一致**：同一个文件里
+       *   这不是新规矩，是补一处与 `array()` 的不一致：同一个文件里
        *   `array().describe()` 一直发着 `minItems`/`maxItems`（`nodes` 就靠它拿到
        *   `minItems: 3, maxItems: 40`），只有 `stringList()` 漏了。
-       *   ★ 文件头那句"分成两份定义迟早会漂"说的正是这种漂——两份定义**在同一个函数里**
+       *   ★ 文件头那句"分成两份定义迟早会漂"说的正是这种漂——两份定义在同一个函数里
        *     也能漂，只要一份发、一份不发。
        */
       if (opts.min !== undefined) node['minItems'] = opts.min
@@ -276,7 +276,7 @@ export function formatFailures(failures: readonly ParseFailure[], limit = 8): st
   return rest > 0 ? [...head, `- （另有 ${rest} 条同类问题）`].join('\n') : head.join('\n')
 }
 
-/* ───────────────────────── 内部 ───────────────────────── */
+/* 内部 */
 
 function ok<T>(value: T): ParseResult<T> {
   return { ok: true, value }

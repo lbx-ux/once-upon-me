@@ -1,7 +1,7 @@
 /**
  * admin/state.test.ts —— 管理页那份数据怎么读回来
  *
- * ★ 这里唯一一条要紧的判断是：**半份用户表比没有更坏**。
+ * 这里唯一一条要紧的判断是：半份用户表比没有更坏。
  *   所以形状不对时整份拒绝，而不是"跳过那一条"。跳过的症状是
  *   "某个人的那一行在页面上不见了"，而管理员会以为自己已经看过全部人了。
  */
@@ -50,7 +50,7 @@ describe('parseOverview', () => {
   })
 
   it('那一位**必须是布尔**：字符串 `"true"` 不算', () => {
-    // ★ 这正是"后端换了序列化方式、没人发现"会长出来的样子
+    // 这正是"后端换了序列化方式、没人发现"会长出来的样子
     const bad = overview({ users: [row({ allowed: 'true' })] })
     expect(parseOverview(bad)).toBeNull()
   })
@@ -67,7 +67,7 @@ describe('parseOverview', () => {
     )
     expect(parsed?.users[0]?.phone).toBeNull()
     expect(parsed?.users[0]?.lastLoginAt).toBeNull()
-    // ★ `demoAccount` 为空时**就是不标**——不是"没找到"，前端不因此去猜一个
+    // `demoAccount` 为空时就是不标——不是"没找到"，前端不因此去猜一个
     expect(parsed?.demoAccount).toBeNull()
   })
 

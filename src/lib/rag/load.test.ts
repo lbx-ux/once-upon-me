@@ -3,12 +3,12 @@
  *
  * 这一份测的是 `rag/` 里唯一碰文件系统的那一层，三条：
  *
- * 1. **种子索引真的读得出来**（96 条）。★ 这是**路径解析**唯一的守卫：
+ * 1. 种子索引真的读得出来（96 条）。★ 这是路径解析唯一的守卫：
  *    它走 `process.cwd()`，而 `import.meta.url` 在 Next 的服务端 bundle 里指向打包产物——
  *    写错的话线上是"检索永远没东西"，而所有纯函数测试照样全绿。
- * 2. **② 现场扫**：一个家庭自己的书 → chunks；读不出来的那一本**跳过**，
+ * 2. ② 现场扫：一个家庭自己的书 → chunks；读不出来的那一本跳过，
  *    不让它把整次检索带走（与 `library.ts` "一本读不出来的书不该让整个书架 500"同一条）。
- * 3. **合成**：种子 + 自家，`corpusVersion` 留种子那一份；owner 边界从这里也守得住。
+ * 3. 合成：种子 + 自家，`corpusVersion` 留种子那一份；owner 边界从这里也守得住。
  */
 
 import { describe, expect, it } from 'vitest'
@@ -26,7 +26,7 @@ import {
   seedIndexPath,
 } from './load.ts'
 
-/** 一本**写完了故事、还没画**的书（`story.json` 的形状） */
+/** 一本写完了故事、还没画的书（`story.json` 的形状） */
 function draftOf(bookId: string, title: string, theme: string): StoryDraft {
   return {
     bookId,
@@ -123,15 +123,15 @@ describe('② 创作史：现场扫这一片存储', () => {
   })
 
   /**
-   * ★ 只过了**信封**的草稿不能让检索停摆（2026-10-20 修的）。
+   * ★ 只过了信封的草稿不能让检索停摆（2026-10-20 修的）。
    *
    *   `readStory` 用的是 `isStoryDoc`——它只认"title 是字符串、nodes 是对象数组"，
-   *   而 `PUT /api/books/<id>/story` 正是拿它把关的。所以盘上**真的可能出现**
+   *   而 `PUT /api/books/<id>/story` 正是拿它把关的。所以盘上真的可能出现
    *   `{"nodes":[{}]}` 和 `{"nodes":[{"scene":123}]}` 这两种。
    *   修之前 `chunksFromStoryBook` 一句 `page.scene.trim()` 当场抛，
    *   抛出去被 `plan.ts` 的 `retrieveOnce` 接住（那一步刻意不拖垮规划）——
-   *   于是症状是**这一片存储的检索从此永远不工作**，而屏幕上只有"这次没检索到"。
-   *   判据因此两边都要：**不抛**，而且**好的那几页照常出来**。
+   *   于是症状是这一片存储的检索从此永远不工作，而屏幕上只有"这次没检索到"。
+   *   判据因此两边都要：不抛，而且好的那几页照常出来。
    */
   it('★ 一页存成 `{}` 的草稿不会让整片检索停摆，好页照常出来', async () => {
     const store = createMemoryStore()
@@ -158,7 +158,7 @@ describe('② 创作史：现场扫这一片存储', () => {
     })
     const chunks = await ownChunksOf(store, 'u/12')
     expect(chunks).toHaveLength(1)
-    // ★ 兜成空串而不是补一个默认值：缺的就是缺的（同 `RagChunk` 那条纪律）
+    // 兜成空串而不是补一个默认值：缺的就是缺的（同 `RagChunk` 那条纪律）
     expect(chunks[0]?.text).toBe('还留着的一句话。')
   })
 })
@@ -203,8 +203,8 @@ describe('合成：种子 + 自家', () => {
     const result = await retriever(input)
 
     expect(result.corpusVersion).toBe(SEED.corpusVersion)
-    // ★ 这一条测的是**合成与归属**，所以 `minScore: 0`（谁来都得留着）。
-    //   阈值是另一件事：`idf` 随语料条数变，**2 条文档的测试索引上"1 分"是很高的门槛**
+    // 这一条测的是合成与归属，所以 `minScore: 0`（谁来都得留着）。
+    //   阈值是另一件事：`idf` 随语料条数变，2 条文档的测试索引上"1 分"是很高的门槛
     //   （实测：一个只在一半文档里出现的 bigram 在这份索引上大约 0.8 分，
     //   而在真语料 96 条上约 4.2 分）。阈值凭直觉设一次就会踩到这个坑，
     //   所以它由工单 06 在真语料上量出来，不在这一层猜。
@@ -264,7 +264,7 @@ describe('两个小工具', () => {
     expect(queryTextOf({ theme: '第一次离开家也不怕', interestTags: ['云'] })).toBe(
       '第一次离开家也不怕 云',
     )
-    // 中文名（界面送的那一种）是**主题**，不进查询串（它已经由过滤器管了）
+    // 中文名（界面送的那一种）是主题，不进查询串（它已经由过滤器管了）
     expect(queryTextOf({ theme: '云', interestTags: [] })).toBe('')
   })
 })

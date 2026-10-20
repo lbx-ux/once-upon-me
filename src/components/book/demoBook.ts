@@ -1,16 +1,16 @@
 /**
- * demoBook.ts —— 首页第二屏那本演示绘本的**内容**
+ * demoBook.ts —— 首页第二屏那本演示绘本的内容
  *
  * 只放内容：跨页图路径、每一面的正文、选择点的两个分支。
  * 几何在 flip.ts，渲染在 StorybookFlip.tsx —— W2 的阅读器要换内容时只动这一个文件。
  *
  * 用的是「云」那一批图（docs/demo-book-art-prompts.md），主角是小宇和他的小狗。
- * 4 个跨页 + 封面 + 封底 = **5 叶**，叶表见 flip.ts 顶部。
+ * 4 个跨页 + 封面 + 封底 = 5 叶，叶表见 flip.ts 顶部。
  *
- * ★ 半页不切文件：同一张 3:2 跨页图挂两次，靠 background-position 各取一半。
+ * 半页不切文件：同一张 3:2 跨页图挂两次，靠 background-position 各取一半。
  *   所以这里一个跨页只有一个 image，左半右半是渲染时算出来的（见 buildLeaves）。
  *
- * ★ 朗读**不在这里**，它没有第二张表：第 k 个跨页的图叫什么，它的朗读就叫什么
+ * 朗读不在这里，它没有第二张表：第 k 个跨页的图叫什么，它的朗读就叫什么
  *   （`spread-k.webp` ↔ `spread-k.m4a`，同目录同序号）—— 由 `lib/demo-book-audio.ts`
  *   问盘得出。逐字的稿子与时长预算在 `docs/demo-narration-script.md`。
  */
@@ -28,7 +28,7 @@ export type BranchKey = 'a' | 'b'
 
 type Spread = {
   image: string
-  /** 这一页的正文，叠在**左页**下角（真 HTML 文字，不是画进图里的） */
+  /** 这一页的正文，叠在左页下角（真 HTML 文字，不是画进图里的） */
   text: readonly string[]
   /** 刻度上的短名 */
   caption: string
@@ -69,12 +69,12 @@ const SPREADS: readonly Spread[] = [
 ]
 
 /**
- * 选择点的两个分支 —— **左 = 恐龙云，右 = 帆船云**，
+ * 选择点的两个分支 —— 左 = 恐龙云，右 = 帆船云，
  * 与 P1 封面、P4 那张图里的左右完全一致（出图文档 §一定死的）。
  * 顺序不许改：孩子看图、看按钮，方向反了就成两件事。
  *
  * `icon` 是那朵云自己的小插画（出图文档 P7）—— 按钮里放的就是画面里那一朵，
- * 不是系统 emoji。`emoji` 退成**兜底**：图还没进来时按下去看得见东西，
+ * 不是系统 emoji。`emoji` 退成兜底：图还没进来时按下去看得见东西，
  * 而不是一个空框（见 StorybookFlip 的 .book-choice__icon）。
  */
 export const BRANCHES: Record<BranchKey, Spread & { emoji: string; label: string; icon: string }> =
@@ -106,7 +106,7 @@ export const BOOK_CHOICE_ASK = '你想去哪一朵？'
 export const DEFAULT_BRANCH: BranchKey = 'a'
 
 /**
- * 选择点落在**第 3 个跨页**上（也就是最后一个固定跨页）——
+ * 选择点落在第 3 个跨页上（也就是最后一个固定跨页）——
  * 它后面的第 4 个跨页由分支决定。
  * ★ 这个数必须与 StorybookFlip 的 P_Q 停顿段和选择窗口对齐，那里有开发期自检。
  */
@@ -121,7 +121,7 @@ function spreadFour(branch: BranchKey): Spread {
 
 /**
  * 这一支读到的四个跨页（下标 0 = 第 1 个跨页）。
- * ★ 导出是给 `lib/demo-book-audio.ts` 用的：它要按**图的名字**去盘上找同名音频，
+ * 导出是给 `lib/demo-book-audio.ts` 用的：它要按图的名字去盘上找同名音频，
  *   所以得有地方问"这一支有哪几张图"——而不是在那边再写一份跨页清单。
  */
 export function allSpreads(branch: BranchKey): readonly Spread[] {
@@ -129,7 +129,7 @@ export function allSpreads(branch: BranchKey): readonly Spread[] {
 }
 
 function artFace(spread: Spread, half: 'left' | 'right'): ArtFace {
-  // 正文只跟着**左半**走：右半翻过来时是同一张图的另一半，不该重复出字
+  // 正文只跟着左半走：右半翻过来时是同一张图的另一半，不该重复出字
   return half === 'left'
     ? { kind: 'art', image: spread.image, half, text: spread.text }
     : { kind: 'art', image: spread.image, half }

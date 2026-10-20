@@ -1,16 +1,16 @@
 /**
  * profile.test.ts —— 档案那一层（工单 03）
  *
- * 这一层是"他是谁"的**唯一**出处——2026-10-16 起真的只剩这一份了：`/home` 那道
+ * 这一层是"他是谁"的唯一出处——2026-10-16 起真的只剩这一份了：`/home` 那道
  * 最后的缝也换了过来（原来读 `kids.json`），那个文件与它的读取器一并删掉。
  * 所以这里盯的是四件事：
  *
- * 1. **childId 会被当成路径的一段用**——界面上它来自 `/character/[childId]`
+ * 1. childId 会被当成路径的一段用——界面上它来自 `/character/[childId]`
  *    那一段 URL。目录穿越要挡在数据层，见下面那条测试。
- * 2. **从磁盘读回来的那一份必须全函数**：半截 JSON、人手改过、旧 schema，
+ * 2. 从磁盘读回来的那一份必须全函数：半截 JSON、人手改过、旧 schema，
  *    解析不出来就跳过这一份，不是让整页崩掉（第一版就是在这里炸的）。
- * 3. **`createdAt` 不可被改名改写**：档案没有版本，但"什么时候建的"是事实。
- * 4. **字段表来自领域层**，不在这里另写一份——名字/读音/年龄档/他喜欢什么，
+ * 3. `createdAt` 不可被改名改写：档案没有版本，但"什么时候建的"是事实。
+ * 4. 字段表来自领域层，不在这里另写一份——名字/读音/年龄档/他喜欢什么，
  *    表单收的、引擎认的、档案存的必须是同一组（见 profile.ts 文件头）。
  */
 
@@ -142,14 +142,14 @@ describe('toChildRecord · 从磁盘读回来的那一份是全函数', () => {
       buildChildRecord({ ...base(), gender: 'girl' }),
     )
     // ② 没有这一栏 = 合法的"还没选"（示例档案与这一天之前建的孩子都是这样）。
-    //    ★ 判据落在"键存不存在"上而不是"值是不是 undefined"：
+    //    判据落在"键存不存在"上而不是"值是不是 undefined"：
     //    `JSON.stringify` 不写 undefined 的键，而 `toEqual` 分得清
     //    `{gender: undefined}` 与 `{}` —— 少了后面那一半，
     //    一次真实的磁盘往返就可能悄悄多出一个键
     expect(Object.hasOwn(buildChildRecord(base()), 'gender')).toBe(false)
     expect(Object.hasOwn(buildChildRecord({ ...base(), gender: undefined }), 'gender')).toBe(false)
     // ③ 磁盘上那个词我们不认识（别人手改过、或者以后加了第三档）→ 当没这一栏，
-    //    **不抛**：多一个不认识的词不该让整条档案读不出来
+    //    不抛：多一个不认识的词不该让整条档案读不出来
     //    （与这个函数"缺项一律回 null / 补数组"的整体口径一致）
     const stranger = toChildRecord({ ...base(), gender: 'other' })
     expect(stranger).not.toBeNull()

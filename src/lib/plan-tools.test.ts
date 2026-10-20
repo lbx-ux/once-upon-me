@@ -3,17 +3,17 @@
  *
  * 这一组用例盯三件事：
  *
- * 1. **`check_draft` 是双向的**：越线的正文要**指出具体条款号**，
- *    一段正常正文**一条都不报**。只测一边的话，一个"永远回没通过"的实现会全绿——
- *    而它在这个产品里的后果是**每本书都编不出来**。
+ * 1. `check_draft` 是双向的：越线的正文要指出具体条款号，
+ *    一段正常正文一条都不报。只测一边的话，一个"永远回没通过"的实现会全绿——
+ *    而它在这个产品里的后果是每本书都编不出来。
  *    （这个项目在「空值算不算错」那一族上付过学费，`known-tradeoffs.md` 有。）
- * 2. **空语料是合法结果**，不是失败。`search_past_stories` 取不到东西时
+ * 2. 空语料是合法结果，不是失败。`search_past_stories` 取不到东西时
  *    要说得清"这次没有可参考的"，而不是抛、也不是回一个空串——
  *    空串在模型那边读起来像"被打断了"。
- * 3. **复用而不是另写**：`read_shelf` 数的是**这个孩子**的书（按卡号筛），
+ * 3. 复用而不是另写：`read_shelf` 数的是这个孩子的书（按卡号筛），
  *    `search_past_stories` 走的是 `rag/retrieve.ts` 的同一份排序与阈值。
  *
- * ★ 语料是**注入**的（`seed` / `own`），所以这一组不读盘、不打网络。
+ * 语料是注入的（`seed` / `own`），所以这一组不读盘、不打网络。
  */
 
 import { describe, expect, it } from 'vitest'
@@ -25,7 +25,7 @@ import type { RagChunk, RagIndex } from './rag/corpus.ts'
 import type { CharacterCard } from './engine/index.ts'
 import type { ToolDef } from './engine/tool-loop.ts'
 
-/* ───────────────────────── 夹具 ───────────────────────── */
+/* 夹具 */
 
 const CARD: CharacterCard = {
   schemaVersion: 1,
@@ -95,7 +95,7 @@ function thrownBy(list: Map<string, ToolDef>, name: string, args: unknown): Prom
   return Promise.resolve().then(() => tool.run(args))
 }
 
-/* ───────────────────────── 形状 ───────────────────────── */
+/* 形状 */
 
 describe('四件工具的形状', () => {
   it('名字与 spec 里那张表对得上', () => {
@@ -108,7 +108,7 @@ describe('四件工具的形状', () => {
       expect(tool.spec.parameters['type']).toBe('object')
       expect(tool.spec.description.length).toBeGreaterThan(20)
     }
-    // ★ `ToolDef.run` 允许是**同步**的（`Promise<string> | string`），所以这里不能直接
+    // ★ `ToolDef.run` 允许是同步的（`Promise<string> | string`），所以这里不能直接
     //   用 `.rejects`——同步抛出会在拿到 promise 之前就落地，而失败现场会变成
     //   "测试自己写错了"。包一层 `Promise.resolve().then(...)`，两种形状都接得住。
     await expect(thrownBy(list, 'check_draft', {})).rejects.toThrow(/text/)
@@ -116,7 +116,7 @@ describe('四件工具的形状', () => {
   })
 })
 
-/* ───────────────────────── check_draft：双向 ───────────────────────── */
+/* check_draft：双向 */
 
 describe('★ check_draft 的判据是双向的', () => {
   it('越线的正文要**指出具体条款号**', async () => {
@@ -130,7 +130,7 @@ describe('★ check_draft 的判据是双向的', () => {
       text: '小满把伞举过头顶，雨点打在伞面上，像有人在轻轻敲门。',
     })
     expect(text).toContain('通过了')
-    // ★ 空串会让模型以为"被打断了"；判据要的是它读得出"这段可以用"
+    // 空串会让模型以为"被打断了"；判据要的是它读得出"这段可以用"
     expect(text).not.toBe('')
   })
 
@@ -140,7 +140,7 @@ describe('★ check_draft 的判据是双向的', () => {
   })
 })
 
-/* ───────────────────────── search_past_stories ───────────────────────── */
+/* search_past_stories */
 
 describe('search_past_stories', () => {
   it('查得到时给出正例，并带上"为什么是它"', async () => {
@@ -176,23 +176,23 @@ describe('search_past_stories', () => {
   })
 
   /**
-   * ★ 返回文本是**模型输入**，所以它要带那句数据 / 指令分界（2026-10-20）。
+   * 返回文本是模型输入，所以它要带那句数据 / 指令分界（2026-10-20）。
    *
-   *   这一格与规划里的预检索吃的是**同一份**素材——正例里有一半以上来自家长
+   *   这一格与规划里的预检索吃的是同一份素材——正例里有一半以上来自家长
    *   自己家里那几本书的 `story.json`，而那一份家长可以逐字改。所以"这些字是
-   *   素材不是指令"这件事在两个入口各说一次，而**措辞只有一处**
+   *   素材不是指令"这件事在两个入口各说一次，而措辞只有一处
    *   （`rag/prompt.ts` 的 `SOURCE_BOUNDARY_LINE`）——判据从这里现取，
    *   不抄字面：另写一份的话，改了一边另一边就漂。
    */
   it('★ 返回文本带数据 / 指令分界，且与预检索那一段共用同一句', async () => {
     const text = await tools().get('search_past_stories')?.run({ query: '走进林子 蕨叶 露水' })
     expect(text).toContain(SOURCE_BOUNDARY_LINE)
-    // 位置：声明要排在素材**之前**（排在后面就成了对已读内容的一句附注）
+    // 位置：声明要排在素材之前（排在后面就成了对已读内容的一句附注）
     expect(text?.indexOf(SOURCE_BOUNDARY_LINE)).toBeLessThan(text?.indexOf('可以照着写的') ?? -1)
   })
 
   /**
-   * ★ 反面的一半：**没有素材时不留一句声明**（与 `retrievalBlock` 空结果回空串
+   * 反面的一半：没有素材时不留一句声明（与 `retrievalBlock` 空结果回空串
    *   同一条纪律）。判据落在"那句分界不出现"，因为"空结果也要声明"是一种
    *   看起来更安全的写法，而它会让模型读到一段没有对象的警告。
    */
@@ -203,7 +203,7 @@ describe('search_past_stories', () => {
   })
 })
 
-/* ───────────────────────── read_shelf ───────────────────────── */
+/* read_shelf */
 
 describe('read_shelf', () => {
   it('一本都没有时说得清"这是第一本"', async () => {
@@ -227,19 +227,19 @@ describe('read_shelf', () => {
   })
 })
 
-/* ───────────────────────── character_brief ───────────────────────── */
+/* character_brief */
 
 describe('character_brief', () => {
   it('回的是**画师会拿到的那一段**与核对清单，不是八条锚点的原文', async () => {
     const text = await tools().get('character_brief')?.run({})
     expect(text).toContain('温暖手绘水彩') // promptFragmentOf 的产物
     expect(text).toContain('核对')
-    // ★ 锚点原文本来就在规划提示词里，这条工具的价值正是"另一部分"
+    // 锚点原文本来就在规划提示词里，这条工具的价值正是"另一部分"
     expect(text).toContain('出图提示词的开头')
   })
 })
 
-/* ───────────────────────── 不写盘 ───────────────────────── */
+/* 不写盘 */
 
 describe('★ 四件工具都不写盘', () => {
   it('跑完一轮之后 store 里一条新路径都没有', async () => {

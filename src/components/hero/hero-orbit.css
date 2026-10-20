@@ -1,5 +1,4 @@
-/* ============================================================================
- * HeroOrbit 配套样式 —— 与 HeroOrbit.tsx 搭配使用
+/* HeroOrbit 配套样式 —— 与 HeroOrbit.tsx 搭配使用
  *
  * 引入方式：在 app/globals.css 里 @import，保持全局样式。
  *   不改成 CSS Modules 的原因：组件依赖 `.hero[data-orbit-dragging='true'] .hero-orbit`
@@ -7,14 +6,14 @@
  *   选择器，收益为零。类名都带 hero- 前缀，冲突风险低。
  *
  * 设计令牌不在这里 —— 统一放在 app/globals.css 的 :root，避免两处打架。
- * ========================================================================== */
+ */
 
 /* ============================================================
    1. 滚动容器：比视口高，内部 sticky 钉住
       → 产生 scrollProgress 0→1，而页面视觉上"不动"
       这是整个滚动驱动效果的支点，高度比例可调
 
-      ★ 可滚的距离是 height - 100vh（这里 68vh），不是 height 本身。
+      可滚的距离是 height - 100vh（这里 68vh），不是 height 本身。
         这 68vh 的分配：0→45% 文案依次离场 + 轨道转过半格，
         45%→95% 交接段（轨道下沉让位，下一节同时升起）。
         下一节用负 margin 叠进来，叠入量见 components/book/storybook-flip.css §1 的推导。
@@ -44,19 +43,19 @@
   isolation: isolate;
   background: var(--bg);
   color: var(--ink);
-  perspective: 1400px;          /* ★ 3D 透视，作用于 .hero-orbit */
+  perspective: 1400px;          /* 3D 透视，作用于 .hero-orbit */
 
   /* ---------------------------------------------------------------- 轨道半轴
-     这两个数供**预渲染那一帧**用（`HeroOrbit.tsx` 给每张卡写的内联样式里
+     这两个数供预渲染那一帧用（`HeroOrbit.tsx` 给每张卡写的内联样式里
      是 `calc(系数 * var(--orbit-rx))`，见 lib/orbit.ts 的 restInlineStyle）。
 
-     ★ 它们与 HeroOrbit.frame() 里那两条
+     它们与 HeroOrbit.frame() 里那两条
          rx = min(heroEl.clientWidth * 0.56, 1420)
          ry = min(heroEl.clientHeight * 0.38, 285)
-       是**同一对数**，改一处要改另一处（与 §5 交接段那三个数同一类耦合）。
+       是同一对数，改一处要改另一处（与 §5 交接段那三个数同一类耦合）。
 
      用 cqw/cqh 而不是 vw/vh：容器查询单位认的是 `.hero` 自己的内容盒 ——
-     就是 clientWidth / clientHeight，**不含滚动条**。vw 含滚动条，1440 的窗口上
+     就是 clientWidth / clientHeight，不含滚动条。vw 含滚动条，1440 的窗口上
      会多 15px（rx 差 8.4px），那一跳就发生在 JS 接手的第一帧上。
      container-type: size 要求两个方向都是定尺寸：height 100vh × width 100%，
      成立；reduced-motion 那条把 height 改成 auto，但 .hero 的子元素全是
@@ -77,7 +76,7 @@
 }
 
 /* 首屏把底色让给页面级的背景层（<SceneBackdrop /> 那三幕场景，页面传 backdrop="none"）。
-   ★ 只让"这一层自己那块不透明底板"，不是让它的纹理：点阵与柔光仍挂在这一层里、
+   只让"这一层自己那块不透明底板"，不是让它的纹理：点阵与柔光仍挂在这一层里、
    仍在同一套 --dot / --dot-size 上 —— 三屏共用同一张"桌面"这条不能破。
    实测依据：整页唯一的不透明底色就是这里与 body（两者同为 --bg），
    .storybook 与 .hl 都没有整节底色（它们的点阵是 radial-gradient，其余透明），
@@ -174,7 +173,7 @@
   background: transparent;      /* 不要白底，理由见上 */
   box-shadow: var(--card-shadow);
   opacity: 0;                   /* JS 接管前不可见，避免首帧闪一下
-                                   ★ 2026-10-13 起这条已经**不是首帧的样子**：每张卡
+                                   2026-10-13 起这条已经不是首帧的样子：每张卡
                                    都带预渲染内联样式（lib/orbit.ts），内联压过这里，
                                    所以首帧是一张完整的环。留着这一条是兜底 ——
                                    万一哪天内联没渲染出来，退回"看不见"而不是
@@ -222,7 +221,7 @@
    顺序与入场一致：品牌 → 主张句 → 按钮组。
    clamp 到 0..1 是因为下面的位移要复用同一个值（opacity 自己会夹，translate 不会）。
 
-   ★ 与 HeroOrbit.tsx 的 HANDOFF_START 是一对，改一边另一边就错位：
+   与 HeroOrbit.tsx 的 HANDOFF_START 是一对，改一边另一边就错位：
      最后一层 .20 + 跨度 .30 = copy-p 的 .50，
      而 copy-p = smoothstep(.06, .84, p) 在 p = .45 时正好是 .50 ——
      三层全消失的那一刻，就是轨道开始下沉、下一节开始升起的那一刻。
@@ -335,29 +334,29 @@
 }
 .btn:hover  { transform: translateY(-2px); box-shadow: 0 12px 30px rgba(23, 23, 29, .22); }
 .btn:active { transform: translateY(0); }
-/* ★ 2026-10-18 配色审查 D：这一条**此前不存在**——`hero-orbit.css` 与
+/* 2026-10-18 配色审查 D：这一条此前不存在——`hero-orbit.css` 与
    `storybook-flip.css` 这两个文件里一条 `:focus-visible` 都没有，而首页（`/`）
-   **不在 `.shell` 下**（只有 `(studio)` 那一组包了 `AppShell`），所以拿不到
+   不在 `.shell` 下（只有 `(studio)` 那一组包了 `AppShell`），所以拿不到
    `app-shell.css` 那条 `.shell :focus-visible`。症状：全站其余三十几处都是
    `2px solid var(--accent)`，首页那几颗（含"开始创作"这颗主 CTA）走的是
-   浏览器默认圈——**键盘用户在这里看到的不是这个站的语言**。
-   ★ 3px 的 offset 与 `.shelf__edit` / `.cw__cta` / `.dk__open` 那一档一致：
+   浏览器默认圈——键盘用户在这里看到的不是这个站的语言。
+   3px 的 offset 与 `.shelf__edit` / `.cw__cta` / `.dk__open` 那一档一致：
    这颗按钮底下有阴影，圈贴边会糊进阴影里。 */
 .btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
 /* 次要按钮：半透明的纸。
-   ★ 刻意**不用** backdrop-filter（原来有一条 blur(10px)，2026-10-13 拆了）。
+   刻意不用 backdrop-filter（原来有一条 blur(10px)，2026-10-13 拆了）。
    理由与 .to-top 那条一字不差（见 back-to-top.css）：毛玻璃意味着背景每变一次
-   就要重新采样并重绘它背后那块屏幕 —— 而它背后正是**每帧都在动**的环形轨道，
+   就要重新采样并重绘它背后那块屏幕 —— 而它背后正是每帧都在动的环形轨道，
    等于给一个次要按钮常年挂一份逐帧的合成开销。
    差别只有"透过玻璃看"的那层柔化：底色从 .72 提到 .86 之后，按钮在方案三的
    场景图上也更实、`--ink` 的对比度只高不低（这层底是白的，越实越稳）。 */
 .btn--ghost {
-  /* ★ 2026-10-19：这一条原来是白色字面量 `rgba(255, 255, 255, .86)`，被
+  /* 2026-10-19：这一条原来是白色字面量 `rgba(255, 255, 255, .86)`，被
      `pnpm check:colors` 判红（`--surface` 就是 #ffffff，写死它等于把"这张纸"
-     埋在组件里）。改成 `var(--surface-rgb)` 是**同一个色**，只是把它交还给
+     埋在组件里）。改成 `var(--surface-rgb)` 是同一个色，只是把它交还给
      令牌表 —— 与 `check:colors --fix` 对这类 rgba 的改法一致。 */
   background: rgba(var(--surface-rgb), .86);
   color: var(--ink);
@@ -369,21 +368,21 @@
       （2026-10-19 第二轮加的断点；第三轮把"顶替环的那条横向卡带"删掉了，
         于是这一档只剩"收掉环 + 收掉交接段"两件事。）
 
-      ★ 为什么这一档要动**父层高度**：`.hero-experience` 的 168vh 不是装饰，
+      为什么这一档要动父层高度：`.hero-experience` 的 168vh 不是装饰，
         它是 `scrollProgress` 的量程（§1 那条推导）。手机上环不演、第二屏也不在
         （见 `storybook-flip.css` §8），这一节后面直接接亮点 —— 留 68vh 的空转
         等于要人空滚一屏半。收到一屏之后"首屏就是一屏"，
         实测数与判据见 scripts/chk-mobile.mjs 判据 7。
-      ★ 环在这一档 `display: none`：**图不会跟着走**，12 张封面共 2.8 MB
+      环在这一档 `display: none`：图不会跟着走，12 张封面共 2.8 MB
         （逐张量过：`public/art/` 3.2 MB / 14 个文件）会白下。所以取图那一步
         另有安排 —— `<picture><source media>` 那道门写在 `HeroOrbit.tsx` 里，
         理由与"为什么不能用 `loading="lazy"`"记在那个文件头上。
-      ★ 文案层的 `top` 从 47% 回到 50%：那 3% 是**给环让位**用的（环占着正中），
+      文案层的 `top` 从 47% 回到 50%：那 3% 是给环让位用的（环占着正中），
         环不演了就没有让位的依据。`.hero__glow` 的中心跟着一起回到 50%。
       ============================================================ */
 @media (max-width: 640px) {
   .hero-experience {
-    /* ★ `dvh` 不是 `vh`：手机上地址栏收起/展开时 `vh` 是**不动的那个数**，
+    /* `dvh` 不是 `vh`：手机上地址栏收起/展开时 `vh` 是不动的那个数，
        只写 `vh` 会让首屏比可视区高（或矮）一条地址栏。与 `.reader-page` 同档写法。 */
     height: 100dvh;
   }
@@ -420,7 +419,7 @@
   /* 品牌那一行在 390px 上摆不下：`clamp(40px, 6.4vw, 84px)` 的下限是给
      ≥1280px 的窗口定的（6.4vw 在 1280 上才 82px），手机取到下限 40px ——
      「小主角 · Once Upon Me」按 40px 排出来约 470px，是屏幕的 1.2 倍。
-     ★ 只改 `font-size`：那枚标记（`.mark`）与分隔符（`.sep`）都是 `em` 系的，
+     只改 `font-size`：那枚标记（`.mark`）与分隔符（`.sep`）都是 `em` 系的，
        跟着一起缩 —— 单独再写一条 `.mark` 的宽高就是把同一件事说两遍。 */
   .hero__brand {
     font-size: 26px;
@@ -452,25 +451,25 @@
 
    点「开始创作」之后那 200ms（`components/hero/StartCreating.tsx` 往
    `[data-hero-experience]` 上写 `data-leaving="true"`）：文案（品牌 + 打字句）淡出、
-   点阵与柔光淡出，**然后才切页**。
+   点阵与柔光淡出，然后才切页。
 
-   ★ 三处刻意的：
-     1. **轨道一个像素不动。** 环继续自转。这不是省事——那 12 张的位置**就是接力的起点**
+   三处刻意的：
+     1. 轨道一个像素不动。 环继续自转。这不是省事——那 12 张的位置就是接力的起点
         （`lib/theme-handoff.ts` 在切页那一刻量它们），让环在退场里下沉或缩小，
         量到的位置与用户最后看到的那一帧就会差几十像素，等于自己给自己加一个跳变。
         所以 §3 那条 transform 不改，这里也不加任何新变量。
-     2. **CTA 那一行不在这一组里。** 退场之后到工作台上屏之间还要等一次 RSC
+     2. CTA 那一行不在这一组里。 退场之后到工作台上屏之间还要等一次 RSC
         （dev 下实测 0.5–2.6s，见 shell/AppShell.tsx 文件头那组读数）。那时屏上若只剩一个
         转着的环、一个字都没有，读起来像坏了。所以那颗主按钮留下来，
         120ms 后自己把话说成「正在打开…」（`.btn[data-busy]`，见下）。
         门槛数字与 AppShell 的 `PENDING_SHOW_AFTER_MS` 是同一条规矩：报信要比人开始怀疑慢半拍。
-     3. **`transition` 只写在退场态里**，不写进上面那些常驻规则。
-        `.hero-orbit` 的 transform 是**每帧被滚动驱动**的（交接段那三个数，见 §3），
+     3. `transition` 只写在退场态里，不写进上面那些常驻规则。
+        `.hero-orbit` 的 transform 是每帧被滚动驱动的（交接段那三个数，见 §3），
         常驻一条 transition 会让整段交接发糊——而那三个数是实测钉住的契约。
 
-   ★ 时长 `0.2s` 与 `StartCreating.tsx` 的 `EXIT_MS` 是**同一个数**，改一处要改另一处。
-   ★ 静止模式下这一整节根本不会发生：`StartCreating` 不拦那一下，直接交给 `<Link>`
-     瞬间切页（它也不写 `data-leaving`）。所以这里**没有** `prefers-reduced-motion` 分支——
+   时长 `0.2s` 与 `StartCreating.tsx` 的 `EXIT_MS` 是同一个数，改一处要改另一处。
+   静止模式下这一整节根本不会发生：`StartCreating` 不拦那一下，直接交给 `<Link>`
+     瞬间切页（它也不写 `data-leaving`）。所以这里没有 `prefers-reduced-motion` 分支——
      写了就是一段永远走不到的代码（同 `child-deletion.ts` 那条"多一个永远走不到的分支，
      就多一处会骗人的代码"）。
    ============================================================ */

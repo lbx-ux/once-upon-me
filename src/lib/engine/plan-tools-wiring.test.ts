@@ -3,14 +3,14 @@
  *
  * 三件事，各对应一条会静默坏掉的地方：
  *
- * 1. **判据 8：不传 `tools` 时请求体逐字节等于今天。** 这一层最容易出的错是
+ * 1. 判据 8：不传 `tools` 时请求体逐字节等于今天。 这一层最容易出的错是
  *    "顺手给每条路都带上 `tools: []`"或"统一改成 messages 形状"——
- *    两者都不会让任何测试变红，只会让**每一次跑测**都换一条没量过的路，而横评的数字
+ *    两者都不会让任何测试变红，只会让每一次跑测都换一条没量过的路，而横评的数字
  *    与上一次不可比（B1 已经付过一次这种学费）。
- * 2. **互斥当场抛**：`tools` 与 `retrieve` / `onDelta` 同时给是两个不同的问题，
+ * 2. 互斥当场抛：`tools` 与 `retrieve` / `onDelta` 同时给是两个不同的问题，
  *    静默取一个的话，"第三臂量的是什么"就说不清了。
- * 3. **工具查完之后，后面那一整套校验照旧跑**：模型查了半天，最后交回来的还得是
- *    一张合法故事表——工具循环返回的 `text` 与 `complete()` 返回的**是同一种东西**。
+ * 3. 工具查完之后，后面那一整套校验照旧跑：模型查了半天，最后交回来的还得是
+ *    一张合法故事表——工具循环返回的 `text` 与 `complete()` 返回的是同一种东西。
  */
 
 import { describe, expect, it } from 'vitest'
@@ -21,7 +21,7 @@ import type { ToolDef } from './tool-loop.ts'
 import type { StoryPlanInput } from '../prompts/story-plan.ts'
 import type { TextGenerator, TextRequest, TextResponse } from './providers/types.ts'
 
-/* ───────────────────────── 夹具 ───────────────────────── */
+/* 夹具 */
 
 const STORY = {
   title: '小满和会下雨的恐龙',
@@ -105,7 +105,7 @@ function opts(fake: ReturnType<typeof fakeText>, extra: Partial<PlanOptions> = {
   }
 }
 
-/* ───────────────────────── 判据 8 ───────────────────────── */
+/* 判据 8 */
 
 describe('★ 判据 8：不传 tools 时，请求体逐字节等于今天', () => {
   it('不给 tools → 走 `complete`，请求里**没有** tools / messages 两个字段', async () => {
@@ -124,13 +124,13 @@ describe('★ 判据 8：不传 tools 时，请求体逐字节等于今天', () 
     const request = fake.seen[0]
     expect(request).not.toHaveProperty('tools')
     expect(request).not.toHaveProperty('messages')
-    // ★ 形状还是 system + user 两条老字段
+    // 形状还是 system + user 两条老字段
     expect(typeof request?.system).toBe('string')
     expect(typeof request?.user).toBe('string')
   })
 })
 
-/* ───────────────────────── 带工具那条路 ───────────────────────── */
+/* 带工具那条路 */
 
 describe('带工具那一条', () => {
   it('模型先调工具、再给故事表——后面那整套校验照旧跑', async () => {
@@ -157,7 +157,7 @@ describe('带工具那一条', () => {
   })
 })
 
-/* ───────────────────────── 互斥 ───────────────────────── */
+/* 互斥 */
 
 describe('★ 互斥当场抛，不静默取一个', () => {
   it('tools 与 retrieve 同时给 → 抛，且说清是"同一个问题的两种答案"', async () => {

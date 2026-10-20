@@ -1,12 +1,12 @@
 /**
  * tool-loop.test.ts —— 工具循环的四条边界
  *
- * 这一组用例盯的全是**坏法**，不是"功能正常时对不对"：模型不调工具、
+ * 这一组用例盯的全是坏法，不是"功能正常时对不对"：模型不调工具、
  * 模型调了不存在的工具、模型把参数写成坏 JSON、工具有一次抛了、它一直调不停。
- * 五种都必须是**有明确处置**的，因为它们的现场都长得像"模型变笨了"——
+ * 五种都必须是有明确处置的，因为它们的现场都长得像"模型变笨了"——
  * 而真实成因在循环这边。
  *
- * ★ 用假 provider，不打网络；时钟也是注入的，所以 `ms` 可断言。
+ * 用假 provider，不打网络；时钟也是注入的，所以 `ms` 可断言。
  */
 
 import { describe, expect, it } from 'vitest'
@@ -15,7 +15,7 @@ import { completeWithTools, type ToolDef } from './tool-loop.ts'
 import type { ChatMessage, TextGenerator, TextRequest, TextResponse } from './providers/types.ts'
 import type { EngineEventPayload } from './events.ts'
 
-/* ───────────────────────── 假的生成器 ───────────────────────── */
+/* 假的生成器 */
 
 type Turn = { toolCalls?: { id: string; name: string; argumentsJson: string }[]; text?: string }
 
@@ -64,7 +64,7 @@ function collect(): { events: EngineEventPayload[]; emit: (one: EngineEventPaylo
   return { events, emit: (one) => events.push(one) }
 }
 
-/* ───────────────────────── 第 4 条：一次都不调 = 合法 ───────────────────────── */
+/* 第 4 条：一次都不调 = 合法 */
 
 describe('模型一次都不调工具', () => {
   it('直接给答案 = 合法结果，不是失败（这才叫"让它自己决定要不要查"）', async () => {
@@ -86,7 +86,7 @@ describe('模型一次都不调工具', () => {
   })
 })
 
-/* ───────────────────────── 第 1 条：正常一轮 ───────────────────────── */
+/* 第 1 条：正常一轮 */
 
 describe('调一次工具再回答', () => {
   it('工具结果回填成 role:tool，并且带的是**同一个 id**', async () => {
@@ -128,7 +128,7 @@ describe('调一次工具再回答', () => {
   })
 })
 
-/* ───────────────────────── 第 2 条：工具抛错不终止 ───────────────────────── */
+/* 第 2 条：工具抛错不终止 */
 
 describe('★ 工具抛错不终止整条循环', () => {
   const boom: ToolDef = {
@@ -163,7 +163,7 @@ describe('★ 工具抛错不终止整条循环', () => {
   })
 })
 
-/* ───────────────────────── 第 3 条：参数坏 / 工具名坏 ───────────────────────── */
+/* 第 3 条：参数坏 / 工具名坏 */
 
 describe('模型写坏参数', () => {
   it('坏 JSON 不当成崩溃，喂回去让它自己改', async () => {
@@ -203,7 +203,7 @@ describe('模型写坏参数', () => {
   })
 })
 
-/* ───────────────────────── 第 3 条：步数用完了 ───────────────────────── */
+/* 第 3 条：步数用完了 */
 
 describe('★ 步数用完了必须说出来，不许静默截断', () => {
   it('到顶后**不带 tools** 再问一次，逼它给最终答复', async () => {
@@ -219,8 +219,8 @@ describe('★ 步数用完了必须说出来，不许静默截断', () => {
     expect(fake.seen[3]?.tools).toBeUndefined()
     expect(outcome.steps).toBe(4)
     expect(outcome.toolCalls).toBe(3)
-    // ★ 最后一轮它**还在**要工具（坏网关才做得到）→ 带着已有文本往下走 + 一条非致命 error，
-    //   而**不是抛**：抛出去会把"模型有点怪"升级成整步崩溃，而下游的 schema 校验
+    // 最后一轮它还在要工具（坏网关才做得到）→ 带着已有文本往下走 + 一条非致命 error，
+    //   而不是抛：抛出去会把"模型有点怪"升级成整步崩溃，而下游的 schema 校验
     //   本来就会把"这不是一张合法故事表"说得更清楚
     expect(
       sink.events.some((one) => one.kind === 'error' && one.code === 'tool-budget-exhausted'),
@@ -234,7 +234,7 @@ describe('★ 步数用完了必须说出来，不许静默截断', () => {
       { system: 's', user: 'u' },
       { text: fake.text, tools: [SHELF], maxSteps: 1, emit: sink.emit },
     )
-    // 没有"到顶"那条 error（因为它在这一轮停下来了），但文本是**它自己给的**
+    // 没有"到顶"那条 error（因为它在这一轮停下来了），但文本是它自己给的
     expect(outcome.text).toBe('我知道的就这些')
     expect(sink.events.some((one) => one.kind === 'error')).toBe(false)
   })
@@ -249,7 +249,7 @@ describe('★ 步数用完了必须说出来，不许静默截断', () => {
   })
 })
 
-/* ───────────────────────── 判据 8：不传 tools 时一个字都不变 ───────────────────────── */
+/* 判据 8：不传 tools 时一个字都不变 */
 
 describe('★ 判据 8：不带工具那条路不受影响', () => {
   it('`completeWithTools` 只在有工具时出现；引擎别处走的是老路（这一条钉住形状）', async () => {
@@ -263,7 +263,7 @@ describe('★ 判据 8：不带工具那条路不受影响', () => {
   })
 })
 
-/* ───────────────────────── 时钟 ───────────────────────── */
+/* 时钟 */
 
 /** 每次调用往后走 250ms，于是 `ms` 可断言，不依赖真实时间 */
 function ticking(): () => number {

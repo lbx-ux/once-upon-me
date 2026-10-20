@@ -1,14 +1,14 @@
 /**
- * http.test.ts —— 网络错误的**判据**：`TypeError: fetch failed` 底下到底是哪一件
+ * http.test.ts —— 网络错误的判据：`TypeError: fetch failed` 底下到底是哪一件
  *
  * 这一组用例是 2026-10-15 那次实测的直接产物。跑一本 20 页的书时本机网络断了约 36 分钟，
  * 17 页在日志里只留下同一行字：`/images/generations 网络错误：TypeError: fetch failed`。
  *
- * ★ 为什么这行字不够用，值得单开一组测试：它底下至少是四件事，
- *   而"能不能重试"完全取决于**是哪一件**——
+ * 为什么这行字不够用，值得单开一组测试：它底下至少是四件事，
+ *   而"能不能重试"完全取决于是哪一件——
  *   `ENOTFOUND`（请求没到服务端）重试是安全的；`ECONNRESET`（可能已经处理过）不是，
  *   而"生成类请求超时不许重试"那条纪律防的正是后者。
- *   所以这不是"报错文案更友好"的问题，是**重试策略的判据**。
+ *   所以这不是"报错文案更友好"的问题，是重试策略的判据。
  *
  * 用假 error 喂进去测：真正要钉住的是"会不会往下走一层 `cause`"，
  * 那件事没法靠真发一次断网的请求来测（且不该在测试里依赖网络）。
@@ -253,7 +253,7 @@ describe('fetchBytes：报"哪一跳坏了"，但不许把签名抄进消息', (
     const message = (err as EngineError).message
     expect(message).toContain('下载媒体网络错误')
     expect(message).toContain('ECONNRESET')
-    // ★ 关键是主机名——出图与下载是两个不同的主机，得能分清是哪一跳
+    // 关键是主机名——出图与下载是两个不同的主机，得能分清是哪一跳
     expect(message).toContain('bucket.oss-cn-beijing.aliyuncs.com')
   })
 

@@ -3,12 +3,12 @@
  *
  * 锁三件事，每件都对应一次实测或一条纪律：
  *
- * 1. **缺省关思考**。与平台默认**相反**，是实测决定的（思考模型会把 max_tokens
+ * 1. 缺省关思考。与平台默认相反，是实测决定的（思考模型会把 max_tokens
  *    整条花在思考链上、正文一个字都不写）。这条要是哪天被悄悄翻回 on，
  *    出厂配置就是坏的，而症状要到跑测时才看得见。
- * 2. **配错值必须响**。`LLM_THINKING=auto` 不能当成 none/off 悄悄跑过去——
+ * 2. 配错值必须响。`LLM_THINKING=auto` 不能当成 none/off 悄悄跑过去——
  *    registry.ts 文件头第 2 条就是"不静默降级"。
- * 3. **health 行要报出实际生效的配置**。看不见就等于没配（同一文件头第 1 条）。
+ * 3. health 行要报出实际生效的配置。看不见就等于没配（同一文件头第 1 条）。
  */
 
 import { describe, expect, it } from 'vitest'
@@ -39,7 +39,7 @@ describe('textOptionsOf · 思考开关与预算', () => {
 
   it('★ 配错值拒绝运行，不悄悄退回某一档', async () => {
     // 平台其实还有个 `auto`（实测：UNSUPPORTED_FIELD 的原文是"只支持开启、关闭或自动"），
-    // 但它的**字面量没验证过**，所以这里宁可拒绝也不替用户猜
+    // 但它的字面量没验证过，所以这里宁可拒绝也不替用户猜
     await expect(() => textOptionsOf({ ...BASE, LLM_THINKING: 'auto' })).toThrowError(EngineError)
     await expect(() => textOptionsOf({ ...BASE, LLM_THINKING: 'auto' })).toThrow(/只接受 on \/ off/)
   })

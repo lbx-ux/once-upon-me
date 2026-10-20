@@ -1,83 +1,69 @@
 'use client'
 
 /**
- * HighlightsReel —— 第三屏：项目亮点
+ * HighlightsReel —— 第三屏：项目亮点。
  *
- * 五条亮点，横向轮播。视觉上它是**首屏那个环的压平版**：同样的近大远小、
- * 同样的后排糊、同样的陶土色只点一处，所以整页读起来是一套系统，不是三段拼起来的东西。
+ * 五条亮点，横向轮播。视觉上它是首屏那个环的压平版：同样的近大远小、同样的后排糊、同样的
+ * 陶土色只点一处，所以整页读起来是一套系统，不是三段拼起来的东西。
  *
- * =========================================================================
- * ## 谁写 transform —— 这一屏最容易做错的一件事，先说清楚
+ * 谁写 transform —— 这一屏最容易做错的一件事，先说清楚
  *
  * 一个元素只能有一个 transform 的主人。四层各管各的：
  *
- * | 层 | 主人 | 管什么 |
- * | --- | --- | --- |
- * | `.hl__reel` | **CSS** | 拖拽位移（独立属性 `translate`，只吃 `--hl-drag`） |
- * | `.hl__slot` | **CSS** | 轮播位移 + 深度（scale/opacity/blur/z） |
- * | `.hl__card` | **GSAP** | 倾斜（rotationX/Y）与进场淡入（autoAlpha） |
- * | `.hl__card` 的抬起 | **CSS `translate`** | 独立属性，与 transform 复合，不抢笔 |
- * | `.hl__art` | **GSAP** | 插画层的反向视差（x/y） |
- * | `--hl-gx/gy` | **GSAP** | 暖光斑位置（CSS 变量，0–1 比例） |
+ *   .hl__reel          CSS   拖拽位移（独立属性 `translate`，只吃 `--hl-drag`）
+ *   .hl__slot          CSS   轮播位移 + 深度（scale/opacity/blur/z）
+ *   .hl__card          GSAP  倾斜（rotationX/Y）与进场淡入（autoAlpha）
+ *   .hl__card 的抬起   CSS translate —— 独立属性，与 transform 复合，不抢笔
+ *   .hl__art           GSAP  插画层的反向视差（x/y）
+ *   --hl-gx/gy         GSAP  暖光斑位置（CSS 变量，0–1 比例）
  *
- * 抬起一开始也走 GSAP 的 `y`，然后发现它和进场可能撞在同一个属性上：
- * 人在进场动画跑到一半时把鼠标放上卡片，两个 tween 就抢一个 y。
- * 换成 CSS 的独立 `translate` 属性之后，两者复合在一起，谁也不用让谁；
- * 卡片进场因此**只淡入不位移**，上升的重量感留给标题与控制条。
+ * 抬起一开始也走 GSAP 的 `y`，然后发现它和进场可能撞在同一个属性上：人在进场动画跑到一半时
+ * 把鼠标放上卡片，两个 tween 就抢一个 y。换成 CSS 的独立 `translate` 属性之后，两者复合在
+ * 一起，谁也不用让谁；卡片进场因此只淡入不位移，上升的重量感留给标题与控制条。
+ * 把轮播位移和倾斜写进同一个 `transform` 是另一个等价的笑话：CSS 的 `transition` 会和 GSAP
+ * 的每帧抢，结果是一种"糊但有延迟"的怪抖，从代码里看不出来。
  *
- * 把轮播位移和倾斜写进同一个 `transform` 是另一个等价的笑话：CSS 的 `transition`
- * 会和 GSAP 的每帧抢，结果是一种"糊但有延迟"的怪抖，从代码里看不出来。
- *
- * ## ★ `perspective` 挂在 slot 上，不挂在 reel 上
+ * perspective 挂在 slot 上，不挂在 reel 上
  *
  * 首屏那个环（`hero-orbit.css`）记着一条已经付过学费的坑：带 `preserve-3d` 的祖先一旦
- * `opacity < 1` 或带 `filter`，就会把 3D 子元素压平，遮挡排序当场失效。
- * 这一屏的 slot 正是又 `opacity < 1` 又 `blur()` 的，所以：
+ * `opacity < 1` 或带 `filter`，就会把 3D 子元素压平，遮挡排序当场失效。这一屏的 slot 正是
+ * 又 `opacity < 1` 又 `blur()` 的，所以不写 `preserve-3d`，perspective 挂在每个 slot 自己
+ * 身上，卡与卡的前后关系交给 `z-index`。代价是"五张卡共用一个灭点"变成"各自一个灭点"：
+ * 6° 的倾角下看不出差别，而各自一个灭点反而更接近"桌上摊着五张纸"的读法。
  *
- * - **不写 `preserve-3d`**，perspective 挂在每个 slot 自己身上；
- * - 每张卡只在自己那层 3D 空间里转，卡与卡的前后关系交给 `z-index`。
- *
- * 代价是"五张卡共用一个灭点"变成"各自一个灭点"。6° 的倾角下看不出差别，
- * 而各自一个灭点反而更接近"桌上摊着五张纸"的读法。
- *
- * ## 不做滚轮劫持；自动轮播有，但底下那排控件没有
+ * 不做滚轮劫持；自动轮播有，但底下那排控件没有
  *
  * 上一屏整屏都在用滚轮翻页（340vh）。到这一屏偷偷改滚轮语义，是最恶劣的一种坏。
- *
- * 自动轮播原先写过一条"不做"，后来按产品要求改成"一直走"，代价是**必须**配中断条件，
- * 见下面 `playing` 那四个输入（指针在本节内 / 键盘焦点在本节内 / 标签页在后台 /
- * 正被拖着）。底部那排圆点 + 箭头 + 暂停键**已经整条删掉**（画面太碎），
- * 于是"停一下"这件事只剩三种给力的做法：
+ * 自动轮播原先写过一条"不做"，后来按产品要求改成"一直走"，代价是必须配中断条件，
+ * 见下面 `playing` 那四个输入（指针在本节内 / 键盘焦点在本节内 / 标签页在后台 / 正被拖着）。
+ * 底部那排圆点 + 箭头 + 暂停键已经整条删掉（画面太碎），于是"停一下"这件事只剩三种给力的
+ * 做法：
  *
  *   1. 指针一进这一节就停（鼠标用户）；
- *   2. **键盘焦点一进这一节就停** —— 所以 `.hl__viewport` 自己带 `tabIndex={0}`：
- *      删掉圆点之后本节里没有任何可聚焦元素了，不给它一个 tab 落点，
- *      键盘用户就既进不来也翻不动（`onKeyDown` 挂在节上，焦点不在节内根本不触发）。
- *      Tab 进来 → 停住 → ← → / Home / End 自己翻 → Tab 出去 → 恢复。
- *      ★ 只算**键盘**带来的焦点：Chrome 点一个 `tabindex` 元素也会给它焦点，
- *        那样"点邻居卡"会把自动播永久停住（焦点再也走不掉）。见 `viaPointerRef`。
+ *   2. 键盘焦点一进这一节就停——所以 `.hl__viewport` 自己带 `tabIndex={0}`：删掉圆点之后
+ *      本节里没有任何可聚焦元素了，不给它一个 tab 落点，键盘用户就既进不来也翻不动
+ *      （`onKeyDown` 挂在节上，焦点不在节内根本不触发）。Tab 进来 → 停住 → ← → / Home / End
+ *      自己翻 → Tab 出去 → 恢复。只算键盘带来的焦点：Chrome 点一个 `tabindex` 元素也会给它
+ *      焦点，那样"点邻居卡"会把自动播永久停住。见 `viaPointerRef`。
  *   3. `prefers-reduced-motion` 下一次都不启动。
  *
- * ★ 记一条真实的让步：WCAG 2.2.2 要的是"看得见、点得到"的暂停手段，
- *   上面第 2 条只在键盘用户**想到要 Tab** 时成立。删掉那颗暂停键是产品决定，
- *   不是无障碍改进 —— 已记进 docs/known-tradeoffs.md「已知取舍」，将来要恢复就照 git 里那一版拿回来。
+ * 记一条真实的让步：WCAG 2.2.2 要的是"看得见、点得到"的暂停手段，上面第 2 条只在键盘用户
+ * 想到要 Tab 时成立。删掉那颗暂停键是产品决定，不是无障碍改进——已记进
+ * docs/known-tradeoffs.md「已知取舍」，将来要恢复就照 git 里那一版拿回来。
  *
- * ## 键盘：只在本节内部接
+ * 键盘：只在本节内部接
  *
- * `onKeyDown` 挂在 `<section>` 上（不在 `window` 上）：焦点不在本节里就根本不触发，
- * 于是 ← → 只翻这一节的轮播，不影响别处。Tab 进来 → 自动播停住 → ← → / Home / End
- * 自己翻 → Tab 出去 → 恢复。
- *
- * ★ 这里原先还有一句 `e.stopPropagation()`，挡的是首页第二屏那本书挂在 `window` 上
- *   的全局 ← →（"哪怕书在屏幕外也会翻一页"）。**2026-10-20 那一边把 bug 修在了根上**：
- *   书只在**自己铺在这一屏上**时才接这两个键（`StorybookFlip` 里那个
- *   `ownsArrowKeys`），于是这句拦截没有对象了 —— 留着它就是留一句会过期的解释，
- *   连同它一起删掉。`preventDefault` 留着：那挡的是**浏览器自己的**横向滚动与回到页首。
+ * `onKeyDown` 挂在 `<section>` 上（不在 `window` 上）：焦点不在本节里就根本不触发，于是
+ * ← → 只翻这一节的轮播，不影响别处。这里原先还有一句 `e.stopPropagation()`，挡的是首页
+ * 第二屏那本书挂在 `window` 上的全局 ← →。2026-10-20 那一边把 bug 修在了根上（书只在自己
+ * 铺在这一屏上时才接这两个键，`StorybookFlip` 里那个 `ownsArrowKeys`），于是这句拦截没有
+ * 对象了——留着它就是留一句会过期的解释，连同它一起删掉。`preventDefault` 留着：那挡的是
+ * 浏览器自己的横向滚动与回到页首。
  */
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import gsap from 'gsap'
-/* ★ 这一行不能省，而且 **`pnpm typecheck` 抓不到它被省掉**。
+/* ★ 这一行不能省，而且 `pnpm typecheck` 抓不到它被省掉。
    gsap 的 .d.ts 把插件类声明成了全局（为了让你在类型里写 `ScrollTrigger`），
    所以只写 `gsap.registerPlugin(ScrollTrigger)` 而不 import，
    tsc 一路绿灯、eslint 也不响，只有浏览器会抛 `ReferenceError: ScrollTrigger is not defined`。
@@ -97,8 +83,8 @@ const ART_DURATION = TILT_DURATION + 0.12
 /**
  * 自动轮播的间隔。
  *
- * 6500 → 3200 → **2000**（用户两次要求加快）。绕一圈 5 × 2 = 10 秒。
- * 2000ms **读不完任何一条**：正文最长的那条（第 2 条）**114 个汉字**、三到四行，
+ * 6500 → 3200 → 2000（用户两次要求加快）。绕一圈 5 × 2 = 10 秒。
+ * 2000ms 读不完任何一条：正文最长的那条（第 2 条）114 个汉字、三到四行，
  * 中文默读按 8–10 字/秒算是 11–15 秒。（这个数 2026-10-18 随文案重写复量过：那一版
  * 最长的是第 3 条约 110 字，现在最长的是第 2 条——五条都在 92–114 字之间，
  * 第 5 条的字符总数更大只是因为它里面有几个拉丁词。）
@@ -107,7 +93,7 @@ const ART_DURATION = TILT_DURATION + 0.12
  * 指针一进这一节、键盘一进这一节、标签页一进后台，立刻停住。
  *
  * 与补间的关系：`.hl__slot` 的位移补间是 0.56s（CSS 里，两个数咬在一起）。
- * 2000 - 560 = 1.44 秒是**停着的**，占一轮 72%。再往下压间隔，先动的是补间
+ * 2000 - 560 = 1.44 秒是停着的，占一轮 72%。再往下压间隔，先动的是补间
  * 而不是间隔 —— 否则卡片永远在滑，读起来就是"一直在飞"。
  */
 const AUTOPLAY_MS = 2000
@@ -120,21 +106,22 @@ const DRAG_SLOP_PX = 6
 
 /**
  * 窄屏判定（2026-10-19 第二轮）。
- * ★ **与 `highlights-reel.css` §11 里"藏轮播、显竖排列表"那条媒体查询是同一个数**，
+ * 与 `highlights-reel.css` §11 里"藏轮播、显竖排列表"那条媒体查询是同一个数，
  *   而全仓的手机竖屏断点只有一个（640，见 `globals.css` 那条断点约定），
  *   新写的断点也照它走 —— 改一处要一起改。
  *
- * 这一档在**手机上换成竖排五张全宽卡**（`.hl__list`），理由见 CSS §11 与
+ * 这一档在手机上换成竖排五张全宽卡（`.hl__list`），理由见 CSS §11 与
  * `docs/known-tradeoffs.md`：轮播的卡宽是 `min(560px, 36vw)`，390px 上取 140px，
  * 正文列只有 94px、13px 的字一行放不下 8 个 —— 那不是"手机上小一点"，是读不了。
- * 这个常量管的是**三件"不跑"的事**（不自动播、不建进场时间线、不接指针倾斜），
+ * 这个常量管的是三件"不跑"的事（不自动播、不建进场时间线、不接指针倾斜），
  * 换形态本身由 CSS 决定（两套 DOM 都渲染、靠 display 二选一）。
  */
 const NARROW_QUERY = '(max-width: 640px)'
 
 /** 订阅一次窄屏判定。GSAP 那一条走 `gsap.matchMedia` 自己会跟着窗口变，
  *  这只给两个 `useEffect` 用（它们原本只在 `active` / `playing` 变时才重跑，
- *  转屏那一刻不会自己醒过来）。 */
+ *  转屏那一刻不会自己醒过来）。
+ */
 function useNarrow(): boolean {
   const [narrow, setNarrow] = useState(false)
   useEffect(() => {
@@ -168,10 +155,12 @@ export function HighlightsReel() {
   const [focused, setFocused] = useState(false)
   const [behindTab, setBehindTab] = useState(false)
   /** 正在被拖着。只为"拖的时候别抢"而存在：画面上的拖拽态走 DOM 直写，
-   *  每帧一次的量不进 React（同下面 tilt 那一段的理由）。 */
+   *  每帧一次的量不进 React（同下面 tilt 那一段的理由）。
+   */
   const [dragging, setDragging] = useState(false)
   /** 手动翻一次就换一颗种子，让 2s 从头计 —— 不然刚点到第 3 条，
-   *  0.5 秒后就被自动播扔去第 4 条，等于把人刚做的选择吃掉。 */
+   *  0.5 秒后就被自动播扔去第 4 条，等于把人刚做的选择吃掉。
+   */
   const [timerSeed, setTimerSeed] = useState(0)
   const count = HIGHLIGHTS.length
   const slots = reelState(active, count)
@@ -192,11 +181,11 @@ export function HighlightsReel() {
   const suppressClickRef = useRef(false)
 
   /**
-   * 环形轮播绕回去那一下，恰好有**一张**卡要从最左跨到最右。
+   * 环形轮播绕回去那一下，恰好有一张卡要从最左跨到最右。
    * 不关掉它这一拍的补间，就会看到一张糊着的卡横穿整个轮播中央 —— 像页面坏了。
    * 判据（"位移超过半圈"）与它的推导在 `reelJumped` 里，有测试。
    *
-   * ★ 必须在**渲染时**算出来、与新的 `--hl-offset` 同一个 commit 交出去。
+   * ★ 必须在渲染时算出来、与新的 `--hl-offset` 同一个 commit 交出去。
    *   等 effect 跑完再关过渡就晚了：浏览器已经看见"旧位置 + 有 transition"，动画照跑。
    */
   const offsets = slots.map((s) => s.offset)
@@ -208,7 +197,8 @@ export function HighlightsReel() {
   })
 
   /** 真的在走吗。四个"临时让路"任一成立就停。
-   *  （原来还有一个：用户按暂停键。那排控件整条删掉了，理由与代价见文件头。） */
+   *  （原来还有一个：用户按暂停键。那排控件整条删掉了，理由与代价见文件头。）
+   */
   const playing = !hovered && !focused && !behindTab && !dragging
 
   const sectionRef = useRef<HTMLElement>(null)
@@ -230,14 +220,14 @@ export function HighlightsReel() {
    *
    * 三条规矩决定了这套写法：
    *
-   * 1. **每帧的位移不进 React。** 拖拽量直接写成一个 CSS 变量 `--hl-drag`
+   * 1. 每帧的位移不进 React。 拖拽量直接写成一个 CSS 变量 `--hl-drag`
    *    挂在 `.hl__reel` 上（那一层的 transform 没人认领，见文件头那张表），
    *    React 这边只留一个 `dragging` 布尔用来停自动播。
-   * 2. **拖的时候关过渡，松手那一刻开回来。** 也是直接写 dataset，不走 state ——
+   * 2. 拖的时候关过渡，松手那一刻开回来。 也是直接写 dataset，不走 state ——
    *    否则 `--hl-drag: 0` 写下去时 `data-dragging` 还在（state 要到 commit 才掉），
-   *    浏览器就会先把拖拽量**瞬间抹掉**、再让卡片走剩下的路，看着像弹了一下。
+   *    浏览器就会先把拖拽量瞬间抹掉、再让卡片走剩下的路，看着像弹了一下。
    *    同一个任务里改两处样式，浏览器只算一次"前后状态"，过渡就从当前拖到的位置起算。
-   * 3. **这是环，所以不用橡皮筋。** 直线轮播拖到端头要减速回弹，环上没有端头。
+   * 3. 这是环，所以不用橡皮筋。 直线轮播拖到端头要减速回弹，环上没有端头。
    */
   /**
    * 一次拖拽的收尾：画面回位、过渡开回来、按拖过的距离翻页。
@@ -245,7 +235,7 @@ export function HighlightsReel() {
    * `advance = false` 给 `pointercancel` 用 —— 系统把这次手势接管了（比如它判定
    * 用户其实在纵向滚页面），那就只该把画面放回去，不该替他翻页。
    *
-   * ★ 归零与去属性两句必须**在同一个任务里**写完，见上面第 2 条规矩：
+   * ★ 归零与去属性两句必须在同一个任务里写完，见上面第 2 条规矩：
    *   分开写就会先瞬间抹掉拖拽量、再让卡片补剩下的路。
    */
   const finishDrag = (reel: HTMLUListElement, dx: number, moved: boolean, advance: boolean) => {
@@ -275,7 +265,7 @@ export function HighlightsReel() {
     if (stale) finishDrag(reel, stale.dx, stale.moved, true)
     suppressClickRef.current = false
     dragRef.current = { id: e.pointerId, x0: e.clientX, dx: 0, moved: false }
-    /* ★ 顺序：先写"正在拖"的视觉状态，再去抓指针。
+    /* 顺序：先写"正在拖"的视觉状态，再去抓指针。
        反过来的话 setPointerCapture 一抛异常整段 handler 当场中断 —— 画面没进拖拽态、
        过渡没关，而 dragRef 已经建好了，于是得到"能拖但拖起来黏糊糊"的怪状态，
        比直接坏还难查。实测它会抛：合成事件里没有 active pointer → NotFoundError。 */
@@ -296,7 +286,7 @@ export function HighlightsReel() {
     if (!d || !reel || d.id !== e.pointerId) return
     d.dx = e.clientX - d.x0
     if (!d.moved && Math.abs(d.dx) > DRAG_SLOP_PX) d.moved = true
-    // 没过阈值前**不动画面**：不然"点一下邻居卡"会先抖一格，点击的手感就毁了
+    // 没过阈值前不动画面：不然"点一下邻居卡"会先抖一格，点击的手感就毁了
     if (d.moved) reel.style.setProperty('--hl-drag', `${d.dx}px`)
   }
 
@@ -317,22 +307,22 @@ export function HighlightsReel() {
 
   /* ------------------------------------------------ 自动轮播
    *
-   * ★ 这一条推翻了 spec 与 README 原先的"不做自动轮播"。理由是产品决定，
-   *   不是技术发现，所以规矩改成了"**碰到就停**"，见下面三个中断条件。
+   * 这一条推翻了 spec 与 README 原先的"不做自动轮播"。理由是产品决定，
+   *   不是技术发现，所以规矩改成了"碰到就停"，见下面三个中断条件。
    *
    * 用 setInterval 而不是 rAF：这是离散步进，不是连续量，
    * 拿 rAF 每帧算"到点了没"是白烧一帧。
    *
-   * `prefers-reduced-motion` 下**一次都不启动**（不是启动后再停）：
+   * `prefers-reduced-motion` 下一次都不启动（不是启动后再停）：
    * 减少动效要的是"没有不该动的东西在动"，不是"动得很克制"。
    */
   useEffect(() => {
     if (!playing) return
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-    /* ★ 窄屏一次都不启动（2026-10-19）：手机上这一屏是**竖排五张全宽卡**，
+    /* 窄屏一次都不启动（2026-10-19）：手机上这一屏是竖排五张全宽卡，
        没有"当前卡"这回事 —— 自动播只会每 2 秒把 `active` 推一格，
        同时把那条 aria-live 播报念一遍（"第 3 条，共 5 条…"），
-       而画面上一个字都没变。那不是"跑了没看见"，是**在替用户看一份不存在的东西**。 */
+       而画面上一个字都没变。那不是"跑了没看见"，是在替用户看一份不存在的东西。 */
     if (narrow) return
 
     const id = window.setInterval(() => {
@@ -357,14 +347,14 @@ export function HighlightsReel() {
    *
    * 只动 GSAP 拥有的那一层（`.hl__card` 的 autoAlpha），CSS 拥有的 `.hl__slot` 一律不碰。
    *
-   * ★ 卡片这一段**只淡入，不带上移**。
+   * 卡片这一段只淡入，不带上移。
    *   倾斜的 quickTo 写的是 `.hl__card` 的 `transform`；进场若也写 `y`，
    *   两者就是同一个属性上的两个主人。一个元素一个 transform 主人，
    *   这条规矩在环那一屏与这里各值一次教训。
    *   标题没有倾斜，所以它可以安心用 `y` —— 进场需要那点上升的重量感。
    *   （底部控制条那一排本来也用它，现在整条删了，见文件头。）
    *
-   * ★ 初始的"藏"是 JS 做的，不是 CSS 做的：禁用 JS、或者爬虫抓静态 HTML 时，
+   * 初始的"藏"是 JS 做的，不是 CSS 做的：禁用 JS、或者爬虫抓静态 HTML 时，
    *   五张卡本来就是可见的完整内容。用 CSS 先藏起来再靠 JS 揭开，
    *   等于给「JS 没跑起来」这个状态准备了一份空白页。
    */
@@ -401,7 +391,7 @@ export function HighlightsReel() {
 
   /* ---------------------------------------------------- 指针跟随（hover 倾斜）
    *
-   * 用**原生**监听而不是 React 的 onPointerMove：每帧一次的量不该走 React 调度，
+   * 用原生监听而不是 React 的 onPointerMove：每帧一次的量不该走 React 调度，
    * 而且 handler 要能稳定命名，卸载时 removeEventListener 才拿得到同一个函数。
    *
    * 依赖只有 `active`：哪几张卡允许倾斜会跟着它变。
@@ -409,7 +399,7 @@ export function HighlightsReel() {
   useEffect(() => {
     const section = sectionRef.current
     if (!section) return
-    /* 窄屏不接（2026-10-19）：这一整套是**指针跟随**，30 处注释里逐条写明了它
+    /* 窄屏不接（2026-10-19）：这一整套是指针跟随，30 处注释里逐条写明了它
        只在"鼠标停在卡上"时成立。手机上轮播是 `display: none` 的，
        接上去只会给五张看不见的卡拉 quickTo —— 真正会命中的是 `pointermove`：
        手指拖动页面时它照样派发。 */
@@ -418,7 +408,8 @@ export function HighlightsReel() {
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)')
 
     /** rect 缓存。滚动/resize 只标脏，下一次真的有指针移动才重量 ——
-     *  每次 pointermove 都读布局盒是在主动制造强制同步布局。 */
+     *  每次 pointermove 都读布局盒是在主动制造强制同步布局。
+     */
     const rects = new Map<HTMLElement, Rect>()
     let dirty = true
 
@@ -430,7 +421,7 @@ export function HighlightsReel() {
     }
 
     /**
-     * 取 rect。**指针落在缓存的框外面就直接重量一次。**
+     * 取 rect。指针落在缓存的框外面就直接重量一次。
      *
      * `dirty` 那个标记只挡得住"滚动事件已经派发过"的情形：同一次同步代码里
      * `scrollIntoView()` 之后立刻读，scroll 事件还没 fire，拿到的是旧位置。
@@ -494,7 +485,7 @@ export function HighlightsReel() {
     const onLeave = (e: PointerEvent) => {
       const card = e.currentTarget as HTMLElement
       delete card.dataset.hover
-      // ★ 同一组属性反向补回。快速把鼠标甩出卡外时不写回的话，
+      // 同一组属性反向补回。快速把鼠标甩出卡外时不写回的话，
       //   卡片会永久停在甩出去那一刻的角度上 —— 这类效果最常见的破绽就是它。
       rest(card)
     }
@@ -521,7 +512,7 @@ export function HighlightsReel() {
     }
 
     // 只有当前卡与左右两张允许倾斜：更外面那两张糊成一条缝，转起来只会显得脏。
-    // ★ 这里重新算一遍 slots，而不是用渲染作用域里那个 —— 后者每次渲染都是新数组，
+    // 这里重新算一遍 slots，而不是用渲染作用域里那个 —— 后者每次渲染都是新数组，
     //   进了依赖就等于每次渲染都重绑一遍监听。active 才是这件事唯一的输入。
     const allowed = new Set(
       reelState(active, count)
@@ -573,8 +564,8 @@ export function HighlightsReel() {
     viaPointerRef.current = false
     const delta = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0
     if (!delta && e.key !== 'Home' && e.key !== 'End') return
-    /* `preventDefault` 挡的是**浏览器自己的**横向滚动与回到页首。
-       ★ 这里原先还有一句 `stopPropagation`（挡第二屏那本书的全局 ← →）——
+    /* `preventDefault` 挡的是浏览器自己的横向滚动与回到页首。
+       这里原先还有一句 `stopPropagation`（挡第二屏那本书的全局 ← →）——
        2026-10-20 对方把它修在了根上，那句拦截没有对象了，连同理由一起删掉。 */
     e.preventDefault()
     if (e.key === 'Home') goTo(0)
@@ -602,11 +593,11 @@ export function HighlightsReel() {
         viaPointerRef.current = true
       }}
       onFocusCapture={() => {
-        /* ★ 只有**键盘带来的**焦点才算"人停在这里"。
+        /* 只有键盘带来的焦点才算"人停在这里"。
            `.hl__viewport` 带 tabIndex={0}，而 Chrome 点一个 tabindex 元素会给它焦点 ——
            于是"点邻居卡翻一条"这个动作会把 focused 打成 true，
            而它只有在焦点离开本节时才回 false，焦点却再也走不掉了（用户已经不动了）。
-           结果就是：**鼠标点过一次，自动播永久停住**。
+           结果就是：鼠标点过一次，自动播永久停住。
            这里用"上一次交互是不是指针"区分两种焦点。 */
         if (viaPointerRef.current) {
           viaPointerRef.current = false

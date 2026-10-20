@@ -7,7 +7,7 @@
  *     →  { "kind": "needs-password" }                     // 新用户，票在 cookie 里
  * ```
  *
- * ★ 两种票（会话票 / 设密码票）**都进 cookie，一个字节都不回给浏览器**。
+ * 两种票（会话票 / 设密码票）都进 cookie，一个字节都不回给浏览器。
  * 上一版那张"已验证会话"的注释里写着"它不落盘、刷新就没"——现在是更强的一条：
  * 它压根不出现在 JS 能碰到的地方（httpOnly）。
  */
@@ -18,7 +18,7 @@ import { backendFetch } from '@/lib/auth/backend.ts'
 import { badJson, failureResponse, jsonBody } from '@/lib/auth/bff.ts'
 import { sessionCookie, ticketCookie } from '@/lib/auth/session.ts'
 
-// ★ 段配置必须是**字面量**：成员表达式 Next 读不了，而它只在 `pnpm build` 那一刻才报（判据见 lib/route-config.test.ts）
+// ★ 段配置必须是字面量：成员表达式 Next 读不了，而它只在 `pnpm build` 那一刻才报（判据见 lib/route-config.test.ts）
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 

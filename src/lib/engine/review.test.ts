@@ -1,26 +1,26 @@
 /**
  * review.test.ts —— 内容审核这道闸（`.scratch/rag` 工单 05，评分表 #5）
  *
- * 六组，每组盯一件只会**悄悄**坏掉的事：
+ * 六组，每组盯一件只会悄悄坏掉的事：
  *
- * 1. **词表档本身**：命中的报出条款 id 与上下文；去空白之后也命中；同一条款只报一次；
- *    以及**单字词的收法**（`砍柴` / `鬼点子` / `丑小鸭` / `打伞` 不许命中——
+ * 1. 词表档本身：命中的报出条款 id 与上下文；去空白之后也命中；同一条款只报一次；
+ *    以及单字词的收法（`砍柴` / `鬼点子` / `丑小鸭` / `打伞` 不许命中——
  *    误拦与漏拦一样贵，理由在 `rag/review-corpus.ts` 文件头第三节）。
- * 2. **裁决**：`rewrite` → `flag`（要改一版）、`block` → `block`（当场拒发）、
+ * 2. 裁决：`rewrite` → `flag`（要改一版）、`block` → `block`（当场拒发）、
  *    两者同时命中时取 `block`。★ `flag` 不是"提示一下照样放行"，它在闸门上是"这一版不能出去"。
- * 3. **审到哪些字**：书名、`scene`、`imagePrompt`、选择点的 `spoken`——
+ * 3. 审到哪些字：书名、`scene`、`imagePrompt`、选择点的 `spoken`——
  *    漏掉任何一处，那一处就是一道没有闸门的门（`spoken` 会被念出来，
  *    `imagePrompt` 会被画出来）。
- * 4. **反例**：12 本人工写过的真样书，96 段正文一条都不许命中。
- *    ★ 这一组比正向用例更要紧——这个项目在「空值算不算错」那节付过一次假拦的学费：
- *      误拦会让一本**正常的**书变成"生成失败"，而家长没有任何办法绕过它。
- * 5. **闸门真的接上了**（`planStory`）：`flag` 带反馈重写且原因**具体到条款 id**、
- *    `block` 当场抛 `review-blocked` **不重试**（只调一次模型）、干净的一版一个
+ * 4. 反例：12 本人工写过的真样书，96 段正文一条都不许命中。
+ *    这一组比正向用例更要紧——这个项目在「空值算不算错」那节付过一次假拦的学费：
+ *      误拦会让一本正常的书变成"生成失败"，而家长没有任何办法绕过它。
+ * 5. 闸门真的接上了（`planStory`）：`flag` 带反馈重写且原因具体到条款 id、
+ *    `block` 当场抛 `review-blocked` 不重试（只调一次模型）、干净的一版一个
  *    `review` 事件都不发。
- * 6. **家长走的那条路**（`planBook`）也拦得住。
+ * 6. 家长走的那条路（`planBook`）也拦得住。
  *
- * ★ 树的造法一律走 `buildTree`（引擎自己那一步），不手搓 `StoryTree`：
- *   手搓出来的那棵树只满足**测试作者以为的**形状，而闸门读的是真树的字段。
+ * 树的造法一律走 `buildTree`（引擎自己那一步），不手搓 `StoryTree`：
+ *   手搓出来的那棵树只满足测试作者以为的形状，而闸门读的是真树的字段。
  */
 
 import { readFile } from 'node:fs/promises'
@@ -96,7 +96,7 @@ function treeOf(pages: readonly NodeDraft[], title = CLEAN_TITLE) {
 }
 
 /**
- * 假文本：按队列回话。★ 先取这一轮的回复**再**自增——反过来写的话第一次拿到的
+ * 假文本：按队列回话。★ 先取这一轮的回复再自增——反过来写的话第一次拿到的
  * 就是 `replies[1]`，那条"带反馈重写"的用例会当场变成"一次就过"（真错过一次，
  * 红得很安静；同一条坑见 `plan-retrieval.test.ts`）。
  */
@@ -170,7 +170,7 @@ describe('① 词表档', () => {
       disposition: 'rewrite',
       word: '血',
     })
-    // `context` 取的是**原文**里那一小段（给人一眼确认用的），不是被我们改过的那份
+    // `context` 取的是原文里那一小段（给人一眼确认用的），不是被我们改过的那份
     expect(problems[0]?.context).toContain('血从窗帘')
   })
 
@@ -196,14 +196,14 @@ describe('① 词表档', () => {
   })
 
   /**
-   * ★ 上面那条管**误拦**，这一条管另一半：**收进来的单字要真命中**——否则"收了它"
+   * ★ 上面那条管误拦，这一条管另一半：收进来的单字要真命中——否则"收了它"
    *   只是注释里的说法。
    *
-   *   现在收的是**三个**：`死`（R-03）、`血`（R-01）、`踹`（R-02）。
-   *   ★ `踹` 是 2026-10-20 用户拍板**保留单字**的（不拆回 `踹倒`），理由写在
+   *   现在收的是三个：`死`（R-03）、`血`（R-01）、`踹`（R-02）。
+   *   `踹` 是 2026-10-20 用户拍板保留单字的（不拆回 `踹倒`），理由写在
    *     `rag/review-corpus.ts` 第三节：它的日常用法只有"踢"这一个意思，
    *     而踢踹这类动作本来就不该出现在这本书里（提示词那侧也逐个点名了它）。
-   *   ★ 判据两边都从词表**现取**、并**要求每个单字都有例子**：以后再加一个单字，
+   *   判据两边都从词表现取、并要求每个单字都有例子：以后再加一个单字，
    *     这条会红——那一刻正是"它进提示词了吗、真书里有例子吗"该被问一次的时候。
    */
   it('★ 收进来的单字要真命中，且每个单字都得有一个例子', () => {
@@ -256,7 +256,7 @@ describe('③ reviewStory 审到哪些字', () => {
     const result = reviewStory(treeOf(CLEAN_PAGES))
     expect(result.verdict).toBe('pass')
     expect(result.pages.every((page) => page.verdict === 'pass')).toBe(true)
-    // ★ `pass` **不等于**"全查过了"：语义档那三条今天没有判据（`review.ts` 文件头第三节），
+    // `pass` 不等于"全查过了"：语义档那三条今天没有判据（`review.ts` 文件头第三节），
     //   所以要说得出来是哪三条。少了这一条，这个字段会退化成"永远是空的"。
     expect(result.unchecked).toEqual(
       REVIEW_CLAUSES.filter((clause) => clause.detect === 'semantic').map((clause) => clause.id),
@@ -335,7 +335,7 @@ describe('④ 反例：12 本真样书一段都不许误拦', () => {
         }
       }
     }
-    // ★ 断言写成这样是为了让红的时候**直接看得到是哪一段哪一个词**——
+    // 断言写成这样是为了让红的时候直接看得到是哪一段哪一个词——
     //   一句 `expect(hits).toEqual([])` 只会给一个空数组（本仓库已有先例）
     expect(hits).toEqual([])
     // 顺带证明这一组真的跑到了 12 本（一个空循环也会"通过"）
@@ -344,9 +344,9 @@ describe('④ 反例：12 本真样书一段都不许误拦', () => {
   })
 
   it('stub 那一版 demo 故事（`engine-run --mode=stub` 用的那一份）也零命中', async () => {
-    // ★ 它也是**人写的**，而且是每次架构验收都会真的过一遍闸门的那一份
+    // 它也是人写的，而且是每次架构验收都会真的过一遍闸门的那一份
     //   （`scripts/engine-run.mts` 把它当规划的替身）。放进这一组是因为
-    //   上面那 96 段样书**不是**它们那种形状：样书没有 `scene` / `imagePrompt` /
+    //   上面那 96 段样书不是它们那种形状：样书没有 `scene` / `imagePrompt` /
     //   选择点，而这一份有。上一版的 `点着`（"点着头"）就是被这一类句子抓出来的。
     const raw = await readFile(join(process.cwd(), 'scripts/fixtures/demo-plan.json'), 'utf8')
     const plan = JSON.parse(raw) as {
@@ -384,7 +384,7 @@ describe('⑤ 闸门接上了：planStory 的 flag 与 block', () => {
     })
     expect((review as { reason: string }).reason).toContain('R-01')
     const retry = events.find((event) => event.kind === 'retry')
-    // ★ 判据 5 的原话：「失败原因**具体到条款 id**，不是「生成失败」」
+    // 判据 5 的原话：「失败原因具体到条款 id，不是「生成失败」」
     expect((retry as { reason: string }).reason).toContain('R-01')
     // 改过之后那一版是过得去的，所以它发得出来
     expect(events.some((event) => event.kind === 'plan-ready')).toBe(true)
@@ -404,7 +404,7 @@ describe('⑤ 闸门接上了：planStory 的 flag 与 block', () => {
     await expect(planStory(INPUT, { text, form: 'solo', emit })).rejects.toMatchObject({
       code: 'review-blocked',
     })
-    // ★ 这一条是 `ClauseDisposition` 里 `block` 的**定义**：让模型看着那段内容再改一遍，
+    // 这一条是 `ClauseDisposition` 里 `block` 的定义：让模型看着那段内容再改一遍，
     //   本身就是一次多余的接触。`maxAttempts` 是 3，这里必须真的是 1。
     expect(calls()).toBe(1)
     expect(events.some((event) => event.kind === 'retry')).toBe(false)
@@ -429,7 +429,7 @@ describe('⑤ 闸门接上了：planStory 的 flag 与 block', () => {
   })
 })
 
-/* ───────────────── 接线：家长走的那条路（`planBook`）也拦得住 ───────────────── */
+/* 接线：家长走的那条路（`planBook`）也拦得住 */
 
 const CARD: CharacterCard = {
   schemaVersion: 1,
@@ -483,13 +483,13 @@ describe('⑥ planBook 那一层（角色卡校验之后、事件工厂之前的
       (error: unknown) => error as { code: string; message: string },
     )
     // ★ 拦下它的是审核（`R-01`），不是别的什么半路绊住——
-    //   所以断言落在**条款 id**上，而不是「反正报错了」
+    //   所以断言落在条款 id上，而不是「反正报错了」
     expect(failure?.message).toContain('R-01')
     expect(failure?.message).toContain('内容审核没过')
   })
 })
 
-/* ───────────────── 第二道闸：出图之前（家长改过的那一版也要审） ───────────────── */
+/* 第二道闸：出图之前（家长改过的那一版也要审） */
 
 describe('⑦ illustrateBook 的审核：拦在第一张图之前', () => {
   it('家长改出来的越线正文：抛 review-blocked，且**一张图都没画**', async () => {
@@ -513,7 +513,7 @@ describe('⑦ illustrateBook 的审核：拦在第一张图之前', () => {
       store: createMemoryStore(),
     } as unknown as ProviderBundle
 
-    // ★ 这一版**不是**模型写的第 1 版：它是家长在故事闸门上改出来的那一版
+    // 这一版不是模型写的第 1 版：它是家长在故事闸门上改出来的那一版
     //   （盘上 `story.json` 里的字才是要拿去画、拿去念的）。
     //   规划那一道闸看不到它——只留规划那一道，家长手打进去的每个字都绕过了闸门。
     const tree = treeOf([
@@ -533,14 +533,14 @@ describe('⑦ illustrateBook 的审核：拦在第一张图之前', () => {
     )
     expect(failure?.code).toBe('review-blocked')
     expect(failure?.message).toContain('R-02')
-    // ★ 判据要选**只有真做才会不同**的量：出图是这条流水线上唯一真花钱的一步，
-    //   而"拦在它之前"这件事的唯一证据就是**调用次数为 0**。
+    // 判据要选只有真做才会不同的量：出图是这条流水线上唯一真花钱的一步，
+    //   而"拦在它之前"这件事的唯一证据就是调用次数为 0。
     //   只断言"抛了错"的话，把闸门挪到画完之后也照样绿。
     expect(imageCalls).toBe(0)
     expect(events.find((event) => event.kind === 'review')).toMatchObject({
       stage: 'auditing',
       check: 'safety',
-      // ★ `flag` 不是 `block`，而这一道闸**照样拒发**：`R-02` 的处置是"重写一版"，
+      // `flag` 不是 `block`，而这一道闸照样拒发：`R-02` 的处置是"重写一版"，
       //   但在这里没有那条路——`illustrateBook` 不重做规划（那会把家长改的东西丢掉），
       //   所以这一道上两种处置的下一步都是"退回去改那一份故事"。
       //   断言写成 `flag` 是为了把这个差别钉住：把它改成 `block` 会红，
@@ -550,7 +550,7 @@ describe('⑦ illustrateBook 的审核：拦在第一张图之前', () => {
   })
 })
 
-/* ───────── 家长那句自由输入过闸（2026-10-19，`.scratch/safety` 工单 02）───────── */
+/* 家长那句自由输入过闸（2026-10-19，`.scratch/safety` 工单 02） */
 
 describe('⑧ 家长那句自由输入：同一份词表，但处置只有一种', () => {
   it('命中就给得出条款 id、类别与**是哪一格**', () => {
@@ -579,11 +579,11 @@ describe('⑧ 家长那句自由输入：同一份词表，但处置只有一种
       planStory({ ...INPUT, theme: '小狗死掉的故事' }, { text, form: 'solo', emit }),
     ).rejects.toMatchObject({ code: 'review-blocked' })
 
-    // ★ 这条是这一档**全部价值的一半**：拦在模型之前，那段内容根本没接触过模型。
+    // 这条是这一档全部价值的一半：拦在模型之前，那段内容根本没接触过模型。
     //   只断言"抛了错"的话，把闸门挪到第一次调用之后也照样绿
     expect(calls()).toBe(0)
     const review = events.find((event) => event.kind === 'review')
-    // ★ `flag` 而不是 `block`：`R-03` 的处置是"重写一版"，而这道闸上**两种处置的
+    // `flag` 而不是 `block`：`R-03` 的处置是"重写一版"，而这道闸上**两种处置的
     //   下一步是同一件事**（都是拒发）——这是别人的话，没有"我们替你重写"这条路。
     //   事件里的 `verdict` 仍然如实报是哪一种，让界面说得清。
     expect(review).toMatchObject({ stage: 'planning', check: 'safety', verdict: 'flag' })

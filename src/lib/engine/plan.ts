@@ -4,12 +4,12 @@
  * 这条流水线是 #1「大模型集成质量」的主体，也是 §9.2 判据 1 的测量对象。
  * 三件事必须在这一层做对，缺一个通过率就会莫名偏低：
  *
- * 1. **校验与树形检查分开报**。Schema 管形状（字段在不在、长度对不对），
+ * 1. 校验与树形检查分开报。Schema 管形状（字段在不在、长度对不对），
  *    tree.ts 管语义（分支数、父子引用、形态约束）。混在一起，
  *    重试提示就会说"格式不对"，而模型上一轮其实是格式全对、分支少了一条。
- * 2. **重试必须带上具体问题**（`formatFailures` / TreeProblem 清单）。
+ * 2. 重试必须带上具体问题（`formatFailures` / TreeProblem 清单）。
  *    原样重发一次是拿钱换同样的输出。
- * 3. **重试次数是产出数据，不是内部细节**。它回填报价表 §10.1 的 N_plan，
+ * 3. 重试次数是产出数据，不是内部细节。它回填报价表 §10.1 的 N_plan，
  *    也是"这批候选里谁的结构化输出最稳"的直接证据。所以它随结果返回。
  */
 
@@ -31,27 +31,27 @@ import type { TextDelta, TextGenerator, TextRequest } from './providers/types.ts
 import type { RetrievePair } from '../rag/retrieve.ts'
 
 /**
- * 一次检索的结果：**取到的东西 + 用的是哪一版语料**。
+ * 一次检索的结果：取到的东西 + 用的是哪一版语料。
  *
- * ★ `corpusVersion` 由检索方（`rag/load.ts` 那个 helper）带回来，不由 `plan.ts` 去猜：
+ * `corpusVersion` 由检索方（`rag/load.ts` 那个 helper）带回来，不由 `plan.ts` 去猜：
  *   它来自索引文件，而索引文件只有载入它的那一侧见过。
  */
 export type PlanRetrieval = { pair: RetrievePair; corpusVersion: string }
 
 /**
- * 「在动手写之前，先把以前写过的相近内容找出来」——**引擎对这一层的唯一要求**。
+ * 「在动手写之前，先把以前写过的相近内容找出来」——引擎对这一层的唯一要求。
  *
- * ★ 它是**一个入参**，不是一条新流水线。`README §五` 记过那次教训：
+ * 它是一个入参，不是一条新流水线。`README §五` 记过那次教训：
  *   横评脚本自己搭一条平行路，量出来的数「不是引擎要用的那个数」。
  *   所以检索挂在 `planStory` 的入参上，开与关都只改这一个字段——
  *   工单 06 的对照跑测要的就是"只差这一个"的两臂。
- * ★ 传 `undefined` = 这一轮不检索（脚本、离线跑测、以及将来的"关掉它"）。
+ * 传 `undefined` = 这一轮不检索（脚本、离线跑测、以及将来的"关掉它"）。
  *   那时提示词逐字节等于 v3 的内容（见 `prompts/story-plan.ts` 那条 ☆）。
- * ★ **它是 async 的**，而这件事决定了失败怎么走：装载语料的 I/O 藏在检索方自己身上
- *   （`rag/load.ts` 是惰性的），所以"索引读不到"这一类错**从这里抛出来**，
+ * 它是 async 的，而这件事决定了失败怎么走：装载语料的 I/O 藏在检索方自己身上
+ *   （`rag/load.ts` 是惰性的），所以"索引读不到"这一类错从这里抛出来，
  *   由下面 `retrieveOnce` 的 catch 接住并发事件。
  *   ★ 反过来（让调用方在路由里先 await 好）会撞一堵墙：路由手上只有
- *   `EngineEvent`（带 `seq` / `at`），**没有事件工厂**——它发不出合法的 payload。
+ *   `EngineEvent`（带 `seq` / `at`），没有事件工厂——它发不出合法的 payload。
  *   让引擎自己经历这次失败，才既发得出事件、也不会有人伪造序号。
  */
 export type PlanRetriever = (input: StoryPlanInput) => Promise<PlanRetrieval>
@@ -59,12 +59,12 @@ export type PlanRetriever = (input: StoryPlanInput) => Promise<PlanRetrieval>
 export type PlanOutcome = {
   tree: StoryTree
   /**
-   * 模型吐回来的那张表（书名 + 每页草稿），也就是 `tree` 的**原材料**。
+   * 模型吐回来的那张表（书名 + 每页草稿），也就是 `tree` 的原材料。
    *
-   * ★ 2026-10-17（故事闸门）加它：家长看到、能改的那一份**就是它**，
+   * 2026-10-17（故事闸门）加它：家长看到、能改的那一份就是它，
    *   盘上的 `books/<id>/story.json` 存的也是它（`lib/story-draft.ts`）。
    *   已经建好的 `tree` 不能反过来当编辑界面用——它上面带着 `nodeId` / `pathFromRoot` /
-   *   `next` 这些**派生出来**的东西，让家长去改它们既没有意义，也不可能改对。
+   *   `next` 这些派生出来的东西，让家长去改它们既没有意义，也不可能改对。
    */
   doc: PlanDraft
   /** 第几次调用才成功。1 = 一次过，是判据 1 的原始数据 */
@@ -74,7 +74,7 @@ export type PlanOutcome = {
   modelId: string
   promptVersion: string
   /**
-   * 这一版故事是**看着哪些旧文本**写出来的（2026-10-19）。**没开检索就没有这个字段**。
+   * 这一版故事是看着哪些旧文本写出来的（2026-10-19）。没开检索就没有这个字段。
    * ★ 三种状态各不相同，别把它们并成两种（见 `domain.ts` 的 `RetrievalProvenance`）：
    *   没有这个字段 = 这一轮没打算检索；`corpusVersion: null` = 打算检索但没跑成；
    *   有值 = 检索跑了，`hits` 为空也是有信息量的（这次没取到相近的）。
@@ -88,37 +88,37 @@ export type PlanOptions = {
   /** 含首次在内的最大次数。默认 3：两次带反馈的重试足够暴露"这家不会出 JSON" */
   maxAttempts?: number
   /**
-   * 覆盖生成器的 token 预算。**通常不传**——留着它是给"同一家模型换个档"用的，
+   * 覆盖生成器的 token 预算。通常不传——留着它是给"同一家模型换个档"用的，
    * 常规路径上预算由适配器按模型决定。
    */
   maxTokens?: number
   /**
-   * 流式增量（工单 07）。**给了它就走 `stream()`，不给就走 `complete()`**。
+   * 流式增量（工单 07）。给了它就走 `stream()`，不给就走 `complete()`。
    *
-   * ★ 默认不给，是刻意的：脚本、横评、测试里的每一次规划调用都与加了这条路之前
-   *   **逐字节相同**（同一条纪律见 `TextRequest.plainText` 的注释）。
-   *   流式是**界面要的东西**，不是引擎的新默认——把它设成默认，等于让每一次跑测
+   * 默认不给，是刻意的：脚本、横评、测试里的每一次规划调用都与加了这条路之前
+   *   逐字节相同（同一条纪律见 `TextRequest.plainText` 的注释）。
+   *   流式是界面要的东西，不是引擎的新默认——把它设成默认，等于让每一次跑测
    *   都换一条没量过的 HTTP 路径。
-   * ★ 重试时也会走流式（第二次起带着上一轮的问题重发）：界面看到的是"这一版又写了一遍"，
+   * 重试时也会走流式（第二次起带着上一轮的问题重发）：界面看到的是"这一版又写了一遍"，
    *   而 `seq` 仍是发射顺序，所以两条流的 delta 不会串。
    */
   onDelta?: (delta: TextDelta) => void
-  /** 流式的**空闲**超时（多久没有新 delta 算失败）。见 http.ts 的 DEFAULT_SSE_IDLE_TIMEOUT_MS */
+  /** 流式的空闲超时（多久没有新 delta 算失败）。见 http.ts 的 DEFAULT_SSE_IDLE_TIMEOUT_MS */
   idleTimeoutMs?: number
   /**
-   * 检索（2026-10-19）。**不传就是这一轮不检索**——与 `onDelta` 同一条纪律：
+   * 检索（2026-10-19）。不传就是这一轮不检索——与 `onDelta` 同一条纪律：
    * 新能力不做默认，因为默认一开，脚本与跑测走的就是一条没量过的路。
    */
   retrieve?: PlanRetriever
   /**
-   * 让模型**自己决定要不要查**（2026-10-19，`.scratch/mcp` 工单 06）。
+   * 让模型自己决定要不要查（2026-10-19，`.scratch/mcp` 工单 06）。
    *
-   * ★ 它与 `retrieve` **互斥**，同时给会当场抛。理由不是实现难，是**它们是同一个问题的
+   * 它与 `retrieve` 互斥，同时给会当场抛。理由不是实现难，是**它们是同一个问题的
    *   两种答案**："动笔之前先看以前写过什么"这件事，要么我们把材料先摆好（`retrieve`），
    *   要么把查找的工具交给模型（`tools`）。两个都给的话，"第三臂比第二臂好在哪"
    *   这个问题就答不出来了——两臂的差别会退化成"检索了两次 vs 一次"。
    *   工单 08 的三臂对照（关检索 / 预检索 / 模型自选工具）量的是这件事。
-   * ★ 与 `onDelta` 也互斥：工具循环要的是**完整回包**，而增量与 `tool_calls`
+   * 与 `onDelta` 也互斥：工具循环要的是完整回包，而增量与 `tool_calls`
    *   的分片拼装是两件都不简单的事（`TextRequest.tools` 那段）。
    */
   tools?: readonly ToolDef[]
@@ -131,7 +131,7 @@ export async function planStory(input: StoryPlanInput, opts: PlanOptions): Promi
   const maxAttempts = opts.maxAttempts ?? 3
   const failures: string[] = []
 
-  // ★ 两条互斥在这里**当场抛**（见 `PlanOptions.tools` 那段）：静默取一个的话，
+  // 两条互斥在这里当场抛（见 `PlanOptions.tools` 那段）：静默取一个的话，
   //   "第三臂"量出来的东西会是一条谁也没定义过的路，而报告上它看起来很正常。
   if (opts.tools && opts.retrieve) {
     throw new EngineError(
@@ -147,17 +147,17 @@ export async function planStory(input: StoryPlanInput, opts: PlanOptions): Promi
   }
 
   /**
-   * ⓪ **家长那句自由输入过闸**（2026-10-19，`.scratch/safety` 工单 02）。
+   * ⓪ 家长那句自由输入过闸（2026-10-19，`.scratch/safety` 工单 02）。
    *
-   * ★ 为什么它非有不可：这一层下面紧接着的两件事都**原样吃家长写的字**——
+   * 为什么它非有不可：这一层下面紧接着的两件事都原样吃家长写的字——
    *   `retrieveOnce` 把那句话送去 embedding，`storyPlanUser` 把它拼进提示词
    *   （`主题：${input.theme}` / `家长希望孩子从中得到：${input.wish}` /
-   *   `家长看完第一版之后的新要求：…`）。在这之前，那三处是**任意文本直达**。
-   * ★ 为什么在最前面，而不是"反正出图前还有一道"：下面那两道闸审的是**模型写出来的东西**。
-   *   家长写"小狗流血死掉的故事"，模型**照做**的概率远高于它自己想起来写——
+   *   `家长看完第一版之后的新要求：…`）。在这之前，那三处是任意文本直达。
+   * 为什么在最前面，而不是"反正出图前还有一道"：下面那两道闸审的是模型写出来的东西。
+   *   家长写"小狗流血死掉的故事"，模型照做的概率远高于它自己想起来写——
    *   那就变成"先让它写一版越线的、再拦下、再让它重写"，多花一次文本调用，
    *   而且让模型看了一遍那段内容（`ClauseDisposition` 里 `block` 那条理由）。
-   * ★ 处置是**拒发**，`flag` 与 `block` 一样：这是别人的话，没有"重写一版"这条路。
+   * ★ 处置是拒发，`flag` 与 `block` 一样：这是别人的话，没有"重写一版"这条路。
    */
   const inputReview = reviewInput([
     { label: '主题', text: input.theme },
@@ -182,8 +182,8 @@ export async function planStory(input: StoryPlanInput, opts: PlanOptions): Promi
     )
   }
 
-  // ★ 检索在**重试循环之外**，三次 attempt 共用同一份。
-  //   理由是重试要改的是**格式**（文件头第 1 条：格式问题与语义问题分开报），
+  // 检索在重试循环之外，三次 attempt 共用同一份。
+  //   理由是重试要改的是格式（文件头第 1 条：格式问题与语义问题分开报），
   //   不是"再找一批参考"。重试时换语料会让"这次为什么变好了"变成一个说不清的问题，
   //   而这批候选里谁的格式化输出最稳，正是要靠这个数回答的。
   const retrieval = await retrieveOnce(input, opts)
@@ -200,19 +200,19 @@ export async function planStory(input: StoryPlanInput, opts: PlanOptions): Promi
       user: attempt === 1 ? baseUser : withFeedback(baseUser, failures),
       jsonSchema: planJsonSchema(),
       temperature: 0.8,
-      // ★ 这里**不给** maxTokens：预算随模型走，不随阶段走。
+      // 这里不给 maxTokens：预算随模型走，不随阶段走。
       //   写死在规划阶段的那版是 4096，而实测思考模型会把这个数整条花在思考链上、
       //   正文一个字都不写（见 openai-text.ts 的 DEFAULT_TEXT_MAX_TOKENS）。
       //   谁最清楚该给多少？适配器——它知道自己在跟哪个模型说话。
       maxTokens: opts.maxTokens,
     }
-    // ★ 这里**不写 `opts.text.stream &&`** 那种兜底：`stream` 在接口上是必填的
+    // 这里不写 `opts.text.stream &&` 那种兜底：`stream` 在接口上是必填的
     //   （见 types.ts 里那段理由），写一个 "有就用、没有就算了" 的判断，
     //   等于把"必填"退回成一个建议——而它一旦真的缺失，症状是"界面上什么都没发生"
     const response = opts.tools
-      ? // ★ 带工具那一档走 `completeWithTools`（2026-10-19，`.scratch/mcp` 工单 06）：
+      ? // 带工具那一档走 `completeWithTools`（2026-10-19，`.scratch/mcp` 工单 06）：
         //   它把"模型要调工具就先调、把结果喂回去、直到它给最终答复"这件事包起来，
-        //   而**返回的 `text` 仍然是那张故事表**——所以下面这一整段校验、重试、
+        //   而返回的 `text` 仍然是那张故事表——所以下面这一整段校验、重试、
         //   审核一个字都不用改。这就是"工具只是规划内部的一步"这句话的具体形状。
         await completeWithTools(request, {
           text: opts.text,
@@ -257,11 +257,11 @@ export async function planStory(input: StoryPlanInput, opts: PlanOptions): Promi
       continue
     }
 
-    // ③ 内容审核（2026-10-19，`.scratch/rag` 工单 05）：**在 plan-ready 之前**。
+    // ③ 内容审核（2026-10-19，`.scratch/rag` 工单 05）：在 plan-ready 之前。
     //    ★ 位置是刻意的：它必须在"这一版故事可以拿出去画"这句话说出口之前跑完——
     //      `plan-ready` 是那个承诺，而内容没过的故事不该得到那个承诺。
     //    ★ 代价上也是这里最划算：出图是这条流水线上唯一真花钱的一步，
-    //      而这道闸在它之前，所以拦下来的那一版**没有为插图花过钱**。
+    //      而这道闸在它之前，所以拦下来的那一版没有为插图花过钱。
     const review = reviewStory(built.tree)
     if (review.verdict !== 'pass') {
       const flagged = review.pages.filter((page) => page.verdict !== 'pass')
@@ -274,7 +274,7 @@ export async function planStory(input: StoryPlanInput, opts: PlanOptions): Promi
         reason,
       })
 
-      // `block` 的处置是**当场拒发、不重试**（自伤与危险示范那两类，见 `ClauseDisposition`）：
+      // `block` 的处置是当场拒发、不重试（自伤与危险示范那两类，见 `ClauseDisposition`）：
       // 让模型看着那段内容再改一遍，本身就是一次多余的接触
       if (review.verdict === 'block') {
         throw new EngineError('review-blocked', `这一版故事被内容审核拦下了：${reason}`, {
@@ -290,7 +290,7 @@ export async function planStory(input: StoryPlanInput, opts: PlanOptions): Promi
         stage: 'planning',
         attempt,
         maxAttempts,
-        // ★ 重试那句话里也要带条款 id（判据 5），但**只带前三页**：
+        // 重试那句话里也要带条款 id（判据 5），但只带前三页：
         //   它在屏幕上是一行，二十页都说出来就没人读得完。完整的在 `failures` 里。
         reason: `故事里有不该给孩子看的内容：${flagged
           .slice(0, 3)
@@ -308,7 +308,7 @@ export async function planStory(input: StoryPlanInput, opts: PlanOptions): Promi
       nodeCount: built.tree.nodes.length,
       choicePages: built.tree.nodes.filter((node) => node.choice).map((node) => node.pageNo),
       // 两条支各自的页（工单 05 §三）：画桌要按它给岔路那几格挂色带。
-      // ★ 与上面那两行同一个来源（同一棵已经校验过的树），所以不会各说一套
+      // 与上面那两行同一个来源（同一棵已经校验过的树），所以不会各说一套
       branchPages: branchPagesOf(built.tree),
     })
     return {
@@ -318,7 +318,7 @@ export async function planStory(input: StoryPlanInput, opts: PlanOptions): Promi
       failures,
       modelId: response.modelId,
       promptVersion: STORY_PLAN_VERSION,
-      // ★ 没开检索时**不给这个字段**（不是给一个空的）——见 PlanOutcome 那条注释
+      // 没开检索时不给这个字段（不是给一个空的）——见 PlanOutcome 那条注释
       ...(retrieval === null ? {} : { retrieval: retrieval.provenance }),
     }
   }
@@ -332,7 +332,7 @@ export async function planStory(input: StoryPlanInput, opts: PlanOptions): Promi
   )
 }
 
-/** 检索那一步：跑、发事件、把结果整理成 provenance。**它自己绝不抛错**（见下） */
+/** 检索那一步：跑、发事件、把结果整理成 provenance。它自己绝不抛错（见下） */
 async function retrieveOnce(
   input: StoryPlanInput,
   opts: PlanOptions,
@@ -353,9 +353,9 @@ async function retrieveOnce(
     })
     return { pair, provenance }
   } catch (err) {
-    // ★ 检索失败**不许拖垮规划**：它是一段可选的参考材料，不是这本书的前提。
+    // ★ 检索失败不许拖垮规划：它是一段可选的参考材料，不是这本书的前提。
     //   一条检索不到的范例不该让家长看到"生成失败"——他要的那本书本来就能编出来。
-    // ★ 但**不许静默**：两件事各记一条，因为它们回答的是不同的问题——
+    // ★ 但不许静默：两件事各记一条，因为它们回答的是不同的问题——
     //   `retrieved`（corpusVersion 为 null）回答"这一步发生了吗"（发生了，但没成）；
     //   `error`（非致命）回答"为什么没成"，把真话留在日志里。
     //   只记前者的话，索引坏了这件事就永远查不出来。
@@ -393,7 +393,7 @@ function refOf(
   }
 }
 
-/** 取到的两栏 → provenance。★ `topScore` 是**两类一起**的最高分：它是"这次检索的把握"那个数 */
+/** 取到的两栏 → provenance。★ `topScore` 是两类一起的最高分：它是"这次检索的把握"那个数 */
 function provenanceOf(pair: RetrievePair, corpusVersion: string): RetrievalProvenance {
   const hits: RetrievedChunkRef[] = [
     ...pair.examples.map((hit) => refOf(hit, 'example')),

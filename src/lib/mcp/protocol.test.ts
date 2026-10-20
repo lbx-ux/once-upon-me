@@ -1,11 +1,11 @@
 /**
  * protocol.test.ts —— MCP 协议层的单测
  *
- * 这一组用例盯的是**规范**而不是"我的实现"，所以每条用例的标题就是它防的那种坏法。
+ * 这一组用例盯的是规范而不是"我的实现"，所以每条用例的标题就是它防的那种坏法。
  * 其中三条是这一层最容易写错、而错了以后现场离成因最远的：
  *
- * 1. **通知回了话** → 客户端把响应错配到别处，整条会话开始错位（文件头第 1 条）。
- * 2. **`id` 被 `String()` 了一道** → 数字 id 变成字符串 id，客户端按 `===` 找不到响应，
+ * 1. 通知回了话 → 客户端把响应错配到别处，整条会话开始错位（文件头第 1 条）。
+ * 2. `id` 被 `String()` 了一道 → 数字 id 变成字符串 id，客户端按 `===` 找不到响应，
  *    表现为"卡在一个永远不来的回复上"（文件头第 2 条）。
  * 3. **进度通知永远发 / 永远不发** → 两种坏法读数完全不同，所以两边都要测
  *    （只测一边的话，一个"忽略 progressToken、无条件发通知"的实现会全绿）。
@@ -28,7 +28,7 @@ import {
 } from './protocol.ts'
 import type { EngineEvent } from '../engine/events.ts'
 
-/* ───────────────────────── 假的运行时 ───────────────────────── */
+/* 假的运行时 */
 
 const SPECS: ToolSpec[] = [
   { name: 'list_children', description: '有哪些孩子', inputSchema: { type: 'object' } },
@@ -105,7 +105,7 @@ async function ready(): Promise<Session> {
   return session
 }
 
-/* ───────────────────────── 传输层的两条 ───────────────────────── */
+/* 传输层的两条 */
 
 describe('行式输入', () => {
   it('空行什么都不做（客户端在每条消息后面补一个换行是常态）', async () => {
@@ -118,7 +118,7 @@ describe('行式输入', () => {
     const first = await run('{"jsonrpc":"2.0", 这不是 JSON')
     expect(first.out).toHaveLength(1)
     expect((first.out[0]?.['error'] as { code: number }).code).toBe(ERROR_CODES.parse)
-    // ★ id 只能是 null：这行根本没解析出来，没有 id 可回
+    // id 只能是 null：这行根本没解析出来，没有 id 可回
     expect(first.out[0]?.['id']).toBeNull()
 
     // 同一份 session 继续用，下一条正常消息照常处理
@@ -134,7 +134,7 @@ describe('行式输入', () => {
   })
 })
 
-/* ───────────────────────── 通知不许回话 ───────────────────────── */
+/* 通知不许回话 */
 
 describe('★ 通知（不带 id）绝不回话', () => {
   it('notifications/initialized 一条都不发', async () => {
@@ -167,7 +167,7 @@ describe('★ 通知（不带 id）绝不回话', () => {
   })
 })
 
-/* ───────────────────────── id 原样回 ───────────────────────── */
+/* id 原样回 */
 
 describe('★ id 原样回（不许 String()）', () => {
   it('数字 id 回数字', async () => {
@@ -188,7 +188,7 @@ describe('★ id 原样回（不许 String()）', () => {
   })
 })
 
-/* ───────────────────────── 版本协商 ───────────────────────── */
+/* 版本协商 */
 
 describe('initialize：版本协商三条分支', () => {
   it('客户端要的版本在表里 → 回它那一个', async () => {
@@ -249,7 +249,7 @@ describe('initialize：版本协商三条分支', () => {
   })
 })
 
-/* ───────────────────────── tools/list ───────────────────────── */
+/* tools/list */
 
 describe('tools/list', () => {
   it('只出 name / description / inputSchema 三件，不带 handler 与 ctx', async () => {
@@ -265,7 +265,7 @@ describe('tools/list', () => {
   })
 })
 
-/* ───────────────────────── tools/call ───────────────────────── */
+/* tools/call */
 
 describe('tools/call', () => {
   it('把 name 与 arguments 原样递给运行时', async () => {
@@ -315,7 +315,7 @@ describe('tools/call', () => {
   })
 })
 
-/* ───────────────────────── 进度通知 ───────────────────────── */
+/* 进度通知 */
 
 describe('★ 进度通知：给 token 才发，不给一条都不发', () => {
   const events = [
@@ -345,7 +345,7 @@ describe('★ 进度通知：给 token 才发，不给一条都不发', () => {
     const progress = out.filter((one) => one['method'] === 'notifications/progress')
     expect(progress).toHaveLength(events.length)
     expect((progress[0]?.['params'] as { progressToken: string }).progressToken).toBe('tok-1')
-    // ★ progress 用的是事件的 seq，不是自增计数
+    // progress 用的是事件的 seq，不是自增计数
     expect((progress[2]?.['params'] as { progress: number }).progress).toBe(3)
   })
 
@@ -406,7 +406,7 @@ describe('★ 进度通知：给 token 才发，不给一条都不发', () => {
   })
 })
 
-/* ───────────────────────── 日志等级 ───────────────────────── */
+/* 日志等级 */
 
 describe('logging/setLevel', () => {
   it('合法等级被接受，并且真的改了阈值', async () => {
@@ -445,7 +445,7 @@ describe('logging/setLevel', () => {
   })
 })
 
-/* ───────────────────────── 未知方法 ───────────────────────── */
+/* 未知方法 */
 
 describe('未知方法', () => {
   it('请求 → -32601', async () => {
@@ -458,7 +458,7 @@ describe('未知方法', () => {
   })
 })
 
-/* ───────────────────────── 纯函数那一条 ───────────────────────── */
+/* 纯函数那一条 */
 
 describe('notificationsFor 是纯的', () => {
   it('同一个事件同样的入参 → 同样的输出（可重放、可断言）', () => {

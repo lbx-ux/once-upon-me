@@ -1,39 +1,39 @@
 /**
  * route-leases.test.ts —— 「预流准备失败时，租约必须还回去」这一族路由的纪律
- *（2026-10-20，本仓库**第一批驱动 Route Handler 的测试**）
+ *（2026-10-20，本仓库第一批驱动 Route Handler 的测试）
  *
- * ## 它守的是什么
+ * 它守的是什么
  *
- * 「取租约 → 预流准备 → 放租约」这三步里，**中间那一步失败时租约必须还回去**。
+ * 「取租约 → 预流准备 → 放租约」这三步里，中间那一步失败时租约必须还回去。
  * 两条路由原来的形状一样：
  *
  * ```ts
  * if (!tryStartRun(runKey)) return jsonError(409, 'book-busy', …)
- * …createProviders（这一段**有** catch → finishRun）…
+ * …createProviders（这一段有 catch → finishRun）…
  * await log.truncate(bookId)   // ← 裸的，写盘，会抛
  * const stream = new ReadableStream({ … finally { finishRun(runKey) } })
  * ```
  *
- * `truncate` 抛出来时（资产根只读、磁盘满、目录权限），`finishRun` **永远不执行**：
+ * `truncate` 抛出来时（资产根只读、磁盘满、目录权限），`finishRun` 永远不执行：
  * 这本书记在这一进程里永远是"在跑"，此后每一次点它都收 409「这本书正在生成中」，
  * 直到进程重启；而用户看到的是一个未捕获的 500，不是一句人话。紧邻的
  * `createProviders` 失败就老老实实还了租约——所以这是同一套纪律上漏掉的那一格，
  * 不是"设计上没想"。
  *
- * ## 为什么要这么一套脚手架
+ * 为什么要这么一套脚手架
  *
- * 这一层以前**没有测试缝**：`vitest` 只收 `src` 下面的 `.test.ts`，而路由要先过
+ * 这一层以前没有测试缝：`vitest` 只收 `src` 下面的 `.test.ts`，而路由要先过
  * `requireCapability`（要一张真签名票 + 问 Java 要权限），再落真磁盘。四样都在
  * 测试里临时搭：
  *
  * | 要什么 | 怎么给 |
  * | --- | --- |
  * | 登录态 | 自己用 `APP_JWT_SECRET` 签一张 `scope: 'session'` 的 HS256 票，塞进 cookie |
- * | 权限 | 一个只回 `/api/auth/me` 的**假后端**（`node:http`，端口系统挑），`BACKEND_URL` 指过去 |
+ * | 权限 | 一个只回 `/api/auth/me` 的假后端（`node:http`，端口系统挑），`BACKEND_URL` 指过去 |
  * | 资产根 | `mkdtemp` 一个临时目录，`ASSET_ROOT` 指过去 |
  * | 模型配置 | 三个 `*_BASE_URL` 一律指向 `127.0.0.1:9`——★ 见下面那条纪律 |
  *
- * ★ **`127.0.0.1:9` 是刻意的**（discard 端口，没人监听）：这一组用例**绝不许**
+ * ★ `127.0.0.1:9` 是刻意的（discard 端口，没人监听）：这一组用例绝不许
  *   打到真厂商。配一个"看起来像真的"地址能跑通，是因为它在任何一条意外路径上
  *   都只会立刻 `ECONNREFUSED`，而不是把一次请求发出去。
  *   对照档正是靠这条保证"引擎真跑了、而且真失败了"。
@@ -83,7 +83,7 @@ const CHILD = {
 }
 
 /**
- * 五条硬锚点的值。★ **五条都得有**：`buildCard` 会拿 `checkAnchors` 卡一道
+ * 五条硬锚点的值。★ 五条都得有：`buildCard` 会拿 `checkAnchors` 卡一道
  * （实测报「缺骨相；缺头发；缺头身比；缺肤色」），少一条这一组用例就红在
  * "夹具没搭起来"上，而不是红在要测的那条路上。
  */
@@ -97,7 +97,7 @@ const ANCHORS = [
 
 /**
  * 三页的合法故事表（`planDraftCodec` 的 `nodes` 是 `min: 3`）。
- * ★ 返回类型写成 `PlanDraft` 而不是手写的 `{title, nodes: unknown[]}`：
+ * 返回类型写成 `PlanDraft` 而不是手写的 `{title, nodes: unknown[]}`：
  *   后者看着更省事，但它正是在"信封对不对"这件事上放水的那种写法——
  *   而这一组用例的语义依赖那份信封（`writeStory` 落盘、`readStory` 读回）。
  */
@@ -118,7 +118,7 @@ function storyDoc(): PlanDraft {
   }
 }
 
-/* ───────────────────────── 脚手架 ───────────────────────── */
+/* 脚手架 */
 
 /** 一张 `scope: 'session'` 的 HS256 票。★ 与 `lib/auth/session.ts` 的验票逐字对齐 */
 function mintSession(userId: string): string {
@@ -168,7 +168,7 @@ async function startFakeBackend(): Promise<{ server: Server; url: string }> {
  * 一个人的那一片盘：一张卡 + 一份故事草稿（都走仓库自己的出口真写盘）。
  * 返回那张卡——`bookIdOf` 要用它算书号。
  *
- * ★ 用 `createCardStore().save()` 与 `writeStory()` 而不是手搓 JSON：
+ * 用 `createCardStore().save()` 与 `writeStory()` 而不是手搓 JSON：
  *   手搓的那份一旦与信封校验漂了，症状是"测试红了，但红在 404 card-not-found"——
  *   那时候查的是测试，而真正要测的那条路一步都没走。
  */
@@ -211,7 +211,7 @@ async function seedUserSlice(root: string): Promise<CharacterCard> {
 
 /**
  * 带一张真票的请求。`POST` 的 `ctx.params` 在 Next 15 里是 Promise，照那个形状给。
- * ★ 形参类型跟着 `params` 推（`P`）：写成 `Record<string, string>` 的话，
+ * 形参类型跟着 `params` 推（`P`）：写成 `Record<string, string>` 的话，
  *   路由那边要的 `{ bookId: string }` 收窄不下来，`tsc` 会在测试里报
  *   "Property 'bookId' is missing"——那条红指向的是脚手架，不是被测的那条路。
  */
@@ -231,7 +231,7 @@ function authed<P extends Record<string, string>>(
   return [request, { params: Promise.resolve(params) }]
 }
 
-/* ───────────────────────── 固定装置 ───────────────────────── */
+/* 固定装置 */
 
 let root = ''
 let card: CharacterCard
@@ -264,10 +264,10 @@ beforeEach(async () => {
   process.env['APP_JWT_SECRET'] = JWT_SECRET
   process.env['BACKEND_URL'] = backend.url
   process.env['ASSET_ROOT'] = root
-  // 管理页那份覆盖指到一个**不存在**的地方：不这样做，本机真有一份
+  // 管理页那份覆盖指到一个不存在的地方：不这样做，本机真有一份
   // `models.runtime.json` 时它会压过下面这些测试值，这一组用例就不再自足
   process.env['MODEL_CONFIG_FILE'] = join(root, 'no-such-model-config.json')
-  // ★ 三个地址全部指向 discard 端口：见文件头那条纪律
+  // 三个地址全部指向 discard 端口：见文件头那条纪律
   process.env['LLM_BASE_URL'] = NOWHERE
   process.env['LLM_API_KEY'] = 'route-test-key'
   process.env['LLM_MODEL'] = 'route-test-model'
@@ -284,7 +284,7 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
-  // 租约是一份**进程级**的账（`globalThis`）：一条用例漏还，下一条就会被误挡
+  // 租约是一份进程级的账（`globalThis`）：一条用例漏还，下一条就会被误挡
   for (const bookId of [BOOK_ID, bookIdOfForTest(card)]) {
     finishRun(runKeyOf(USER_ID, bookId))
   }
@@ -309,7 +309,7 @@ function bookIdOfForTest(current: CharacterCard): string {
 }
 
 /**
- * 把 `events.jsonl` 做成一个**目录**：读路径不受影响（`read()` 吞异常、
+ * 把 `events.jsonl` 做成一个目录：读路径不受影响（`read()` 吞异常、
  * `story.json` 是它的兄弟），而 `truncate()` 的 `writeFile` 会当场 EISDIR
  * （本机实测的码就是这个）。
  */
@@ -317,7 +317,7 @@ async function poisonEventsFile(bookId: string): Promise<void> {
   await mkdir(join(root, 'u', USER_ID, 'books', bookId, 'events.jsonl'), { recursive: true })
 }
 
-/* ───────────────────────── 用例 ───────────────────────── */
+/* 用例 */
 
 describe('预流准备失败时租约要还', () => {
   it('★ 重写一版：事件日志写不进去（EISDIR）→ 回一句人话，租约还了', async () => {
@@ -344,7 +344,7 @@ describe('预流准备失败时租约要还', () => {
     const bookId = bookIdOfForTest(card)
     await poisonEventsFile(bookId)
 
-    // ★ 这一条路由**没有** `[bookId]` 那一段，所以它只收一个参数
+    // 这一条路由没有 `[bookId]` 那一段，所以它只收一个参数
     const [request] = authed(
       'http://localhost:3311/api/books',
       {
@@ -377,11 +377,11 @@ describe('预流准备失败时租约要还', () => {
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toContain('text/event-stream')
 
-    // ★ 把流读完：引擎真的跑起来了（它会去连 discard 端口，必然失败）
+    // 把流读完：引擎真的跑起来了（它会去连 discard 端口，必然失败）
     const text = await res.text()
     expect(text).toContain('fatal')
 
-    // 跑完了 → 租约也该还了（`finally` 那条路，与上面两条是**两条**不同的路）
+    // 跑完了 → 租约也该还了（`finally` 那条路，与上面两条是两条不同的路）
     expect(isRunning(runKeyOf(USER_ID, BOOK_ID))).toBe(false)
   })
 })

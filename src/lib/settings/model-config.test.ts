@@ -1,12 +1,12 @@
 /**
- * settings/model-config.test.ts —— 管理页那份模型配置的**读写规矩**
+ * settings/model-config.test.ts —— 管理页那份模型配置的读写规矩
  *
- * ★ 这一组里最要紧的一条是「**key 永远不出现在 view 里**」。它不是"界面小心一点"，
- *   而是服务端根本不给——所以判据选的是**整份 JSON 里搜不到那个值**，
+ * ★ 这一组里最要紧的一条是「key 永远不出现在 view 里」。它不是"界面小心一点"，
+ *   而是服务端根本不给——所以判据选的是整份 JSON 里搜不到那个值，
  *   而不是"某一格是不是 null"。后者只挡住了一种写法，前者挡住所有写法
  *   （包括将来有人往 view 里加一个 `debug` 字段顺手把值塞进去）。
  *
- * ★ 第二条要紧的是「空 ≠ 清掉」：只想换模型名的人不该顺手把自己的 key 清掉。
+ * 第二条要紧的是「空 ≠ 清掉」：只想换模型名的人不该顺手把自己的 key 清掉。
  *   这个错误的症状要到下一次生成才出现（401），那时没人会想到是这里。
  */
 
@@ -50,7 +50,7 @@ let tmpDir = ''
 beforeEach(() => {
   snapshot = {}
   for (const key of TOUCHED) snapshot[key] = process.env[key]
-  // ★ 每个用例一个空的临时目录：这些用例会**真的写文件**，绝不能碰到
+  // ★ 每个用例一个空的临时目录：这些用例会真的写文件，绝不能碰到
   //   项目根下那份真的 `models.runtime.json`
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'model-config-test-'))
   process.env.MODEL_CONFIG_FILE = path.join(tmpDir, 'models.json')
@@ -121,7 +121,7 @@ describe('覆盖压过环境变量', () => {
     delete process.env.LLM_MODEL
     await writeOverrides({ LLM_MODEL: 'admin-model' })
 
-    // ★ 「恢复默认」点下去会变成空值——界面上要说的正是这一句。
+    // 「恢复默认」点下去会变成空值——界面上要说的正是这一句。
     //   拿合并后的 env 判这一位的话它永远为真，于是确认框会说
     //   "那边都有配，不会空"，而点完这个能力当场就用不了了
     expect(fieldOf('text', 'model').fallback).toBe(false)
@@ -154,7 +154,7 @@ describe('文件的读法', () => {
   it('文件是坏 JSON → 当没有覆盖，**退回环境变量**而不是让全站 500', () => {
     process.env.LLM_MODEL = 'env-model'
     fs.writeFileSync(modelConfigFile(), '{ 这不是 JSON', 'utf8')
-    // ★ 生成链路的每一跳都会读它一次。为一份手改坏的文件让整站坏掉，
+    // 生成链路的每一跳都会读它一次。为一份手改坏的文件让整站坏掉，
     //   是把一个小事故升级成大事故
     expect(readOverrides()).toEqual({})
     expect(serverEnv()['LLM_MODEL']).toBe('env-model')
@@ -187,7 +187,7 @@ describe('一次改动的规矩', () => {
     const before = { LLM_API_KEY: 'sk-keep-me', LLM_MODEL: 'old-model' }
     const after = applyPatch(before, text, { model: 'new-model', apiKey: '' })
     expect(after['LLM_MODEL']).toBe('new-model')
-    // ★ 这一条防的是"只想换个模型名，顺手把 key 清了"——
+    // 这一条防的是"只想换个模型名，顺手把 key 清了"——
     //   而那个后果要到下一次生成才出现（401）
     expect(after['LLM_API_KEY']).toBe('sk-keep-me')
   })
@@ -273,12 +273,12 @@ describe('show 给界面的那份', () => {
     expect(CAPABILITIES.find((c) => c.id === 'speech')?.warn).toContain('[411]')
   })
 
-  /* ── 「测试连通」那两句（2026-10-18）──────────────────────────────────── */
+  /* 「测试连通」那两句（2026-10-18） */
 
   it('★ 副标题里写的那个数，就是测试真发出去的那个数', () => {
     // 这一条是这一组里最要紧的：副标题写着"上限 64 token"而路由发的是 4096，
     // 谁也不会发现——那种"字写得很具体、做的是另一件事"正是最坏的错。
-    // ★ 而这两个数现在同源（都从 `TEST_REQUEST` 来），所以这一条断言的是**同源**本身
+    // 而这两个数现在同源（都从 `TEST_REQUEST` 来），所以这一条断言的是同源本身
     const line = sectionOf('text').testLine
     expect(line).toContain(`${TEST_REQUEST.text.maxTokens} token`)
   })
@@ -291,7 +291,7 @@ describe('show 给界面的那份', () => {
 
   it('测试那一格预填的，就是路由缺省会发出去的那一份', () => {
     expect(sectionOf('image').testSeed).toBe(TEST_REQUEST.image.prompt)
-    // 语音那一句与音色卡上印的是**同一个常量**——两处漂开就是"卡片上印的
+    // 语音那一句与音色卡上印的是同一个常量——两处漂开就是"卡片上印的
     // 和实际念的成了两句话"，而这种错没人会去对
     expect(sectionOf('speech').testSeed).toBe(PREVIEW_LINE)
   })
@@ -314,7 +314,7 @@ describe('keepKnownKeys', () => {
   })
 })
 
-/* ── 小工具 ─────────────────────────────────────────────────────────────── */
+/* 小工具 */
 
 function sectionOf(id: string) {
   const section = modelConfigView().sections.find((s) => s.id === id)

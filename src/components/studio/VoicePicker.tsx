@@ -3,39 +3,39 @@
 /**
  * VoicePicker —— 工作台「声音」那一屏：每个音色一张贴在纸上的卡
  *
- * ★ 选音色这件事**没法用文字判断**。"天真男童音"这五个字不告诉你它念童书是什么调子——
+ * 选音色这件事没法用文字判断。"天真男童音"这五个字不告诉你它念童书是什么调子——
  *   预置的两个是用户在厂商控制台里自己听过挑的，自己录的那条更是只能听。所以每张卡都能
- *   **听一句真的**，那句还是演示书第 1 页的原句（真语料，不是"测试文本一二三"），
- *   而且那句话**印在卡上**：按下去会听到什么，写在按钮旁边比藏在一个默认参数里诚实。
+ *   听一句真的，那句还是演示书第 1 页的原句（真语料，不是"测试文本一二三"），
+ *   而且那句话印在卡上：按下去会听到什么，写在按钮旁边比藏在一个默认参数里诚实。
  *
- * ★ 卡片的配方从 `character-wall.css` 抄来（2026-10-16 用户原话「声音这一块也应该像角色卡
- *   一样是一张卡片那样」）。四条刻意不同（没有假头像、下半截是**冷纸**不是暖相纸、
+ * 卡片的配方从 `character-wall.css` 抄来（2026-10-16 用户原话「声音这一块也应该像角色卡
+ *   一样是一张卡片那样」）。四条刻意不同（没有假头像、下半截是冷纸不是暖相纸、
  *   没有背后撑开的面板、主要动作不在悬停层里）逐条写在 `voice-picker.css` 的文件头。
  *
- * ★ 2026-10-16 第九轮（用户："感觉有点不好看，具体是哪我也说不出来"）改的是**骨架**，
+ * 2026-10-16 第九轮（用户："感觉有点不好看，具体是哪我也说不出来"）改的是骨架，
  *   不是配色：卡变成上下两段（身份 / 要听的那句话），下半截贴着卡底铺满整宽；
  *   删除那颗从卡底的独立一行挪进了试听那一行；确认态与试听块二选一。
  *   四条起因都是那张截图量出来的数，逐条记在 `voice-picker.css` 的文件头。
  *
- * ★ 2026-10-16 第九轮之后，用户点的这颗钮**什么也没响**：「现在这个听一句真的是假的，根本听不了」。
+ * 2026-10-16 第九轮之后，用户点的这颗钮什么也没响：「现在这个听一句真的是假的，根本听不了」。
  *   查下来不是代码坏了（那条路由拿真 key 打是 200 / audio/mpeg / 41,371 字节），
- *   是**这一屏在最常见的那种状态下放不出声**：ADR-0008 定的 BYO key 只在内存里活一次请求，
+ *   是这一屏在最常见的那种状态下放不出声：ADR-0008 定的 BYO key 只在内存里活一次请求，
  *   刷新就没了，于是没配 key 的浏览器里三颗钮全是 `disabled`，而它看着几乎是活的。
  *   两处一起改：
- *   1. **预置音色的试听不再要 key**——那句语料是固定的、音色是厂商的，所以"它念这句什么样"
- *      是个**常量**：一次生成、跟着仓库走（`lib/voices/samples.ts`，ADR-0003 的同一条做法）。
+ *   1. 预置音色的试听不再要 key——那句语料是固定的、音色是厂商的，所以"它念这句什么样"
+ *      是个常量：一次生成、跟着仓库走（`lib/voices/samples.ts`，ADR-0003 的同一条做法）。
  *      点下去放的是那份样本，不碰网络。克隆的那条只存在于用户自己的账号里，只能现场合成。
- *   2. 剩下**真放不出来**的那些，钮上写明要什么（「先配密钥」）并按下去开「模型与密钥」；
+ *   2. 剩下真放不出来的那些，钮上写明要什么（「先配密钥」）并按下去开「模型与密钥」；
  *      真死的那些（音色用不了）把"能点"的信号一起收掉，不再只是字浅一档。
  *
  * ★ 2026-10-16 第二轮按用户划掉的记号删了三处，别以为漏了：
- *   页头那句说明（`.vc__sub`）、卡脚那行（音色 id + 绑定模型，**整行**）、
+ *   页头那句说明（`.vc__sub`）、卡脚那行（音色 id + 绑定模型，整行）、
  *   以及原本「用自己的声音 · 还没做」那一块——它被右上角那颗「＋新建声音」兑现了
  *   （面板在 `NewVoicePanel.tsx`，样本、同意、部署状态那些规矩都在那个文件的头里）。
  *
- * ★ 「删掉它」只出现在**我录的**卡上（系统给的删不了，那是厂商的预置音色）。
- *   两步：先按下垃圾桶，再按「确认删掉」，成功之后给一句**报数的凭据**。
- *   ★ 第十一轮之前第二步还会**列出"将要失去什么"两行字**，用户把那段划掉了 ——
+ * 「删掉它」只出现在我录的卡上（系统给的删不了，那是厂商的预置音色）。
+ *   两步：先按下垃圾桶，再按「确认删掉」，成功之后给一句报数的凭据。
+ *   第十一轮之前第二步还会列出"将要失去什么"两行字，用户把那段划掉了 ——
  *     那件事没有消失，改挂在「确认删掉」的 `title` 与 `role="alertdialog"` 的名字上。
  *   照角色墙那条判断：删除的实现只有这一份，卡面上不再各写一遍。
  */
@@ -51,7 +51,8 @@ import { useSignInGate } from '@/components/auth/SignInGate.tsx'
 import NewVoicePanel from './NewVoicePanel.tsx'
 
 /** 语音这条路卡住时，那颗钮上写什么。★ 与 `NARRATION_BLOCK_MESSAGE` 分开：
- *  钮上只有几个字的位置，而理由要完整说出来的是下面 `needReason` 那一句 */
+ *  钮上只有几个字的位置，而理由要完整说出来的是下面 `needReason` 那一句
+ */
 const BLOCKED_LABEL: Record<SpeechBlock, string> = {
   'no-permission': '没有语音权限',
   'server-not-configured': '站里还没配好',
@@ -59,14 +60,14 @@ const BLOCKED_LABEL: Record<SpeechBlock, string> = {
 
 export default function VoicePicker() {
   const { current, setVoice, voices, forgetVoice, speechBlock, voiceError } = useVoice()
-  /* ★ 录一条声音是**这台机器上的一个账号**才会有的东西（厂商那边的音色挂在账号下），
+  /* 录一条声音是这台机器上的一个账号才会有的东西（厂商那边的音色挂在账号下），
      所以没登录时先请他去登录——见 `SignInGate` */
   const gate = useSignInGate()
   const audioRef = useRef<HTMLAudioElement>(null)
   /** 当前那个一次性对象地址。换一段、播完、卸载都要 revoke —— 见文件头 */
   const urlRef = useRef<string | null>(null)
   /**
-   * ★ 令牌：连点两张卡时，**先发的那次响应可能后到**，把播放器改成上一个音色。
+   * 令牌：连点两张卡时，先发的那次响应可能后到，把播放器改成上一个音色。
    *   与 `CreateLanding` 那颗优化钮防双发是同一类毛病，只是这里的窗口在 fetch 上。
    *   所以每次点击领一个号，回来时对不上就整段丢弃。
    */
@@ -81,7 +82,8 @@ export default function VoicePicker() {
   const [panelOpen, setPanelOpen] = useState(false)
 
   /** 放掉那个一次性地址。★ 先摘 `src` 再 revoke：留着一个已吊销的地址在元素上，
-   *  下一次 `play()` 会报一个看不出原因的错 */
+   *  下一次 `play()` 会报一个看不出原因的错
+   */
   const releaseUrl = (): void => {
     const el = audioRef.current
     if (el) el.removeAttribute('src')
@@ -115,7 +117,7 @@ export default function VoicePicker() {
       stop()
       return
     }
-    // 换一张卡：**先把上一段停掉**。不停的话旧的那段还在响，而按钮已经改口说新的在放，
+    // 换一张卡：先把上一段停掉。不停的话旧的那段还在响，而按钮已经改口说新的在放，
     // 两头对不上——而"哪一段在响"正是这一屏唯一要读准的事
     el.pause()
     releaseUrl()
@@ -124,7 +126,7 @@ export default function VoicePicker() {
     setError(null)
     setPlaying(voiceId)
 
-    // ★ 预置音色放的是**跟着仓库走的样本**（`lib/voices/samples.ts`）：不碰网络，
+    // 预置音色放的是跟着仓库走的样本（`lib/voices/samples.ts`）：不碰网络，
     //   不需要 key。这一屏的存在理由是"音色没法用文字判断，必须能听"，
     //   所以它不能是"只有配过 key 的机器才听得见"——用户报的"这个是假的"就是这个形状。
     const sample = sampleFor(voiceId)
@@ -148,7 +150,7 @@ export default function VoicePicker() {
       const response = await fetch('/api/voice/preview', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        // ★ 请求体里**没有 env** 了（2026-10-17）：密钥由站长分配，只从服务端环境来
+        // 请求体里没有 env 了（2026-10-17）：密钥由站长分配，只从服务端环境来
         body: JSON.stringify({ voiceId, text: PREVIEW_LINE }),
       })
       if (!response.ok) {
@@ -173,8 +175,9 @@ export default function VoicePicker() {
     }
   }
 
-  /** 真删。★ 失败就说失败，且**不把本地那条记录删掉**——否则列表里那条"没了"，
-   *  而厂商那边还在，下一次克隆会撞上一个没人记得的旧音色 */
+  /** 真删。★ 失败就说失败，且不把本地那条记录删掉——否则列表里那条"没了"，
+   *  而厂商那边还在，下一次克隆会撞上一个没人记得的旧音色
+   */
   const removeVoice = async (voice: CatalogVoice): Promise<void> => {
     setDeleting(voice.id)
     setError(null)
@@ -190,9 +193,9 @@ export default function VoicePicker() {
       const data = (await response.json()) as { released?: boolean }
       const wasCurrent = current === voice.id
       /**
-       * ★ 2026-10-17（工单 16）：删除是**两次请求**，而这句话要说清两次的结果。
-       *   上面那一次打的是厂商（解绑），下面这一次把**账号里那条记录**删掉。
-       *   ★ 记录那一次要 `await`：不 await 就只能猜它成没成，
+       * 2026-10-17（工单 16）：删除是两次请求，而这句话要说清两次的结果。
+       *   上面那一次打的是厂商（解绑），下面这一次把账号里那条记录删掉。
+       *   记录那一次要 `await`：不 await 就只能猜它成没成，
        *   而这句话有一半是关于隐私的（"厂商那边删干净了没有"），猜错就是撒谎。
        */
       const recordGone = await forgetVoice(voice.id)
@@ -257,17 +260,17 @@ export default function VoicePicker() {
           const busy = playing === voice.id
           const openConfirm = confirming === voice.id
           /**
-           * 随包的那份样本。★ 只有**预置**音色走这条路：样本是"厂商那个音色的这一句"，
+           * 随包的那份样本。★ 只有预置音色走这条路：样本是"厂商那个音色的这一句"，
            * 不是"任何 id 长这样的音色"。克隆出来的 id 是厂商给的、与预置的不可能撞，
            * 但这条判据不该靠"撞不上"——真撞上就会拿一份别人的录音当成用户自己的声音播。
            */
           const sample = voice.source === 'preset' ? sampleFor(voice.id) : null
           /**
-           * ★ 没有样本、语音这条路又被卡住：这颗钮**放不出这句话**（克隆的那条只能现场合成）。
-           *   ★ `speechBlock` 与"挑没挑音色"无关，这一点是刻意的：用自己录的那条试听
+           * 没有样本、语音这条路又被卡住：这颗钮放不出这句话（克隆的那条只能现场合成）。
+           *   `speechBlock` 与"挑没挑音色"无关，这一点是刻意的：用自己录的那条试听
            *     正是"在挑"这个动作的一部分，拿"你还没挑"去拦它就成了死循环
            *     （见 `voices/state.ts` 里 `speechBlockOf` 那段）。
-           * ★ 带上 `voice.usable`：音色根本用不了的时候，钮是**死的**（`disabled`），
+           * 带上 `voice.usable`：音色根本用不了的时候，钮是死的（`disabled`），
            *   说"没有权限"会把病因指错——那一种是"模型对不上"，理由由卡上的 `.vc__why` 说。
            */
           const blocked = voice.usable && !sample ? speechBlock : null
@@ -367,7 +370,7 @@ export default function VoicePicker() {
                           data-playing={busy ? 'true' : 'false'}
                           data-blocked={blocked ? 'true' : 'false'}
                           onClick={() => void preview(voice.id)}
-                          /* ★ 卡住的时候这颗钮是**死的**（`disabled`），不是"按下去开设置"：
+                          /* 卡住的时候这颗钮是死的（`disabled`），不是"按下去开设置"：
                              2026-10-17 起没有设置可开了——密钥由站长分配，用户在界面上
                              一个 key 都填不了。留着一颗"按下去开某个抽屉"的钮才是假的。
                              理由由 `title` 与下面那句 `needReason` 完整说出来。 */
@@ -416,14 +419,14 @@ export default function VoicePicker() {
                         长出了两副骨架。现在三张卡的下半截结构一模一样。
                       ★ 同一行不等于同权重：它是 32px 的透明底图标钮，点下去还有两步确认。 */}
                         {voice.source === 'mine' ? (
-                          /* ★ 2026-10-16 用户要求把它换成一个删除图标（原来是"删掉它"三个字）。
-                       ★ 只有图标就**必须**补两个东西：`aria-label`（读屏念得到）与
+                          /* 2026-10-16 用户要求把它换成一个删除图标（原来是"删掉它"三个字）。
+                       ★ 只有图标就必须补两个东西：`aria-label`（读屏念得到）与
                          `title`（鼠标停一下能看到它是什么、以及删了会怎样）——
                          同 `CreateLanding` 那颗优化钮的处理。
-                       ★ 图标**重画过一次**（第一版用户说"不好看"）：那一版在 20 的格子里
+                       图标重画过一次（第一版用户说"不好看"）：那一版在 20 的格子里
                          还塞了两条竖线当桶纹，缩到 17px 之后两条 1.5 的线糊成一团，
-                         整个图形读起来像个珊瑚。现在只用三笔——**盖、提手、桶身**——
-                         按 24 的格子、1.6 的线宽画：小尺寸下**少一笔比多一笔好看**。 */
+                         整个图形读起来像个珊瑚。现在只用三笔——盖、提手、桶身——
+                         按 24 的格子、1.6 的线宽画：小尺寸下少一笔比多一笔好看。 */
                           <button
                             type="button"
                             className="vc__del"

@@ -1,14 +1,14 @@
 /**
  * child-deletion.test.ts —— 「删干净了没有」这件事的用例（工单 03 第三刀）
  *
- * 最要紧的一组是**缩略图**。理由不是"完整性好看"，是一个真实的漏：
+ * 最要紧的一组是缩略图。理由不是"完整性好看"，是一个真实的漏：
  * 这一刀开工前，资产根里躺着 9 个残留的缩略图，全是我在前面几刀里删掉的探针留下的——
  * 卡片目录删了，`thumbs/240/cards/<cardId>/ref.….webp` 还在。
- * 那 7 个文件里的内容就是那些探针的"脸"，而"删掉"这件事在界面上当时是**成立**的。
+ * 那 7 个文件里的内容就是那些探针的"脸"，而"删掉"这件事在界面上当时是成立的。
  *
  * 其余几组盯的是同一件事的几个侧面：
- * - 书用**卡号**认，不用 `${childId}-sheet` 这个命名约定（靠约定会安静漏掉全部旧书）；
- * - 凭据报的是**真删掉的条数**，不是预演时数出来的那份（这两者在"正常情况"下相等，
+ * - 书用卡号认，不用 `${childId}-sheet` 这个命名约定（靠约定会安静漏掉全部旧书）；
+ * - 凭据报的是真删掉的条数，不是预演时数出来的那份（这两者在"正常情况"下相等，
  *   而"正常情况"正是不该被假定的东西）；
  * - 一个位置失败不代表放弃其它位置，但 `complete` 必须是 false。
  */
@@ -116,7 +116,7 @@ async function seedDerived(f: Fixture, cardId: string, bookId: string, childId: 
   for (const width of [240, 384, 512, 768]) {
     await f.put(`thumbs/${width}/cards/${cardId}/ref.abc.png.webp`)
     await f.put(`thumbs/${width}/books/${bookId}/page-1-a1.png.webp`)
-    // 另一个孩子的缩略图：**不许**被牵连
+    // 另一个孩子的缩略图：不许被牵连
     await f.put(`thumbs/${width}/cards/other-sheet/ref.zzz.png.webp`)
   }
   void childId
@@ -233,7 +233,7 @@ describe('照片那一行：0 条，但有一张卡的血缘里有照片', () =>
     const photo = receipt.places.find((one) => one.place === '照片原图')
     expect(photo?.deleted).toBe(0)
     expect(photo?.note).toContain('从来没有落盘过')
-    // ★ 数的是卡不是版本：第二版是从第一版的插画改的，同一张照片不该数两次
+    // 数的是卡不是版本：第二版是从第一版的插画改的，同一张照片不该数两次
     expect(photo?.note).toContain('1 张卡')
   })
 
@@ -242,7 +242,7 @@ describe('照片那一行：0 条，但有一张卡的血缘里有照片', () =>
     const { cardId } = await seedChild(f, 'kid-a', { photo: true, revisions: 3 })
     const revisions = await f.deps.cardStore.revisions(cardId)
     expect(revisions).toHaveLength(3)
-    // 三版都带着 sourcePhoto —— 继承是**对的**（血缘里确实有一张真照片）
+    // 三版都带着 sourcePhoto —— 继承是对的（血缘里确实有一张真照片）
     expect(revisions.every((card) => card.sourcePhoto)).toBe(true)
     // 但凭据说的是"一张卡"，不是"三版"
     const targets = await targetsOf('kid-a', f.deps)
@@ -299,7 +299,7 @@ describe('★ 删到一半那句话：点名，而且只有没删干净时才有
     // 只点没删干净的那个：把删干净的位置也念一遍，这句话就不值得信了
     expect(message).not.toContain('角色卡与参考图')
     expect(message).not.toContain('孩子的档案')
-    // ★ 底层原话**不进**这句话（它随凭据回去，排障时看响应体）——
+    // 底层原话不进这句话（它随凭据回去，排障时看响应体）——
     //   家长要问的是"哪儿没删干净"，不是在弹窗里读 EACCES / 磁盘满了
     expect(message).not.toContain('磁盘满了')
   })
@@ -325,12 +325,12 @@ describe('★ 删到一半那句话：点名，而且只有没删干净时才有
 })
 
 /**
- * 路由把那句话**接上**了没有。
+ * 路由把那句话接上了没有。
  *
- * ★ 这一条是**护栏**，不是证明：真正的逻辑在上面那三条用例里（纯函数，
+ * 这一条是护栏，不是证明：真正的逻辑在上面那三条用例里（纯函数，
  *   点不点名、什么时候回 null 都由它们钉着）。这里问的是一件纯函数测不到的事——
  *   `DELETE` 那条路有没有把这句话放进响应体。
- *   ★ 它值得一条用例，是因为这件事**恰恰坏过一次**：服务端原来回
+ *   它值得一条用例，是因为这件事恰恰坏过一次：服务端原来回
  *   `200 + { receipt }`（没有 `message`），界面写着"把服务端那句话说出来"，
  *   于是两边读起来都对、而家长永远看到的是界面自己的兜底话。
  *   "界面会显示服务端那句话"这种承诺，只有真跑到那条分支才算数。

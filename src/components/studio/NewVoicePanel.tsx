@@ -6,19 +6,19 @@
  * 它是 `.scratch/voice-clone/` 这一轮真正的那件东西。五条按顺序写在下面，
  * 每一条都是别人踩过的地方：
  *
- * 1. **同意是这一步的前置条件，不是一句文案**。勾了才出现录音钮；而且这次勾选会变成
+ * 1. 同意是这一步的前置条件，不是一句文案。勾了才出现录音钮；而且这次勾选会变成
  *    `consentRef`（一个只指代"这一次授权"的凭据号）随请求发出去——服务端少了它就 400
- *    （`lib/voices/request.ts`）。"没有那一次同意就没有这条音色"因此在**接口上**成立，
+ *    （`lib/voices/request.ts`）。"没有那一次同意就没有这条音色"因此在接口上成立，
  *    而不只在界面上成立。
- * 2. **我们发出去的样本 = 你刚听的那一段**。浏览器录到的是 webm/opus（厂商不收），
+ * 2. 我们发出去的样本 = 你刚听的那一段。浏览器录到的是 webm/opus（厂商不收），
  *    所以中间要转成 16kHz 单声道 WAV（`lib/audio/capture.ts`）。试听放的**就是转好的
  *    那串字节**，不是原始录音——这样"发出去的东西有没有被转坏"当场就能听出来，
  *    而不是等生成出来听着不对再回头怀疑。
- * 3. **样本不留存**。它只活在内存与那一次请求体里：不落盘、不进本地记录、不进日志。
+ * 3. 样本不留存。它只活在内存与那一次请求体里：不落盘、不进本地记录、不进日志。
  *    这也是为什么这一屏没有"我的录音"列表——那种列表本身就是在留样本。
- * 4. **在录的那一刻要说清在录什么**（计时 + 一个静止模式下也读得出来的状态），
+ * 4. 在录的那一刻要说清在录什么（计时 + 一个静止模式下也读得出来的状态），
  *    以及**麦克风被拒/没有麦克风时**还有"选一个音频文件"那条路。
- * 5. **建完之后立刻真合成一次**，通了才说"能用了"；没通就说"还在部署中"
+ * 5. 建完之后立刻真合成一次，通了才说"能用了"；没通就说"还在部署中"
  *    （`list_voice` 里新建的音色 status 是 `DEPLOYING`，这是实测见过的真实状态）。
  */
 
@@ -37,8 +37,9 @@ import { newConsentRef } from '@/lib/voices/consent.ts'
 import type { MyVoice } from '@/lib/voices/state.ts'
 import { useVoice } from '@/components/voices/VoiceProvider.tsx'
 
-/** 厂商上限 60 秒。★ 到点自动停，但**不是**在理想的 20 秒处停——
- *  正说到一半被掐掉，比多录 10 秒难受得多 */
+/** 厂商上限 60 秒。★ 到点自动停，但不是在理想的 20 秒处停——
+ *  正说到一半被掐掉，比多录 10 秒难受得多
+ */
 const HARD_MAX_MS = 60_000
 /** 计时器每 100ms 一次：屏幕上要跳的是"秒数"，用 rAF 是浪费 */
 const TICK_MS = 100
@@ -133,7 +134,7 @@ export default function NewVoicePanel({ onClose }: { onClose: () => void }) {
     }
     let stream: MediaStream
     try {
-      // ★ 关掉三件"好听但不像你"的处理：回声消除/降噪/自动增益都会改音色，
+      // 关掉三件"好听但不像你"的处理：回声消除/降噪/自动增益都会改音色，
       //   而这一屏要的正是"像你"
       stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
@@ -194,7 +195,7 @@ export default function NewVoicePanel({ onClose }: { onClose: () => void }) {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          // ★ 请求体里**没有 env** 了（2026-10-17）：密钥由站长分配，只从服务端环境来
+          // 请求体里没有 env 了（2026-10-17）：密钥由站长分配，只从服务端环境来
           sampleBase64: toBase64(sample.bytes),
           mime: sample.mime,
           name,
@@ -206,9 +207,9 @@ export default function NewVoicePanel({ onClose }: { onClose: () => void }) {
       }
       const data = (await response.json()) as { voiceId?: string; modelId?: string; name?: string }
       if (!data.voiceId) throw new Error('厂商那边没有回 voice_id')
-      // ★ 2026-10-17（工单 16）：这里原来还带一个 consentRef——那份记录住在
+      // 2026-10-17（工单 16）：这里原来还带一个 consentRef——那份记录住在
       //   localStorage 时，它被原样存下来。现在记录住在账号上（voices 表），
-      //   而凭据号是**一次性**的东西：进了持久层，下一次有人读它就会以为
+      //   而凭据号是一次性的东西：进了持久层，下一次有人读它就会以为
       //   那是一次仍然有效的授权。所以它只走请求，不进记录。
       voice = {
         voiceId: data.voiceId,
@@ -217,7 +218,7 @@ export default function NewVoicePanel({ onClose }: { onClose: () => void }) {
         createdAt: Date.now(),
       }
     } catch (err) {
-      // ★ 失败就说失败：卡片不出现、本地记录不写。绝不"先记下来，回头再慢慢修"——
+      // 失败就说失败：卡片不出现、本地记录不写。绝不"先记下来，回头再慢慢修"——
       //   那样列表里会有一条永远发不出声的音色
       setError(err instanceof Error ? err.message : String(err))
       setStep('review')
@@ -312,7 +313,7 @@ export default function NewVoicePanel({ onClose }: { onClose: () => void }) {
                 disabled={!canRecord}
                 title={
                   consented
-                    ? /* ★ 上面那条被砍掉的话在这里：按钮上是唯一还能读到它的地方 */
+                    ? /* 上面那条被砍掉的话在这里：按钮上是唯一还能读到它的地方 */
                       '开始录音。录的这一段只用来生成音色——它只在生成的那一次请求里出现过，不落盘、不留档'
                     : '先勾上面那一条'
                 }

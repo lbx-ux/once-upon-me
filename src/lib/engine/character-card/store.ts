@@ -11,14 +11,14 @@
  *   latest                 纯文本，写着当前 revision —— 一个字节的可信指针
  * ```
  *
- * ★ 三个设计选择，每个都对应一个具体的失败模式：
+ * 三个设计选择，每个都对应一个具体的失败模式：
  *
- * 1. **文件名里带内容指纹**。家长微调之后旧版卡必须还在：旧书的那些页出自旧版，
+ * 1. 文件名里带内容指纹。家长微调之后旧版卡必须还在：旧书的那些页出自旧版，
  *    覆盖了它们，"这张图是哪版角色卡画的"就答不上来（ADR-0003 的失效管理）。
- * 2. **`latest` 是一个单独的小文件**，不是"扫目录取最大 revision"。
+ * 2. `latest` 是一个单独的小文件，不是"扫目录取最大 revision"。
  *    扫目录在内存 store 上可行、在对象存储上会变成一次全量 list；
- *    而且"当前版"是一个**决定**，决定要有明确的记录处。
- * 3. **删除以孩子为单位**（`deleteChild`），返回删掉的条数。
+ *    而且"当前版"是一个决定，决定要有明确的记录处。
+ * 3. 删除以孩子为单位（`deleteChild`），返回删掉的条数。
  *    隐私设计 §九 要求删除凭据列出"每个存储位置各删了多少条"——
  *    一个不报数的删除实现，那张凭据就写不出来。
  *
@@ -53,19 +53,19 @@ export type CardStore = {
   /** 造卡：算参考图指纹 → 建卡 → 校验 → 落盘 → 更新 latest */
   create(
     input: // ★ `referenceBytes` 要一起 Omit 掉再重声明：`BuildCardInput.referenceBytes` 是
-    //   **字节数**（`number`，卡里存的是长度），而这一层的入参是**字节本身**
+    //   字节数（`number`，卡里存的是长度），而这一层的入参是字节本身
     //   （`Uint8Array`）。只 Omit 'referencePath' 的话，交叉类型会得到
     //   `number & Uint8Array` —— 一个没有任何值能满足的类型。
     //   它一直没被闸门抓到的原因很具体：调它的三个调用方都在 `scripts/*.mts` 里，
-    //   而 `tsconfig.json` 的 include 是 `**/*.ts`，**.mts 不在其中**。
+    //   而 `tsconfig.json` 的 include 是 `**/*.ts`，.mts 不在其中。
     Omit<BuildCardInput, 'referencePath' | 'referenceBytes'> & {
       referenceBytes: Uint8Array
       referenceMime: string
       /**
-       * 「换一版」：在旧卡上叠一个新 revision，**不覆盖**（ADR-0007）。
+       * 「换一版」：在旧卡上叠一个新 revision，不覆盖（ADR-0007）。
        *
-       * ★ 为什么要有这个入参，而不是让调用方自己 `save` 一张改过 revision 的卡：
-       *   参考图是**内容寻址**的（`ref.<指纹>.webp`），换图必须同时换文件名、
+       * 为什么要有这个入参，而不是让调用方自己 `save` 一张改过 revision 的卡：
+       *   参考图是内容寻址的（`ref.<指纹>.webp`），换图必须同时换文件名、
        *   换 `reference` 三件套、并且知道 store 算出来的指纹——那三件事全在这一层，
        *   调用方拿不到也拼不对。没有它，界面上的"换一版"只有两条歪路：
        *   覆盖旧版（旧书的图来源被抹掉），或者从 `load` 拿到旧版自己改（拼错指纹）。
@@ -74,7 +74,7 @@ export type CardStore = {
       /**
        * 家长写下的那句「想改哪里」（工单 03）。进 `provenance.suggestion`。
        *
-       * ★ 它进 provenance 而不是进 anchors：锚点是"他长什么样"的判据，
+       * 它进 provenance 而不是进 anchors：锚点是"他长什么样"的判据，
        *   这句话是"这一版是怎么来的"。混进锚点会当场撞上 card.ts 文件头那条
        *   不变式——锚点里的每一项都必须跨页不变，而"眼睛再大一点"只属于这一版。
        */
@@ -89,9 +89,9 @@ export type CardStore = {
   latest(cardId: string): Promise<CharacterCard | null>
   summaries(): Promise<CardSummary[]>
   /**
-   * 这张卡的**全部**版本，按 revision 升序（工单 03 的版本历史）。
+   * 这张卡的全部版本，按 revision 升序（工单 03 的版本历史）。
    *
-   * ★ 与 `summaries()` 分开而不是给它加个开关：那两个问题的答案形状不一样——
+   * 与 `summaries()` 分开而不是给它加个开关：那两个问题的答案形状不一样——
    *   一个是"每个卡现在长什么样"（跨卡，同 cardId 只留最新），
    *   一个是"这一张卡走过哪些版本"（单卡，全都留着）。合并成一个函数加 flag，
    *   调用方就要读文档才知道自己拿到的是哪种。
@@ -100,18 +100,18 @@ export type CardStore = {
   /**
    * 这个孩子现在的形象。没有就 `null`。
    *
-   * ★ 它**不靠"卡号 = `${childId}-sheet`"这个约定**去找：那是 `/api/cards` 建卡时
+   * 它不靠"卡号 = `${childId}-sheet`"这个约定去找：那是 `/api/cards` 建卡时
    *   顺手拼的字符串，不是领域规则。靠约定找的话，哪天建卡改用别的命名，
    *   所有已经建好的孩子会一起"没有形象"，而错误现场是一句
    *   "这个孩子还没有形象"——看不出是命名改了。
-   * ★ 由 `childId` 反查也是**档案与卡之间唯一那根线的另一端**：
+   * 由 `childId` 反查也是档案与卡之间唯一那根线的另一端：
    *   档案说"他是谁"，卡说"他长什么样"，两边靠 childId 对上。
    */
   latestForChild(childId: string): Promise<CharacterCard | null>
   /**
    * 把 `latest` 指回旧的一版（工单 03 的"切回这一版"）。
    *
-   * ★ 它**只动那个一字节的指针**，不删新图、不改任何一版的内容。
+   * 它只动那个一字节的指针，不删新图、不改任何一版的内容。
    *   语义是"从现在起用第 N 版形象"，不是"第 N 版之后那些没发生过"——
    *   已经做出来的书仍然指着它们各自那一版（ADR-0007）。
    * ★ 目标版不存在就抛，不写一个指不到东西的指针：那种指针的症状是
@@ -119,13 +119,13 @@ export type CardStore = {
    */
   setLatest(cardId: string, revision: number): Promise<void>
   /**
-   * 删掉**一张卡的全部版本**（含参考图与 `latest` 指针），返回删掉的**条数**与参考图字节数。
+   * 删掉一张卡的全部版本（含参考图与 `latest` 指针），返回删掉的条数与参考图字节数。
    *
-   * ★ 与 `deleteChild` 分开的理由：删除的凭据要**逐位置报数**
+   * 与 `deleteChild` 分开的理由：删除的凭据要逐位置报数
    *   （"每个存储位置各删了多少条"），而一张卡的条数是那笔账里的一行。
    *   让调用方拿 `deleteChild` 去凑一行，它就得自己拼 `cards/<cardId>/` 这个前缀——
    *   而那正是这个文件管的约定（`CARDS_PREFIX`）。
-   * ★ 返回的 `files` 是**真的删掉了几条**（`deletePrefix` 数的），不是预估：
+   * 返回的 `files` 是真的删掉了几条（`deletePrefix` 数的），不是预估：
    *   凭据的全部意义就是不依赖预估。
    */
   deleteCard(cardId: string): Promise<{ files: number; bytes: number }>
@@ -148,7 +148,7 @@ export function createCardStore(store: AssetStore): CardStore {
       const ref = await store.put({ path, bytes: input.referenceBytes, mime: input.referenceMime })
 
       const fresh = buildCard({ ...input, referencePath: path, referenceBytes: ref.bytes })
-      // 「换一版」：新 revision + 新锚点 + 新参考图，**旧版文件一个字节都不动**
+      // 「换一版」：新 revision + 新锚点 + 新参考图，旧版文件一个字节都不动
       // （ADR-0007：旧书的那些页出自旧版卡，覆盖了它们，"这张图是哪版画的"就答不上来）
       const card = attachReferenceDigest(
         input.previous
@@ -225,12 +225,12 @@ export function createCardStore(store: AssetStore): CardStore {
 
       const out: CardSummary[] = []
       for (const cardId of cardIds) {
-        // ★ **必须走 `load`**：它读的是 `latest` 那个指针。
+        // ★ 必须走 `load`：它读的是 `latest` 那个指针。
         //
         //   这一版之前用的是"扫目录取最大 revision"——在"切回旧版"这个动作出现之前，
         //   两者永远一致，所以看不出区别。工单 03 做了「从现在起用这一版」之后，
         //   实测到症状：指针已经写成 1 了，页面上还说第 2 版是当前——
-        //   因为"当前版"是**一个决定**（`latest` 文件头第 2 条就是这么写的），
+        //   因为"当前版"是一个决定（`latest` 文件头第 2 条就是这么写的），
         //   而"revision 最大"只是那个决定在没人改过它时的样子。
         //
         //   指针指不到东西时退回最大 revision：那是资产被手改过的情形，
@@ -277,7 +277,7 @@ export function createCardStore(store: AssetStore): CardStore {
     },
 
     async deleteCard(cardId) {
-      // 字节在删之前读：`reference.bytes` 是建卡时记下的**参考图长度**，
+      // 字节在删之前读：`reference.bytes` 是建卡时记下的参考图长度，
       // 删完就没人记得了，而删除凭据要报得出"各删了多少"
       const card = (await this.load(cardId)) ?? (await newestRevision(store, cardId))
       const bytes = card?.reference.bytes ?? 0

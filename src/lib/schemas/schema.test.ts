@@ -51,14 +51,14 @@ describe('describe() —— 同一份定义的两个用途', () => {
   })
 
   /**
-   * ★ `stringList` 的条数上下界要发出去（2026-10-20 补的）。
+   * `stringList` 的条数上下界要发出去（2026-10-20 补的）。
    *
    *   在它之前，`parse()` 一直用 `countCheck` 卡着 `opts.min` / `opts.max`
-   *   （`body` 是 1–4 条），而 `describe()` **一个都不发**——于是喂给模型的那份 schema
+   *   （`body` 是 1–4 条），而 `describe()` 一个都不发——于是喂给模型的那份 schema
    *   比我们验收的那份松一格：模型交了 5 条，会被判 `数量过多（5 > 4）`，
    *   而它从来没有被告知上限是 4。文件头那句"分成两份定义迟早会漂"，说的就是这种漂。
-   *   ★ 同一个文件里 `array().describe()` 一直发着这两个键（`nodes` 就靠它拿到
-   *     `minItems: 3, maxItems: 40`），所以这一条其实是**补一处不一致**，不是加规矩。
+   *   同一个文件里 `array().describe()` 一直发着这两个键（`nodes` 就靠它拿到
+   *     `minItems: 3, maxItems: 40`），所以这一条其实是补一处不一致，不是加规矩。
    */
   it('stringList 的 min/max 也发出去，与 array() 一致', () => {
     const list = stringList({ min: 1, max: 4, itemMax: 120 }).describe()
@@ -76,7 +76,7 @@ describe('describe() —— 同一份定义的两个用途', () => {
   })
 
   /**
-   * ★ 发出去的那份与真正验收的那份**同一个数**：交 4 条过、交 5 条不过，
+   * 发出去的那份与真正验收的那份同一个数：交 4 条过、交 5 条不过，
    *   而 schema 里写的正是 4。这条把两者钉在一起——只改一边就会红。
    */
   it('★ 发出去的 maxItems 与 parse 真正卡住的条数是同一个数', () => {

@@ -1,7 +1,7 @@
 /**
- * inspirations.test.ts —— 灵感池与"发牌"那一步的**结构性**约束
+ * inspirations.test.ts —— 灵感池与"发牌"那一步的结构性约束
  *
- * ★ 为什么值得测：这一份表坏起来全是静默的——
+ * 为什么值得测：这一份表坏起来全是静默的——
  *   1. `theme` 写错一个字母：那一句抽到时点不亮任何一格，立绘也不换，屏幕上什么都不说；
  *   2. 某个主题一条都没有：那句"点了主题卡就换人"的话在这一路上有个洞；
  *   3. 全都带主题（或全都不带）：`theme: null` 那条分支变成死代码，
@@ -36,7 +36,7 @@ describe('灵感池', () => {
     for (const text of texts) expect(text.trim().length).toBeGreaterThan(0)
     // ★ 池子里自己重复：抽到两次同一句，用户会以为按坏了
     expect(new Set(texts).size).toBe(texts.length)
-    // ★ 与墙上那 12 句重复：墙上那句是配着插画出的说明，"换一句"换出同一句
+    // 与墙上那 12 句重复：墙上那句是配着插画出的说明，"换一句"换出同一句
     //   看着像按钮没反应（12 格全部按过一遍之后概率不低）
     const wall = new Set(EXAMPLE_WISHES.map((item) => item.text))
     for (const text of texts) expect(wall.has(text), `「${text}」与主题墙那一句重复了`).toBe(false)
@@ -78,7 +78,7 @@ describe('发牌（"换一句"按下去的那一步）', () => {
 
   it('一轮之内不重复：抽满一条池子正好是 0…N-1 的一个排列', () => {
     const got = draws(INSPIRATION_POOL.length, seq([0.13, 0.71, 0.29, 0.53, 0.97, 0.41, 0.07]))
-    // ★ 这一条同时否掉两种坏法：随机到重复（长度对不上）与**按顺序**（就是旧样子：
+    // 这一条同时否掉两种坏法：随机到重复（长度对不上）与按顺序（就是旧样子：
     //   那么抽出来会正好是 0,1,2,…，一个排列也满足，所以下面还要单独查它不是顺序）
     expect(new Set(got).size).toBe(INSPIRATION_POOL.length)
     expect([...got].sort((a, b) => a - b)).toEqual(

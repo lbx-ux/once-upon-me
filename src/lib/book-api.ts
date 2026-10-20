@@ -1,16 +1,16 @@
 /**
- * book-api.ts —— 创作流那一次 `POST /api/books` 的**请求契约**（纯函数）
+ * book-api.ts —— 创作流那一次 `POST /api/books` 的请求契约（纯函数）
  *
  * 单独一个文件的理由：它是"浏览器传进来的东西"与"引擎的入参"之间唯一的关口。
  * 把关的代码写在 Route Handler 里，就只能靠手工发请求去测；写在这里，
  * 它可以被测试钉住（工单 09 §二 第 6 条：表单契约测试先行）。
  *
- * ★ 校验的**判据**来自引擎的领域类型，不另立一套：
+ * 校验的判据来自引擎的领域类型，不另立一套：
  *   `ageBand` 必须落在 `AGE_BANDS` 里、`form` 必须落在 `BOOK_FORMS` 里——
  *   都是 import 过来判的。抄一份字面量进来，就是"两处定义迟早会漂"的最小样本
  *   （漂了以后的症状是：表单能选中的年龄档，引擎拒绝）。
  *
- * ★ 校验失败**一次报全部**，不是遇到第一个就返回。填表的人宁可一次看到三条，
+ * 校验失败一次报全部，不是遇到第一个就返回。填表的人宁可一次看到三条，
  *   也不愿意改一条、提交、再看到下一条。
  */
 
@@ -32,7 +32,7 @@ export const BOOK_STATUSES: readonly BookStatus[] = ['draft', 'published']
 /** 表单能提供的、以及 ADR-0008 要求的那几项 */
 export type CreateBookBody = {
   child: ChildProfile
-  /** 角色卡**按 id 引用**，不是把卡塞进请求体：卡是资产（ADR-0007），不是表单字段 */
+  /** 角色卡按 id 引用，不是把卡塞进请求体：卡是资产（ADR-0007），不是表单字段 */
   cardId: string
   cardRevision?: number
   theme: string
@@ -42,22 +42,22 @@ export type CreateBookBody = {
   /**
    * 这一本用哪个音色朗读（工单 02）。
    *
-   * ★ **不填就是"这一本不配音"**——不是"用默认音色"。这一点是刻意的：
+   * 不填就是"这一本不配音"——不是"用默认音色"。这一点是刻意的：
    *   引擎那边碰到没有 `voiceId` 会发一条非致命 error 如实说"这本书没有朗读"
-   *   （`engine/index.ts`），而**默认音色是产品概念，不是引擎概念**（那行注释的原话）。
+   *   （`engine/index.ts`），而默认音色是产品概念，不是引擎概念（那行注释的原话）。
    *
-   * ★ 这个字段曾经**整条缺席**：`CreateBookBody` 上没有它、`toBookBody()` 也不传，
+   * 这个字段曾经整条缺席：`CreateBookBody` 上没有它、`toBookBody()` 也不传，
    *   于是从界面做出来的每一本书，引擎收到的都是 `undefined`——
    *   一次朗读都没有过。加上它才是"接了"，在此之前那条线只是看着接上了。
    */
   voiceId?: string
   /**
-   * 这一轮做出来的是一份**草稿**还是一本**成品**（工单 03）。
+   * 这一轮做出来的是一份草稿还是一本成品（工单 03）。
    * 不填 = 不写这个字段（见 `Book.status` 的迁移决定：缺省 = 成品）。
    */
   status?: BookStatus
   /**
-   * provider 模式由调用方**声明**，不许 fallback 出来（providers/types.ts 的原话）。
+   * provider 模式由调用方声明，不许 fallback 出来（providers/types.ts 的原话）。
    * 界面永远传 live；脚本与演示可以传 offline。
    */
   mode?: 'live' | 'offline'
@@ -77,15 +77,15 @@ export type ParseResult<T> = { ok: true; value: T } | { ok: false; problems: str
 const MAX_TAGS = 8
 
 /**
- * 「人写的一句话」的上界。★ 2026-10-20 **导出**它，因为消费它的人从一个变成了四个。
+ * 「人写的一句话」的上界。★ 2026-10-20 导出它，因为消费它的人从一个变成了四个。
  *
  * 原来是这一条路由内部的一个数，而同一类东西（家长手打的一句话）在别的入口
  * 各有各的数——`rerun-api.ts` 的 `MAX_FIX_NOTE`、`optimize` 那条的 `MAX_WISH`、
  * `rewrite` 那条的 `MAX_REVISE_NOTE`。`rerun-api.ts` 的文件头把这条规矩写得很清楚：
  * 「同一类东西（人写的一句话）不该因为走了另一个入口就换一套长度规矩」，
- * 而它自己就是被这个数**催出来**的。四个数写死四处，就是四次各自漂移的机会。
- * ★ 所以"开书时的主题与 wish"与"改稿要求"现在共用这一个：它们的下界都是"一句话"，
- *   上界也就该是同一个。`rerun-api.ts` 的 `MAX_BODY`（一页正文）**不并进来**——
+ * 而它自己就是被这个数催出来的。四个数写死四处，就是四次各自漂移的机会。
+ * 所以"开书时的主题与 wish"与"改稿要求"现在共用这一个：它们的下界都是"一句话"，
+ *   上界也就该是同一个。`rerun-api.ts` 的 `MAX_BODY`（一页正文）不并进来——
  *   那是另一种东西（一页绘本的字），它有自己的量级。
  */
 export const MAX_TEXT = 200
@@ -167,8 +167,8 @@ export function parseCreateBody(raw: unknown): ParseResult<CreateBookBody> {
   }
 
   // 音色 id 是厂商侧的一个标识（`longjielidou_v3.6`、或克隆来的 voice_id）。
-  // ★★ 这条判据 2026-10-18 从"64 字以内"改成了 `lib/voices/id.ts` 里那一条，
-  //    起因是用户报「选自己生成的声音就报错」——量下来克隆出来的 id 是 **68 字**
+  // ★ 这条判据 2026-10-18 从"64 字以内"改成了 `lib/voices/id.ts` 里那一条，
+  //    起因是用户报「选自己生成的声音就报错」——量下来克隆出来的 id 是 68 字
   //    （厂商把 `qwen-audio-3.0-tts-flash` + prefix + 32 位随机拼起来了），
   //    而那 64 是当初猜的。长度与字符集两条判据、以及那次测量的完整记录都在那个文件里。
   //    ★ 它会被原样送去 TTS：判漏了报回来的错是"音色不存在"，与真正的问题隔着两层。
@@ -183,10 +183,10 @@ export function parseCreateBody(raw: unknown): ParseResult<CreateBookBody> {
   const lookTags = strList(childRaw?.['lookTags'], problems, '外貌标签')
   const interestTags = strList(childRaw?.['interestTags'], problems, '爱好标签')
   /**
-   * 性别（2026-10-16 补）。★ **可选**，与 `ChildProfile.gender` 一致：没填是一个合法状态
+   * 性别（2026-10-16 补）。★ 可选，与 `ChildProfile.gender` 一致：没填是一个合法状态
    * （老档案、示例孩子都没有这一栏），那时称号退回按外貌标签推。
    *
-   * ★ 它为什么必须进这张表：这个字段决定逐页 prompt 里的那个**称呼**
+   * ★ 它为什么必须进这张表：这个字段决定逐页 prompt 里的那个称呼
    *   （小男孩 / 小女孩），而称呼决定模型画男孩还是画女孩。
    *   原来 `toBookBody` 根本不送它——用户在界面上选的那一档，跑到引擎那边就不见了，
    *   于是"我提供给你的是男孩子，生成出来有男孩有女孩子"。
@@ -227,7 +227,7 @@ export function parseCreateBody(raw: unknown): ParseResult<CreateBookBody> {
 /**
  * 名字 → childId。
  *
- * ★ 中文名推不出像样的 slug，所以这条只是**兜底**：真正的 childId 由表单层生成
+ * 中文名推不出像样的 slug，所以这条只是兜底：真正的 childId 由表单层生成
  *   （它知道这是第几个孩子）。兜底返回空串让上面的校验报错，比编一个
  *   `child-<时间戳>` 更好——时间戳会让同一个孩子每提交一次就多一个身份，
  *   而"跨书复用同一张卡"正是这个产品的主张之一。

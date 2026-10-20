@@ -1,14 +1,14 @@
 /**
- * children-body.test.ts —— 性别那一栏在**请求边界**上收成什么样（2026-10-16 第 23 刀）
+ * children-body.test.ts —— 性别那一栏在请求边界上收成什么样（2026-10-16 第 23 刀）
  *
- * ★ 为什么要给这一层写测试：它是这条值**唯一**能挡住"绕过界面的请求"的地方。
+ * 为什么要给这一层写测试：它是这条值唯一能挡住"绕过界面的请求"的地方。
  *   界面上性别只能点两个芯片之一，但请求体是外面递进来的——`parseChildBody`
  *   是最后一道。写错的样子很安静：脏值一路传进档案，"男孩/女孩"变成
  *   提示词里一个模型读不懂的词，而界面上看不出任何异常。
- * ★ 它的三条口径与 `domain.ts` 的 `Gender` 是同一件事的三面：
+ * 它的三条口径与 `domain.ts` 的 `Gender` 是同一件事的三面：
  *   ① 没有这一栏 = 合法（老档案、示例、创作流那一屏）；
  *   ② 有且是 boy/girl = 收；
- *   ③ 有但是别的 = 报一条人话，**不把脏值传下去**。
+ *   ③ 有但是别的 = 报一条人话，不把脏值传下去。
  */
 
 import { describe, expect, it } from 'vitest'
@@ -45,7 +45,7 @@ describe('parseChildBody · 性别（第 23 刀）', () => {
     const { body, problems } = parseChildBody({ ...base(), gender: '男孩' })
     expect(problems).toEqual(['性别只认「boy」或「girl」'])
     // 这一条是重点：问题清单非空时 `body` 是 undefined，
-    // 于是"脏值灌进档案"这件事在这个形状下**做不到**
+    // 于是"脏值灌进档案"这件事在这个形状下做不到
     expect(body).toBeUndefined()
   })
 })

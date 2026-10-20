@@ -1,19 +1,19 @@
 /**
- * illustrate.test.ts —— 一致性比对**调用失败**时的行为
+ * illustrate.test.ts —— 一致性比对调用失败时的行为
  *
  * 这一条是实测踩出来的，不是推演出来的（`node scripts/engine-run.mts --mode=live
  * --pages=5`，2026-10-13）：
  *
  * - 5 页全部出图，磁盘上 8 张 PNG（含重画），钱都花了；
  * - 比对模型在其中 3 页上回 504 / 网络错；
- * - 书里**只剩 2 页**，汇总行还写着"2/5 页有图"。
+ * - 书里只剩 2 页，汇总行还写着"2/5 页有图"。
  *
  * 成因是 `opts.vision.compare()` 直接 await：异常冒到 `illustrateAll` 的 catch，
- * 于是这一页连同**已经付过钱的图**一起从书里消失。
+ * 于是这一页连同已经付过钱的图一起从书里消失。
  * 而 `ConsistencyResult.verdict` 的注释本来就写明 `unavailable` 覆盖
- * "视觉模型未配置**或调用失败**"——代码没做到注释里写的事。
+ * "视觉模型未配置或调用失败"——代码没做到注释里写的事。
  *
- * 这里锁死三件事：**不抛、图还在、verdict = unavailable**。
+ * 这里锁死三件事：不抛、图还在、verdict = unavailable。
  */
 
 import { describe, expect, it } from 'vitest'
@@ -177,7 +177,7 @@ describe('illustrateNode · 比对调用失败', () => {
 
     const { result, calls } = await run(throwing)
 
-    // 1) 图真的画出来了，而且**记录里指向的是那张图**，不是 missing.bin
+    // 1) 图真的画出来了，而且记录里指向的是那张图，不是 missing.bin
     expect(calls).toHaveLength(1)
     expect(result.asset.path).toBe('books/book-test/page-1-a1.png')
     expect(result.asset.path).not.toContain('missing')
@@ -192,7 +192,7 @@ describe('illustrateNode · 比对调用失败', () => {
     // 4) 仍然要人看一眼（降级 B 的入口），但不是整页失败
     expect(result.needsHumanReview).toBe(true)
 
-    // 5) **不重画**：没有判据的重画是烧钱抽签（illustrate.ts 文件头第 1 条）
+    // 5) 不重画：没有判据的重画是烧钱抽签（illustrate.ts 文件头第 1 条）
     expect(calls).toHaveLength(1)
   })
 
@@ -213,7 +213,7 @@ describe('illustrateNode · 比对调用失败', () => {
   it('未配置比对模型时不重画，且明说这一页没核对过', async () => {
     const { result, calls } = await run(null)
     expect(result.consistency?.verdict).toBe('unavailable')
-    // ★ 2026-10-19 改了措辞：这一档现在有**两件事**可能没做（像不像 / 画面），
+    // 2026-10-19 改了措辞：这一档现在有两件事可能没做（像不像 / 画面），
     //   所以这句话要说清是"整个没有视觉能力"，而不是含糊的"比对模型没配"。
     //   两件事都缺席时说的是这一句；只缺比对那一半时说的是另一句（见文件里那两行）
     expect(result.consistency?.reason).toContain('未配置视觉模型')
@@ -223,12 +223,12 @@ describe('illustrateNode · 比对调用失败', () => {
 })
 
 /**
- * ★ 这一组是 2026-10-19 补的，对着 **B3 剩下那半张纸** 写
+ * 这一组是 2026-10-19 补的，对着 B3 剩下那半张纸 写
  *   （`.scratch/safety` 工单 01：画面那一路）。
  *
- *   它锁死的是**处置**，不是"函数返回了 flag"——两者差着一条真的在跑的路径：
- *   `flag` → 重画 → 重画用尽 → **图留着 + 人得看一眼 + 条款 id 在记录里**。
- *   `unavailable` → **不重画**（这一档连分都没有，重画是纯抽签）。
+ *   它锁死的是处置，不是"函数返回了 flag"——两者差着一条真的在跑的路径：
+ *   `flag` → 重画 → 重画用尽 → 图留着 + 人得看一眼 + 条款 id 在记录里。
+ *   `unavailable` → 不重画（这一档连分都没有，重画是纯抽签）。
  *   这两条判据反过来任意一条写错，症状都不是报错，而是"钱多花了"或"一张有问题的图
  *   悄悄进了书里"，两个都不会在日志里喊。
  */
@@ -280,7 +280,7 @@ describe('illustrateNode · 画面审核（`pictureReview`）', () => {
     // 真的重画过（不是"函数返回了 flag"就算）——这是判据的关键一半
     expect(calls).toHaveLength(2)
     expect(result.attempt).toBe(2)
-    // 小事：`pass` 那一条事件**照样发**（与 `consistency` 同一条），由界面决定显不显示
+    // 小事：`pass` 那一条事件照样发（与 `consistency` 同一条），由界面决定显不显示
     expect(reviews.map((event) => event.verdict)).toEqual(['flag', 'pass'])
     expect(reviews[0]?.reason).toContain('R-01')
     expect(reviews[0]?.reason).toContain('左下角那只玩偶的眼睛')
@@ -314,7 +314,7 @@ describe('illustrateNode · 画面审核（`pictureReview`）', () => {
     expect(calls).toHaveLength(1)
     expect(seen()).toBe(1)
     expect(result.pictureReview?.verdict).toBe('unavailable')
-    // 缺席/判不了**都不算通过**
+    // 缺席/判不了都不算通过
     expect(result.needsHumanReview).toBe(true)
     expect(reviews[0]?.verdict).toBe('unavailable')
   })
@@ -343,7 +343,7 @@ describe('illustrateNode · 画面审核（`pictureReview`）', () => {
       },
     }
     // 第 1 次：比对判不过（这张会被替掉）→ 不该审；第 2 次是最后一次，比对判不过但
-    // **这张会被留下** → 该审
+    // 这张会被留下 → 该审
     const { reviewer, seen } = scriptedReview(['pass'])
     const { calls } = await run(failing, { pictureReview: reviewer, maxAttempts: 2 })
     expect(calls).toHaveLength(2)
@@ -360,7 +360,7 @@ describe('illustrateNode · 画面审核（`pictureReview`）', () => {
     }
     const { reviewer, seen } = scriptedReview(['flag', 'flag', 'flag'])
     const { result, calls } = await run(blind, { pictureReview: reviewer, maxAttempts: 3 })
-    // 审了，而且它报出来的东西**照样触发重画**（不是"一致性没结论就一起放过"）
+    // 审了，而且它报出来的东西照样触发重画（不是"一致性没结论就一起放过"）
     expect(seen()).toBe(3)
     expect(calls).toHaveLength(3)
     expect(result.pictureReview?.verdict).toBe('flag')
@@ -377,9 +377,9 @@ describe('illustrateNode · 画面审核（`pictureReview`）', () => {
   })
 
   it('★ 配了比对、没配审核（直接调引擎时的可能形状）：写成 `unavailable` 并说清原因', async () => {
-    // ★ 这两个字段在产品路径上是**同一个对象**（`ProviderBundle.vision`），
+    // 这两个字段在产品路径上是同一个对象（`ProviderBundle.vision`），
     //   所以这一格只有直接调 `illustrateNode` 的脚本才会走到。
-    //   它记的是"审了没审成"而不是缺席——因为**没配审核**正是"没审成"的一个原因，
+    //   它记的是"审了没审成"而不是缺席——因为没配审核正是"没审成"的一个原因，
     //   而缺席要留给"根本没走到那一步"（见 domain.ts 那段）
     const { result, reviews } = await run(alwaysPass)
     expect(result.pictureReview?.verdict).toBe('unavailable')
@@ -391,16 +391,16 @@ describe('illustrateNode · 画面审核（`pictureReview`）', () => {
 })
 
 /**
- * ★ 这一组是 2026-10-16 补的，对着一次**真跑出来的**事故写：
+ * 这一组是 2026-10-16 补的，对着一次真跑出来的事故写：
  *   `.out/web/books/xiaolu-r1-ee69012def18` 第 6 页。
  *
  *   第 1 次画好了（`page-6-a1.png`，1536×1024、3.0 MB 就在磁盘上），比对没过 →
- *   重画 → 第 2 次在**下图那一跳**撞上 `ECONNRESET` → 整页变成 `errors` 里的一条，
- *   那张已经付过钱的图从书里消失，阅读器上写着"这一页没做出来"——**假话**。
+ *   重画 → 第 2 次在下图那一跳撞上 `ECONNRESET` → 整页变成 `errors` 里的一条，
+ *   那张已经付过钱的图从书里消失，阅读器上写着"这一页没做出来"——假话。
  *
- *   成因与上面那一组**完全同源**（异常冒到 `illustrateAll` 的 catch），
+ *   成因与上面那一组完全同源（异常冒到 `illustrateAll` 的 catch），
  *   只是当时只修了比对那一跳，真正出图与下图那两跳没修。
- *   所以判据也同形：**不抛、图还在、并且说清"重画没跑成"**。
+ *   所以判据也同形：不抛、图还在、并且说清"重画没跑成"。
  */
 describe('illustrateNode · 出图/落盘失败时不许丢掉已经画好的图', () => {
   /** 按剧本给分的比对器：`0.3` = 不像，`null` = 判不了 */
@@ -426,7 +426,7 @@ describe('illustrateNode · 出图/落盘失败时不许丢掉已经画好的图
     const { image, calls: imageCalls } = scriptedImage(['ok', ECONNRESET])
     const { result, calls, errors } = await run(scriptedVision([0.3]), { image })
 
-    // 1) 图还在，而且指向的是**已经画完的那一次**，不是空白占位
+    // 1) 图还在，而且指向的是已经画完的那一次，不是空白占位
     expect(result.asset.path).toBe('books/book-test/page-1-a1.png')
     expect(result.asset.path).not.toContain('missing')
     expect(result.attempt).toBe(1)
@@ -435,7 +435,7 @@ describe('illustrateNode · 出图/落盘失败时不许丢掉已经画好的图
     expect(result.consistency?.verdict).toBe('fail')
     expect(result.needsHumanReview).toBe(true)
 
-    // 3) ★ 但书里要写清**为什么停在第 1 次**：原始那句"哪一撮头发不对"一个字不丢，
+    // 3) ★ 但书里要写清为什么停在第 1 次：原始那句"哪一撮头发不对"一个字不丢，
     //    后面续上停手的原因。没有这一句，`verdict:'fail' + attempt:1` 看不出
     //    "后面还画过、只是被打断了"，而"重画几次"是 r_redraw 的数据源
     expect(result.consistency?.reason).toContain('头身比不对')
@@ -443,14 +443,14 @@ describe('illustrateNode · 出图/落盘失败时不许丢掉已经画好的图
     expect(result.consistency?.reason).toContain('ECONNRESET')
     expect(result.consistency?.reason).toContain('不是"没做出来"')
 
-    // 4) 也要出事件（过程日志里看得见），并且**不许是 fatal**——
+    // 4) 也要出事件（过程日志里看得见），并且不许是 fatal——
     //    它不是整本书失败，也不是这一页没有图
     expect(errors).toHaveLength(1)
     expect(errors[0]?.fatal).toBe(false)
     expect(errors[0]?.pageNo).toBe(1)
     expect(errors[0]?.message).toContain('重画没跑成')
 
-    // 5) 真的画过两次（第 2 次是失败的那次），但**只有一次成功产出**
+    // 5) 真的画过两次（第 2 次是失败的那次），但只有一次成功产出
     expect(imageCalls()).toBe(2)
     expect(calls).toHaveLength(1)
 
@@ -481,7 +481,7 @@ describe('illustrateNode · 出图/落盘失败时不许丢掉已经画好的图
   })
 
   it('★ 第 1 次就没成时照旧抛出去——那一页**确实**没有图，这才该进 errors', async () => {
-    // 这一条与上面两条是**一对**：修"丢掉已有的图"不等于"什么错都不抛了"。
+    // 这一条与上面两条是一对：修"丢掉已有的图"不等于"什么错都不抛了"。
     // 分界线只有一个：手上有没有一张画完的图。
     const { image } = scriptedImage([ECONNRESET])
     await expect(run(scriptedVision([0.3]), { image })).rejects.toThrow(/ECONNRESET/)
@@ -499,10 +499,10 @@ describe('illustrateNode · 出图/落盘失败时不许丢掉已经画好的图
 })
 
 /**
- * ★ `attemptBase`（工单 01 §3.1）——单页重画时**接着数**，不从 1 重来。
+ * `attemptBase`（工单 01 §3.1）——单页重画时接着数，不从 1 重来。
  *
  * 两种坏法都被这一节挡住：
- * 1. 文件名是 `page-{n}-a{attempt}` 拼的。从 1 重来会把**上一次那张**覆盖掉，
+ * 1. 文件名是 `page-{n}-a{attempt}` 拼的。从 1 重来会把上一次那张覆盖掉，
  *    而"失败的图也落盘、家长要能看见上一版为什么不像"是 `illustrate.ts` 文件头第 3 条。
  * 2. `retry` 那句话是"第 {attempt} / {maxAttempts} 次"。只抬 `attempt` 不抬上界的话，
  *    它念出来是"第 4 / 3 次"——一个自相矛盾的数，而屏幕上没有任何东西会提示它是错的。
@@ -593,15 +593,15 @@ describe('illustrateNode · attemptBase（单页重画接着数）', () => {
 })
 
 /**
- * 钱的账 —— 这一页这一次**实付了多少**（2026-10-16 补的字段）
+ * 钱的账 —— 这一页这一次实付了多少（2026-10-16 补的字段）
  *
- * ★ 在这一组测试之前，`Illustration.costCny` **从来没人填**：钱只进了 `illustration`
+ * 在这一组测试之前，`Illustration.costCny` 从来没人填：钱只进了 `illustration`
  *   事件（那是给界面看的），而 `summarize()` 的 `totalCostCny` 是从 `illustrations`
- *   里加出来的——于是**每一本书的成本都记成 0.00**，`scripts/web-run.mts` 的账目核对
+ *   里加出来的——于是每一本书的成本都记成 0.00，`scripts/web-run.mts` 的账目核对
  *   拿一个恒为 0 的和去对照单价，永远"对得上"。这正是"没测成不许记成测出来"那条
- *   教训的另一种长相：**假的和比没有和更危险**。
+ *   教训的另一种长相：假的和比没有和更危险。
  *
- * 判据选在这里而不是 `summarize` 那边：这一个字段是那份和的**唯一来源**，
+ * 判据选在这里而不是 `summarize` 那边：这一个字段是那份和的唯一来源，
  * 把它钉住了，上层那三行 reduce 就没有可错的地方。
  */
 describe('illustrateNode · 这一页这一次实付了多少', () => {
@@ -627,7 +627,7 @@ describe('illustrateNode · 这一页这一次实付了多少', () => {
   })
 
   it('★ 重画两次都算钱：这一页带回来的是 3 次的和，不是最后那张的价', async () => {
-    // 钱是按**次**花的，而"最后一版多少钱"这种口径会让重画看起来是免费的——
+    // 钱是按次花的，而"最后一版多少钱"这种口径会让重画看起来是免费的——
     // 而 r_redraw 这个指标本来就是拿重画次数说成本的
     const alwaysFail: VisionComparator = {
       id: 'fake-vision',
@@ -671,19 +671,19 @@ describe('illustrateNode · 这一页这一次实付了多少', () => {
 })
 
 /**
- * ── 锚点回灌（2026-10-20，计划表 B7）──────────────────────────────────────────
+ * ── 锚点回灌（2026-10-20，计划表 B7）
  *
- * ★ 这一组量的是**判据，不是实现**：出图那一步**实际收到的 prompt**。
- *   在那之前，提示词在循环外只算一次，重画那一轮拿到的是与上一轮**逐字节相同**
+ * 这一组量的是判据，不是实现：出图那一步实际收到的 prompt。
+ *   在那之前，提示词在循环外只算一次，重画那一轮拿到的是与上一轮逐字节相同
  *   的一段话——比对模型说出的"哪几条锚点不像"只进了 `retry` 事件（给人看）。
- *   所以"这一页重画过"这件事在旧代码里也是真的，**只有 prompt 不一样才是新增的**。
+ *   所以"这一页重画过"这件事在旧代码里也是真的，只有 prompt 不一样才是新增的。
  *   这就是为什么这里的判据取 `prompts[1]`，而不是取 `calls.length`。
  *
- * ★ 四件事，各自对应一种会静悄悄错掉的写法：
- *   ① 第 1 次**不许**带那句（带了就说明回灌发生在该发生之前，而那会动到首次通过率）；
- *   ② 第 2 次必须带上，并且**把卡上的原文补齐**（「眼睛是否一致」→「眼睛：深棕圆眼」）；
- *   ③ 第 3 次跟的是**第 2 次**的结论（照抄实现里"累积"的写法会让它带着两条旧账）；
- *   ④ 结论为空 / 比对已通过时**一句都不带**（缺席不许被读成"我知道该改哪里"）。
+ * 四件事，各自对应一种会静悄悄错掉的写法：
+ *   ① 第 1 次不许带那句（带了就说明回灌发生在该发生之前，而那会动到首次通过率）；
+ *   ② 第 2 次必须带上，并且把卡上的原文补齐（「眼睛是否一致」→「眼睛：深棕圆眼」）；
+ *   ③ 第 3 次跟的是第 2 次的结论（照抄实现里"累积"的写法会让它带着两条旧账）；
+ *   ④ 结论为空 / 比对已通过时一句都不带（缺席不许被读成"我知道该改哪里"）。
  */
 describe('illustrateNode · 重画时的锚点回灌（`anchorNote`）', () => {
   /** 记下每一次真的发出去的 prompt。这才是"喂回去了没有"的判据 */
@@ -725,10 +725,10 @@ describe('illustrateNode · 重画时的锚点回灌（`anchorNote`）', () => {
   }
 
   /**
-   * ★ 从一段 prompt 里挑出**回灌那一行**（没有就是 `undefined`）。
+   * 从一段 prompt 里挑出回灌那一行（没有就是 `undefined`）。
    *   判据必须落在这一行上，不能拿 `toContain('眼睛：深棕圆眼')` 去问整段：
    *   角色段本来就把每一条锚点写成「眼睛：深棕圆眼」（`promptFragmentOf`）——
-   *   那种断言**恒真**，等于没测（写这一组时它当场红过一次，是真的撞上了）。
+   *   那种断言恒真，等于没测（写这一组时它当场红过一次，是真的撞上了）。
    */
   function noteLineOf(prompt: string | undefined): string | undefined {
     return prompt?.split('\n').find((line) => line.includes('上一版经核对'))
@@ -749,7 +749,7 @@ describe('illustrateNode · 重画时的锚点回灌（`anchorNote`）', () => {
     expect(noteLineOf(prompts[0])).toBeUndefined()
     // 模型回的是「眼睛是否一致」（清单里冒号后面那截它丢了），要能看到卡上的值
     expect(noteLineOf(prompts[1])).toContain('眼睛：深棕圆眼')
-    // ★ 而且两段话的差别**只有那一行**：把那一行抽掉，第 2 次就等于第 1 次。
+    // ★ 而且两段话的差别只有那一行：把那一行抽掉，第 2 次就等于第 1 次。
     //   这一条才是"首次通过率仍然可比"的依据——不许顺手改别处。
     const withoutNote = (prompts[1] ?? '')
       .split('\n')
@@ -771,7 +771,7 @@ describe('illustrateNode · 重画时的锚点回灌（`anchorNote`）', () => {
 
     expect(calls).toHaveLength(3)
     expect(noteLineOf(prompts[2])).toContain('右手多了一根手指')
-    // 第 2 次的结论里没有眼睛那条，第 3 次就**不该**还在说眼睛
+    // 第 2 次的结论里没有眼睛那条，第 3 次就不该还在说眼睛
     expect(noteLineOf(prompts[2])).not.toContain('眼睛')
   })
 

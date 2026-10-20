@@ -1,22 +1,22 @@
 /**
  * event-log.ts —— 生成过程的落盘日志（ADR-0003 演示路径的数据源）
  *
- * 一行一条**语义事件**（`events.jsonl`）。三条设计选择，每条对应一个具体的失败模式：
+ * 一行一条语义事件（`events.jsonl`）。三条设计选择，每条对应一个具体的失败模式：
  *
- * 1. **一产生就 append，不是跑完再写**。"跑完再写"在中断时什么都不剩，
+ * 1. 一产生就 append，不是跑完再写。"跑完再写"在中断时什么都不剩，
  *    而中断正是最需要日志的时候（刷新、断线、演示到一半有人拔网线）。
- * 2. **坏行跳过并计数，不崩、不静默**。进程被杀的瞬间，最后一行**一定可能**是半条 JSON。
+ * 2. 坏行跳过并计数，不崩、不静默。进程被杀的瞬间，最后一行一定可能是半条 JSON。
  *    崩掉的话，前面几十条完好事件的证据全废；静默吞掉的话，
  *    没人分得清"少了 3 条"是引擎没发还是日志读坏了。所以：跳过 + 报数。
- * 3. **重开一轮先截断**。书号是"卡 + 主题指纹"，不含时间戳，所以重跑同一本书
- *    写的是**同一个目录**。不截断就会把两轮混成一条时间线，重放出来的过程是假的。
+ * 3. 重开一轮先截断。书号是"卡 + 主题指纹"，不含时间戳，所以重跑同一本书
+ *    写的是同一个目录。不截断就会把两轮混成一条时间线，重放出来的过程是假的。
  *
- * ★ 纯逻辑（`parseEventLog` / `serializeEvent`）与文件系统分开：
+ * 纯逻辑（`parseEventLog` / `serializeEvent`）与文件系统分开：
  *   前者有测试，后者只在 Route Handler 里跑。与 `providers/stores.ts` 同一套理由——
  *   `pnpm test` 不该碰文件系统。
  *
- * ★ 本模块是**服务端专用**（`node:fs`）。它不在 `lib/engine/` 下，所以不受
- *   "引擎不许碰运行时"那条约束管；但它也**不许被客户端组件 import**——
+ * 本模块是服务端专用（`node:fs`）。它不在 `lib/engine/` 下，所以不受
+ *   "引擎不许碰运行时"那条约束管；但它也不许被客户端组件 import——
  *   客户端要读事件，走 `/api/books/<id>/events` 这条 HTTP 路（工单 02 §2.3）。
  */
 
@@ -30,7 +30,7 @@ export type EventLogRead = {
   skipped: number
 }
 
-/** 一条事件序列化成一行 JSON（**不带换行**，由写方加，这样 append 的边界由一处决定） */
+/** 一条事件序列化成一行 JSON（不带换行，由写方加，这样 append 的边界由一处决定） */
 export function serializeEvent(event: EngineEvent): string {
   return JSON.stringify(event)
 }
@@ -64,8 +64,9 @@ export type EventLog = {
 
 export const EVENTS_FILE = 'events.jsonl'
 
-/** ★ 目录拼法**不在这里定义**，从引擎那边拿（`bookDirOf`）：
- *  日志与 `book.json` 必须落在同一个目录里，两处各拼一遍就会漂。 */
+/** 目录拼法不在这里定义，从引擎那边拿（`bookDirOf`）：
+ *  日志与 `book.json` 必须落在同一个目录里，两处各拼一遍就会漂。
+ */
 export function eventLogPathOf(bookId: string): string {
   return `${bookDirOf(bookId)}/${EVENTS_FILE}`
 }

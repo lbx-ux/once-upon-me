@@ -1,25 +1,25 @@
 /**
  * /api/cards/revise —— 「再画一版」：拿上一版形象当参考图，按家长那句话重画一张
  *
- * 这一条是 Request 3(a) 里最后那句「**根据刚才生成的插画进行建议**」的落地，
- * 也是工单 02 那条 `edits` 通路到目前为止**唯一真正的消费方**。
+ * 这一条是 Request 3(a) 里最后那句「根据刚才生成的插画进行建议」的落地，
+ * 也是工单 02 那条 `edits` 通路到目前为止唯一真正的消费方。
  *
- * ★ 三条设计决定，每条都对应一个具体的坏法：
+ * 三条设计决定，每条都对应一个具体的坏法：
  *
- * 1. **参考图必须过 `normalizeReference`，不能把卡里那张直接送出去。**
- *    这一条不是"以防万一"，是**实测出来会撞的**：上一版如果本身就是 `edits` 的产物，
- *    它是 **4 通道带 alpha 的 PNG**（工单 02 §四 量到的，两次都是），而接口
+ * 1. 参考图必须过 `normalizeReference`，不能把卡里那张直接送出去。
+ *    这一条不是"以防万一"，是实测出来会撞的：上一版如果本身就是 `edits` 的产物，
+ *    它是 4 通道带 alpha 的 PNG（工单 02 §四 量到的，两次都是），而接口
  *    明说不收带 alpha 的 PNG（`IMAGE_INPUT_ALPHA_UNSUPPORTED`）。
  *    所以"第一版能改、改出来的第二版改不动"是一个真实的坏法，不是假想。
- * 2. **锚点一个字都不改。** 那句话进 `provenance.suggestion`，不进 `anchors`——
+ * 2. 锚点一个字都不改。 那句话进 `provenance.suggestion`，不进 `anchors`——
  *    锚点的不变式是"跨页不变"，而"眼睛再大一点"只属于这一版。
- * 3. **归档 = 新 revision，不是覆盖**（ADR-0007）。旧书的那些页仍然指着旧版。
+ * 3. 归档 = 新 revision，不是覆盖（ADR-0007）。旧书的那些页仍然指着旧版。
  *
- * ★ 这一版**不自动判"这条建议被采纳了吗"**，理由是具体的：
+ * 这一版不自动判"这条建议被采纳了吗"，理由是具体的：
  *   现有的比对器问的是"图上有没有这几条锚点"（`checklistOf`），
  *   而这次动的正是锚点管的那些部位——"眼睛再大一点"会让锚点清单里的
- *   "深棕色圆眼"判**不**像，于是**成功会被判成失败**。
- *   要自动判，需要的是"两张图 + 一句判据"这个**新的比对形态**，那是另一件事。
+ *   "深棕色圆眼"判不像，于是成功会被判成失败。
+ *   要自动判，需要的是"两张图 + 一句判据"这个新的比对形态，那是另一件事。
  *   所以界面上是把新旧两版并排给家长看（人判），而不是贴一句"AI 会尽力理解"。
  */
 
@@ -32,7 +32,7 @@ import {
 import { assetRoot } from '@/lib/books-runtime.ts'
 import { createCardStore, promptFragmentOf } from '@/lib/engine/index.ts'
 import { reviewInput, reviewInputText } from '@/lib/engine/review.ts'
-// ★ 直接取**图像**那一个，不用 `createProviders`：那一个会把文本/视觉/语音一起建起来，
+// 直接取图像那一个，不用 `createProviders`：那一个会把文本/视觉/语音一起建起来，
 //   于是"没填文本模型"会让"再画一版"报一句"还差：文本模型名"——而这件活根本不用文本模型。
 //   一个按组构造的适配器工厂，就该按组用（同样的用法在 /api/settings/probe 里）。
 import { imageProviderOf } from '@/lib/engine/providers/registry.ts'
@@ -50,7 +50,7 @@ const SHEET_SIZE = '1440x1440'
 
 type Body = {
   childId: string
-  /** 孩子的名字/读音只用于提示词里那句称呼，**档案才是它的出处** */
+  /** 孩子的名字/读音只用于提示词里那句称呼，档案才是它的出处 */
   name: string
   ageBand: string
   suggestion: string
@@ -67,18 +67,18 @@ function parseBody(raw: unknown): { body?: Body; problems: string[] } {
   const childId = str(source['childId'])
   if (!childId) problems.push('childId 缺失（没有它就不知道该改谁的哪张卡）')
   const suggestion = str(source['suggestion'])
-  // ★ 空建议不收：那等于"再画一张一样的"，而这一版是按次计费的。要重画请说明改哪里
+  // 空建议不收：那等于"再画一张一样的"，而这一版是按次计费的。要重画请说明改哪里
   if (suggestion === '') problems.push('还没写想改哪里——空着点一次就是按原样重画一张，白花钱')
   if (suggestion.length > 200) problems.push('想改的地方写短一点（200 字以内）')
 
   /**
-   * ★ 内容闸（2026-10-20）。这一格与单页重画那句 `fixNote`（`lib/rerun-api.ts`）
-   *   是**同一类**：家长手输、原样进**图像**提示词（`prompts/character-sheet.ts` 的
+   * 内容闸（2026-10-20）。这一格与单页重画那句 `fixNote`（`lib/rerun-api.ts`）
+   *   是同一类：家长手输、原样进图像提示词（`prompts/character-sheet.ts` 的
    *   `revisionNote` 那一段）、而两道文字闸都不经过——它不写进故事（躲过 `reviewStory`），
    *   也不是开书时的表单（躲过 `reviewInput`）。补上之前，一句"改成脸上有血"在这条路上
-   *   没有任何东西拦得住，唯一的事后拦截是那一档**不可复现**的画面审核。
-   *   ★ 处置与另外两处同一条口径：**拒发**（`review.ts` 文件头那句"这是别人的话，
-   *   没有'我们替你重写一版'这条路"）。用的是**同一份条款库**，所以家长在不同入口
+   *   没有任何东西拦得住，唯一的事后拦截是那一档不可复现的画面审核。
+   *   ★ 处置与另外两处同一条口径：拒发（`review.ts` 文件头那句"这是别人的话，
+   *   没有'我们替你重写一版'这条路"）。用的是同一份条款库，所以家长在不同入口
    *   撞到的是同一套词表、同一句措辞。
    */
   if (suggestion !== '') {
@@ -101,7 +101,7 @@ function parseBody(raw: unknown): { body?: Body; problems: string[] } {
 }
 
 export async function POST(req: NextRequest): Promise<Response> {
-  // ★ 改一版卡也是一次图像生成，所以只要**图像**这一个能力——与 `/api/cards` 同一条口径
+  // 改一版卡也是一次图像生成，所以只要图像这一个能力——与 `/api/cards` 同一条口径
   const guard = await requireCapability(req, ['image'])
   if (!guard.ok) return guard.response
 
@@ -182,7 +182,7 @@ export async function POST(req: NextRequest): Promise<Response> {
 
   let generated
   try {
-    // ★ 见文件头第 1 条：上一版可能就是带 alpha 的 `edits` 产物，不过这一道会吃 400
+    // 见文件头第 1 条：上一版可能就是带 alpha 的 `edits` 产物，不过这一道会吃 400
     const normalized = await normalizeReference(rawBytes)
     generated = await edit.call(image, {
       prompt,
@@ -191,7 +191,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     })
   } catch (err) {
     const failure = userFailureOf(err)
-    // 失败**不改卡**：这一版没做成，旧版仍然是旧版（ADR-0007 的"不覆盖"）
+    // 失败不改卡：这一版没做成，旧版仍然是旧版（ADR-0007 的"不覆盖"）
     return Response.json(
       {
         code: failure.code,
@@ -218,7 +218,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     const { card } = await cardStore.create({
       cardId: previous.cardId,
       childId: previous.childId,
-      // ★ 锚点原样带过去，一个字不改（文件头第 2 条）
+      // 锚点原样带过去，一个字不改（文件头第 2 条）
       anchors: previous.anchors,
       style: previous.style,
       referenceBytes: generated.bytes,
@@ -232,7 +232,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     return Response.json({
       cardId: card.cardId,
       revision: card.revision,
-      // 两版的地址一起回：界面要把它们**并排**给家长看（这一版不自动判建议，见文件头）
+      // 两版的地址一起回：界面要把它们并排给家长看（这一版不自动判建议，见文件头）
       previousRevision: previous.revision,
       promptFragment: promptFragmentOf(card),
     })

@@ -1,14 +1,14 @@
 /**
  * narrate.test.ts —— 逐页配音的两条行为
  *
- * 1. **去重键是 `(voiceId, textHash)`**（`domain.ts` 的 Narration 注释早就定死了）。
+ * 1. 去重键是 `(voiceId, textHash)`（`domain.ts` 的 Narration 注释早就定死了）。
  *    共读版的故事树里主干页会被多个分支共用，同一段正文合成两次是白花钱。
- *    复用必须是**同一份文件**，不是"再合成一次但标个 reused"——所以这里同时断言
+ *    复用必须是同一份文件，不是"再合成一次但标个 reused"——所以这里同时断言
  *    合成次数与 asset 路径。
- * 2. **一页配不上音不影响别的页，但必须留下痕迹**。抛出的错要收成 `{pageNo, message}`
- *    并补一条**非致命**的 error 事件；书照样装订。
+ * 2. 一页配不上音不影响别的页，但必须留下痕迹。抛出的错要收成 `{pageNo, message}`
+ *    并补一条非致命的 error 事件；书照样装订。
  *
- * 另外锁一条很容易被"顺手改好"的事：正文是 `body.join('')`，**不加空格**。
+ * 另外锁一条很容易被"顺手改好"的事：正文是 `body.join('')`，不加空格。
  * 实测那句两句相连的正文合成出来约 2.5 秒，改成空格会插进一个没量过的停顿
  * （narrate.ts 文件头第 2 条）。
  */
@@ -37,7 +37,7 @@ function node(pageNo: number, body: string[], mood: Mood = 'calm'): StoryNode {
 /**
  * 只会吐固定字节的假 TTS，记下每次合成了什么文本与什么语气；`failOnText` 命中就抛。
  *
- * ★ `supportsMood` 是个**参数**：默认 `true`（多数判据只关心"mood 有没有传下来"），
+ * `supportsMood` 是个参数：默认 `true`（多数判据只关心"mood 有没有传下来"），
  *   要测"换了个不认情绪标签的模型"时传 `false`。
  */
 function fakeVoice(failOnText?: string, supportsMood = true) {
@@ -207,7 +207,7 @@ describe('选择点那三段（2026-10-18）', () => {
     const a = result.narrations.find((item) => item.part === 'option-a')
     const b = result.narrations.find((item) => item.part === 'option-b')
     expect(b?.asset.path).toBe(a?.asset.path)
-    // ★ 但两条记录的 part 各是各的：复用同一份字节，不等于它们变成同一段
+    // 但两条记录的 part 各是各的：复用同一份字节，不等于它们变成同一段
     expect(a?.part).toBe('option-a')
     expect(b?.part).toBe('option-b')
   })
@@ -243,12 +243,12 @@ describe('narrationTextOf · 正文怎么拼', () => {
 })
 
 /**
- * ★ 单页重配（工单 01 §五）。
+ * 单页重配（工单 01 §五）。
  *
  * 两件事是新的，各自对应一种"只有真跑一本书才会发现"的坏法：
- * 1. **带页码的 stage**：原来整本只发不带页码的那一对，于是没有任何东西说得清
+ * 1. 带页码的 stage：原来整本只发不带页码的那一对，于是没有任何东西说得清
  *    "这一页正在配音"——`frames.ts` 的 `Frame.busy = 'voicing'` 就是从它推的。
- * 2. **`takeNo`**：重配落一份**新文件**。从 1 重来的话会把上一版录音覆盖掉，
+ * 2. `takeNo`：重配落一份新文件。从 1 重来的话会把上一版录音覆盖掉，
  *    而"失败的产物不许被覆盖"是这条流水线写明的纪律。
  */
 describe('narrateNode · 单页重配', () => {
@@ -343,7 +343,7 @@ describe('nextTakeNo', () => {
 })
 
 /**
- * 情绪（2026-10-19 接上）：`node.mood` 要走到底，而且**要进去重键**。
+ * 情绪（2026-10-19 接上）：`node.mood` 要走到底，而且要进去重键。
  *
  * 这一组是"接上了没有"在引擎这一层的全部凭据。适配器怎么把它翻成厂商标签
  * （`qwen-speech.test.ts`）与"翻出来的声音对不对"（试听）是另外两件事。
@@ -356,7 +356,7 @@ describe('narrateAll · 情绪', () => {
   })
 
   it('★ 同一段文字换个 mood = 另一份录音（去重键带了 mood）', async () => {
-    // ★ 这条是接情绪标签**逼出来**的改动：不带 mood 的话第二页会复用第一页那份录音，
+    // 这条是接情绪标签逼出来的改动：不带 mood 的话第二页会复用第一页那份录音，
     //   于是"叠句换了语气"这件事被静默吃掉，而盘上看起来一切正常
     const { voice, texts, moods } = fakeVoice()
     const { result } = await run(
@@ -388,7 +388,7 @@ describe('narrateAll · 情绪', () => {
     )
 
     const notices = events.filter((e) => e.kind === 'error' && e.code === 'mood-tags-unsupported')
-    // ★ **只发一条**：18 页发 18 条同样的话，真正的错误会被淹掉
+    // 只发一条：18 页发 18 条同样的话，真正的错误会被淹掉
     expect(notices).toHaveLength(1)
     expect(notices[0]).toMatchObject({ fatal: false })
     expect(notices[0]?.kind === 'error' && notices[0].message).toMatch(/平调/)

@@ -1,17 +1,17 @@
 /**
- * qwen-speech.test.ts —— 语音适配器：**发请求之前**该拦下来的，与请求体长什么样
+ * qwen-speech.test.ts —— 语音适配器：发请求之前该拦下来的，与请求体长什么样
  *
  * 两组判据，都不花钱：
  *
- * 1. **没接的能力不许静默忽略**（文件头第 5 条）。`pronunciation`（读音纠正）与
- *    `mood`（情绪）现在都还没接，传进来必须**报错**。这两条最容易在将来被"顺手改成忽略"，
+ * 1. 没接的能力不许静默忽略（文件头第 5 条）。`pronunciation`（读音纠正）与
+ *    `mood`（情绪）现在都还没接，传进来必须报错。这两条最容易在将来被"顺手改成忽略"，
  *    而被忽略的症状要到"名字念错了""20 页一个调子"时才浮出来——那时已经付过钱了。
- * 2. **请求体的形状**。`sample_rate` 实测被忽略，所以它**不许**出现在 payload 里
+ * 2. 请求体的形状。`sample_rate` 实测被忽略，所以它不许出现在 payload 里
  *    （发一个不生效的参数，等于告诉下一个人"语速是靠它调的"）。
- *    `clone` 的样本必须以 **data URL** 送出去——这是"样本从不落到任何地方"
+ *    `clone` 的样本必须以 data URL 送出去——这是"样本从不落到任何地方"
  *    这条隐私承诺在代码里的唯一凭据。
  *
- * 这里 stub 掉 `globalThis.fetch` 并把每次调用抄下来，所以断言的是**真实请求体**，
+ * 这里 stub 掉 `globalThis.fetch` 并把每次调用抄下来，所以断言的是真实请求体，
  * 不是"我们以为发出去的东西"。
  */
 
@@ -151,7 +151,7 @@ describe('qwen-speech · 请求体与下载', () => {
     expect(calls[0]?.url).toBe(
       'https://example.invalid/api/v1/services/audio/tts/SpeechSynthesizer',
     )
-    // ★ toEqual 是精确匹配：多一个 sample_rate 就会失败（文件头第 6 条）
+    // toEqual 是精确匹配：多一个 sample_rate 就会失败（文件头第 6 条）
     expect(calls[0]?.body).toEqual({
       model: MODEL,
       input: { text: '哗啦啦，大雨落下来。', voice: 'longjielidou_v3.6', format: 'mp3' },
@@ -210,9 +210,9 @@ describe('qwen-speech · 请求体与下载', () => {
 /**
  * 情绪标签（2026-10-19 接上）。
  *
- * ★ 这一组断言的是**真实请求体里的 `input.text`**，不是"我们以为贴上去的标签"——
+ * 这一组断言的是真实请求体里的 `input.text`，不是"我们以为贴上去的标签"——
  *   与上面那两组的理由一样：只有抄下来的 payload 才算证据。
- * ★ `calm` 那一档是**判据**不是省略：它必须**逐字节等于原文**。
+ * ★ `calm` 那一档是判据不是省略：它必须逐字节等于原文。
  *   "平稳叙述就是这个音色的默认状态"这件事在代码里只有这一个凭据。
  */
 describe('qwen-speech · 情绪标签', () => {
@@ -240,7 +240,7 @@ describe('qwen-speech · 情绪标签', () => {
     expect((await spokenWith('tender')).text).toBe('[empathetic]天黑了')
     // proud 与 joy 同档：词表里没有更贴"自豪"的（见 MOOD_TAGS 注释），这是认下来的重合
     expect((await spokenWith('proud')).text).toBe('[excited]天黑了')
-    // ★ calm 不发标签。它必须**一个字都不多**，否则"默认音色"这句话就没有凭据了
+    // ★ calm 不发标签。它必须一个字都不多，否则"默认音色"这句话就没有凭据了
     expect((await spokenWith('calm')).text).toBe('天黑了')
   })
 
@@ -284,7 +284,7 @@ describe('qwen-speech · 情绪标签', () => {
       expect(supportsMood, model).toBe(true)
       expect(text, model).toBe('[excited]天黑了')
     }
-    // ★ 前缀匹配是**故意不做的**：认错了厂商不是忽略标签，而是把它当控制符乱来
+    // 前缀匹配是故意不做的：认错了厂商不是忽略标签，而是把它当控制符乱来
     for (const model of ['QWEN-AUDIO-3.0-TTS-FLASH', 'qwen-audio-3.0-tts-flash-preview']) {
       expect((await spokenWith('joy', model)).supportsMood, model).toBe(false)
     }

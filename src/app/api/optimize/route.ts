@@ -3,18 +3,18 @@
  *
  *   POST /api/optimize  { wish, childName?, themeLabel? }  →  { suggestion, … }
  *
- * ★ 它**只回建议，不改任何东西**。原句在客户端的 state 里，用不用由用户点。
+ * 它只回建议，不改任何东西。原句在客户端的 state 里，用不用由用户点。
  *   服务端不落盘、不建产物、不进任何 provenance——这不是一次生成，是一次改写建议。
  *   （所以这一版提示词的版本号只用于排障，见 `prompts/optimize.ts` 文件头。）
  *
- * ★ 这是**文本**能力，不是新能力：走 `textProviderOf(env)`，与 `/api/cards` 那边
+ * 这是文本能力，不是新能力：走 `textProviderOf(env)`，与 `/api/cards` 那边
  *   直接用 `imageProviderOf` 是同一条纪律——按组构造的工厂就该按组用。
- *   拿 `createProviders` 做这件事的话，一个"只想改句话"的动作会因为没填**图像**密钥整条跑不起来。
+ *   拿 `createProviders` 做这件事的话，一个"只想改句话"的动作会因为没填图像密钥整条跑不起来。
  *
- * ★ 密钥只从服务端环境来（ADR-0009，`lib/settings/server-env.ts`）：
+ * 密钥只从服务端环境来（ADR-0009，`lib/settings/server-env.ts`）：
  *   这一条 2026-10-17 之前写的是"请求体里那张表说了算"，正好反过来。
  *
- * ★ 失败一律说人话（`userFailureOf` 是唯一那处判据），**绝不在本地编一句兜底文本顶上**：
+ * 失败一律说人话（`userFailureOf` 是唯一那处判据），绝不在本地编一句兜底文本顶上：
  *   那样用户会以为自己拿到的是 AI 优化过的句子，实际是一句写死的话——
  *   一个只对四分之一能响的控件，证的是这件事想证的反面。
  */
@@ -52,15 +52,15 @@ type Body = {
 }
 
 /**
- * 家长写的那句话的**上界**（2026-10-20 补的）。
+ * 家长写的那句话的上界（2026-10-20 补的）。
  *
- * ★ 在这之前这一格**只判了非空**，而它原样进提示词（`prompts/optimize.ts` 的
+ * 在这之前这一格只判了非空，而它原样进提示词（`prompts/optimize.ts` 的
  *   `optimizeUser`）。同一类东西在别的入口都是有上界的，三个数还是同一档：
  *   `book-api.ts` 的 `MAX_TEXT = 200`（开书时的主题与 wish）、
  *   `rerun-api.ts` 的 `MAX_FIX_NOTE = 200`（重画时那句补充）。
- *   ★ 那个文件头把这条规矩写得很清楚：「同一类东西（人写的一句话）不该因为走了
+ *   那个文件头把这条规矩写得很清楚：「同一类东西（人写的一句话）不该因为走了
  *     另一个入口就换一套长度规矩」——这一格正是漏掉的那一个入口。
- *   ★ 超了**拒收而不是截断**：截一半的句子会被"优化"成一句完整的话，
+ *   超了拒收而不是截断：截一半的句子会被"优化"成一句完整的话，
  *     而家长看不到自己那半句被丢了（与 `OPTIMIZE_MAX_CHARS` 那条"超长只说长了一点、
  *     不截断"是同一条判断：截断会把"我写多了"伪装成"模型读懂了"）。
  */
@@ -75,7 +75,7 @@ function parseBody(raw: unknown): { body?: Body; problems: string[] } {
 
   const problems: string[] = []
   const wish = str(source['wish'])
-  // ★ 空句**不在这里兜一个默认主题**：没有要改的句子就没有这件事，
+  // 空句不在这里兜一个默认主题：没有要改的句子就没有这件事，
   //   编一句"关于友情的故事"顶上就是把一个空输入变成一次收费的调用
   if (wish === '') problems.push('要优化的那句话是空的——先写一句想讲什么')
   else if (wish.length > MAX_TEXT) problems.push(`想讲什么写短一点（${MAX_TEXT} 字以内）`)
@@ -95,7 +95,7 @@ function parseBody(raw: unknown): { body?: Body; problems: string[] } {
 }
 
 export async function POST(req: NextRequest): Promise<Response> {
-  // ★ 这一条只花文本的钱（`textProviderOf`），所以只要**文本**那一个能力
+  // 这一条只花文本的钱（`textProviderOf`），所以只要文本那一个能力
   const guard = await requireCapability(req, ['text'])
   if (!guard.ok) return guard.response
 
@@ -125,7 +125,7 @@ export async function POST(req: NextRequest): Promise<Response> {
 
   let response
   try {
-    // ★ 整份请求（含 `plainText: true`）从 `optimizeRequest` 出，与
+    // 整份请求（含 `plainText: true`）从 `optimizeRequest` 出，与
     //   `scripts/probe-optimize.mts` 是同一份——探针量到的就是线上这条路的调用
     response = await text.complete(optimizeRequest(body))
   } catch (err) {
@@ -133,7 +133,7 @@ export async function POST(req: NextRequest): Promise<Response> {
   }
 
   const suggestion = cleanSuggestion(response.text)
-  // ★ 空回复算失败，不退回原句**假装优化过**：退回原句之后界面会显示
+  // 空回复算失败，不退回原句假装优化过：退回原句之后界面会显示
   //   "优化后：<和原来一模一样>"，用户以为模型觉得他写得很好了
   if (suggestion === '') {
     return Response.json(
@@ -148,7 +148,7 @@ export async function POST(req: NextRequest): Promise<Response> {
 
   return Response.json({
     suggestion,
-    /** 超长**不截断**，只把这件事告诉界面（界面写一句"长了一点"） */
+    /** 超长不截断，只把这件事告诉界面（界面写一句"长了一点"） */
     tooLong: isTooLong(suggestion),
     length: suggestionLength(suggestion),
     /** 哪一版提示词、哪个模型改的：优化结果被投诉时要答得上（与卡上记 modelId 同一条道理） */

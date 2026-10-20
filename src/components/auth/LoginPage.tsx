@@ -4,22 +4,22 @@
  * LoginPage —— `/login` 那一屏
  *
  * 流程照 `E:\match\login` 那份稿子：手机号 → 验证码/密码二选一 → 新用户先设密码 →
- * 完成。**一处刻意与稿子不同**：稿子最后有一个「登录成功」的中间态，要人再点一下
+ * 完成。一处刻意与稿子不同：稿子最后有一个「登录成功」的中间态，要人再点一下
  * 「进入创作 →」；这里登录成功即 `router.replace` 走人。
- * 理由：真的登录页不该让用户替你把跳转点一下。那个中间态原本是给**静态稿**用的
+ * 理由：真的登录页不该让用户替你把跳转点一下。那个中间态原本是给静态稿用的
  * ——双击 `index.html` 的人需要看到"成"了，而真页面不需要，他下一眼就在 `/home`。
  * 想去哪儿由 `next` 参数决定（侧栏点「请登录」时带上当前路径），取不到就回 `/home`。
  *
- * ★ 三个状态判断，都是这一屏独有的：
+ * 三个状态判断，都是这一屏独有的：
  *
- * 1. **`pending` 不是装饰**。`lib/auth/client.ts` 每个函数都会等一会儿
- *    （`MOCK_LATENCY_MS`，理由写在那儿），所以"正在发验证码""正在登录"是**真的**会发生的
+ * 1. `pending` 不是装饰。`lib/auth/client.ts` 每个函数都会等一会儿
+ *    （`MOCK_LATENCY_MS`，理由写在那儿），所以"正在发验证码""正在登录"是真的会发生的
  *    一段时间。这期间对应的那颗按钮必须 `disabled`：一个能连点两次的"登录"，
  *    在真接口那边就是两条请求。
- * 2. **错误只有一处来源**。所有文案都由 `client.ts` 给（`result.message`），
+ * 2. 错误只有一处来源。所有文案都由 `client.ts` 给（`result.message`），
  *    这一层不自己编——接后端那天，服务端说什么就显示什么，
  *    而客户端自己写的那几句（"请输入 6 位验证码"）会跟着一起去掉。
- * 3. **「两次输入的密码不一致」是边输边报的**，不等提交。稿子就是这么做的，
+ * 3. 「两次输入的密码不一致」是边输边报的，不等提交。稿子就是这么做的，
  *    而这一条对：等到提交才说，人已经忘了自己第一次输的是什么。
  */
 
@@ -41,10 +41,10 @@ type Step = 'login' | 'set-password'
 type Mode = 'code' | 'password'
 
 /**
- * ★ 登录名有两种，判据与后端**逐字一样**（`AccountRules`）：
- * 11 位、1 开头的是手机号（能收短信），其它 6–11 位数字是**短账号**（只能密码登录）。
+ * 登录名有两种，判据与后端逐字一样（`AccountRules`）：
+ * 11 位、1 开头的是手机号（能收短信），其它 6–11 位数字是短账号（只能密码登录）。
  * 演示账号 `123456` 就是后一种。★ 这一层判一遍只是为了让界面说得早一点
- * （比如那颗"获取验证码"该不该亮），**真正的规则在服务端**——两边不一致时，
+ * （比如那颗"获取验证码"该不该亮），真正的规则在服务端——两边不一致时，
  * 以服务端那句错为准。
  */
 const ACCOUNT_PATTERN = /^\d{6,11}$/
@@ -52,15 +52,16 @@ const PHONE_PATTERN = /^1\d{10}$/
 const CODE_PATTERN = /^\d{6}$/
 /** 与后端同一条口径（`app.sms.same-phone-seconds`）；它只是体验，不是防线 */
 const RESEND_SECONDS = 60
-/* ★ 2026-10-17：`DEMO_ACCOUNT` 那个常量**删掉了**，连同页脚下面那一行
+/* 2026-10-17：`DEMO_ACCOUNT` 那个常量删掉了，连同页脚下面那一行
  *   「演示账号 123456 / 123456」的印刷（用户：「演示账号就不要明着写出来了」）。
  *   删常量而不是留着不用：一个没人读的常量下一次会被下一个人当成"还没接线的东西"
- *   再接回去。账号本身**在库里、在服务端没动**（`DemoAccount`，口令就是用户名），
+ *   再接回去。账号本身在库里、在服务端没动（`DemoAccount`，口令就是用户名），
  *   这条删的只是"印在登录页上"这一件事。
- *   ★ 代价要写明白：**评委从这一页再也拿不到进门的口令了**——
+ *   ★ 代价要写明白：评委从这一页再也拿不到进门的口令了——
  *     它现在只写在交付说明与 `docs/known-tradeoffs.md` 里（连同"怎么停掉它"）。
  *     如果哪天要放回界面上，放回这里是最省事的位置，但那时也该想清楚
- *     "一个口令公开的账号挂在公网登录页上"这件事本身。 */
+ *     "一个口令公开的账号挂在公网登录页上"这件事本身。
+ */
 
 function EyeIcon() {
   return (
@@ -162,7 +163,7 @@ export default function LoginPage({ next }: { next?: string | undefined }) {
 
   /**
    * 这个登录名能不能收短信。
-   * ★ 短账号（比如演示账号 `123456`）收不到——这是**结构上**的：
+   * 短账号（比如演示账号 `123456`）收不到——这是结构上的：
    * 后端判据是"它是不是一个手机号"。所以那颗按钮要早一点把这件事说清，
    * 而不是让人点下去、等一条永远不来的短信。
    */
@@ -212,7 +213,7 @@ export default function LoginPage({ next }: { next?: string | undefined }) {
   /** 登录成功：写进 Provider（它会落盘），然后走人 */
   const finish = (user: AuthUser): void => {
     signIn(user)
-    // ★ 不调 `router.refresh()`：工作台此刻没有任何服务端组件读登录态
+    // 不调 `router.refresh()`：工作台此刻没有任何服务端组件读登录态
     //   （`/account` 读的是作品数，身份在客户端）。等后端落地、身份变成
     //   服务端 session 的那一天，这一行才需要补上。
     router.replace(landing)
@@ -224,7 +225,7 @@ export default function LoginPage({ next }: { next?: string | undefined }) {
 
     setSubmitting(true)
     if (mode === 'password') {
-      // ★ 这里**不判密码长度**：长度是"自己设密码"那一步的规则，而登录只比对哈希。
+      // 这里不判密码长度：长度是"自己设密码"那一步的规则，而登录只比对哈希。
       //   判在这里的话，演示账号那个 6 位的口令会当场被自己人挡在门外
       const result = await loginWithPassword(phone, loginPassword)
       setSubmitting(false)
@@ -265,7 +266,7 @@ export default function LoginPage({ next }: { next?: string | undefined }) {
     if (!checkPasswordsMatch()) return
 
     setSubmitting(true)
-    // ★ 只把密码递过去：手机号在那张票里（cookie），这一层拿不到也不需要
+    // 只把密码递过去：手机号在那张票里（cookie），这一层拿不到也不需要
     const result = await setPasswordRequest(newPassword)
     setSubmitting(false)
     if (!result.ok) {
@@ -356,7 +357,7 @@ export default function LoginPage({ next }: { next?: string | undefined }) {
                     className="login__input"
                     type="tel"
                     name="phone"
-                    /* ★ 不放占位号码（用户 2026-10-16 要求）。
+                    /* 不放占位号码（用户 2026-10-16 要求）。
                        原来这里是 `13800138000`——那是演示账号，把它当占位符
                        会让人以为"这就是我的号"或者"系统已经填好了"。
                        演示账号现在写在下面的页脚里，一句说明而不是一个假输入 */
@@ -426,7 +427,7 @@ export default function LoginPage({ next }: { next?: string | undefined }) {
                       <button
                         className="login__send"
                         type="button"
-                        /* ★ 短账号时直接禁用：它收不到短信（后端那条判据是结构性的），
+                        /* 短账号时直接禁用：它收不到短信（后端那条判据是结构性的），
                            让人点下去、等一条永远不来的短信是最坏的一种"能用" */
                         disabled={countdown > 0 || sendingCode || !canReceiveSms}
                         onClick={() => void onSendCode()}

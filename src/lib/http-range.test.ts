@@ -17,7 +17,7 @@ describe('parseRange', () => {
     expect(parseRange('bytes=0-99', 1000)).toEqual({ start: 0, end: 99 })
     // 只给开头 = 一直到末尾
     expect(parseRange('bytes=100-', 1000)).toEqual({ start: 100, end: 999 })
-    // ★ 后缀式：浏览器取 mp3 末尾就是发这个（时长靠它算出来）
+    // 后缀式：浏览器取 mp3 末尾就是发这个（时长靠它算出来）
     expect(parseRange('bytes=-500', 1000)).toEqual({ start: 500, end: 999 })
   })
 
@@ -57,7 +57,7 @@ describe('parseRange', () => {
   })
 
   it('一个字节的边界：start === end 是可用的', () => {
-    // ★ 单字节请求是最容易写错的那种：`end + 1` 与 `end` 混了就是空响应
+    // 单字节请求是最容易写错的那种：`end + 1` 与 `end` 混了就是空响应
     expect(parseRange('bytes=999-999', 1000)).toEqual({ start: 999, end: 999 })
     expect(parseRange('bytes=-1', 1000)).toEqual({ start: 999, end: 999 })
   })

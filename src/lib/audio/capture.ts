@@ -1,14 +1,14 @@
 /**
  * lib/audio/capture.ts —— 录到/选到的音频 → 厂商收得下的样本
  *
- * 一条流水线，两个入口（录音、选文件）：**解码 → 重采样成 16kHz 单声道 → 写 WAV**。
+ * 一条流水线，两个入口（录音、选文件）：解码 → 重采样成 16kHz 单声道 → 写 WAV。
  * 为什么要过这一趟，见 `wav.ts` 的文件头（一句话：浏览器产不出 WAV，厂商不收 webm）。
  *
- * ★ 这一层是**唯一**能判"这段够不够、长不长"的地方：适配器里没有解码器
+ * 这一层是唯一能判"这段够不够、长不长"的地方：适配器里没有解码器
  *   （`qwen-speech.ts` 那段注释写着"推荐 10–20 秒、最长 60 秒"这条约束落在采集的界面上）。
  *   所以 `sampleProblem()` 是这一层的公开判据，界面直接拿它说话。
  *
- * ★ 这一层**不碰任何存储**：出来的字节只在内存里走一趟请求体，然后就没有然后了
+ * 这一层不碰任何存储：出来的字节只在内存里走一趟请求体，然后就没有然后了
  *   （§8.3：样本拿到 voice_id 后立即删——我们的版本是"从不上传以外的任何地方"）。
  */
 
@@ -27,9 +27,10 @@ const IDEAL_MAX_MS = 20_000
 const TOO_LONG_MS = 60_000
 
 export type Sample = {
-  /** ★ 类型写成 `Uint8Array<ArrayBuffer>` 而不是裸的 `Uint8Array`：
+  /** 类型写成 `Uint8Array<ArrayBuffer>` 而不是裸的 `Uint8Array`：
    *  它要能直接塞进 `new Blob([...])`（`BlobPart` 只收 `ArrayBufferView<ArrayBuffer>`），
-   *  而裸类型在 TS 眼里可能由 `SharedArrayBuffer` 撑着 */
+   *  而裸类型在 TS 眼里可能由 `SharedArrayBuffer` 撑着
+   */
   bytes: Uint8Array<ArrayBuffer>
   mime: string
   durationMs: number
@@ -82,7 +83,7 @@ function audioContextCtor(): AudioContextCtor {
 /**
  * 任意一段音频 → 16kHz 单声道 WAV。
  *
- * ★ 重采样交给 `OfflineAudioContext`，不自己抽点：直接隔点丢样本会出混叠噪声，
+ * 重采样交给 `OfflineAudioContext`，不自己抽点：直接隔点丢样本会出混叠噪声，
  *   而"16k 是 48k 的三分之一"这种整除关系只在部分设备上成立（44100 就不是）。
  *   离线上下文按浏览器自己的重采样器跑一遍，几毫秒的事。
  */
@@ -92,7 +93,7 @@ export async function toSample(input: Blob): Promise<Sample> {
   const decodeContext = new (audioContextCtor())()
   let decoded: AudioBuffer
   try {
-    // ★ 传副本：某些实现会「吃掉」这个 ArrayBuffer，之后再用就只剩零长度
+    // 传副本：某些实现会「吃掉」这个 ArrayBuffer，之后再用就只剩零长度
     decoded = await decodeContext.decodeAudioData(bytes.slice(0))
   } catch {
     // 解码失败的原因对用户没有信息量（容器坏了/编码不认识），给一句能行动的话

@@ -12,9 +12,9 @@ import {
 
 /**
  * `state.ts` 剩下三个纯函数 + 两处形状检查（`canCreate` / `parsePermissions`）。
- * ★ 上一版这里还有"用户 round-trip / 在册号码表 / 底账"三组用例——它们测的是
+ * 上一版这里还有"用户 round-trip / 在册号码表 / 底账"三组用例——它们测的是
  * 浏览器替后端记的那些账。后端落地之后那些账没了，用例跟着走：
- * "登出再登入昵称还在"这条性质现在由**服务端**保证，
+ * "登出再登入昵称还在"这条性质现在由服务端保证，
  * 而它在 Java 那边有测试（`AuthFlowIntegrationTest#passwordSurvivesSignOut`）。
  */
 
@@ -39,7 +39,7 @@ describe('maskPhone', () => {
   })
 
   it('认不出来的一律原样返回，不套假的星号形状', () => {
-    // ★ 短账号（演示账号）也走这一条：它没有被"打码"这回事
+    // 短账号（演示账号）也走这一条：它没有被"打码"这回事
     expect(maskPhone('123456')).toBe('123456')
     expect(maskPhone('138001380001')).toBe('138001380001')
     expect(maskPhone('abc')).toBe('abc')

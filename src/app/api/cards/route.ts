@@ -8,21 +8,21 @@
  * 合成一次而不是分两步，是因为"图出了但卡没建成"的中间态没有任何意义——
  * 家长要的是"这就是我孩子的形象"，不是一张游离的图。
  *
- * ★ **不做 3–4 张候选**（用户 10/13 定的档）：一次出一张，不满意就再点一次。
+ * 不做 3–4 张候选（用户 10/13 定的档）：一次出一张，不满意就再点一次。
  *   重出就是按需的候选，比一次给四张更省，也比一次给四张更贴近真实的挑选过程。
- * ★ **不收照片**，但理由换了（原来那句是错的，见下）。
+ * 不收照片，但理由换了（原来那句是错的，见下）。
  *   旧理由是"图像接口不支持参考图（实测 7 个候选字段名全被 400 挡回）"——
  *   那句话只在 `/images/generations` 这条路上成立。同一家另有一条 `/images/edits`
- *   是**通的**（2026-10-14 实测，见工单 02 §一）。
- *   现在不收照片的理由是**照片还没有消费方**：卡上的参考图既要用来逐页画
+ *   是通的（2026-10-14 实测，见工单 02 §一）。
+ *   现在不收照片的理由是照片还没有消费方：卡上的参考图既要用来逐页画
  *   （`edit`），又要用来比对（`vision.compare`）。拿照片当参考图，第二件事是
- *   拿**照片**比**插画**——与 ADR-0007 验过的那次（插画比插画）不是同一个任务，
- *   **没量过**。没有消费方的输入框就是假装，所以这一格继续空着，
+ *   拿照片比插画——与 ADR-0007 验过的那次（插画比插画）不是同一个任务，
+ *   没量过。没有消费方的输入框就是假装，所以这一格继续空着，
  *   等工单 03 把"照片 → 卡"这条链连同比对一起量出来再开。
- * ★ 密钥只从服务端环境来（ADR-0009）。这一条在 2026-10-17 之前写的是
+ * 密钥只从服务端环境来（ADR-0009）。这一条在 2026-10-17 之前写的是
  *   "请求体里那张表说了算，服务端的 `process.env` 不参与"——正好反过来。"
  *
- * GET 那条兑现的是 ADR-0007 的**可复用**：上一版第 3 步只有"出一张形象"，
+ * GET 那条兑现的是 ADR-0007 的可复用：上一版第 3 步只有"出一张形象"，
  * 于是每做一本书都要重新出一张脸——那正好把"可复用"做没了。
  */
 
@@ -69,23 +69,23 @@ function failureResponse(err: unknown): Response {
 /** 出图尺寸与页内插画同一档（方形）。标准像与页内形象同比例，家长看到的就是书里的样子 */
 const SHEET_SIZE = '1440x1440'
 
-/* ───────────────────────── GET：已有的卡 ───────────────────────── */
+/* GET：已有的卡 */
 
 export async function GET(req: NextRequest): Promise<Response> {
-  // ★ 2026-10-17（工单 16）：这条路原来**没有入参、也没有闸门**——
+  // 2026-10-17（工单 16）：这条路原来没有入参、也没有闸门——
   //   于是它列的是"这台服务器上的全部角色卡"（帮助弹窗里那句
   //   「书架上是这台服务器做过的全部作品」就是这么来的）。
   const guard = await requireCapability(req, [])
   if (!guard.ok) return guard.response
 
-  // ★ 取数在 `lib/cards-list.ts`，与工作台「小主角」选择器、角色页同一份实现：
+  // 取数在 `lib/cards-list.ts`，与工作台「小主角」选择器、角色页同一份实现：
   //   "同 cardId 只留最新一版"这条是 ADR-0007 的 revision 语义，不该有三份
   return Response.json({
     cards: await listCardItems(userSliceRoot(assetRoot(), guard.session.userId)),
   })
 }
 
-/* ───────────────────────── POST：出一张形象 ───────────────────────── */
+/* POST：出一张形象 */
 
 type Body = {
   childId: string
@@ -94,10 +94,10 @@ type Body = {
   childWord?: string
   anchors: CharacterAnchor[]
   /*
-   * ★ 这里原来有 `env`（ADR-0008：用户在设置里填的密钥随请求上来）。
+   * 这里原来有 `env`（ADR-0008：用户在设置里填的密钥随请求上来）。
    *   2026-10-17 之后整条退场（ADR-0009）：密钥由站长分配，只从服务端的
    *   `process.env` 来（`lib/settings/server-env.ts`）。
-   *   与 `book-api.ts` 那一段逐字同一个理由——**删掉而不是留着不用**。
+   *   与 `book-api.ts` 那一段逐字同一个理由——删掉而不是留着不用。
    */
   /** 换一版：带上已有卡号，引擎会叠一个新 revision 而不是覆盖 */
   cardId?: string
@@ -142,7 +142,7 @@ function parseBody(raw: unknown): { body?: Body; problems: string[] } {
 }
 
 export async function POST(req: NextRequest): Promise<Response> {
-  // ★ 出形象只要**图像**那一个能力（与下面那句"按组构造的工厂就该按组用"同一条理由）：
+  // 出形象只要图像那一个能力（与下面那句"按组构造的工厂就该按组用"同一条理由）：
   //   要成"文本 + 图像"的话，这条路会因为一件与画脸无关的事情把人生拦在外面
   const guard = await requireCapability(req, ['image'])
   if (!guard.ok) return guard.response
@@ -166,13 +166,13 @@ export async function POST(req: NextRequest): Promise<Response> {
   const store = await createUserStore(root, guard.session.userId)
   const cardStore = createCardStore(store)
 
-  // ★ 锚点先校验一次，**必须在出图之前**。
-  //   `cardStore.create` 里（`buildCard`）也会校验，但它跑在出图**之后**——
+  // ★ 锚点先校验一次，必须在出图之前。
+  //   `cardStore.create` 里（`buildCard`）也会校验，但它跑在出图之后——
   //   于是"锚点不合格"的真实代价是：先花掉一次出图的钱，再收到一句"角色卡不合格"，
   //   而卡没建成。这不是假想的：`DEFAULT_ANCHORS` 的 mark 那一格曾经带「笑」
-  //   （页级词），家长不动那一格直接点生成，**每一次都白花一次钱**（2026-10-15 实测，
+  //   （页级词），家长不动那一格直接点生成，每一次都白花一次钱（2026-10-15 实测，
   //   见 `lib/creation/default-anchors.test.ts`）。一句话的检查换掉一次白花的调用。
-  // ★ 码用 `card-invalid` 而不是 `invalid-request`：它翻出来的那句是
+  // 码用 `card-invalid` 而不是 `invalid-request`：它翻出来的那句是
   //   "回到第 3 步改那几条被标出来的锚点"，而这正是这里该说的事
   const anchorProblems = checkAnchors(body.anchors)
   if (anchorProblems.length > 0) {
@@ -181,11 +181,11 @@ export async function POST(req: NextRequest): Promise<Response> {
     )
   }
 
-  // ★ 直接取**图像**那一个，不用 `createProviders`（2026-10-15 修，与 `/api/cards/revise`、
+  // 直接取图像那一个，不用 `createProviders`（2026-10-15 修，与 `/api/cards/revise`、
   //   `/api/cards/photo` 对齐）。
   //
   //   原来这里是 `createProviders({...})`——那是全都要：文本、图像、视觉、语音缺一项就抛。
-  //   于是**这一条路只用到图像接口，却会因为"没填文本模型"整条跑不起来**，
+  //   于是这一条路只用到图像接口，却会因为"没填文本模型"整条跑不起来，
   //   而家长拿到的是一句"模型与密钥没配全，这一轮跑不起来"。
   //   实测到的现场：只配了 IMAGE_* 去跑 `/api/cards`，回 502 +
   //   `LLM_API_KEY 未配置`——一件与出形象毫无关系的事。
@@ -206,12 +206,12 @@ export async function POST(req: NextRequest): Promise<Response> {
 
   let generated
   try {
-    // ★ 出图之后把底刷成纯白（2026-10-16 第 23 刀）：模型逼不到 #FFFFFF，
+    // 出图之后把底刷成纯白（2026-10-16 第 23 刀）：模型逼不到 #FFFFFF，
     //   而卡片墙上一排三张必须同一种底，理由与量法写在 `whiten-backdrop.ts` 文件头
     generated = await whitened(await image.generate({ prompt, size: SHEET_SIZE }))
   } catch (err) {
     const failure = userFailureOf(err)
-    // 出图失败**不改卡**：这一版没做成，旧版仍然是旧版（ADR-0007 的"不覆盖"）
+    // 出图失败不改卡：这一版没做成，旧版仍然是旧版（ADR-0007 的"不覆盖"）
     return Response.json(
       { code: failure.code, message: failure.message, retryable: failure.retryable },
       { status: failure.status },
@@ -235,13 +235,13 @@ export async function POST(req: NextRequest): Promise<Response> {
       cardId,
       childId: body.childId,
       anchors: body.anchors,
-      // ★ 这一份画风从 `character-sheet.ts` 来，不在这里就地写字面量：
+      // 这一份画风从 `character-sheet.ts` 来，不在这里就地写字面量：
       //   建卡的路有两条了（工单 03 加了"用他的照片"那条），两份字面量会安静地漂
       style: DEFAULT_CARD_STYLE,
       referenceBytes: generated.bytes,
       referenceMime: generated.mime,
       modelId: generated.modelId,
-      // ★ 版本号也从那个文件取（2026-10-16 第 21 刀）。这一行原来是**写死的字面量**
+      // 版本号也从那个文件取（2026-10-16 第 21 刀）。这一行原来是写死的字面量
       //   `'character-sheet@v1'`——上面那句"不在这里就地写字面量"当时只管着 `style`，
       //   而版本号正是同一类东西：提示词改到 `@v2`（背景改白底）的那一次，
       //   卡上照旧会被盖上 `@v1`，于是"这张图是哪份提示词出的"答出来是错的。
@@ -265,7 +265,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       // 同一份锚点的两种用法，一起回给界面（ADR-0007：画的时候按 A 画、查的时候按 B 查）
       promptFragment: promptFragmentOf(card),
       checklist: checklistOf(card),
-      // ★ 锚点跟着回（工单 03 第 4 刀）。回的是**卡里那份**而不是请求里那份：
+      // 锚点跟着回（工单 03 第 4 刀）。回的是卡里那份而不是请求里那份：
       //   建卡时归一化过（去空、按槽位排序），而且"换一版"那条路上生效的也确实是卡里这份。
       //   客户端拿请求值顶上，界面就会显示一份"服务端其实没用"的锚点
       anchors: card.anchors,

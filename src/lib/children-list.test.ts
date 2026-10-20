@@ -1,20 +1,20 @@
 /**
- * children-list.test.ts —— 那道**窄投影**（`listChildPicker`）漏了什么
+ * children-list.test.ts —— 那道窄投影（`listChildPicker`）漏了什么
  *
- * ★ 这个文件只钉一条，但它是那条报障在**界面这条路上**最后的漏点：
+ * ★ 这个文件只钉一条，但它是那条报障在界面这条路上最后的漏点：
  *   「我提供给你的是男孩子，怎么生成出来有男孩有女孩子」。
  *
  *   那条链上有四节，前三节当时都补了（`toBookBody` 送、`parseCreateBody` 收、
- *   引擎把它变成逐页 prompt 里那个称呼），而**第四节没补**：
+ *   引擎把它变成逐页 prompt 里那个称呼），而第四节没补：
  *   `/home` 那张卡上的孩子是从 `listChildPicker` 反查来的，
  *   而这道投影只挑 childId/name/nameReading/ageBand/lookTags/interestTags
  *   —— 性别在**进 `/create` 之前**就掉了。于是三节补好的管道里流过一个
  *   `undefined`，症状与没修一模一样。
  *
- * ★ 判据为什么选"投影里有没有这个值"而不是"页面上选得中"：
+ * 判据为什么选"投影里有没有这个值"而不是"页面上选得中"：
  *   点得中只证明 React 状态，而这一栏的消费者在服务端的提示词里。
  *   上一刀（`probe-gender-roundtrip.mjs`）已经证明了档案那条往返是通的；
- *   这里要证的是**它有没有被投影带出来**——两件事，中间隔着一次 `.map()`。
+ *   这里要证的是它有没有被投影带出来——两件事，中间隔着一次 `.map()`。
  */
 
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'

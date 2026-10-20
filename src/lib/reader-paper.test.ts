@@ -1,13 +1,13 @@
 /**
- * reader-paper.test.ts —— 阅读器底图那份表：**纯的那半**，加上"表与盘对不对得上"
+ * reader-paper.test.ts —— 阅读器底图那份表：纯的那半，加上"表与盘对不对得上"
  *
- * ★ 不测 `load/save`：vitest 是 `environment: 'node'`（理由写在 `vitest.config.ts`），
+ * 不测 `load/save`：vitest 是 `environment: 'node'`（理由写在 `vitest.config.ts`），
  *   这里没有 `localStorage`。丢进这个文件的断言只该管两件事：
  *
- *   1. **认不出来的值退到哪一边** —— 那是"用户打开一本书，看到的是不是他认识的那一屏"。
- *   2. **表与盘是不是同一个事实** —— 与 `booklist.test.ts` 的「桌面那张色表」同源：
- *      底图是一份**生成物**（`scripts/make-reader-paper.mts` 出图、`--apply` 落盘），
- *      而生成物的坏法是**静默**的：表里写了 `mist` 而盘上没有那个文件，
+ *   1. 认不出来的值退到哪一边 —— 那是"用户打开一本书，看到的是不是他认识的那一屏"。
+ *   2. 表与盘是不是同一个事实 —— 与 `booklist.test.ts` 的「桌面那张色表」同源：
+ *      底图是一份生成物（`scripts/make-reader-paper.mts` 出图、`--apply` 落盘），
+ *      而生成物的坏法是静默的：表里写了 `mist` 而盘上没有那个文件，
  *      界面上不会报错，只是那一档铺出来是一片空的。那条断言把"记得跑脚本"
  *      变成机器的事。
  */

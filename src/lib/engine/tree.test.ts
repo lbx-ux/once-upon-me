@@ -21,8 +21,9 @@ function page(overrides: Partial<NodeDraft> = {}): NodeDraft {
   }
 }
 
-/** 选择点那一页多出来的九格。★ 线格式是**平铺**的（见 `schemas/story.ts` 那段 ★★），
- *  所以这里也是一个平铺对象，直接摊进 `page()`，不再包一层 `choice` */
+/** 选择点那一页多出来的九格。★ 线格式是平铺的（见 `schemas/story.ts` 那段 ★★），
+ *  所以这里也是一个平铺对象，直接摊进 `page()`，不再包一层 `choice`
+ */
 const CHOICE: Partial<NodeDraft> = {
   ask: '你觉得他该上哪一朵云？为什么？',
   labelA: '恐龙背',
@@ -97,7 +98,7 @@ describe('buildTree · 共读版', () => {
     expect(result.problems[0]?.message).toContain('独读版')
   })
 
-  /* ── 2026-10-18 共读版收窄成一档之后新加的三条 ───────────────────────────── */
+  /* 2026-10-18 共读版收窄成一档之后新加的三条 */
 
   it('两个选择点被拒：多出来的那条岔路会把其中一支截断', () => {
     const result = buildTree('shared', 't', [
@@ -113,7 +114,7 @@ describe('buildTree · 共读版', () => {
     if (result.ok) return
     const said = result.problems.map((p) => p.message).join('')
     expect(said).toContain('只支持一个选择点')
-    // 报的是**整篇**的问题（index 0），并点名是哪几页——家长/模型要知道改哪里
+    // 报的是整篇的问题（index 0），并点名是哪几页——家长/模型要知道改哪里
     expect(result.problems.some((p) => p.index === 0 && p.message.includes('第 2、5 页'))).toBe(
       true,
     )
@@ -195,8 +196,8 @@ describe('线性读法', () => {
 
 describe('两条支与路长（工单 05）', () => {
   /**
-   * ★ 这个形状是**刻意**摆的，它让"按平铺顺序猜"与"按路算"给出**不同**的答案：
-   *   a 支那一页（第 3 页）排在 b 支那几页（第 4、5 页）**前面**，
+   * 这个形状是刻意摆的，它让"按平铺顺序猜"与"按路算"给出不同的答案：
+   *   a 支那一页（第 3 页）排在 b 支那几页（第 4、5 页）前面，
    *   但 b 支更长。所以下面每条判据都同时钉住"是哪一支"与"不是靠位置猜的"。
    */
   function sharedTree() {
@@ -314,16 +315,16 @@ describe('isChoicePage（工单 05 §一：闸门据此摊开那九个框）', (
 
   it('★ 只有一侧的 label、没有 spoken **不算**：它与 `toChoice` 是同一句话，引擎也不报错', () => {
     // 这一条钉的是"两边一样宽"：`optionOf` 要 label + spoken 齐全，
-    // 所以这种残留是**惰性数据**——引擎既不组装 choice、也不报问题。
+    // 所以这种残留是惰性数据——引擎既不组装 choice、也不报问题。
     // ★ 它不能被这样漏掉：闸门那一屏的判据是
     //   `isChoicePage(node) || 这一页有 field === 'choice' 的问题`，
-    //   所以**schema 报得出来的**那几种（比如 labelA 空着/太短）照样会把框摊开。
+    //   所以schema 报得出来的那几种（比如 labelA 空着/太短）照样会把框摊开。
     expect(isChoicePage(page({ labelA: '恐龙背' }))).toBe(false)
   })
 
   it('★ 光有 icon / emoji **不算**：那四个格子在 codec 里是 withDefault，每一页都有值', () => {
     // 这一条是这条判据的全部难点：拿"九格里任意一个有值"当判据的话，
-    // 过一遍校验之后**每一页都是选择点**，那九个框会摊在整本书上
+    // 过一遍校验之后每一页都是选择点，那九个框会摊在整本书上
     expect(isChoicePage(page({ iconA: 'dino', emojiA: '🦕', iconB: 'ship', emojiB: '⛵' }))).toBe(
       false,
     )

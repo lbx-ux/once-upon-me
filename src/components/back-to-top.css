@@ -1,9 +1,8 @@
-/* ============================================================================
- * back-to-top.css —— 右下角那颗"回到页首"
+/* back-to-top.css —— 右下角那颗"回到页首"
  *
  * 与 BackToTop.tsx 同名同目录，在 app/globals.css 里 @import（与其余三套一致）。
  * 类名 `to-top`，全站唯一，不与前几屏的 .hero__ / .book__ / .hl__ 命名空间相撞。
- * ========================================================================== */
+ */
 
 .to-top {
   position: fixed;
@@ -25,7 +24,7 @@
   background: rgba(var(--page-paper-rgb), 0.94);
   color: var(--ink-soft);
   cursor: pointer;
-  /* ★ 刻意**不用** backdrop-filter。它是 position: fixed 的元素，
+  /* 刻意不用 backdrop-filter。它是 position: fixed 的元素，
      背景模糊意味着每一帧滚动都要重新采样并重绘它背后那块屏幕 ——
      为了一颗常驻右下角的按钮，把整页的滚动成本抬上去，是笔亏本买卖。
      半透明的纸色底已经够"浮在页面上"了，不需要那层毛玻璃。 */
@@ -33,7 +32,7 @@
     0 2px 6px rgba(19, 19, 28, 0.07),
     0 10px 24px rgba(19, 19, 28, 0.12);
   /* 默认藏起来：opacity 0 + 往下沉 10px + visibility hidden。
-     ★ visibility 不是可选的装饰 —— 只写 opacity 的话，一颗看不见的按钮
+     visibility 不是可选的装饰 —— 只写 opacity 的话，一颗看不见的按钮
        仍然可点、仍然会被 Tab 到、仍然会被读屏念一遍（`.book-choice` 那条同一个理由）。 */
   opacity: 0;
   visibility: hidden;
