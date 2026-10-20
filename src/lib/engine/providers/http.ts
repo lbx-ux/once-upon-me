@@ -106,9 +106,16 @@ export function findFirst(obj: unknown, keys: readonly string[]): string | numbe
   return null
 }
 
-/** 两种拼法都要读，少读一种就是排障时拿不到 traceId */
+/**
+ * 三种拼法都要读，少读一种就是排障时拿不到 traceId。
+ *
+ * 第三种（`request_id`）是 2026-10-20 补的，因为那天真需要它：阿里云 dashscope 的
+ *   `voice-enrollment` 间歇性回 500，要报障就得报出他们认的那一串号，而他们的错误体里
+ *   写的正是 `request_id` —— 前两种拼法都读不到，于是那句错误落到界面上时一个号都没有，
+ *   报障只能靠描述时间点。
+ */
 export function traceOf(obj: unknown): string {
-  const hit = findFirst(obj, ['traceId', 'trace_id'])
+  const hit = findFirst(obj, ['traceId', 'trace_id', 'request_id'])
   return hit === null ? '' : String(hit)
 }
 

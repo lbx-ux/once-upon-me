@@ -63,6 +63,20 @@ function byStatus(status: number | undefined, providerCode: string | undefined):
     case 503:
     case 504:
       return line('平台那边超时或不可用', '等一会儿再试，或者换一个模型。你们的 key 没有问题。')
+    case 500:
+      // ★ 2026-10-20 补的一条。500 原来**不在**这张分流表里，于是它落到
+      //   `byCode('provider-call-failed')`（也没有这一档）、再落到兜底那句
+      //   "原样保留供应商原文"——家长屏幕上于是只有
+      //   `… 失败 HTTP 500 · InternalError · feat extract missing ph.bin`。
+      //   一句厂商黑话，读到的人只能理解成"我录坏了"，而真相是"他们那边这次没读出来"。
+      //   与 502/503/504 分开写，是因为那三句建议里有一句"换一个模型"——
+      //   在音色这条路上那是**错的**建议：音色绑模型（`qwen-speech.ts` 文件头第 4 条），
+      //   换模型等于让刚建好的音色失效。这里只留"再点一次"，它在两条路上都对。
+      return line(
+        '平台那边自己报错了（是他们内部的故障，不是你录的声音、也不是你填的东西不对）',
+        '过几秒再点一次就行；连着好几次都这样，那就是平台这段时间在犯病——' +
+          '把下面那句原文最末了那个厂商流水号发给我们，我们拿它去问平台。',
+      )
     default:
       break
   }
@@ -173,6 +187,21 @@ function byCode(error: EngineError): string | null {
 }
 
 /**
+ * 厂商流水号（`traceId`，阿里云那家写成 `request_id`）。
+ *
+ * ★ 为什么它要出现在**给用户**的那句话里（2026-10-20）：厂商侧的 5xx 大多只能靠报障解决，
+ *   而报障唯一能认这一次调用的东西就是这串号。原来它只躺在 `EngineError.traceId` 里
+ *   （结构化字段，界面上一个字都看不到），于是那句"把原文发给我们"到了家长手里
+ *   是一句空话——他没有号可发。
+ * 已经在原文里出现过就不重复（`request_id` 有可能本来就在供应商那句 message 里）。
+ */
+function traceTail(failure: EngineError): string {
+  const id = failure.traceId ?? ''
+  if (id === '' || failure.message.includes(id)) return ''
+  return ` · 厂商流水号 ${id}`
+}
+
+/**
  * 给终端用户的一句话。
  *
  * 兜底分支保留供应商原文：宁可给一句长话，也不要说"未知错误"——
@@ -181,8 +210,8 @@ function byCode(error: EngineError): string | null {
 export function userMessageFor(error: unknown): string {
   const failure = asEngineError(error)
   const specific = byStatus(failure.httpStatus, failure.providerCode) ?? byCode(failure) ?? null
-  if (!specific) return failure.message
-  return `${specific}\n（供我们排障的原文：${failure.message}）`
+  if (!specific) return `${failure.message}${traceTail(failure)}`
+  return `${specific}\n（供我们排障的原文：${failure.message}${traceTail(failure)}）`
 }
 
 /**

@@ -21,6 +21,7 @@ import {
   fetchBytes,
   isSafeToRetryNetwork,
   requestJson,
+  traceOf,
   type HttpDeps,
 } from './http.ts'
 import { EngineError } from '../errors.ts'
@@ -234,6 +235,47 @@ describe('失败消息要能指着下一步走', () => {
     expect(message).toContain('要去充值')
     // 结构化字段也要留住，界面文案分流靠它
     expect((err as EngineError).httpStatus).toBe(402)
+  })
+})
+
+/**
+ * ★ `traceOf` 认几种拼法（2026-10-20 补第三种）。
+ *
+ * 报障要的就是这一串号，而每家拼法不同：前两种早就写在注释里，第三种是阿里云
+ * dashscope 的 `request_id` —— 那天音色复刻间歇性 500，要拿号去报障，才发现
+ * 它的错误体读不出号来（两种老拼法都不认），于是那句"把原文发给我们"到家长手里
+ * 是一句空话。这一组钉的是"号读得到"，以及"读到的是哪一颗"。
+ */
+describe('traceOf 读流水号：三种拼法 + 优先级', () => {
+  it('三种拼法都读得到', () => {
+    expect(traceOf({ traceId: 'a' })).toBe('a')
+    expect(traceOf({ trace_id: 'b' })).toBe('b')
+    expect(traceOf({ request_id: '40dd863b-f7c4' })).toBe('40dd863b-f7c4')
+  })
+
+  it('嵌套也要读得到（厂商的错误体常把东西塞在 output 里）', () => {
+    expect(traceOf({ output: {}, request_id: 'top-1' })).toBe('top-1')
+  })
+
+  it('★ requestJson 把 dashscope 的 request_id 放进结构化字段（界面上那句流水号从这儿来）', async () => {
+    const impl = (() =>
+      Promise.resolve(
+        new Response(
+          '{"request_id":"9653cb0c","code":"InternalError","message":"feat extract missing ph.bin"}',
+          {
+            status: 500,
+          },
+        ),
+      )) as unknown as typeof fetch
+    const err = await requestJson(
+      { baseUrl: 'https://example.invalid/api/v1', apiKey: 'k', fetchImpl: impl },
+      { method: 'POST', path: '/services/audio/tts/customization' },
+    )
+      .then(() => null)
+      .catch((e: unknown) => e)
+
+    expect((err as EngineError).httpStatus).toBe(500)
+    expect((err as EngineError).traceId).toBe('9653cb0c')
   })
 })
 

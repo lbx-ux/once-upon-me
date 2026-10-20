@@ -203,7 +203,10 @@ export default function NewVoicePanel({ onClose }: { onClose: () => void }) {
         }),
       })
       if (!response.ok) {
-        throw new Error((await response.text()).slice(0, 200) || `HTTP ${response.status}`)
+        // ★ 2026-10-20 从 200 提到 600：服务端那句话现在末尾带着厂商流水号
+        //   （报障要靠它），200 那个截断恰好会把它切掉 —— 屏幕上于是只剩一句正文，
+        //   而"把流水号发给我们"那半句承诺就没有东西可发。
+        throw new Error((await response.text()).slice(0, 600) || `HTTP ${response.status}`)
       }
       const data = (await response.json()) as { voiceId?: string; modelId?: string; name?: string }
       if (!data.voiceId) throw new Error('厂商那边没有回 voice_id')

@@ -154,3 +154,66 @@ describe('userFailureOf · 状态码按"错在谁"分', () => {
     expect(said).toContain('ECONNRESET')
   })
 })
+
+/**
+ * ★ 500 那一档（2026-10-20 补）。
+ *
+ * 这一档原来是**空的**：`byStatus` 没有 500，`byCode('provider-call-failed')` 也没有，
+ * 于是它落到兜底那句"原样保留供应商原文"——厂商那句黑话直接上了家长屏幕。
+ * 触发它的那次实测：音色复刻连打 17 次只成功 2 次，失败一律
+ * `HTTP 500 · InternalError · feat extract missing ph.bin`。
+ *
+ * 几条判据都对着"只有真改对才会不同"选：文案不再是原文（这是修的那个 bug）、
+ * 该给的那串流水号真的出现了、而且它与 502/503/504 那句**不是同一句**
+ * （那三句里有"换一个模型"，在音色这条路上是错的建议——音色绑模型）。
+ */
+describe('500：厂商内部报错（2026-10-20）', () => {
+  const enrollment500 = (requestId: string) =>
+    new EngineError(
+      'provider-call-failed',
+      '/services/audio/tts/customization 失败 HTTP 500 · InternalError · feat extract missing ph.bin' +
+        '（这一条我们连着试了 4 次，每次都是这个结果）',
+      { httpStatus: 500, providerCode: 'InternalError', traceId: requestId },
+    )
+
+  it('★ 不再把厂商黑话直接甩给家长，但原文与流水号都还在', () => {
+    const said = userMessageFor(enrollment500('40dd863b-f7c4-9c26-9b69-488d60541514'))
+    expect(said).toContain('再点一次')
+    expect(said).toContain('不是你录的声音') // 这一句才是家长真正需要知道的
+    expect(said).not.toBe(enrollment500('x').message) // 这一条就是修的那个 bug
+    expect(said).toContain('ph.bin') // 原文照旧附上（我们自己排障要它）
+    expect(said).toContain('厂商流水号 40dd863b-f7c4-9c26-9b69-488d60541514')
+  })
+
+  it('★ 整句话要装得下两处截断：路由 600、前端 600（装不下就等于没带流水号）', () => {
+    // 这一条钉的不是文案好不好，是**流水号真的到得了屏幕上**：
+    //   它在这句话的最末了，而这一句要穿过 `/api/voice/clone` 的 `.slice(0, 600)`
+    //   与 `NewVoicePanel` 的 `.slice(0, 600)`（那两处 2026-10-20 从 300/200 抬上来的
+    //   就是这个原因：300/200 恰好切在流水号中间）。这里拿真 500 那句原文算长度。
+    const said = userMessageFor(enrollment500('40dd863b-f7c4-9c26-9b69-488d60541514'))
+    expect(said.length).toBeLessThanOrEqual(600)
+    expect(said.slice(0, 600)).toContain('40dd863b-f7c4-9c26-9b69-488d60541514')
+  })
+
+  it('★ 与 502/503/504 不是同一句：那三句的"换一个模型"在音色这条路上是错的建议', () => {
+    const five = userMessageFor(enrollment500('r-1'))
+    expect(five).not.toBe(userMessageFor(withStatus(503)))
+    expect(five).not.toContain('换一个模型')
+  })
+
+  it('没有流水号时不硬凑一句；原文里已经有了就不重复', () => {
+    const noId = userMessageFor(withStatus(500))
+    expect(noId).toContain('再点一次')
+    // 判据是"没有**附上**一个号"，不是"这句话里没有这五个字"——正文里本来就要提到它
+    expect(noId).not.toContain('· 厂商流水号')
+    const already = new EngineError(
+      'provider-call-failed',
+      '平台返回 request_id=abc123 之后就断了',
+      {
+        httpStatus: 500,
+        traceId: 'abc123',
+      },
+    )
+    expect(userMessageFor(already).match(/abc123/g)).toHaveLength(1)
+  })
+})

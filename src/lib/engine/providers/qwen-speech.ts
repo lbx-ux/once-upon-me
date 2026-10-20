@@ -35,6 +35,17 @@
  *    被忽略的输入会让上游以为它生效了，而症状要到"家长说名字念错了"时才浮出来。
  * 7. `sample_rate` 不发送。实测请求里写 `24000` 被忽略，回的是 48kHz；
  *    发一个不生效的参数会让下一个人以为语速/音质是靠它调的。
+ * 8. ★ **`create_voice` 在这家是间歇性坏的**（2026-10-20 实测）：同一份合规样本
+ *    （16kHz 单声道 WAV）连打 17 次只成功 2 次，失败一律
+ *    `HTTP 500 · InternalError · feat extract missing ph.bin`（他们内部音素提取那一步
+ *    找不到产物文件）。格式（WAV/MP3）与内容（循环样本 / 真实 14.9 秒旁白）都不是判别项，
+ *    两种都落在同一档失败率上——**所以这是他们那边的事，不是我们的参数或那段录音的事**。
+ *    合成的 `SpeechSynthesizer` 同时正常（同一把 key），所以也不是 key。
+ *    → `clone` 因此自己重试几次（判据与"为什么这里能重试"写在 `ENROLL_ATTEMPTS` 那段）。
+ *    ★ 而且这件事**不是常数**：同一天傍晚再量，单次成功率从上午的 2/17（12%）
+ *    变成了 9/28（32%），两次区间不交叠。所以别把任何一个数当"这家的成功率"引用，
+ *    真正稳的那条是"单发会经常失败，所以要重试"。
+ *    完整台账（含"失败在厂商侧一条音色都没留下"那条反证）在 `docs/known-tradeoffs.md`。
  *
  * 与 tokenrhythm-image 一样：本文件不 import React，也不假设浏览器 API。
  */
@@ -153,6 +164,93 @@ export type QwenSpeechOptions = {
   voicePrefix?: string
   /** 单次合成的超时。实测一句 0.7–1.5s，但网络抖动要留余量 */
   synthTimeoutMs?: number
+  /**
+   * 复刻失败时的退避基数（缺省 `ENROLL_BACKOFF_BASE_MS`）。
+   * ★ 它作为一个选项存在的理由只有一个：让"重试的次序与次数"能被测住，
+   *   而不必让测试真等 7 秒。生产上没有人该动它。
+   */
+  enrollBackoffMs?: number
+}
+
+/**
+ * ★ 复刻这条路自己试几次（2026-10-20 加，依据是文件头第 8 条那 17 次里成功 2 次）。
+ *
+ * **为什么这里能重试，而"生成类请求不许重试"那条纪律仍然成立**：
+ *   那条纪律（`http.ts` 的 `shouldRetry` 对 POST 一律不放行）防的是"重试 = 重复建单、重复扣费"。
+ *   在这条路上这件事**量过**，不成立：
+ *   · 当天那 15 次失败之后，厂商侧 `list_voice` 里 10-20 那天**一条音色都没有**
+ *     （只剩 10-16/17/18 那四条旧的），两次成功的各留下一条 —— 失败不建东西；
+ *   · 失败响应里没有 `usage` 计数（成功的两次有）。
+ *   所以重试多花的是时间，不是钱，也不会多出一条音色。
+ *
+ * 判据只看状态码，不匹配错误文案（同 `provider-messages.ts` 第一条纪律）：
+ *   · 5xx / 429 → 重试：这是厂商侧的故障与限流，与那段录音、与我们的参数都无关，
+ *     换个时刻再发一次就是在换一次运气（他们那 500 像是部分实例缺产物文件，
+ *     但我们看不见他们的实例，"换一台"这个解释只是推测，真凭据是重试前后成功率的差，
+ *     见 docs/known-tradeoffs.md 那一段）；
+ *   · 4xx（401 key、400 参数、413 超限）→ 一次都不重试，试一百次也一样；
+ *   · 超时/中止、以及连接中途被掐（`ECONNRESET`）→ 不重试：请求可能已经跑到他们那边了，
+ *     "不知道到没到"正是那条纪律要防的形状。它们在 `EngineError` 上没有 `httpStatus`，
+ *     于是自然落在这条判据之外 —— 这是判据本身挡住的，不是漏写。
+ *
+ * 退避 1.2s 起、逐次加一档：失败本身是秒级的（实测每次 2.3–4.4s），
+ *   等太久只会让"点一下"卡在那里。最坏一回合（四次全灭 + 三档退避）约 18 秒才见分晓。
+ * ★ 四次这个上限与"到底管不管用"当天都量过（`.out/vc-retry-probe.mjs`，
+ *   同一份样本字节、10 个回合 × 最多 4 次、跑在服务器上）：**回合成功率 9/10**
+ *   （这是"点一次"的读数）；而同一轮里**单次**是 9/28 ≈ 32% ——
+ *   也就是厂商那边的坏损率自己也在动（上午那次 2/17 ≈ 12%，两次区间不交叠）。
+ *   所以"重试值几个点"没有固定倍数：照 32% 独立抽签算约 79%、照 12% 算约 40%、
+ *   实测 90%。站得住的结论只有一句：**单发会经常失败，四次重试之后一个晚上十个回合
+ *   只翻了一次车**。别把 90% 引成"成功率"——它是那一个窗口里的读数。
+ */
+const ENROLL_ATTEMPTS = 4
+const ENROLL_BACKOFF_BASE_MS = 1_200
+
+/** 5xx / 429 才是"厂商那边的事"。没有 `httpStatus` 的（超时、连接被掐）一律不重试 */
+function enrollRetryable(err: unknown): boolean {
+  if (!(err instanceof EngineError)) return false
+  const status = err.httpStatus
+  return status !== undefined && (status === 429 || status >= 500)
+}
+
+/** 退避等待；信号已中止时立刻返回（不再白等一档） */
+function backoff(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    const onAbort = (): void => {
+      clearTimeout(timer)
+      resolve()
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort)
+      resolve()
+    }, ms)
+    if (signal) {
+      if (signal.aborted) {
+        clearTimeout(timer)
+        resolve()
+        return
+      }
+      signal.addEventListener('abort', onAbort, { once: true })
+    }
+  })
+}
+
+/**
+ * 把"试了几次"写回那句开发者消息里。结构化字段原样带走 ——
+ *   界面分流靠的是 `httpStatus` / `providerCode` / `traceId`，不是这句话。
+ * 次数必须说出来：不说的话，"再点一次"就不知道是在说第几次。
+ */
+function withAttempts(error: EngineError, attempts: number): EngineError {
+  return new EngineError(
+    error.code,
+    `${error.message}（这一条我们连着试了 ${attempts} 次，每次都是这个结果）`,
+    {
+      traceId: error.traceId,
+      detail: error.detail,
+      httpStatus: error.httpStatus,
+      providerCode: error.providerCode,
+    },
+  )
 }
 
 export function createQwenSpeech(
@@ -258,29 +356,54 @@ export function createQwenSpeech(
       //   "这条音色是基于哪一次授权创建的"，那个记录在我们这边，不在厂商那边。
       //   这条与文件头第 5 条的区别是刻意的：那边漏的是能力，这边漏的是记账。
 
-      const body = await requestJson(deps, {
-        method: 'POST',
-        path: CUSTOMIZE_PATH,
-        body: {
-          model: ENROLL_MODEL,
-          input: {
-            action: 'create_voice',
-            // 文件头第 4 条：音色绑定模型，写死成本适配器的 modelId
-            target_model: modelId,
-            prefix,
-            // ★ 文件头第 3 条：样本以 data URL 进请求体，因此从不落到别处
-            url: `data:${req.mime};base64,${base64(req.sampleBytes)}`,
-          },
+      const payload = {
+        model: ENROLL_MODEL,
+        input: {
+          action: 'create_voice',
+          // 文件头第 4 条：音色绑定模型，写死成本适配器的 modelId
+          target_model: modelId,
+          prefix,
+          // ★ 文件头第 3 条：样本以 data URL 进请求体，因此从不落到别处
+          url: `data:${req.mime};base64,${base64(req.sampleBytes)}`,
         },
-        signal: budget?.signal,
-        timeoutMs: budget?.timeoutMs ?? 120_000,
-      })
+      }
 
-      const voiceId = findFirst(body, ['voice_id'])
+      // ★ 文件头第 8 条 + `ENROLL_ATTEMPTS` 那段：这家这条 action 是间歇性坏的，
+      //   所以这里自己试到 `ENROLL_ATTEMPTS` 次。只重"厂商回了 5xx/429"那一种。
+      const backoffMs = opts.enrollBackoffMs ?? ENROLL_BACKOFF_BASE_MS
+      let reply: unknown = null
+      let failure: EngineError | null = null
+      let attempts = 0
+      for (let attempt = 1; attempt <= ENROLL_ATTEMPTS; attempt += 1) {
+        attempts = attempt
+        try {
+          reply = await requestJson(deps, {
+            method: 'POST',
+            path: CUSTOMIZE_PATH,
+            body: payload,
+            signal: budget?.signal,
+            timeoutMs: budget?.timeoutMs ?? 120_000,
+          })
+          failure = null
+          break
+        } catch (err) {
+          failure =
+            err instanceof EngineError ? err : new EngineError('provider-call-failed', String(err))
+          if (!enrollRetryable(failure) || attempt === ENROLL_ATTEMPTS) break
+          // 调用方喊停（整轮取消）就不再等下一档，直接把它抛出去
+          if (budget?.signal?.aborted) break
+          await backoff(backoffMs * attempt, budget?.signal)
+        }
+      }
+      if (failure) throw attempts > 1 ? withAttempts(failure, attempts) : failure
+
+      const voiceId = findFirst(reply, ['voice_id'])
       if (voiceId === null) {
+        // ★ 拿到 200 却没有 voice_id：**不重试**。这一种分不清"他们建了但没回"还是
+        //   "没建"，重试就可能多出一条孤儿音色 —— 判不出就不重试是这条路上唯一的规矩
         throw new EngineError('provider-call-failed', '创建音色没有返回 voice_id', {
-          traceId: traceOf(body) || undefined,
-          detail: body,
+          traceId: traceOf(reply) || undefined,
+          detail: reply,
         })
       }
       return { voiceId: String(voiceId) }

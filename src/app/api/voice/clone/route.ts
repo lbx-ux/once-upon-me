@@ -1,9 +1,9 @@
-import { EngineError } from '@/lib/engine/index.ts'
 import type { NextRequest } from 'next/server'
 import { voiceProviderOf } from '@/lib/engine/providers/registry.ts'
 import { requireCapability } from '@/lib/auth/session.ts'
 import { serverEnv } from '@/lib/settings/server-env.ts'
 import { parseCloneRequest } from '@/lib/voices/request.ts'
+import { userFailureOf } from '@/lib/provider-messages.ts'
 
 /**
  * POST /api/voice/clone —— 「用我自己的声音」
@@ -29,8 +29,13 @@ import { parseCloneRequest } from '@/lib/voices/request.ts'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-/** 供应商的错误体可能有几 KB，回一段就够定位；长了反而把关键行挤掉 */
-const MAX_ERROR_CHARS = 300
+/**
+ * 供应商的错误体可能有几 KB，回一段就够定位；长了反而把关键行挤掉。
+ * ★ 2026-10-20 从 300 提到 600：这句话现在是两行（给人那句 + 排障原文 + 厂商流水号），
+ *   实测一次真 500 拼出来约 250 字；300 那种余量会把末尾的流水号切在半路，
+ *   而报障要的就是那一串。
+ */
+const MAX_ERROR_CHARS = 600
 
 export async function POST(req: NextRequest): Promise<Response> {
   // 闸门在最前：这三条都只花语音的钱，所以只要语音那一个能力
@@ -58,10 +63,15 @@ export async function POST(req: NextRequest): Promise<Response> {
     const { voiceId } = await voice.clone(parsed.value.request)
     return Response.json({ voiceId, modelId, name: parsed.value.name })
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    const code = err instanceof EngineError ? err.code : 'unknown'
-    const status = code === 'provider-not-configured' ? 400 : 502
+    // ★ 2026-10-20：这里原来回的是 `err.message`（引擎那句开发者原话）。于是厂商侧
+    //   间歇性 500 的时候，家长屏幕上只有 `… 失败 HTTP 500 · InternalError ·
+    //   feat extract missing ph.bin`——一句厂商黑话，读到的人只能理解成"我录坏了"。
+    //   现在走 `userFailureOf`（文案 + 可重试性 + 状态码一次算清），
+    //   与其余 Route Handler 同一条出口；那句原文与厂商流水号仍附在末尾。
+    //   配置类照旧回 400（不是平台故障，是"这一项没配"）。
+    const failure = userFailureOf(err)
+    const status = failure.code === 'provider-not-configured' ? 400 : failure.status
     // 不回任何供应商的原始错误体：里面可能有请求回显（我们发出去的样本就在里面）
-    return new Response(message.slice(0, MAX_ERROR_CHARS), { status })
+    return new Response(failure.message.slice(0, MAX_ERROR_CHARS), { status })
   }
 }

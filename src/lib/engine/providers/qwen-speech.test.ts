@@ -290,3 +290,107 @@ describe('qwen-speech · 情绪标签', () => {
     }
   })
 })
+
+/**
+ * ★ 复刻失败时的重试（2026-10-20 加）。
+ *
+ * 这一组量的是"发了几次请求、发的是什么、抛出来那句还剩哪些字段"——
+ * 都是只有真做才会不同的量。背景是当天实测厂商那条 `create_voice` 连打 17 次
+ *   只成功 2 次（同一份合规样本，失败一律 `HTTP 500 InternalError`），
+ *   台账在 `docs/known-tradeoffs.md`。
+ *
+ * 退避给 0（`opts.enrollBackoffMs`），所以这一组不真等 7 秒；
+ *   退避的**存在与次序**由第 2 条那 4 次调用钉住，退避的**数**不值一条测试。
+ */
+describe('qwen-speech · 复刻重试（只重 5xx/429）', () => {
+  const SAMPLE = { sampleBytes: new Uint8Array([1, 2, 3]), mime: 'audio/wav', consentRef: 'c1' }
+
+  /** 厂商那句真 500 的形状（2026-10-20 实测到的原文，含他们的 request_id） */
+  const vendor500 = (requestId: string) => ({
+    ok: false,
+    status: 500,
+    headers: { get: () => 'application/json' },
+    text: async () =>
+      JSON.stringify({
+        request_id: requestId,
+        code: 'InternalError',
+        message: 'feat extract missing ph.bin',
+      }),
+    arrayBuffer: async () => new ArrayBuffer(0),
+  })
+
+  const statusResponse = (status: number, code: string) => ({
+    ok: false,
+    status,
+    headers: { get: () => 'application/json' },
+    text: async () => JSON.stringify({ code, message: 'no' }),
+    arrayBuffer: async () => new ArrayBuffer(0),
+  })
+
+  it('★ 第一次 500、第二次成 → 拿到 voice_id，只发了两次，且两次的样本逐字节一样', async () => {
+    const calls: Call[] = []
+    stubFetch([vendor500('req-1'), jsonResponse({ output: { voice_id: 'v-ok' } })], calls)
+    const speech = createQwenSpeech(DEPS, MODEL, { enrollBackoffMs: 0 })
+    await expect(speech.clone(SAMPLE)).resolves.toEqual({ voiceId: 'v-ok' })
+    expect(calls).toHaveLength(2)
+    // 重试发的是同一次录入，不是"让家长再录一遍"——请求体一模一样
+    expect(calls[1]?.body).toEqual(calls[0]?.body)
+  })
+
+  it('★ 连着四次都 500 → 抛错带"试了 4 次"，而状态码与流水号**还在**（界面分流与报障都要它们）', async () => {
+    const calls: Call[] = []
+    stubFetch([vendor500('r1'), vendor500('r2'), vendor500('r3'), vendor500('r4')], calls)
+    const speech = createQwenSpeech(DEPS, MODEL, { enrollBackoffMs: 0 })
+    const err: unknown = await speech.clone(SAMPLE).then(
+      () => null,
+      (e: unknown) => e,
+    )
+    expect(calls).toHaveLength(4)
+    expect(err).toBeInstanceOf(EngineError)
+    const failure = err as EngineError
+    expect(failure.message).toContain('连着试了 4 次')
+    // 这两条是"包装不能把结构化字段弄丢"的判据：丢了界面就分流不了，报障也没号可报
+    expect(failure.httpStatus).toBe(500)
+    expect(failure.traceId).toBe('r4')
+  })
+
+  it('★ 401 / 403 一次都不重试：key 与权限试一百次也一样', async () => {
+    for (const status of [401, 403]) {
+      const calls: Call[] = []
+      stubFetch([statusResponse(status, status === 401 ? 'InvalidApiKey' : 'AccessDenied')], calls)
+      const speech = createQwenSpeech(DEPS, MODEL, { enrollBackoffMs: 0 })
+      await expect(speech.clone(SAMPLE)).rejects.toThrow(/401|403/)
+      expect(calls, String(status)).toHaveLength(1)
+    }
+  })
+
+  it('★ 200 却没有 voice_id → 不重试（分不清他们建没建，重试就可能多出一条孤儿音色）', async () => {
+    const calls: Call[] = []
+    stubFetch([jsonResponse({ output: {} })], calls)
+    const speech = createQwenSpeech(DEPS, MODEL, { enrollBackoffMs: 0 })
+    await expect(speech.clone(SAMPLE)).rejects.toThrow(/没有返回 voice_id/)
+    expect(calls).toHaveLength(1)
+  })
+
+  it('★ 连接中途被掐（ECONNRESET）不重试：那一种"不知道到没到"', async () => {
+    let calls = 0
+    globalThis.fetch = (async () => {
+      calls += 1
+      throw new TypeError('fetch failed', { cause: { code: 'ECONNRESET' } })
+    }) as unknown as typeof fetch
+    const speech = createQwenSpeech(DEPS, MODEL, { enrollBackoffMs: 0 })
+    await expect(speech.clone(SAMPLE)).rejects.toThrow(/ECONNRESET/)
+    expect(calls).toBe(1)
+  })
+
+  it('429 也重试（容量限流与录音无关，换个时刻再发一次）', async () => {
+    const calls: Call[] = []
+    stubFetch(
+      [statusResponse(429, 'Throttling'), jsonResponse({ output: { voice_id: 'v-2' } })],
+      calls,
+    )
+    const speech = createQwenSpeech(DEPS, MODEL, { enrollBackoffMs: 0 })
+    await expect(speech.clone(SAMPLE)).resolves.toEqual({ voiceId: 'v-2' })
+    expect(calls).toHaveLength(2)
+  })
+})
