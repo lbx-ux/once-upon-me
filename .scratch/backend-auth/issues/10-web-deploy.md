@@ -226,3 +226,21 @@
   断言有 `allowed`；失败时直说"多半是另一半没跟着部署"）。
   · 仍留一条缝（写进 known-tradeoffs 了）：只部署后端时没人拦 —— 那条判据目前长在前端
   那个脚本上，`server/deploy.sh` 仍然只问 `/api/health`。
+
+- 2026-10-20（**换模型钥匙**：站长报"过期了"）：钥匙只有一个落点在服务器上 ——
+  `/etc/xiaozhujue/web.env`，其中 `LLM_API_KEY` / `IMAGE_API_KEY` / `VISION_API_KEY`
+  **是同一把**（三个能力同一家、同一个 base URL），`TTS_API_KEY` 是另一把
+  （阿里云 dashscope）。管理员页写出来的 `/var/lib/xiaozhujue/models.json` **不存在**
+  （它若存在会压过 web.env —— 换钥匙前先看这一眼）。
+  · 流程：`cp -a web.env web.env.bak-<时间>` → 改那三行 → `install -m 640 -o root -g xzj`
+  → `systemctl restart xiaozhujue-web`（`.env` 是**进程启动时**读的，不重启不生效）。
+  · ★ **判据要走计费接口**：`GET /v1/models` 新旧钥匙**都回 200**（那家网关的模型列表
+  不校验钥匙），所以它证明不了任何事。真判据是应用自己那条路 —— 管理页的
+  「测试连通」（`POST /api/admin/model-test`），三支实测都 `ok:true`：
+  文字 1.7 s（`qwen3.8-flash`）、图像 17.2 s（`wan2.7-image`，真回图）、
+  视觉 46.6 s（`kimi-k2.6`，真读了输入图）。
+  · 顺带一个比"过期"更准的诊断：旧钥匙在计费接口上回的是
+  **402 `INSUFFICIENT_BALANCE`（账户余额不足）**，不是 401 —— 那家后台充值即可恢复；
+  而 401/403 才是"钥匙无效"。以后看到"生成失败"先看这句厂商原文
+  （`lib/provider-messages.ts` 会把它翻成人话并原样附上）。
+  · 本机 `.env.local` 里那三把是**另一把**（指纹与服务器不同），本次没动。
