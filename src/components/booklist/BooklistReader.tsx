@@ -56,6 +56,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { flipState } from '@/components/book/flip.ts'
+import FullscreenButton from '@/components/reader/FullscreenButton.tsx'
 import { useNarration } from '@/components/reader/use-narration.ts'
 import { useSwipeTurn } from '@/components/reader/use-swipe-turn.ts'
 import { useReaderPaper, useTurnMode } from '@/lib/use-reading-prefs.ts'
@@ -375,7 +376,11 @@ export default function BooklistReader({ book, coverUrl, art, audio }: BooklistR
       <div className="blr__bar">
         <button
           type="button"
-          className="blr__btn"
+          /* ★ 两颗翻页钮带**明确的修饰类**（`--prev` / `--next`），不是靠 `:first-of-type`：
+             手机横屏那一档要把它们分别摆进左右两条页边（`booklist-reader.css` §手机横屏），
+             而"第几个孩子"这种写法在朗读钮缺席（没录朗读的书）那天会**静悄悄地错位**——
+             与 `.reader__meta--origin` 那条注释同一条理由。 */
+          className="blr__btn blr__btn--prev"
           onClick={() => turn(-1)}
           disabled={qTarget === 0}
           aria-label="上一页"
@@ -402,13 +407,17 @@ export default function BooklistReader({ book, coverUrl, art, audio }: BooklistR
         )}
         <button
           type="button"
-          className="blr__btn"
+          className="blr__btn blr__btn--next"
           onClick={() => turn(1)}
           disabled={qTarget >= leafCount}
           aria-label="下一页"
         >
           ›
         </button>
+        {/* 全屏那一颗（只解决"手机横屏时地址栏吃掉的那一条"）。
+            它自己不写版面：摆哪儿由 `fullscreen-button.css` 说了算，
+            横屏时这一档的网格里正好是右上那一格。 */}
+        <FullscreenButton />
       </div>
 
       <div className="blr__progress" aria-hidden="true">

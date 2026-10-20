@@ -1,0 +1,78 @@
+/* ============================================================================
+ * 全屏那一颗（`FullscreenButton.tsx`，2026-10-20）
+ *
+ * 三档显隐，一条一条说清，因为"什么时候它在"是这个控件唯一容易做错的地方：
+ *
+ *   桌面 / 竖屏（没在全屏里）：**不出现**。它解决的只是"手机横屏时地址栏
+ *     吃掉的那一条"，而竖屏那一屏已经有 `.rotate-hint` 在说同一件事。
+ *   手机横屏：出现，落在**右页边上格**（两台阅读器那一档都是三列网格，
+ *     上页边是第 1 行、右页边是第 3 列 —— 见 `reader-book.css` §手机横屏）。
+ *   已经在全屏里（**任何方向**）：出现。横屏进的全屏，转回竖屏时得退得出来；
+ *     而竖屏的底栏那一行本来就紧，所以那一态它**浮在右上角**，
+ *     照「← 回去」那颗的写法（`globals.css` §手机横屏 里同一个做法）。
+ *     ★ 这一条不能省：省了就是"全屏进去之后、转个屏就出不来"。
+ *
+ * ★ `.fullscreen-button` 与 `.fullscreen-button[data-on='true']` **成对写**在媒体查询里：
+ *   `[data-on]` 那条是 (0,2,0)，只写 `.fullscreen-button` 的 (0,1,0) 盖不过它 ——
+ *   漏了的症状是"横屏进了全屏之后，这颗钮跳回右上角浮着"（看着像没生效，
+ *   其实是那两条规则在打架）。这类特异性坑这个仓库记过好几条（见 `app-shell.css` 那段）。
+ *
+ * ★ 它落在 `.reader__bar` / `.blr__bar` **里面**：那一层在横屏那一档是
+ *   `display: contents`，所以 `position: relative` 要自己带（层序 —— 底图是定位元素，
+ *   静态内容画在它下面）。这一条与那两颗翻页钮同源，写在那边；这里再写一遍是因为
+ *   竖屏 + 全屏那一态它不在那个选择器覆盖范围内。
+ * ========================================================================== */
+
+.fullscreen-button {
+  position: relative;
+  z-index: 1;
+  /* 桌面与竖屏的默认：不出现（理由见文件头） */
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--dot);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--ink);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.fullscreen-button svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* 与 `‹` `›` 那两颗同一条焦点圈（同一屏上的第三个圆钮，不该长得不一样） */
+.fullscreen-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+/* 已经在全屏里：**任何方向**都留着出口。竖屏时它浮在右上角，不进底栏那一行
+   （那一行本来就紧，多一颗会把页码挤掉）。 */
+.fullscreen-button[data-on='true'] {
+  display: inline-flex;
+  position: fixed;
+  top: calc(6px + var(--safe-t));
+  right: calc(8px + var(--safe-r));
+}
+
+/* ── 手机横屏这一档：进右页边上格 ────────────────────────────────────────────
+   ★ 与左页边上那颗「← 回去」同一个高度（`6px + --safe-t`），两块屏边上下对称。 */
+@media (orientation: landscape) and (max-height: 560px) {
+  .fullscreen-button,
+  .fullscreen-button[data-on='true'] {
+    display: inline-flex;
+    position: relative;
+    top: auto;
+    right: auto;
+    grid-area: 1 / 3;
+    justify-self: center;
+    align-self: start;
+    margin-top: calc(6px + var(--safe-t));
+  }
+}

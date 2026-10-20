@@ -106,6 +106,7 @@ import {
   type Pick,
   type ReaderFace,
 } from './reader-model.ts'
+import FullscreenButton from './FullscreenButton.tsx'
 import { useNarration } from './use-narration.ts'
 import { useSwipeTurn } from './use-swipe-turn.ts'
 import type { ResolvedStory, StoryChoiceView } from '@/lib/book-source.ts'
@@ -605,7 +606,11 @@ export default function ReaderBook({ bookId, title, coverUrl, story, source }: R
       <div className="reader__bar">
         <button
           type="button"
-          className="reader__btn"
+          /* ★ 两颗翻页钮带**明确的修饰类**（`--prev` / `--next`），不是靠 `:first-of-type`：
+             手机横屏那一档要把它们分别摆进左右两条页边（`reader-book.css` §手机横屏），
+             而"第几个孩子"这种写法在朗读钮缺席（这一本没录朗读）那天会**静悄悄地错位**——
+             与 `.reader__meta--origin` 那条注释同一条理由。 */
+          className="reader__btn reader__btn--prev"
           onClick={() => turn(-1)}
           disabled={qTarget === 0}
           aria-label="上一页"
@@ -640,7 +645,7 @@ export default function ReaderBook({ bookId, title, coverUrl, story, source }: R
         )}
         <button
           type="button"
-          className="reader__btn"
+          className="reader__btn reader__btn--next"
           onClick={() => turn(1)}
           /* ★ 上界是 `maxTarget`：共读版没选之前，`›` 在这一屏就是按不动的
              （"不选也能往下翻"会让共读版退化成独读版加一页，见 `maxLeafOf`） */
@@ -649,6 +654,10 @@ export default function ReaderBook({ bookId, title, coverUrl, story, source }: R
         >
           ›
         </button>
+        {/* 全屏那一颗（只解决"手机横屏时地址栏吃掉的那一条"）。
+            它自己不写版面：摆哪儿由 `fullscreen-button.css` 说了算，
+            横屏时这一档的网格里正好是右上那一格。 */}
+        <FullscreenButton />
       </div>
 
       <div className="reader__progress" aria-hidden="true">

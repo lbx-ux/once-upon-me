@@ -18,6 +18,7 @@
 @import '../components/creation/redraw-dialog.css';
 @import '../components/reader/reader-book.css';
 @import '../components/reader/rotate-hint.css';
+@import '../components/reader/fullscreen-button.css';
 @import '../components/shelf/shelf.css';
 @import '../components/admin/admin.css';
 @import '../components/shell/app-shell.css';

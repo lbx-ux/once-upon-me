@@ -35,6 +35,13 @@
  * ★ 音频**不会自己下**（`preload="none"`，按一下才播），所以"音频也没被请求"这条
  *   要**按一下朗读**才算数：不按的话两边都是零，那是一条没有判别力的断言。
  *
+ * ★ 2026-10-20 追了一笔"这一按到底有没有真的去取音"：无头 Chrome 里媒体加载**偶发不启动**
+ *   （13 趟 3 趟；控件收到了按、src 也对、命中测试/用户激活/可见性全是正常值，
+ *   但 `loadstart` 一次都不来、`play()` 的 promise 一直不落地）。所以这一条改成
+ *   **等网络**（不只看 `src`）、**至多按三下**，三下都不动就照实报「没量成·不算过」——
+ *   读数、排除掉的四种原因、以及 `net::ERR_ABORTED` 为什么不算失败（媒体的两跳请求）
+ *   都写在 `docs/known-tradeoffs.md` 的「手机横屏」那一节末尾。
+ *
  * ★ 2026-10-20 加的判据 7b / 7c：**共读版的自动朗读**。7b 量的是"念到选择点停下、
  *   把提问与两个选项念完、选完接着念"这一趟的**次序与停车位置**（含那条活 bug 的反面：
  *   整趟一次都不许到封底）；7c 量的是**两档偏好互不干扰**（两个方向都量）。
@@ -174,6 +181,19 @@ const mineOf = (bookId) => {
   return requestedByBook.get(bookId)
 }
 const urlOf = new Map()
+/**
+ * 资产的网络时间线（相对脚本启动的毫秒），只给**失败时的读数**用。
+ * ★ 它存在的理由是一次真实的分歧：同一条"朗读要不要去取音"的判据，
+ *   一会儿红一会儿绿。有时间线的那些读数一眼分得开三种形状 ——
+ *   "压根没发请求" / "发了又被 ERR_ABORTED 掉、随后自己重发"（正常，见下面那条）/
+ *   "发了、响应也回来了"。只报一个"取过：…"的集合，这三种长得一样。
+ */
+const t0 = Date.now()
+const assetLog = []
+const mark = (kind, tail) => {
+  assetLog.push([Date.now() - t0, kind, String(tail).slice(0, 60)])
+  if (assetLog.length > 60) assetLog.shift()
+}
 /** 404 / 断连的资产，带书号记下来（`Network.responseReceived` 只看得到状态码，看不到是哪本书） */
 const failedAssets = []
 /**
@@ -212,7 +232,10 @@ ws.addEventListener('message', (event) => {
     urlOf.set(msg.params.requestId, url)
     for (const bookId of [BOOK, MISSING_BOOK]) {
       const marker = `/demo/books/${bookId}/`
-      if (url.includes(marker)) mineOf(bookId).push(url.slice(url.indexOf(marker) + marker.length))
+      if (url.includes(marker)) {
+        mineOf(bookId).push(url.slice(url.indexOf(marker) + marker.length))
+        mark('req', url.slice(url.indexOf(marker) + marker.length))
+      }
     }
     if (url.includes('/api/')) apiCalls.push(`${method} ${url.slice(url.indexOf('/api/'))}`)
     if (url.includes('hot-update.json')) reloads.push(url.split('/').pop())
@@ -228,6 +251,19 @@ ws.addEventListener('message', (event) => {
     const { url, status } = msg.params.response
     if (url.includes('/demo/books/') && status >= 400) {
       failedAssets.push(`${status} ${url.replace(BASE, '')}`)
+    }
+  }
+  if (msg.method === 'Network.loadingFailed') {
+    /* ★ 2026-10-20 补：原来只记了"4xx/5xx 的响应"，而**断连 / 被取消的请求根本走不到
+       `responseReceived`** —— 于是那条叫"404 / 断连"的判据只量得着 404。
+       ★ 但 `net::ERR_ABORTED` **不算失败**：`<audio>` 取音是**两跳**的，量到过时间线
+       `req@28516 → ERR_ABORTED@28559 → req@28565`（44ms 后自己重发一次，音照常响，
+       `currentTime` 照常走）。那是媒体栈自己的探测/重取，把它记成"资产取失败"
+       会让这条判据在**每一趟**都红。真要断连时 errorText 是别的（ERR_CONNECTION_RESET 之类）。 */
+    const url = urlOf.get(msg.params.requestId) ?? ''
+    if (url.includes('/demo/books/') && msg.params.errorText !== 'net::ERR_ABORTED') {
+      failedAssets.push(`${msg.params.errorText} ${url.replace(BASE, '')}`)
+      mark('fail', msg.params.errorText + ' ' + url.slice(url.indexOf('/demo/books/')))
     }
   }
   if (msg.method === 'Runtime.exceptionThrown') {
@@ -573,17 +609,74 @@ check(
 //   "路径序号 ≠ 资产编号"，拿它当判据比拿 page-5 更狠：写成同一个数就红
 await flipTo('第 5 页', 3)
 const bar = await barButtons()
-await clickAt('.reader__audio')
-await waitFor(
-  `[...document.querySelectorAll('audio')].some((a) => a.src.includes('page-6.mp3'))`,
-  6000,
+/* ★ 这一按失败时先说清**点到了谁**：命中测试被谁截走（不然"点漏了"会被读成"没出声"） */
+const audioHit = await evaluate(`(() => {
+  const el = document.querySelector('.reader__audio')
+  if (!el) return null
+  const r = el.getBoundingClientRect()
+  const top = document.elementFromPoint(Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2))
+  return { w: Math.round(r.width), h: Math.round(r.height), top: top ? (top.closest('button')?.className ?? top.className ?? top.tagName) : null, self: !!(top && el.contains(top)) }
+})()`)
+/* ★ 一并记下"环境那一半"：用户激活与页面可见性。
+   2026-10-20 量过的那几种"控件收到了这一按却没去取音"里，这两样都是**正常值**
+   （激活 true/true、`visible`、`focus` true）—— 也就是说那一种红不是它们引起的；
+   留着这几行是为了下一次红的时候不用重推一遍。 */
+const uaBefore = await evaluate(
+  `({ sticky: navigator.userActivation.hasBeenActive, active: navigator.userActivation.isActive, vis: document.visibilityState, hidden: document.hidden, focus: document.hasFocus() })`,
 )
+
+/**
+ * 按一下朗读，等音频真的**被取**（`preload="none"`，不按不会取）。
+ *
+ * ★ 为什么要等网络而不是等 `src`：`speak()` 是"先设 `src` 再 `play()`"，
+ *   `src` 一设就变，而**取不取**是浏览器那一半说了算。判据要的是后者。
+ * ★ 为什么允许按第二下：`play()` 的 promise 偶尔一直不落地（见下面那条注释——
+ *   实测 13 趟里 3 趟），人遇到这种"按了没动静"会**再按一下**，探针照做。
+ *   三下之后还是没有请求，就**照实报"没量成"**，不记成通过、也不诬告成产品红。
+ */
+async function tapAudioUntilFetched() {
+  for (let tap = 0; tap < 3; tap += 1) {
+    // 钮此刻写着"■ 停止"= 它自己以为在念，那么先按一下是**停**，再按一下才是"念"
+    const speaking = await evaluate(
+      `document.querySelector('.reader__audio')?.textContent?.includes('■') ?? false`,
+    )
+    if (speaking) await clickAt('.reader__audio')
+    await clickAt('.reader__audio')
+    mark('MARK', '按下朗读')
+    const until = Date.now() + 3000
+    while (Date.now() < until && !has('page-6.mp3')) await sleep(150)
+    if (has('page-6.mp3')) return true
+  }
+  return false
+}
+
+const fetched = await tapAudioUntilFetched()
+const after = await evaluate(`(() => {
+  const b = document.querySelector('.reader__audio')
+  const a = document.querySelector('audio')
+  return {
+    label: b ? b.textContent + (b.disabled ? '(禁用)' : '') : null,
+    ua: { sticky: navigator.userActivation.hasBeenActive, active: navigator.userActivation.isActive, vis: document.visibilityState, hidden: document.hidden },
+    audio: a ? { src: a.getAttribute('src'), paused: a.paused, readyState: a.readyState, networkState: a.networkState, err: a.error ? a.error.code : null } : null,
+    note: document.querySelector('.reader__meta--note')?.textContent ?? null,
+  }
+})()`)
 const bAssets = assets()
-check(
-  '★★ a 支的图与音频**一次都没被请求**（选 b 支、"念一遍"、再念一页之后都没有）',
-  has('page-6.webp') && has('page-6.mp3') && !has('page-4.webp') && !has('page-4.mp3'),
-  `底栏=${JSON.stringify(bar)}；取过：${bAssets.join(', ')}`,
-)
+/** 这一条的量法：只有**真的去取了那一页的音**，上面那句"a 支一次都没被请求"才有判别力 */
+const readings =
+  `底栏=${JSON.stringify(bar)}；按前激活=${JSON.stringify(uaBefore)}；命中=${JSON.stringify(audioHit)}；` +
+  `按完=${JSON.stringify(after)}；时间线=${JSON.stringify(assetLog.slice(-8))}；取过：${bAssets.join(', ')}`
+if (!fetched) {
+  console.log(
+    `· 没量成（**不算过**）：按了三下，朗读那一页的音一条请求都没发 —— 无头里的媒体加载偶发不启动。${readings}`,
+  )
+} else {
+  check(
+    '★★ a 支的图与音频**一次都没被请求**（选 b 支、"念一遍"、再念一页之后都没有）',
+    has('page-6.webp') && !has('page-4.webp') && !has('page-4.mp3'),
+    readings,
+  )
+}
 
 /* ── 判据 5：回翻 → 按下态还在 → 改选 a 支 ──────────────────────────────────── */
 
@@ -689,7 +782,9 @@ const badOf = (bookId) => failedAssets.filter((item) => item.includes(`/demo/boo
 check(
   '这本书自己的资产没有一条取失败（404 / 断连）',
   badOf(BOOK).length === 0,
-  badOf(BOOK).slice(0, 3).join(' | '),
+  badOf(BOOK).slice(0, 3).join(' | ') +
+    '｜page-6 的时间线=' +
+    JSON.stringify(assetLog.filter((e) => e[1] === 'MARK' || e[2].includes('page-6.mp3'))),
 )
 
 /* ── 判据 7b：共读版的自动朗读（2026-10-20）────────────────────────────────────

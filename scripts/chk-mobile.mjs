@@ -17,7 +17,9 @@
  * | # | 量什么                                                        | 错了会怎样                                                       |
  * | - | ------------------------------------------------------------- | ---------------------------------------------------------------- |
  * | 1 | 五个视口 × 十三条路由：`scrollWidth ≤ clientWidth + 1`          | 手机上整页横着能拖（这一轮要修的那件事本身）                     |
- * | 2 | 844×390 下书的高 ≥ **0.80 × 视口高**                           | "横放在屏幕上"没做到（竖屏那一档必然 ~0.29，**这条有判别力**）    |
+ * | 2 | 844×390 下书的高 ≥ **0.95 × 视口高**（两台阅读器各量一次）     | "横放在屏幕上"没做到（竖屏那一档必然 ~0.29，**这条有判别力**）    |
+ * |   | ＋ 同一档下**每一个控件都不与书相交**；640×360（16:9 横屏）    | 底栏搬进页边时压到书面上 / 页边窄到放不下控件                   |
+ * |   | 也量一次（页边只剩约 51px，正是那一版翻过车的尺寸）             |                                                                  |
  * | 3 | 390×844 下 `.rotate-hint` 可见、844×390 下不可见               | 提示不出现 / 横屏还挡着                                          |
  * | 4 | 真触摸事件后**读出那一行真的变了**，且拖动**中途** q 落在叶之间 | 滑动没接上 / 不是跟手（"先不动、松手才跳"）                      |
  * | 5 | 两台阅读器 + 底部标签栏 + 书架：每个可点元素 ≥ 44×44           | 手指点不准                                                       |
@@ -101,6 +103,17 @@ const VIEWPORTS = [
   { name: '844×390', w: 844, h: 390, mobile: true },
   { name: '768×1024', w: 768, h: 1024, mobile: true },
 ]
+
+/**
+ * ★ 2026-10-20 补的第六个视口：**16:9 手机横过来**（判据 2 用，不进判据 1 那一圈）。
+ *
+ * 为什么单列一个：上面那五个里横屏只有 844×390（19.5:9 的一台），而
+ * **16:9 的手机横过来是 640×360** —— 书占 537 宽，两侧各只剩约 51px。
+ * 底栏搬进页边那一版正是在这个尺寸上翻过车：朗读那颗药丸量出来 76px，
+ * 比页边还宽，于是**溢出屏幕 17px、左边压着书**（844×390 上完全看不出来，
+ * 那个尺寸的页边有 131px）。补这一档就是让"页边放不放得下控件"有判别力。
+ */
+const LANDSCAPE_NARROW = { name: '640×360', w: 640, h: 360, mobile: true }
 
 /**
  * 十三条路由（外加**本机有真数据时**再补一条带 id 的）。★ 覆盖这一轮动过的每一处
@@ -315,10 +328,13 @@ const viewport = async ({ w, h, mobile }) => {
  *   不是判据：页面真画不出来还是会红，只是不再把"编译慢"记成"这一屏坏了"。
  */
 const ready = async (expect = null, tries = 100) => {
+  let last = ''
   for (let i = 0; i < tries; i += 1) {
     const state = await evaluate(`(() => {
       if (document.readyState !== 'complete') return 'loading'
-      if (${expect ? `location.pathname !== ${JSON.stringify(expect)}` : 'false'}) return 'wrong-doc'
+      if (${expect ? `location.pathname !== ${JSON.stringify(expect)}` : 'false'}) {
+        return 'elsewhere:' + location.pathname
+      }
       if (!document.body || document.body.children.length === 0) return 'no-dom'
       if (document.documentElement.scrollHeight <= 1) return 'no-layout'
       // ★ 挂上 React 的判据取「页面上**有元素**带 __reactFiber$」而不是点名某个容器：
@@ -330,9 +346,21 @@ const ready = async (expect = null, tries = 100) => {
       return hydrated ? 'ok' : 'no-hydrate'
     })()`)
     if (state === 'ok') return i * 200
+    last = state
+    /* ★ 2026-10-20：「跳到别的路上了」要**单独认出来**，不能混进"一直没画好"。
+       起因：`/create` 不带参数时那一屏渲染的 `ResumeLastRun` 会自己回 `/home`
+       （"这一屏没有'这一轮'就无事可做"，见 `src/app/create/page.tsx` 的文件头），
+       于是这一支原来会在四个视口上报"这一屏一直没画好（DOM / 排版 / hydrate 有一样没到）"
+       —— 一个**把重定向说成假故障**的账，而读到它的人会去找一个不存在的排版问题。
+       探针量的那一刻跳到哪儿，就是它落到的**另一屏**；调用方照实说"跳过"。 */
+    if (state.startsWith('elsewhere:')) {
+      const err = new Error(`这一屏跳到了 ${state.slice('elsewhere:'.length)}`)
+      err.redirectedTo = state.slice('elsewhere:'.length)
+      throw err
+    }
     await sleep(200)
   }
-  throw new Error('这一屏一直没画好（DOM / 排版 / hydrate 有一样没到）')
+  throw new Error(`这一屏一直没画好（DOM / 排版 / hydrate 有一样没到，最后一次读到「${last}」）`)
 }
 
 const go = async (path) => {
@@ -360,6 +388,8 @@ console.log('\n── 判据 1 · 五个视口 × 十三条路由，不横向溢
 for (const vp of VIEWPORTS) {
   await viewport(vp)
   const bad = []
+  /** ★ 跳走的那些**照实报出来**，不悄悄算通过（跳过不是通过 —— 与判据 6 同一条账） */
+  const skipped = []
   for (const [path, label] of ROUTES) {
     try {
       await go(path)
@@ -369,10 +399,18 @@ for (const vp of VIEWPORTS) {
       }))()`)
       if (m.sw > m.cw + 1) bad.push(`${label}(${m.sw}>${m.cw})`)
     } catch (err) {
+      if (err.redirectedTo) {
+        skipped.push(`${label}→${err.redirectedTo}`)
+        continue
+      }
       bad.push(`${label}(探针失败：${err.message.slice(0, 40)})`)
     }
   }
-  check(`${vp.name} · 十三条路由都不横向溢出`, bad.length === 0, bad.join('  '))
+  const label =
+    skipped.length === 0
+      ? `${vp.name} · 十三条路由都不横向溢出`
+      : `${vp.name} · ${ROUTES.length - skipped.length} 条路由不横向溢出（跳过 ${skipped.join('、')}）`
+  check(label, bad.length === 0, bad.join('  '))
   await shoot(`overflow-${vp.name.replace('×', 'x')}`)
 }
 
@@ -380,12 +418,22 @@ for (const vp of VIEWPORTS) {
  * 判据 2 · 横屏真的"把书铺开"
  *
  * ★ 判据取**书的高 ÷ 视口高**，而且竖屏那一档也量一次当对照 ——
- *   "≥0.80"这个数只有在它同时能**证伪**的时候才有意义：
+ *   "≥0.95"这个数只有在它同时能**证伪**的时候才有意义：
  *   同一台手机上竖屏必然是 0.29 左右，两条一起报出来，读者才看得出
  *   这一轮到底改了什么（`e2e-acceptance-needs-a-discriminating-signal` 那条）。
  * ★ 高度而不是宽度：书是 3:2、屏幕是 2.16:1，绑定的那条**只能是**高度
  *   （宽是它推出来的）。量宽的话，一台更宽的手机就能"达标"，而那些空白
  *   本来就在那儿。
+ * ★ 门槛 2026-10-20 从 **0.80 抬到 0.95**：那一轮把底栏从"书下面那一行"
+ *   搬进了左右两条页边（`reader-book.css` / `booklist-reader.css` 的 §手机横屏），
+ *   书从 338px / 86.7% 变成 388px / 99.5%。**留着 0.80 就等于这条判据没了** ——
+ *   把底栏搬回书下面照样过（86.7% 离 80% 还有 6.7 个点）。
+ *   ★ 两台阅读器各量一次：那两处是**逐字同一条规则**，只量一台等于只验了一半
+ *     （`booklist-reader.css` 那台的文件头写着"改一处要改另一处"）。
+ * ★ 第二条断言（控件不与书相交）判的是**新版面唯一会犯的错**：页边是 `1fr`，
+ *   书一变形、或者控件忘了带上 `max-width: 100%`，页码就会从页边探出去压到书上。
+ *   ★ 它同时报「量到几个」：**一个都没量到 = 不过**（空集通过是这一支最容易被骗的
+ *     地方，与判据 5 同一条账）。量到的至少要 3 个：两颗翻页钮 + 页码。
  * ══════════════════════════════════════════════════════════════════════════ */
 console.log('\n── 判据 2 · 横屏把书铺开（竖屏对照）──')
 const STAGE = '.blr__stage, .reader__stage'
@@ -397,33 +445,70 @@ const bookFrac = async () =>
     return { frac: r.height / innerHeight, ratio: r.width / r.height, h: Math.round(r.height) }
   })()`)
 
-for (const [vp, want] of [
-  [VIEWPORTS[0], null],
-  [VIEWPORTS[3], 0.8],
+/** 横屏下每个控件与书矩形的关系。★ 只收**真有盒子**的（`display: none` 的不算） */
+const railOverlap = async () =>
+  evaluate(`(() => {
+    const s = document.querySelector('${STAGE}')
+    if (!s) return null
+    const b = s.getBoundingClientRect()
+    const sel =
+      '.blr__btn--prev, .blr__btn--next, .blr__readout, .blr__audio, .fullscreen-button, ' +
+      '.reader__btn--prev, .reader__btn--next, .reader__readout, .reader__audio'
+    const items = [...document.querySelectorAll(sel)].filter((el) => {
+      const r = el.getBoundingClientRect()
+      return r.width > 0 && r.height > 0 && getComputedStyle(el).display !== 'none'
+    })
+    const hits = items
+      .filter((el) => {
+        const r = el.getBoundingClientRect()
+        return r.left < b.right && r.right > b.left && r.top < b.bottom && r.bottom > b.top
+      })
+      .map((el) => el.className)
+    return { n: items.length, hits, book: [Math.round(b.left), Math.round(b.right)] }
+  })()`)
+
+for (const [vp, path, label, want] of [
+  [VIEWPORTS[0], `/booklist/${KEY}`, '样书阅读器', null],
+  [VIEWPORTS[3], `/booklist/${KEY}`, '样书阅读器', 0.95],
+  [VIEWPORTS[3], `/reader/${BOOK}`, '独读版阅读器', 0.95],
+  [LANDSCAPE_NARROW, `/booklist/${KEY}`, '样书阅读器', 0.95],
+  /* ★ 2026-10-20 补：640×360 原来只量样书那一台。两台阅读器的横屏规则是**逐字同一条**
+     （`reader-book.css` / `booklist-reader.css` 的文件头写着"要一起改"），而**窄到只剩
+     51px 页边**的那一档恰恰是第一版翻车的地方（朗读药丸溢出 17px）—— 只量一台的话，
+     另一台在那条规则上写错了没人知道。两台各量一次才对称。 */
+  [LANDSCAPE_NARROW, `/reader/${BOOK}`, '独读版阅读器', 0.95],
 ]) {
   await viewport(vp)
-  await go(`/booklist/${KEY}`)
+  await go(path)
   const m = await bookFrac()
   if (!m) {
-    check(`${vp.name} · 找到书的舞台`, false, '页面上没有 ${STAGE}')
+    check(`${vp.name} · ${label} · 找到书的舞台`, false, `页面上没有 ${STAGE}`)
     continue
   }
   // 两台阅读器都是 3:2 的跨页，量出来的比例必须还是 1.5（不能被"铺开"拉变形）
   check(
-    `${vp.name} · 书仍是 3:2（没被拉伸）`,
+    `${vp.name} · ${label} · 书仍是 3:2（没被拉伸）`,
     Math.abs(m.ratio - 1.5) < 0.02,
     `ratio=${m.ratio.toFixed(3)}`,
   )
   if (want === null) {
     console.log(`  · ${vp.name}（竖屏对照）书高占视口 ${(m.frac * 100).toFixed(1)}% · ${m.h}px`)
-  } else {
-    check(
-      `${vp.name}（横屏）书高 ≥ ${(want * 100).toFixed(0)}% 视口`,
-      m.frac >= want,
-      `实测 ${(m.frac * 100).toFixed(1)}% · ${m.h}px`,
-    )
+    continue
   }
-  await shoot(`book-${vp.name.replace('×', 'x')}`)
+  check(
+    `${vp.name} · ${label} · 书高 ≥ ${(want * 100).toFixed(0)}% 视口`,
+    m.frac >= want,
+    `实测 ${(m.frac * 100).toFixed(1)}% · ${m.h}px`,
+  )
+  const ov = await railOverlap()
+  check(
+    `${vp.name} · ${label} · 控件一个都不压书（量到 ${ov?.n ?? 0} 个）`,
+    (ov?.n ?? 0) >= 3 && ov.hits.length === 0,
+    ov
+      ? `书占 x ${ov.book[0]}–${ov.book[1]}，压住的是：${ov.hits.join(' / ') || '（无）'}`
+      : '没找到控件',
+  )
+  await shoot(`book-${label}-${vp.name.replace('×', 'x')}`)
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -596,8 +681,8 @@ const SMALL_PROBE = (sel, hit = false) => `(() => {
 for (const vp of [VIEWPORTS[0], VIEWPORTS[3]]) {
   await viewport(vp)
   for (const [path, label, sel] of [
-    [`/booklist/${KEY}`, '样书阅读器', '.blr__btn, .blr__audio'],
-    [`/reader/${BOOK}`, '独读版阅读器', '.reader__btn, .reader__audio'],
+    [`/booklist/${KEY}`, '样书阅读器', '.blr__btn, .blr__audio, .fullscreen-button'],
+    [`/reader/${BOOK}`, '独读版阅读器', '.reader__btn, .reader__audio, .fullscreen-button'],
     ['/home', '工作台底栏与顶栏', '.shell__nav .shell__link, .shell__bar a, .shell__bar button'],
     // ★ 书架那一行的按钮：`制作为绘本` / `删除` 在手机上原来是 30px 高。
     //   没登录时它们不存在 —— 那时 n=0，下一条会把"一个都没量到"判成**不过**，
