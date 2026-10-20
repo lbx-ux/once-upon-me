@@ -17,5 +17,5 @@ import SystemNotice from '@/components/system/SystemNotice.tsx'
 export const metadata = { title: '没有这一页 · 小主角' }
 
 export default function NotFound() {
-  return <SystemNotice kind="missing" scope="page" />
+  return <SystemNotice kind="missing" />
 }

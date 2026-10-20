@@ -1,34 +1,35 @@
 /**
- * chk-system-pages.mjs —— 三个「系统页」到底长什么样、什么时候显形（2026-10-20）
+ * chk-system-pages.mjs —— 「系统页」长什么样，以及**导航时那张纸不许再出现**（2026-10-20）
  *
  * ```bash
  * node scripts/chk-system-pages.mjs http://127.0.0.1:3311
  * ```
  *
- * 量的是新加的 `app/error.tsx` / `app/loading.tsx` / `app/(studio)/loading.tsx` /
- * `app/not-found.tsx` —— 四个文件一套视图（`components/system/SystemNotice.tsx`）。
+ * 量的是 `app/error.tsx` / `app/not-found.tsx`（一套视图 `components/system/SystemNotice.tsx`）
+ * 与"导航期间的加载态"这件事本身。
  *
- * ── 判据四条，每条都只有真做才会不同 ───────────────────────────────────────
+ * ── 判据，每条都只有真做才会不同 ───────────────────────────────────────────
  *
  * | # | 量什么                                                              | 错了会怎样                                       |
  * | - | ------------------------------------------------------------------- | ------------------------------------------------ |
  * | 1 | `/no-such-page` 返回**真 404**，页面上是那张纸（标题、两条出口、纸色） | 落到 Next 自带的错误页 / 200 带一句"没有这一页"  |
- * | 2 | 客户端导航（RSC 拦住 1.5s）：**先出现根那一档**，且前 120ms 读到的   | 那一档立刻显形 → 快导航时闪一下整屏纸            |
- * |   | opacity 是 0，之后升到 1                                             |                                                  |
- * | 3 | 工作台**组内**导航：出现的是 `scope=shell` 那一档，而 `.shell` 还在  | 侧栏一起被换掉 → 读起来像"整个应用重启了"        |
- * | 4 | 空态不算通过：判据 2/3 **必须真看见那张纸**（量到 0 次 = 不过）      | 加载态根本没出现过，而"没闪"看着像全绿           |
+ * | 2 | 客户端导航（RSC 与 page chunk 拦住 1.5s）：**全程没有那张纸**，        | 那张纸又冒出来了（用户 2026-10-20 明确不要它）   |
+ * |   | 那 1.5s 里**旧那一屏原地留着**，放行后**新那一屏真的到了**            |                                                  |
+ * | 3 | 工作台**组内**导航：同上，且 `.shell` 那 1.5s 全程在场                | 侧栏一起被换掉 → 读起来像"整个应用重启了"        |
  *
- * ★ 判据 2/3 为什么要**拦 RSC**：这两个加载态只在"等得够久"时才看得见 ——
- *   生产上那是首屏与冷导航，dev 里是现场编译（实测 1.5–2.5s）。
- *   不拦的话量到的是"什么都没看见"，而那与"延迟显形做对了"是**同一个读数**
- *   （`measurement-budget-is-ample` 那条账：没测成不许记成测出来）。
- *   拦住之后那 1.5s 由脚本自己给，两件事就分得开了。
+ * ★ 判据 2/3 的三格是**绑在一起的**：只量"没看见那张纸"会被"导航根本没发生"骗过
+ *   （一次都没点动、或者点了没反应，读数与"做对了"一模一样）。
+ *   所以另两格是"旧屏还在"与"新屏真到了"——后者只有真换过去才会成立。
+ *   （`measurement-budget-is-ample` 那条账：没测成不许记成测出来。）
+ *
+ * ★ 为什么要**拦 RSC 与 page chunk**：不拦的话这一趟导航只花几十毫秒
+ *   （实测 45–62ms），"加载态该不该出现"这个窗口根本不存在，量到的永远是"没看见"。
+ *   拦住之后那 1.5s 是脚本自己给的，于是"没出现"才是一个有内容的读数 ——
+ *   它证明了**等 1.5 秒也没有纸**，而那正是用户要的那件事。
  *
  * ★ 为什么直连 CDP、不进预览面板：**那个面板会把 rAF 与 transition 一起冻住**
- *   （`preview-pane-hidden-freezes-raf-and-transitions` 那条记过），
- *   而判据 2 量的恰恰是"这 120ms 里它是 0 还是 1"。
- *   （实测过：面板里那张纸出现 300ms，其间每 40ms 采一次，opacity 一直是 0 ——
- *   采样窗口不够是一个原因，但更根本的是那一档动画在面板里不跑。）
+ *   （`preview-pane-hidden-freezes-raf-and-transitions` 那条记过）。
+ *   这张纸本身已经拆了，但"旧屏留到什么时候、新屏什么时候到"仍是时间上的事。
  *
  * ★ 判据 1 的出口**逐个查 href 而不是查数量**：`回到首页 → /`、`翻一本成品 →
  *   /booklist` 这两条是这一屏唯一说得出"下一步去哪"的地方，路径写错了与没写
@@ -66,8 +67,10 @@ const PROFILE = resolve(ROOT, '.out', 'chrome-system-pages')
 
 const VW = 1440
 const VH = 900
-/** 延迟显形那道门槛（CSS 里的 `animation-delay`：0.12s）。判据 2 前 120ms 读 0 靠它 */
-const REVEAL_MS = 120
+/** 采样间隔。判据 2/3 要读的是"那 1.5s 里有没有出现纸"，25ms 够密 */
+const SAMPLE_MS = 25
+/** 一次采样窗口（要盖住 1.5s 的拦截 + 放行之后的换屏） */
+const WATCH_MS = 7000
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const results = []
@@ -222,16 +225,14 @@ check(
 )
 
 /* ══════════════════════════════════════════════════════════════════════════
- * 判据 2：从首页客户端导航进工作台 —— 出现的是**根那一档**（整页）
- *         并且前 120ms 读到的 opacity 必须是 0
+ * 判据 2：从首页客户端导航进工作台 —— 那 1.5s 里**不许出现那张纸**，
+ *         旧那一屏原地留着，放行之后新那一屏真的到了
  *
  * ★ 拦的**是两类**请求，理由不同：
  *   · `*_rsc=*`：新一屏的数据。拦住它 = "服务端还没把这一屏给出来"。
- *   · `*_next/static/chunks/app/*`：那一屏的 JS。**dev 里真正决定这张纸活多久的
- *     是这一条** —— 实测第一遍只拦 RSC 时，纸在 t≈1741ms 才出现、只活了约 325ms
- *     （RSC 放行后开始取 page chunk，取完就换页），短于"延迟 120 + 渐显 300"，
- *     于是判据 2c 读不到 opacity=1（它分不清"还没显完"与"永远不会显"）。
- *   两条一起拦，纸就活够久，判据 2c 才有意义。
+ *   · `*_next/static/chunks/app/*`：那一屏的 JS。dev 里它也是这段时间的一部分，
+ *     一起拦住，这 1.5s 才是干净的"什么都没有准备好"。
+ *   （这一条是上一版探针实测踩出来的：只拦 RSC 时，纸的寿命由 page chunk 决定。）
  * ══════════════════════════════════════════════════════════════════════════ */
 await send('Fetch.enable', {
   patterns: [
@@ -242,88 +243,117 @@ await send('Fetch.enable', {
 await open('/')
 heldRsc.length = 0
 
-const rootSheet = await evaluate(`new Promise((resolve) => {
+/**
+ * 点一个链接，然后每 `SAMPLE_MS` 采一次。三件事一起采，因为它们互为判据：
+ *   · `notice`  —— 那张纸（`null` = 不在 DOM 里）
+ *   · `old`     —— 旧那一屏的标志物还在不在
+ *   · `next`    —— 新那一屏的标志物到了没有
+ */
+const watchNav = (linkHref, oldMark, newMark) => `new Promise((resolve) => {
   const t0 = performance.now()
   const samples = []
-  const a = document.querySelector('a[href="/booklist"]')
-  if (!a) { resolve({ err: '首页上没有指向 /booklist 的链接' }); return }
+  const a = document.querySelector('a[href="${linkHref}"]')
+  if (!a) { resolve({ err: '这一屏上没有指向 ${linkHref} 的链接' }); return }
   const iv = setInterval(() => {
-    const n = document.querySelector('.notice')
-    if (n) {
-      samples.push({
-        t: Math.round(performance.now() - t0),
-        scope: n.dataset.scope,
-        op: Number(getComputedStyle(n.querySelector('.notice__paper')).opacity),
-        shell: !!document.querySelector('.shell'),
-      })
-    }
-    if (performance.now() - t0 > 6000) { clearInterval(iv); resolve({ samples }) }
-  }, 25)
+    samples.push({
+      t: Math.round(performance.now() - t0),
+      notice: !!document.querySelector('.notice'),
+      old: !!document.querySelector('${oldMark}'),
+      next: !!document.querySelector('${newMark}'),
+      shell: !!document.querySelector('.shell'),
+    })
+    if (performance.now() - t0 > ${WATCH_MS}) { clearInterval(iv); resolve({ samples }) }
+  }, ${SAMPLE_MS})
   a.click()
-})`)
+})`
 
-const rs = rootSheet.samples ?? []
-/* "第一次看见"= 那张纸进 DOM 的那一刻；延迟显形要从那一刻起算 */
-const firstSeen = rs[0]?.t ?? null
-const early = rs.filter((s) => s.t - (firstSeen ?? 0) < REVEAL_MS)
-const late = rs.filter((s) => s.t - (firstSeen ?? 0) > REVEAL_MS + 320)
+/**
+ * 三段读数：拦截期间（放行前）、刚放行之后、**末尾那一段**。
+ *
+ * ★ 为什么要有"末尾"这一段：换屏发生在放行之后的某一刻，`after` 那个窗口里
+ *   前几次采样仍在旧屏上（实测就是这样：`old` 是 false/true 混着的）。
+ *   拿"放行后每一次都必须是新屏"当判据，红的是判据自己，不是页面。
+ *   所以"真的换过去了"这条落在**末尾**：那一段必须是"新屏在场、旧屏已退场"。
+ */
+const phasesOf = (samples) => {
+  const held = samples.filter((s) => s.t < DELAY - SAMPLE_MS * 2)
+  const after = samples.filter((s) => s.t > DELAY + 900)
+  const tail = samples.slice(-Math.max(8, Math.round(samples.length * 0.25)))
+  return { held, after, tail }
+}
+
+const home2studio = await evaluate(watchNav('/booklist', '.hero__brand', '.blw'))
+const h2s = home2studio.samples ?? []
+const h2sHeld = phasesOf(h2s).held
+const h2sTail = phasesOf(h2s).tail
+const h2sNoticeAt = h2s.filter((s) => s.notice).map((s) => s.t)
+
 check(
-  '2a 客户端导航进工作台时，出现的是**根**那一档加载态',
-  rs.length > 0 && rs.every((s) => s.scope === 'page'),
-  rs.length
-    ? `看见 ${rs.length} 次采样，scope=${[...new Set(rs.map((s) => s.scope))].join('/')}（要 page）· 首次看见 t≈${firstSeen}ms`
-    : `一次都没看见（拦了 ${heldRsc.length} 条 RSC）—— 判据 4 说的"空态不算通过"就是这一格`,
+  '2a 客户端导航进工作台：**全程没有那张加载纸**（拦了 1.5s 也没有）',
+  h2s.length > 0 && h2sNoticeAt.length === 0,
+  h2s.length === 0
+    ? `一次都没采到（${home2studio.err ?? '未知'}）`
+    : `采样 ${h2s.length} 次（拦了 ${heldRsc.length} 条 RSC，同期的 page chunk 一起拦），` +
+        `\`.notice\` 出现 ${h2sNoticeAt.length} 次` +
+        (h2sNoticeAt.length ? `（t≈${h2sNoticeAt.slice(0, 6).join('/')}ms）` : '（一次都没有 ✓）'),
 )
+
 check(
-  '2b 前 120ms 读到的 opacity 是 0（快导航不闪）',
-  early.length > 0 && early.every((s) => s.op === 0),
-  early.length
-    ? `头 ${early.length} 次采样 opacity=${[...new Set(early.map((s) => s.op))].join('/')}`
-    : '那 120ms 里一次都没采到（采样太稀，判不了）',
+  '2b 那 1.5s 里**旧那一屏还在**（不是空白、也不是那张纸）',
+  h2sHeld.length > 0 && h2sHeld.every((s) => s.old),
+  h2sHeld.length
+    ? `拦截期间 ${h2sHeld.length} 次采样，首页标志物在场 ${[...new Set(h2sHeld.map((s) => s.old))].join('/')}（要 true）`
+    : '拦截期间一次都没采到（窗口太短，判不了）',
 )
+
 check(
-  '2c 等到放行之后 opacity 升到 1（它是真的会显形的，不是永远 0）',
-  late.length > 0 && late.some((s) => s.op === 1),
-  late.length
-    ? `后段 opacity=${[...new Set(late.map((s) => s.op))].join('/')}`
-    : '后段一次都没采到',
+  '2c 放行之后**新那一屏真的到了**（否则 2a 那格会被"没导航"骗过）',
+  h2sTail.length > 0 && h2sTail.every((s) => s.next && !s.old),
+  h2sTail.length
+    ? `末尾 ${h2sTail.length} 次采样（t≥${h2sTail[0].t}ms）：新屏 ${[...new Set(h2sTail.map((s) => s.next))].join('/')}（要 true）` +
+        ` · 首页标志物 ${[...new Set(h2sTail.map((s) => s.old))].join('/')}（要 false）`
+    : '末尾一段一次都没采到',
 )
 
 /* ══════════════════════════════════════════════════════════════════════════
- * 判据 3：**工作台组内**导航 —— 出现的是 shell 那一档，且侧栏还在
+ * 判据 3：**工作台组内**导航 —— 同样不许出现那张纸，且 `.shell` 全程在场
  *
- * 这一格是 `(studio)/loading.tsx` 存在的全部理由：根那一档会把 `.shell`
- * 一起换掉（判据 2 的读数里 `shell` 就是 false），组内这一档不该。）
+ * 这一格是"为什么不再要那两个 `loading.tsx`"的验收：以前组内那一档存在的
+ * 全部理由就是"根那一档会把 `.shell` 一起换掉"，而现在是**两个都不在了** ——
+ * 导航期间既不换壳，也不再画纸。
  * ══════════════════════════════════════════════════════════════════════════ */
-await open('/booklist')
+await open('/home')
 heldRsc.length = 0
-const shellSheet = await evaluate(`new Promise((resolve) => {
-  const t0 = performance.now()
-  const samples = []
-  const a = document.querySelector('a[href="/shelf"]')
-  if (!a) { resolve({ err: '工作台里没有指向 /shelf 的链接' }); return }
-  const iv = setInterval(() => {
-    const n = document.querySelector('.notice')
-    if (n) {
-      samples.push({
-        t: Math.round(performance.now() - t0),
-        scope: n.dataset.scope,
-        op: Number(getComputedStyle(n.querySelector('.notice__paper')).opacity),
-        shell: !!document.querySelector('.shell'),
-      })
-    }
-    if (performance.now() - t0 > 7000) { clearInterval(iv); resolve({ samples }) }
-  }, 25)
-  a.click()
-})`)
-const ss = shellSheet.samples ?? []
+const insideStudio = await evaluate(watchNav('/shelf', '.cl', '.shelf'))
+const ins = insideStudio.samples ?? []
+const insHeld = phasesOf(ins).held
+const insTail = phasesOf(ins).tail
+const insNoticeAt = ins.filter((s) => s.notice).map((s) => s.t)
+
 check(
-  '3 工作台组内导航：出现 shell 那一档，侧栏（`.shell`）还在',
-  ss.length > 0 && ss.every((s) => s.scope === 'shell') && ss.every((s) => s.shell === true),
-  ss.length
-    ? `看见 ${ss.length} 次采样，scope=${[...new Set(ss.map((s) => s.scope))].join('/')}（要 shell）` +
-        ` · .shell 在场 ${[...new Set(ss.map((s) => s.shell))].join('/')}（要 true）· 首次看见 t≈${ss[0].t}ms`
-    : `一次都没看见（拦了 ${heldRsc.length} 条 RSC）`,
+  '3a 组内导航：**全程没有那张加载纸**，且 `.shell` 一次都没被换掉',
+  ins.length > 0 && insNoticeAt.length === 0 && ins.every((s) => s.shell),
+  ins.length === 0
+    ? `一次都没采到（${insideStudio.err ?? '未知'}）`
+    : `采样 ${ins.length} 次（拦了 ${heldRsc.length} 条），\`.notice\` 出现 ${insNoticeAt.length} 次 · ` +
+        `.shell 在场 ${[...new Set(ins.map((s) => s.shell))].join('/')}（要 true）`,
+)
+
+check(
+  '3b 那 1.5s 里旧那一屏还在（`.cl` 是 /home 的标志物）',
+  insHeld.length > 0 && insHeld.every((s) => s.old),
+  insHeld.length
+    ? `拦截期间 ${insHeld.length} 次采样，/home 标志物在场 ${[...new Set(insHeld.map((s) => s.old))].join('/')}（要 true）`
+    : '拦截期间一次都没采到',
+)
+
+check(
+  '3c 放行之后 `/shelf` 真的到了（末尾那一段：书架在场、`/home` 已退场）',
+  insTail.length > 0 && insTail.every((s) => s.next && !s.old),
+  insTail.length
+    ? `末尾 ${insTail.length} 次采样（t≥${insTail[0].t}ms）：书架 ${[...new Set(insTail.map((s) => s.next))].join('/')}（要 true）` +
+        ` · /home 标志物 ${[...new Set(insTail.map((s) => s.old))].join('/')}（要 false）`
+    : '末尾一段一次都没采到',
 )
 
 await send('Fetch.disable')

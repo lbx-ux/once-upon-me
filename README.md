@@ -269,16 +269,14 @@ once-upon-me/
    │  ├─ globals.css             ★ 设计令牌唯一来源 + Tailwind 配置 + 页面层样式
    │  ├─ layout.tsx              根布局（zh-CN、metadata）
    │  ├─ error.tsx               ★ 根错误边界（渲染期抛错 → 一张纸 + 重试，`digest` 照原样给出来）
-   │  ├─ loading.tsx             页面这一级的加载态（**晚 120ms 才显形**，快导航因此一格都不闪）
    │  ├─ not-found.tsx           404（未匹配的路由 + 任何 `notFound()`；状态码是真的 404）
-   │  ├─ (studio)/loading.tsx    ★ 工作台**组内**那一档：边界在 `(studio)/layout` 里面，只换内容区
    │  └─ page.tsx                首页：三幕场景背景 + 12 张封面的环形轨道 + 示例绘本 + 五条项目亮点
    ├─ components/
    │  ├─ BackToTop.tsx            右下角"回到页首"（滚过 0.6 视口才出现，客户端组件）
    │  ├─ back-to-top.css          组件样式
    │  ├─ system/
-   │  │  ├─ SystemNotice.tsx      ★ 三个「系统页」共用的那张纸（错误 / 正在打开 / 404 各一档）
-   │  │  └─ system-notice.css     组件样式（★ 延迟显形那 120ms 与 AppShell 同一条规矩）
+   │  │  ├─ SystemNotice.tsx      ★ 两个「系统页」共用的那张纸（错误 / 404 各一档）
+   │  │  └─ system-notice.css     组件样式
    │  ├─ shell/
    │  │  ├─ AppShell.tsx          工作台外壳：侧栏 + 内容区，四屏共用
    │  │  ├─ app-shell.css         组件样式（侧栏那层纸、当前项那张抽出来的卡、焦点环）

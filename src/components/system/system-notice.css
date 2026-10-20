@@ -1,12 +1,13 @@
-/* system-notice.css —— 三个「系统页」共用的那一张纸
+/* system-notice.css —— 两个「系统页」共用的那一张纸
  *
  * 与 SystemNotice.tsx 同名同目录，在 app/globals.css 里 @import（与其余各套一致）。
  * 类名 `notice` 全站唯一，不与前几屏的 .hero__ / .book__ / .hl__ 命名空间相撞。
  *
- * 谁在读它：`app/error.tsx`（React 抛了）、`app/loading.tsx` 与
- * `app/(studio)/loading.tsx`（正在打开）、`app/not-found.tsx`（404）。
- * 每一档的差别只有三处：要不要延迟显形、标题是什么、有没有按钮 ——
- * 理由都写在 SystemNotice.tsx 的文件头，这里只管长相。
+ * 谁在读它：`app/error.tsx`（React 抛了）、`app/not-found.tsx`（404）。
+ * ★ 2026-10-20：「正在打开」那一档连同两个 `loading.tsx` 一起拆了
+ *   （理由与代价在 SystemNotice.tsx 的文件头），所以这里也删掉了
+ *   它专用的三条：`[data-scope='shell']` 那一段、loading 档的 120ms 延迟显形、
+ *   以及 reduced-motion 里给那条延迟开的例外。
  *
  * 颜色一律走令牌（`var(--x)`），一个十六进制都不写：
  *   `scripts/check-color-tokens.mts` 扫的正是组件样式表里「面与墨」位置上的字面量，
@@ -21,14 +22,6 @@
   min-height: 100vh;
   min-height: 100dvh;
   padding: clamp(24px, 6vh, 72px) clamp(20px, 5vw, 40px);
-}
-
-/* 工作台那一档落在 `.studio` 的内容区里 —— 不铺满视口：
-   壳（侧栏 / 顶栏）还立着，整屏一张纸会把壳也盖住，读起来像"整个应用重启了"。
-   高度按内容区给一个下限，宁可矮一点也不要一屏空白。 */
-.notice[data-scope='shell'] {
-  min-height: min(58vh, 560px);
-  padding: clamp(22px, 5vh, 56px) clamp(18px, 4vw, 40px);
 }
 
 .notice__paper {
@@ -147,41 +140,9 @@
   box-shadow: inset 0 0 0 1px rgba(var(--ink-rgb), 0.1);
 }
 
-/* 「正在打开」这一档：晚 120ms 才显形
- *
- * 与 AppShell 的 `PENDING_SHOW_AFTER_MS`（120）是同一条规矩、同一个数：
- * 工作台来回切的实测是 45–62ms，立刻显形的加载态在那条路上只会闪一下。
- * 延迟写在 CSS 里而不是 setTimeout 里 —— 导航比门槛快时这个组件会被整个卸载，
- * 定时器那套还得自己收尸（AppShell 那边是因为 `useLinkStatus` 本来就在 React 里，
- * 只能那么写；这里能交给 CSS 就交给 CSS）。
- *
- * ★ `forwards` + 底下的 `opacity: 0`：延迟那一段必须真的看不见，
- *   而不是"看不见但盖在别的东西上"。
- * 只有 loading 这一档延迟。错误页与 404 要立刻出现 ——
- *   它们不是"等一下就好"，晚 120ms 只会让人以为页面坏了。
- */
-.notice[data-kind='loading'] .notice__paper {
-  opacity: 0;
-  animation: notice-reveal 0.3s ease-out 0.12s forwards;
-}
-
-@keyframes notice-reveal {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-/* 静止模式：延迟保留，渐显去掉 —— 要停的是"动"，不是"等"。
-   （duration 取 1ms 而不是 `animation: none`：后者会把整条动画连同延迟一起取消，
-   于是这一档在静止模式下变成"立刻显形"，又回到那个会闪的样子。） */
+/* 静止模式：要停的是"动"，不是"等" —— hover 的抬起停掉，
+   按钮本身（形状、颜色、焦点圈）一个都不改。 */
 @media (prefers-reduced-motion: reduce) {
-  .notice[data-kind='loading'] .notice__paper {
-    animation-duration: 1ms;
-  }
-  /* hover 的抬起是"动"，停掉；按钮本身（形状、颜色、焦点圈）一个都不改。 */
   .notice__btn {
     transition: none;
   }
