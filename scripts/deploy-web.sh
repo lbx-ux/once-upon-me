@@ -407,10 +407,43 @@ deploy() {
 #   用公开的演示账号（README §一 就写着它，而且它**不是管理员**）。
 #   代价：一次成功的登录（不消耗"连错五次锁十分钟"那本账），以及给演示账号留一张票。
 # ══════════════════════════════════════════════════════════════════════════
+# 打一次演示账号登录，回 BFF 给的原始响应（走 BFF，就是浏览器那条路）
+login_probe() {
+  rsh "curl -s -m 20 -X POST 'http://127.0.0.1:$PORT/api/auth/login-password' -H 'Content-Type: application/json' -d '{\"account\":\"123456\",\"password\":\"123456\"}'" || true
+}
+
 check_contract() {
   say "判据：前端认不认得后端回的登录态（真打一次演示账号登录）"
+
+  # ★ 先等接口活过来。构建期间 mysql 与 java 是被停掉的（见上面那段），而 Java 冷启动
+  #   实测要 18–24 秒（第 6–8 次问）。不等它就判，这条判据会在"其实一切都好"的时候红 ——
+  #   2026-10-20 第一次真跑就撞上了：回来的是一句 `unreachable / fetch failed`，
+  #   而下面那句提示还在说"多半是另一半没跟着部署"，把人往错的方向指。
+  local code="" i
+  for i in $(seq 1 20); do
+    code="$(rsh "curl -s -o /dev/null -w '%{http_code}' -m 3 127.0.0.1:8080/api/health" || true)"
+    if [ "$code" = "200" ]; then
+      say "接口已就绪（第 $i 次问，约 $((i * 3)) 秒）"
+      break
+    fi
+    sleep 3
+  done
+  if [ "$code" != "200" ]; then
+    say "✗ 等了 60 秒接口还没起来（最后状态：${code:-没答上}）—— 这条判据这次判不了"
+    say "  去看：ssh ${HOST} 'journalctl -u xiaozhujue-api -n 40 --no-pager'"
+    return 1
+  fi
+
   local body
-  body="$(rsh "curl -s -m 20 -X POST 'http://127.0.0.1:$PORT/api/auth/login-password' -H 'Content-Type: application/json' -d '{\"account\":\"123456\",\"password\":\"123456\"}'" || true)"
+  body="$(login_probe)"
+  # ★ 冷启动刚过去的那一两秒里，BFF 那 8 秒超时仍可能先到 —— 再给一次机会，
+  #   但只对"服务不可达"这一类重试（形状不对是另一回事，重试没有意义）。
+  if printf '%s' "$body" | grep -q '"unreachable"'; then
+    say "接口刚起来，BFF 第一次没连上（unreachable）—— 3 秒后再试一次"
+    sleep 3
+    body="$(login_probe)"
+  fi
+
   if printf '%s' "$body" | grep -q '"allowed"'; then
     say "命中 ✓（登录态里有 allowed，前端那份 parseUser 认得出）"
     return 0
@@ -418,7 +451,11 @@ check_contract() {
   say "✗ 登录态里没有 allowed —— 前端会报「服务端回的登录态不是我们认识的形状」。回来的东西："
   printf '%s' "$body" | head -c 300
   echo
-  say "多半是**另一半没跟着部署**：试试 bash server/deploy.sh（后端），然后再跑一次这个脚本"
+  if printf '%s' "$body" | grep -q '"unreachable"'; then
+    say "这一份是「连不上服务」，不是形状问题 —— 先确认后端活着（systemctl is-active xiaozhujue-api）"
+  else
+    say "多半是**另一半没跟着部署**：试试 bash server/deploy.sh（后端），然后再跑一次这个脚本"
+  fi
   return 1
 }
 
