@@ -117,6 +117,13 @@ public class AuthService {
       // ★ 不建号：只发一张 5 分钟的票，等他把密码设了再说（见文件头第 2 条）
       return CodeVerdict.needsPassword(jwt.signTicket(name));
     }
+    // ★ 停用的号不许在这里拿到会话（2026-10-22 审查）。密码登录那条路查了
+    //   `isActive`，验证码这条路原来没查——一个被停用的号用验证码还能签出一张
+    //   7 天的票，而"停号此刻就进不来"是这一层写在注释里的承诺。
+    //   文案与"验证码不对"刻意一致：否则等于向任何会猜账号的人确认这个号存在。
+    if (!User.isActive(user)) {
+      throw ApiException.badRequest("bad-code", "验证码不对，或者已经过期了");
+    }
     return CodeVerdict.signedIn(viewOf(user), touchLogin(user));
   }
 

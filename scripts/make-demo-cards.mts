@@ -65,7 +65,7 @@ import { extname, join, resolve } from 'node:path'
 
 import sharp from 'sharp'
 
-import { createTokenrhythmImage } from '../src/lib/engine/providers/tokenrhythm-image.ts'
+import { imageProviderOf } from '../src/lib/engine/providers/registry.ts'
 import { createOpenAiVision } from '../src/lib/engine/providers/openai-vision.ts'
 import { createFsStore } from '../src/lib/engine/providers/stores.ts'
 import { createCardStore } from '../src/lib/engine/character-card/store.ts'
@@ -262,7 +262,9 @@ async function main(): Promise<void> {
   // ★ `--images` 那条路**不需要密钥**：图是人出的，这个脚本只负责把它装回卡里
   if (!apiKey && imagesDir === '')
     throw new Error('IMAGE_API_KEY 未配置（或者用 --images=<目录> 装手工出的图）')
-  const baseUrl = env['IMAGE_BASE_URL'] ?? 'https://tokenrhythm.studio/v1'
+  // 视觉那一支的回落。★ 别回落到 IMAGE_BASE_URL：它现在与视觉不是同一家、
+  //   也不是同一个接口形状（与 registry 的 visionProviderOf 同一条链）
+  const baseUrl = env['VISION_BASE_URL'] ?? env['LLM_BASE_URL'] ?? ''
   /**
    * ★ `--images` 那条路的 `--model` **没有默认值**（默认是"不知道"）。
    *   以前这里回落到 `wan2.7-image`，于是装一张别人用别的工具出的图，
@@ -272,7 +274,7 @@ async function main(): Promise<void> {
    */
   const model = arg(
     'model',
-    imagesDir === '' ? (env['IMAGE_MODEL'] ?? 'wan2.7-image') : '外部手工出图（未记录工具）',
+    imagesDir === '' ? (env['IMAGE_MODEL'] ?? '') : '外部手工出图（未记录工具）',
   )
   const out = resolve(arg('out', '.out/cards'))
   /**
@@ -291,8 +293,10 @@ async function main(): Promise<void> {
   await mkdir(out, { recursive: true })
   const store = await createFsStore(out)
   const cardStore = createCardStore(store)
-  const image =
-    imagesDir === '' ? createTokenrhythmImage({ baseUrl, apiKey, timeoutMs: 180_000 }, model) : null
+  // ★ 走 registry 的构造点，不自己拼一个适配器：`--model` 那个覆盖也走同一份选项
+  //   （超时、提示词改写、记账），否则这个脚本量出来的是"它以为的生产配置"。
+  //   同一条理由见 registry.ts 的 `textOptionsOf`：那是横评吃过一次亏之后留下的。
+  const image = imagesDir === '' ? imageProviderOf({ ...env, IMAGE_MODEL: model }) : null
   const vision = env['VISION_MODEL']
     ? createOpenAiVision(
         {

@@ -93,7 +93,10 @@ function byteResponse(
   cacheable: boolean,
   rangeHeader: string | null,
 ): Response {
-  const cache = cacheable ? 'public, max-age=31536000, immutable' : 'no-store'
+  // ★ `private` 不是保守，是这条 URL 的语义：访问要登录，而地址里不带用户。
+  //   `public` 会让浏览器之外的共享缓存（CDN、反向代理）把甲的那一页发给乙。
+  //   内容寻址的文件名可以长缓存，但只能留在"这一位用户"的缓存里。
+  const cache = cacheable ? 'private, max-age=31536000, immutable' : 'no-store'
   const size = bytes.byteLength
   const wanted = parseRange(rangeHeader, size)
 
@@ -165,7 +168,9 @@ export async function GET(
   if (!guard.ok) return guard.response
 
   const { path } = await ctx.params
-  const relative = path.map((segment) => decodeURIComponent(segment)).join('/')
+  // ★ 不再 decode：Next 已经解码过一次（见 events 路由文件头那条）。再解一次会让
+  //   `%252e%252e` 变成 `..`，也会让一个坏的 `%` 直接抛 URIError（500 而不是 404）。
+  const relative = path.join('/')
 
   if (!ALLOWED_PREFIXES.some((prefix) => relative.startsWith(prefix))) {
     return new Response('不认识的资产前缀', { status: 404 })

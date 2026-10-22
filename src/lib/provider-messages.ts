@@ -117,6 +117,19 @@ function byCode(error: EngineError): string | null {
         '这个模型没能写出合格的故事表（换模型时最常见的坏法）',
         '再点一次通常会好；连着两三次都不行就换一个模型——结构化的故事表不是每个模型都能稳定输出。',
       )
+    case 'input-blocked':
+      /**
+       * ★ 2026-10-22 用户拍板：这一档**只说这一句**。
+       *
+       * 原来这里还有"括号里那句写明了是哪个词、哪一条红线"与"没花钱"两截，
+       * 而 `userMessageFor` 又会把引擎原文（"主题：死亡（R-03）——出现了「死」"）附在下面——
+       * 同一件事说了两遍，失败页上是一段要读三行的字。用户圈出来说：
+       * "把这段话改写成这个就行"。
+       *
+       * 哪一条、哪个词仍然查得到：引擎在抛错之前发过一条 `review` 事件（带条款 id），
+       * 错误里也有 `detail`（`field:clauseId`），两者都进日志。屏幕上不需要再抄一遍。
+       */
+      return '你写的这句话里有不该给孩子看的内容，已经在编故事之前拦下了'
     case 'review-blocked':
       // 这一句的活儿是把"格式不对"与"内容越线"分开（`errors.ts` 那条注释写了理由）：
       //   家长看到"生成失败"时的第一反应是"再点一次"，而这里再点一次也不会好——
@@ -124,7 +137,7 @@ function byCode(error: EngineError): string | null {
       //   顺带说清一件真实的好消息：这道闸在开始画之前，所以没有为插图花钱。
       return line(
         '这一版里有不该给孩子看的内容，已经拦下了',
-        '拦住它的是内容红线，上面那句写明了是哪一页、哪一条、哪个词。' +
+        '拦住它的是内容红线，括号里那句写明了是哪一页、哪一条、哪个词。' +
           '换一个说法再试一次，或者换一个模型。这一步发生在开始画之前，所以没有为插图花钱。',
       )
     case 'profile-invalid':
@@ -211,6 +224,14 @@ export function userMessageFor(error: unknown): string {
   const failure = asEngineError(error)
   const specific = byStatus(failure.httpStatus, failure.providerCode) ?? byCode(failure) ?? null
   if (!specific) return `${failure.message}${traceTail(failure)}`
+  /**
+   * ★ `input-blocked` 不附原文（2026-10-22，用户拍板）。
+   *
+   * 引擎那句原文（"主题：死亡（R-03）——出现了「死」"）在失败页上与上面那句说的是同一件事，
+   * 两截摞在一起要读三行。屏幕只留一句；哪一条、哪个词在 `review` 事件与 `error.detail` 里，
+   * 日志照旧查得到。
+   */
+  if (failure.code === 'input-blocked') return specific
   return `${specific}\n（供我们排障的原文：${failure.message}${traceTail(failure)}）`
 }
 
@@ -255,7 +276,9 @@ export function isRetryable(error: unknown): boolean {
     failure.code === 'profile-invalid' ||
     failure.code === 'invalid-request' ||
     failure.code === 'card-not-found' ||
-    failure.code === 'page-not-found'
+    failure.code === 'page-not-found' ||
+    // 原样重发同一句话，还会被同一条红线拦下——"能不能重试"说的是这一件事
+    failure.code === 'input-blocked'
   ) {
     return false
   }
@@ -300,6 +323,8 @@ export function userFailureOf(error: unknown): {
     failure.code === 'invalid-request' ||
     failure.code === 'card-not-found' ||
     failure.code === 'page-not-found' ||
+    // 家长那句话越线：是输入的问题，回 400 而不是"平台故障"
+    failure.code === 'input-blocked' ||
     status === 401 ||
     status === 403 ||
     status === 404 ||

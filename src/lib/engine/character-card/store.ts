@@ -145,9 +145,20 @@ export function createCardStore(store: AssetStore): CardStore {
     async create(input) {
       const digestOfBytes = digest(input.referenceBytes)
       const path = refPath(input.cardId, digestOfBytes, input.referenceMime)
-      const ref = await store.put({ path, bytes: input.referenceBytes, mime: input.referenceMime })
 
-      const fresh = buildCard({ ...input, referencePath: path, referenceBytes: ref.bytes })
+      /**
+       * ★ 先校验，再落盘（2026-10-22 审查）。
+       *   原来第一件事就是 `store.put` 参考图，然后才 `validateCard`——
+       *   一张不合格的卡（比如照片推出来的硬锚点缺一格）被拒时，
+       *   参考图已经躺在 `cards/<id>/` 里了，而 `summaries()` / `deleteCard()`
+       *   只认卡片文件，那份孤图谁也看不见、也删不掉。
+       *   指纹用 `digestOfBytes`，与 `store.put` 返回的是同一个函数算的。
+       */
+      const fresh = buildCard({
+        ...input,
+        referencePath: path,
+        referenceBytes: input.referenceBytes.byteLength,
+      })
       // 「换一版」：新 revision + 新锚点 + 新参考图，旧版文件一个字节都不动
       // （ADR-0007：旧书的那些页出自旧版卡，覆盖了它们，"这张图是哪版画的"就答不上来）
       const card = attachReferenceDigest(
@@ -168,13 +179,18 @@ export function createCardStore(store: AssetStore): CardStore {
               },
             }
           : fresh,
-        ref.digest,
+        digestOfBytes,
       )
 
       const problems = validateCard(card)
       if (problems.length > 0) {
         throw new EngineError('card-invalid', `角色卡不合格：${problems.join('；')}`)
       }
+      const ref = await store.put({
+        path,
+        bytes: input.referenceBytes,
+        mime: input.referenceMime,
+      })
       await this.save(card)
       return { card, ref }
     },

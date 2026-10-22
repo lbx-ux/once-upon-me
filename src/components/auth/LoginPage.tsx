@@ -23,6 +23,7 @@
  *    而这一条对：等到提交才说，人已经忘了自己第一次输的是什么。
  */
 
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 
@@ -213,9 +214,10 @@ export default function LoginPage({ next }: { next?: string | undefined }) {
   /** 登录成功：写进 Provider（它会落盘），然后走人 */
   const finish = (user: AuthUser): void => {
     signIn(user)
-    // 不调 `router.refresh()`：工作台此刻没有任何服务端组件读登录态
-    //   （`/account` 读的是作品数，身份在客户端）。等后端落地、身份变成
-    //   服务端 session 的那一天，这一行才需要补上。
+    // 2026-10-22：服务端组件（书架/主页/账号页/管理页）确实读登录态了，
+    //   缓存必须清——这件事现在由 `AuthProvider.signIn` 里的 `router.refresh()`
+    //   一处负责，所以这里只导航。原来这里写着"没有任何服务端组件读登录态"，
+    //   那句话在真后端落地那天就过期了。
     router.replace(landing)
   }
 
@@ -607,10 +609,22 @@ export default function LoginPage({ next }: { next?: string | undefined }) {
             就已经定了（侧栏把当前路径编码进去），登录页再说一遍只是把一句已经成立的事
             讲第二遍。真想知道去哪儿，地址栏里写着 */}
         <p className="login__foot">以他为主角、用你的声音朗读的定制绘本</p>
+
+        {/* ★ 2026-10-21（工单 D-28）：这一屏是"人会开始留下东西"的第一个地方
+            （建账号 → 传照片 → 录声音），所以告知那根链挂在这里，而不是只挂在个人主页上。
+            写法上只指路、不说承诺：这一屏没有资格替那一页保证什么，
+              而"我们不会泄露"那种句子正是那一页明确不写的（见 `PrivacySheet.tsx` 文件头）。
+            它不占"稿子那一行"的位置——那一行一个字没动，这一行在它下面 */}
+        <p className="login__data">
+          要传孩子的照片、录你自己的声音，那之前先读这一页：
+          <Link className="login__data-link" href="/privacy">
+            我们怎么处理你和孩子的数据
+          </Link>
+        </p>
       </section>
 
       <figure className="login__art">
-        {/* ★ 两张都在 DOM 里，由 CSS 决定谁可见（见 login.css 文件头最后一段）。
+        {/* ★ 两张都在 DOM 里，由 CSS 决定谁可见（见 login.css 文件头第 2 条）。
             默认这张图：服务端渲染、禁 JS、reduced-motion 三种情形都拿到它 */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
@@ -620,6 +634,11 @@ export default function LoginPage({ next }: { next?: string | undefined }) {
           width={960}
           height={960}
         />
+        {/* ★ 仍是自动播（用户 2026-10-21 看过那颗"让它动起来"之后否掉了它：
+            "不要这个按钮，默认视频"）。省下来的是那 1.3 MB 的字节数，不是这一格的下载时机
+            ——见 login.css 文件头第 2 条里那份读数。
+            `poster` 是那段视频自己的第一帧：在第一个视频帧解出来之前，
+            这一栏不再是一块空的（同一个 URL，浏览器那边是缓存命中，不多花一个字节） */}
         <video
           className="login__art-media login__video"
           autoPlay
@@ -627,6 +646,7 @@ export default function LoginPage({ next }: { next?: string | undefined }) {
           loop
           playsInline
           preload="metadata"
+          poster="/art/picnic-loop.webp"
           aria-hidden="true"
           src="/art/picnic-loop.mp4"
         />

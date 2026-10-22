@@ -1,0 +1,95 @@
+/* delete-child-dialog.css —— 删完那张「各位置删掉了多少条」的凭据（工单 D-28 判据②）
+ *
+ * 与 `DeleteChildDialog.tsx` 同目录同名，在 `app/globals.css` 里 `@import`（与其余各套一致）。
+ * 类名前缀 `dcd`（delete child dialog）全站唯一——弹窗的壳（`.dlg__*`）住在
+ *   `dialog/dialog.css` 里，那一套是全站二十几个弹窗共用的；这几条只有这一屏有
+ *   （逐位置的条数），所以不该塞进那一份。
+ *
+ * ★ 为什么这几行值得单独画：那张凭据是"删除"这件事唯一能**被检查**的地方
+ *   （`child-deletion.ts` 文件头第一句）。所以数字那一列用等宽 + `tabular-nums`：
+ *   四行数字竖着对齐，一眼能看出"哪一处是 0"、"哪一处是 3"。
+ *   数字用等宽、位置名用正文字体，于是读的时候眼睛可以只扫右边那一列。
+ *
+ * 颜色一律走令牌（`var(--x)`）——`scripts/check-color-tokens.mts` 扫的正是
+ *   组件样式表里「面与墨」位置上的字面量。这里的每一对都是既有配对：
+ *   `--ink` / `--surface`（弹窗面板）、`--ink-muted` / `--surface`、`--danger` / `--surface`。
+ */
+
+.dcd__receipt {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  /* 只读块底：与全站"这是一份只读的东西"同一档 α（`--accent-a1`），
+     不是另挑一个数——α 的档位是一把共用的尺子（见 `globals.css` 那一组令牌） */
+  background: var(--accent-a1);
+}
+
+.dcd__places {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* 一行一个位置：第一行是「位置名 …… 条数」，凭据自己那句 `note` 排在第二行。
+   ★ 用 grid 而不是 flex：三样东西（名、数、注）用 `space-between` 排会变成
+     名在左、注在中、数在右——而"数"必须紧贴右边成一列才扫得动，
+     注是要读的一句话，它该另起一行、跨满整宽 */
+.dcd__place {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 12px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.dcd__place-name {
+  color: var(--ink);
+}
+
+/* 数字那一列：等宽 + 表格数字。★ 四行数字要竖着对齐才扫得动，
+   而正文字体里的数字是比例宽度的（1 比 8 窄），四行会参差不齐 */
+.dcd__place-count {
+  flex: none;
+  color: var(--ink-soft);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 没删掉的那一处。★ 用 `--danger`（全站"没成功"那一支），不是 `--warn`：
+   `--warn` 说的是"这么做会有代价"（那一句警告用它），而这一格说的是"这一处没成" */
+.dcd__place-bad {
+  flex: none;
+  color: var(--danger);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+/* 凭据自己那句解释（"这里本来就没有" / "共 3 张卡、全部版本与参考图"）。
+   跨满整宽另起一行：它是给上面那一行做注的，不该挤在数与名中间 */
+.dcd__place-note {
+  grid-column: 1 / -1;
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+.dcd__books {
+  margin: 10px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--hairline);
+  color: var(--ink-muted);
+  font-size: 12.5px;
+  line-height: 1.8;
+}
+
+/* 总数那一行比上面几行重一档：它是"一共动了多少东西"的那一个数，
+   而上面几行是它的分解 */
+.dcd__total {
+  margin: 10px 0 0;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}

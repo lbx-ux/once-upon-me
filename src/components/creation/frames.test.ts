@@ -23,12 +23,39 @@ import {
   drawnRatio,
   hasBranches,
   EMPTY_DESK,
+  planningOf,
   railOf,
   storyDeskOf,
   toneOf,
   withStoryTitle,
 } from './frames.ts'
 import { STUB_RUN_EVENTS } from './fixtures/stub-run.events.ts'
+
+/**
+ * 什么时候可以说"正在编故事"（2026-10-21）
+ *
+ * 这一条是从屏幕上那张截图来的：失败那一屏上「这一本没做出来」和
+ * 「正在重写（第 2 / 3 次）」同时挂着——后一句是假话，那一次重写早就结束了。
+ */
+describe('planningOf · "正在编故事"只在那一段、且没判失败时说', () => {
+  const planning = { ...EMPTY_DESK, stage: 'planning' as const, title: null }
+
+  it('在编、还没有书名 → 真', () => {
+    expect(planningOf(planning, false)).toBe(true)
+  })
+
+  it('已经有书名（在重编这一本，屏幕上还是上一版的画）→ 假', () => {
+    expect(planningOf({ ...planning, title: '小宇的云' }, false)).toBe(false)
+  })
+
+  it('★ 判了失败 → 假（失败那一屏上不许再挂着"正在…"）', () => {
+    expect(planningOf(planning, true)).toBe(false)
+  })
+
+  it('不在规划那一段 → 假', () => {
+    expect(planningOf({ ...EMPTY_DESK, stage: 'illustrating' }, false)).toBe(false)
+  })
+})
 
 /** 造事件：`seq` 自增，`stage` 默认跟着走。与引擎的工厂同一形状，但只填用得上的 */
 function stream(payloads: EngineEventPayload[]): EngineEvent[] {

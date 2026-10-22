@@ -37,6 +37,8 @@ public class LoginAttemptGuard {
   static final Duration LOCK = Duration.ofMinutes(10);
   /** 多久以前的失败不算数（否则一个记性太好的计数会让人几个月后被"翻旧账"） */
   static final Duration WINDOW = Duration.ofMinutes(15);
+  /** 这张临时账最多记多少个登录名；到顶就先清一遍过期条目（内存不是无限的） */
+  static final int MAX_TRACKED = 10_000;
 
   private final Clock clock;
   private final Map<String, Deque<Instant>> failures = new ConcurrentHashMap<>();
@@ -48,6 +50,15 @@ public class LoginAttemptGuard {
   /** 这个人现在能不能试密码。锁着就抛（消息里带上还要等多久） */
   public void check(String account) {
     Deque<Instant> attempts = fresh(account);
+    if (attempts.isEmpty()) {
+      // ★ 这个键是 fresh 刚刚为一次尝试建出来的（或者窗口里的记录已经全过期）：
+      //   现在没有要记的东西，就把它删掉。原来只清队列、不删键，于是每一个被
+      //   试过一次的登录名都会在这张表里留一个永久空壳——登录接口在认人之前就调
+      //   check，6–11 位数字的账号又是无穷的，几百次请求就能把这张表撑大
+      //   （2026-10-22 审查）。
+      failures.remove(account, attempts);
+      return;
+    }
     if (attempts.size() < MAX_FAILURES) {
       return;
     }
@@ -62,6 +73,9 @@ public class LoginAttemptGuard {
 
   /** 记一次失败 */
   public void recordFailure(String account) {
+    if (failures.size() >= MAX_TRACKED) {
+      sweep(clock.instant());
+    }
     Deque<Instant> attempts = fresh(account);
     attempts.addLast(clock.instant());
   }
@@ -71,7 +85,7 @@ public class LoginAttemptGuard {
     failures.remove(account);
   }
 
-  /** 去掉窗口外的旧记录，并把空队列清出表（不然这张表会随着登录名一路长） */
+  /** 去掉窗口外的旧记录。空队列不在这里删——`recordFailure` 接着就要往里写 */
   private Deque<Instant> fresh(String account) {
     Deque<Instant> attempts = failures.computeIfAbsent(account, key -> new ArrayDeque<>());
     Instant cutoff = clock.instant().minus(WINDOW);
@@ -79,5 +93,17 @@ public class LoginAttemptGuard {
       attempts.removeFirst();
     }
     return attempts;
+  }
+
+  /** 把已经没有任何窗口内记录的登录名整条移出表（到上限时调用） */
+  private void sweep(Instant now) {
+    Instant cutoff = now.minus(WINDOW);
+    failures.entrySet().removeIf((entry) -> {
+      Deque<Instant> attempts = entry.getValue();
+      while (!attempts.isEmpty() && attempts.peekFirst().isBefore(cutoff)) {
+        attempts.removeFirst();
+      }
+      return attempts.isEmpty();
+    });
   }
 }

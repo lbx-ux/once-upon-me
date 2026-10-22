@@ -185,6 +185,16 @@ describe('★ 越界：跑出自己那一片（这条洞是单元测试先照出
     await expect(store.deletePrefix('../u/7/')).rejects.toThrow()
   })
 
+  it('★ Windows 的反斜杠也当分隔符看（2026-10-22 审查）', async () => {
+    // `path.resolve` 在 win32 上把 `\` 当分隔符，而 Next 会把 `%5c` 解码成 `\`。
+    // 只按 `/` 切的话，这一条会在这里放行、到磁盘上却真的出了 u/3/。
+    const store = scopedStore(base(), '3')
+    await expect(store.read('books\\..\\..\\u\\7\\books\\secret\\book.json')).rejects.toThrow()
+    await expect(
+      store.put({ path: 'books\\..\\..\\u\\7\\x.png', bytes: bytes('x'), mime: 'image/png' }),
+    ).rejects.toThrow()
+  })
+
   it('★ 判据只拒 `..` 那一段，不误伤带点的文件名', async () => {
     const store = scopedStore(base(), '3')
     // `a..b.png` 是合法文件名；整条路上引擎生成的名字里也确实没有 `..` 段

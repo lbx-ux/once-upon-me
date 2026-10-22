@@ -524,6 +524,10 @@ describe('plan_book', () => {
       child: 'xiaoman',
       theme: '恐龙',
       form: 'solo',
+      // ★ 3 与下面那份 `STORY` 对齐（2026-10-21，工单 D-08）：`buildTree` 现在会拿这个数
+      //   去卡页数，而 `STORY` 是三页——不写就是"请求 20 页、拿到 3 页"，
+      //   规划会连着三次被拒（这条用例原本就没打算测页数）
+      pages: 3,
     })
     expect(isError).toBe(false)
     expect(text).toContain(STORY.title)
@@ -558,6 +562,8 @@ describe('plan_book', () => {
       child: 'xiaoman',
       theme: '恐龙',
       form: 'solo',
+      // 同上：与 `STORY` 的三页对齐（工单 D-08 之后 `buildTree` 会卡页数）
+      pages: 3,
     })
     const bookId = /书号 (\S+?)，/.exec(first.text)?.[1] ?? ''
     // 造一本"已经画过"的书：book.json 是收尾才写的那一件
@@ -567,6 +573,7 @@ describe('plan_book', () => {
       child: 'xiaoman',
       theme: '恐龙',
       form: 'solo',
+      pages: 3,
     })
     expect(again.isError).toBe(true)
     expect(again.text).toContain('换一个主题')

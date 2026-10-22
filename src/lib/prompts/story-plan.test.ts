@@ -31,7 +31,7 @@ const INPUT: StoryPlanInput = {
   interestTags: ['恐龙'],
   lookTags: [],
   theme: '第一次自己去幼儿园',
-  form: 'shared',
+  form: 'solo',
   pages: 8,
 }
 
@@ -86,10 +86,10 @@ describe('长度上限：散文承诺的 = 解析器接受的', () => {
     expect(storyPlanUser(INPUT)).toContain(`每条不超过 ${item} 字`)
   })
 
-  it('九格里的 ask / spoken 上限也写在正文里（共读版才会用到，但同一张表）', () => {
-    const user = storyPlanUser({ ...INPUT, form: 'shared' })
-    expect(user).toContain(nodeRange('ask'))
-    expect(user).toContain(nodeRange('spokenA'))
+  it('★ 共读版不走这条一次性提示词：传 shared 进来当场抛', () => {
+    // 2026-10-22：共读版改走两步（`story-outline.ts`）。静默回一份形状不对的提示词的话，
+    //   模型会照着它写出一张我们不再校验的整表，而屏幕上只有"这一本没做出来"。
+    expect(() => storyPlanUser({ ...INPUT, form: 'shared' })).toThrow(/story-outline/)
   })
 
   /**
@@ -193,6 +193,24 @@ describe('家长那三格自由文本：数据 / 指令分界', () => {
   })
 })
 
+describe('页数：独读版的散文与判据同一个口径（2026-10-21，@v6）', () => {
+  /**
+   * 这一组的起因是一次实测：模型在数表里的格子，而判据数的是走一条路的长度。
+   * 独读版两者相等，所以它的口径最简单——**表里就写 {pages} 个节点**。
+   *
+   * ★ 共读版那几条判据 2026-10-22 搬去了 `story-outline.test.ts`：它不再走这张表，
+   *   页数由提纲的数组长度表达。留在这里会让"改共读版提示词却不改这个文件"变成一次误红。
+   */
+  const solo = storyPlanUser({ ...INPUT, form: 'solo' })
+  const PAGES = INPUT.pages
+
+  it('独读版说的是"恰好 {pages} 页"，不是"约 {pages} 页"', () => {
+    expect(solo).toContain(`恰好 ${PAGES} 页`)
+    // 留口子的那两处逐字不许再出现：它们是模型少写一两页的直接来源
+    expect(solo).not.toContain(`约 ${PAGES} 页`)
+  })
+})
+
 describe('版本号', () => {
   /**
    * 它是 `Provenance.promptVersion` 的来源，而那个字段的用处是回答
@@ -202,5 +220,16 @@ describe('版本号', () => {
    */
   it('形如 `story-plan@vN`，且这一版不是 v1', () => {
     expect(STORY_PLAN_VERSION).toMatch(/^story-plan@v\d+$/)
+  })
+
+  /**
+   * ★ 系统提示词里必须有 "json" 这个词（2026-10-22，实测的 400）。
+   *
+   * `LLM_JSON_MODE` 缺省 `object` → 每次调用都带 `response_format: {type:'json_object'}`，
+   * 而网关要求 messages 里出现 "json"，否则整次调用 400。这条与
+   * `story-outline.test.ts` 里那条是同一件事的两个调用方。
+   */
+  it('★ 系统提示词里有 "json"（json_object 模式的硬要求）', () => {
+    expect(storyPlanSystem().toLowerCase()).toContain('json')
   })
 })

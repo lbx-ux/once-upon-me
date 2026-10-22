@@ -6,7 +6,7 @@
  * ```
  *
  * 家长在 `StorySheet` 上过完一遍、点「就按这个画」，才走到这里。这是唯一真正花钱的一步
- * （一页一次出图，实测 ≈154 s/页、0.2 元/张），所以这一条上的闸门比别处多：
+ * （一页一次出图，2026-10-21 实测 6–12 s/页；单价按厂商计费），所以这一条上的闸门比别处多：
  *
  * | 什么时候 | 回什么 | 为什么 |
  * | --- | --- | --- |
@@ -161,9 +161,18 @@ export async function POST(
   const { events } = await log.read(bookId)
 
   // 见文件头第 3 条：盘上留着的必须是真拿去画的那一段（所以写的是归一化过的那一份）
+  // ★ 这一段在 `tryStartRun` 之后、流建立之前，所以它的失败要自己还租约
+  //   （2026-10-22 审查）：写不进去时原来直接 500 冒出去，`finishRun` 永远轮不到，
+  //   这本书就一直回 409「正在画」，直到进程重启。
   if (!sameDoc(normalized, draft.doc)) {
     const next: StoryDraft = { ...draft, doc: normalized, editedAt: Date.now() }
-    await writeStory(store, next)
+    try {
+      await writeStory(store, next)
+    } catch (err) {
+      finishRun(runKey)
+      const failure = userFailureOf(err)
+      return jsonError(failure.status, failure.code, failure.message)
+    }
   }
 
   const request = storyRequestOf(draft.input, card)

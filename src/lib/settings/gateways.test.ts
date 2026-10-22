@@ -72,12 +72,29 @@ describe('按能力过滤（gatewaysFor）', () => {
     ])
   })
 
-  it('★ 图像那一张里没有只做文字的那一家', () => {
-    // 参考截图里那一格填的是 DeepSeek + dall-e-3——那种组合只会 404
+  it('★ 图像那一张只出百炼原生那一条 + 自定义', () => {
+    // 图像适配器（`qwen-image.ts`）走的是 DashScope 原生路由，不是 OpenAI 兼容的
+    // `/images/generations`。列别家只会换来 404 或 pathPrefix 拒绝——
+    // 地址簿不该承诺适配器做不到的事（2026-10-22）。
+    expect(gatewaysFor('image').map((item) => item.id)).toEqual([
+      'dashscope-image',
+      CUSTOM_GATEWAY_ID,
+    ])
     const imageIds = gatewaysFor('image').map((item) => item.id)
     expect(imageIds).not.toContain('deepseek')
     expect(imageIds).not.toContain('dashscope-tts')
     expect(imageIds).not.toContain('ark')
+  })
+
+  it('★ 视觉那一张里**有** DeepSeek——"不会画图"与"不会读图"是两件事', () => {
+    // 2026-10-21：这一家的 `serves` 原来写着 ['text']，注释是"没有图像接口，也没有读图的模型"。
+    //   后半句是错的：`deepseek-flash` 收 image_url 块（官方《图像理解》）。
+    //   这条断言守的是那个区分——一个地址能不能进某一格，判据是**那一格要的能力**，
+    //   不是"这一家看着像不像做图的"。写反了会让人白白排除掉一家能用的。
+    const visionIds = gatewaysFor('vision').map((item) => item.id)
+    expect(visionIds).toContain('deepseek')
+    // 但它仍然进不了图像那一格（上一条）
+    expect(visionIds).not.toContain('dashscope-tts')
   })
 
   it('文字那一张里最多（常见的那几家都在）', () => {

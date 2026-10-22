@@ -52,11 +52,36 @@ export type BuildTreeResult =
  * 建一棵树。所有问题一次全报，不是遇到第一个就返回：
  * 规划失败时我们要把整份问题清单塞进重试提示（plan.ts），
  * 一次只报一条会让重试次数等于问题条数——那是拿钱换啰嗦。
+ *
+ * ── 第四个参数 `pages`：这一次要的是几页（2026-10-21，工单 D-08）─────────────
+ *
+ * 在那之前**页数一个数都不查**：请求 2 页拿到 3 页、横评里要 6 给 7、`--pages=8` 那次
+ * 长出 14 个节点（选择点在第 6 页 → 每条路 10 页），全都照收。它是真实的成本漏洞：
+ * 出图是这条流水线上唯一真花钱的一步，多出来的页每一页 0.2 元，而书上、屏幕上
+ * 没有任何东西提示"这一本比你要的长"。
+ *
+ * ★ **量的是"一条路读下来几页"，不是表里几个节点**，两种形态共用这一条：
+ *   独读版是单链，两者相等；共读版表里一定比它多（两条支各占各的，提示词里写着
+ *   "表里的页数会比 {pages} 多几页"）。拿节点数去卡共读版会把它自己的正确形状判错——
+ *   `pages=8` 那本正确时是 11 个节点，正好是 `tree.ts` 文件头那句"路长 8 页时 1 层 ≈11 张图"。
+ *   ★ 所以 `BookRequest.pages` 那句"共读版是主干页数"是**写松了**：主干（选择点之前的
+ *   那几页）只是路长的一部分。真口径是"一条路的页数"。
+ *
+ * ★ 它只在**建树这一步**查，也就是"模型被要求写 N 页"这一次。`illustrate` 那条路由
+ *   （拿着盘上那份草稿再建一次树）**不传它**，那是刻意的：故事闸门之后家长可以自己
+ *   增删页面，而"我删了一页"不该变成"这一本画不出来"。请求的页数是**请求时**的一条
+ *   约束，不是盘上那一份的永久属性。
+ *
+ * ★ 路径长度只有一处算法（`computePaths`），所以这一条放在树建好之后量
+ *   （`pathLengthsOf`），不在这里自己再走一遍 `from`。
+ *
+ * `pages` 不传 = 不查（老调用点、以及不知道请求页数的那些路）。
  */
 export function buildTree(
   form: BookForm,
   title: string,
   drafts: readonly NodeDraft[],
+  pages?: number,
 ): BuildTreeResult {
   const problems: TreeProblem[] = []
   if (drafts.length === 0) {
@@ -195,7 +220,104 @@ export function buildTree(
   const rootId = nodes[0]?.nodeId ?? ''
   const paths = computePaths(nodes, rootId)
   const withPaths = nodes.map((node) => ({ ...node, pathFromRoot: paths.get(node.nodeId) ?? [] }))
-  return { ok: true, tree: { form, title, rootId, nodes: withPaths }, problems: [] }
+  const tree: StoryTree = { form, title, rootId, nodes: withPaths }
+
+  /*
+   * 页数（2026-10-21，工单 D-08）。放在树建好之后：路长只有 `computePaths` 一处算法，
+   * 这一条要用的是它的结果，不是第二个真相。
+   *
+   * 每一条路都要等于请求值——共读版有两条路（两支页数已经强制差 ≤1），而孩子走哪一条
+   * 都是"这一本"。只卡最长的那条会让"一支 8 页、一支 7 页"过关，
+   * 而那一支的孩子比要的少读一页。
+   *
+   * 它报在 `index: 0`（这一层报"整本书"级问题的既有写法，与"共读版一个选择点都没有"
+   * 同一格）；共读版另外挂上 `field: 'choice'`——改这一条要动的是那两条支，
+   * 而不是某一页的情节。
+   */
+  if (pages !== undefined) {
+    const lengths = pathLengthsOf(tree)
+    /**
+     * 2026-10-22：共读版的 **±1 容差撤掉了**。
+     *
+     * 那条容差（2026-10-21 深夜加的）是给旧的一次性路径打的补丁：20 页的共读版表里要 29–39 个节点，
+     * 而模型数不准（实测 21 / 没有选择点 / 12），严格相等时这一档几乎发不出去。
+     * 现在共读版改走两步规划（`plan-shared.ts`），页数是**构造出来的**：
+     * 主干 `C` 行 + 每支 `pages−C` 行，一条路必然是 `pages` 页。
+     *
+     * 留着容差只会有一种后果：**装配代码哪天错了一页，这本书会安静地过关**，
+     * 而书架上显示的是真实页数——家长要 20 页，拿到 19 页，屏幕上没有任何东西解释这件事。
+     * 所以它现在是严格相等；共读版也不再需要"差不多"。
+     *
+     * ★ 独读版一直是严格相等（表里几页就是几页），这一条没有变过。
+     */
+    if (lengths.some((length) => length !== pages)) {
+      /**
+       * 措辞是这一条的一半功能：模型要照着这句话改，而"页数不对"四个字它改不动。
+       *
+       * ★ 共读版那两句必须把"路长 ≠ 表里几个节点"这件事说出来。第一版写的是
+       *   `页数 4 ≠ 请求 8`，而模型上一版明明交了 6 页——它没有理由知道我们数的是哪一份
+       *   （表里 6 个节点、两条路各 4 页）。一句它读不懂的反馈，等于把重试变成原样重发。
+       */
+      const actual =
+        lengths.length > 1
+          ? `两条路读下来 ${lengths.join(' 页 / ')} 页`
+          : form === 'shared'
+            ? `两条路读下来都是 ${lengths[0]} 页`
+            : `页数 ${lengths[0]}`
+      /**
+       * 共读版再往前一步：把**它自己那一版的算式**算给它看（2026-10-21 补）。
+       *
+       * 起因是实测：`story-plan@v6` 已经把公式写进提示词了，模型照样每次都差一页
+       *   （请求 4 → 它写 5/5、5/5、6/6 三遍）。它读得懂公式，但读不懂"我这一版错在哪"——
+       *   而上面那两句只说"两条路都是 5 页 ≠ 请求 4"，它得自己反推选择点在第几页。
+       *   这跟当初"页数 4 ≠ 请求 8"那次是同一个病：一句它读不懂的反馈，等于原样重发。
+       *
+       * 所以这里把它自己的 `C`（选择点在第几页）代进去，给出三个数：
+       *   每支该写 `pages − C` 页（它写了 `L − C` 页）、表里应正好 `pages + (pages − C)` 个节点
+       *   （它写了 `nodes.length` 个）。改哪一头都行，但两条路都得正好 `pages` 页。
+       */
+      const choiceNode = form === 'shared' ? tree.nodes.find((node) => node.choice) : undefined
+      /**
+       * 差几页也要说出来，而且要说**怎么改**。
+       *
+       * 实测（2026-10-21，DeepSeek `deepseek-flash` + `story-plan@v6`，每个页数跑 1–3 次）：
+       *   请求 8 → 1/1 一次过；请求 6 → 1/2；请求 4 → 1/3。
+       *   失败的形状很稳定：**每支的尾巴多写一页**（请求 4 → 两条路 5/5，表里 7 个节点）。
+       *   给公式没用，给"你这一版差几页、删哪儿"才有用——模型改稿读的是这句话。
+       */
+      const advice =
+        choiceNode && choiceNode.pageNo > 0 && choiceNode.pageNo < pages && lengths[0] !== undefined
+          ? (() => {
+              const tailShould = pages - choiceNode.pageNo
+              const tailActual = lengths[0] - choiceNode.pageNo
+              const delta = tailActual - tailShould
+              const fix =
+                delta > 0
+                  ? `每支末尾**删掉 ${delta} 页**`
+                  : delta < 0
+                    ? `每支末尾**补 ${-delta} 页**`
+                    : '页数对了，问题在别处'
+              return (
+                `。这一版的算式：选择点在第 ${choiceNode.pageNo} 页 → 每支应各写 ${tailShould} 页` +
+                `（这一版写了 ${tailActual} 页）→ 表里应正好 ${pages + tailShould} 个节点` +
+                `（这一版 ${nodes.length} 个）。改法：${fix}；也可以把选择点前移/后移来凑，两种都行`
+              )
+            })()
+          : ''
+      problems.push({
+        index: 0,
+        ...(form === 'shared' ? { field: 'choice' as const } : {}),
+        message:
+          form === 'shared'
+            ? `${actual} ≠ 请求 ${pages}（表里 ${nodes.length} 个节点，两条支各占各的——` +
+              `页数按**一条路走下来**算，不按表里几页算）${advice}`
+            : `${actual} ≠ 请求 ${pages}`,
+      })
+      return { ok: false, tree: null, problems }
+    }
+  }
+
+  return { ok: true, tree, problems: [] }
 }
 
 /**

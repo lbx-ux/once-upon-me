@@ -6,7 +6,7 @@
  * ```bash
  * # 半程：只跑归一化 + 失败路径，一个网络请求都不发、一分钱不花
  * node scripts/e2e-image-reference.mts --dry=1
- * # 全程：再走一次真实的 /images/edits（会出一张图、会扣费）
+ * # 全程：再走一次真实的"带参考图出图"那条路（会出一张图、会花钱）
  * node scripts/e2e-image-reference.mts
  * # 真照片那一条（验收里写着"需要用户提供的照片"）：不给就照实记「没量到」
  * node scripts/e2e-image-reference.mts --photo=/path/to/照片.jpg
@@ -18,6 +18,13 @@
  *   谁也没法在两周后说清当时送的是什么形状的图。这里走的是**引擎自己的适配器**
  *   （`createTokenrhythmImage().edit`），所以它同时证明了另一件更要紧的事——
  *   `edit()` 不是纸上的一个方法名，它真的能出图。
+ *
+ * ✅ 2026-10-21 更新（换到 qwen-image-3.0）：这条脚本原来硬编码 `createTokenrhythmImage`，
+ *   于是它证明的是"那一家那一次能出图"，而不是"**配置里那一家**能出图"。
+ *   现在它走 registry 的 `imageProviderOf(env)`——与生产同一个构造点，
+ *   换模型不需要再动这个文件（同一条理由见 `textOptionsOf` 的注释）。
+ *   随之翻掉的一行：`size` 在这家**是会进请求体的**，所以下面核的那个尺寸是量出来的、
+ *   也是我们真要的那个（页图 3:2）。
  *
  * ★ 三件**不许糊弄**的事，各自对应一次教训：
  *
@@ -43,9 +50,9 @@ import sharp from 'sharp'
 import { normalizeReference, referenceDataUrlOf } from '../src/lib/engine/image/normalize.ts'
 import { EngineError } from '../src/lib/engine/errors.ts'
 import { checklistOf } from '../src/lib/engine/character-card/card.ts'
-import { pagePrompt } from '../src/lib/prompts/image.ts'
+import { DEFAULT_IMAGE_SIZE, pagePrompt } from '../src/lib/prompts/image.ts'
 import { createCardStore } from '../src/lib/engine/character-card/store.ts'
-import { createTokenrhythmImage } from '../src/lib/engine/providers/tokenrhythm-image.ts'
+import { imageProviderOf } from '../src/lib/engine/providers/registry.ts'
 import { createFsStore } from '../src/lib/engine/providers/stores.ts'
 import { userFailureOf } from '../src/lib/provider-messages.ts'
 import { arg, readEnv } from './env.mts'
@@ -185,10 +192,8 @@ async function main(): Promise<void> {
   }
   process.stdout.write(`真实照片\n${table(photoRows)}\n\n`)
 
-  /* ── 4. 端到端：走引擎自己的适配器 ─────────────────────────── */
-  const apiKey = env['IMAGE_API_KEY'] ?? ''
-  const baseUrl = env['IMAGE_BASE_URL'] ?? 'https://tokenrhythm.studio/v1'
-  const model = arg('model', env['IMAGE_MODEL'] ?? 'wan2.7-image')
+  /* ── 4. 端到端：走引擎自己的适配器（与生产同一个构造点） ───── */
+  const model = env['IMAGE_MODEL'] ?? ''
 
   // ★ 提示词**默认走生产那一条**（`pagePrompt`），不自编一段。
   //   自编的代价实测过一次：第一版这里写的是"黄昏的河面，暖色调……"，
@@ -215,11 +220,10 @@ async function main(): Promise<void> {
   if (arg('dry', '') === '1') {
     e2eRows = [['状态', '**跳过了**（--dry=1）：上面那两节一个请求都没发，也没花钱']]
     process.stdout.write(`端到端\n${table(e2eRows)}\n\n`)
-  } else if (!apiKey) {
-    // ★ 没配 key 就报错退出，不静默跳过：一个"跳过也算过"的验收是假验收
-    throw new Error('IMAGE_API_KEY 未配置。要只跑不发请求的那两节，用 --dry=1')
   } else {
-    const image = createTokenrhythmImage({ baseUrl, apiKey }, model)
+    // 构造点只有一个：registry。key 缺了它会自己抛（不在这里再判一遍，
+    //   否则"哪一层负责报错"就有两份答案）。要跑不发请求的那两节，用 --dry=1
+    const image = imageProviderOf(env)
     const edit = image.edit
     if (typeof edit !== 'function') {
       throw new Error(`${model} 的适配器没有 edit()——这条通路在这家平台上不存在`)
@@ -227,9 +231,10 @@ async function main(): Promise<void> {
     const started = Date.now()
     const response = await edit.call(image, {
       prompt,
-      // ★ 这个 size 在 `edits` 那条路上**不进请求体**（适配器文件头：只送过三个字段）。
-      //   接口形状要它，所以照填，但下面的产物尺寸是**量出来的**，不是这里填的那个
-      size: '1440x1440',
+      // ★ 用**产品自己那个尺寸**（页图 3:2），不是随手挑一个。
+      //   上一家这条路上没有 `size` 字段，产物尺寸由模型定；这一家认它——
+      //   所以下面核出来的尺寸既是"我们真会要的那个"，也是"它到底守不守"的判据
+      size: DEFAULT_IMAGE_SIZE,
       referenceDataUrl: referenceDataUrlOf(normalized),
     })
     const seconds = (Date.now() - started) / 1000
@@ -238,27 +243,36 @@ async function main(): Promise<void> {
     await writeFile(pagePath, response.bytes)
     pageArtifact = pagePath
 
-    // 产物尺寸是工单 02 那三条"没量过"里的第一条（edits 没有 size 字段 ⇒ 由模型定）。
-    // 顺手量掉它，因为图已经在我们手里了，不看白不看
     const produced = await shapeOf(response.bytes)
     e2eRows = [
       ['模型', model],
-      ['路由', 'POST /images/edits（经 createTokenrhythmImage().edit，不是手搓 fetch）'],
+      [
+        '路由',
+        'POST /api/v1/services/aigc/multimodal-generation/generation，content 里多一段 {image}' +
+          '（经 registry 的 imageProviderOf().edit，不是手搓 fetch）',
+      ],
+      ['请求的尺寸', `${DEFAULT_IMAGE_SIZE}（产品页图那一个）`],
       [
         '提示词来源',
         page === ''
           ? '生产那一条（prompts/image.ts 的 pagePrompt + demo-plan 第 1 页）'
           : '命令行给的（--prompt）',
       ],
-      ['参考图是否进请求', response.referenceApplied === true ? '是 ✓' : '**否——这条通路没生效**'],
+      [
+        '参考图是否进请求',
+        response.referenceApplied === true
+          ? '是 ✓（读的是响应里的 usage.input_image_count）'
+          : '**否——这条通路没生效**',
+      ],
       ['耗时', `${seconds.toFixed(1)}s`],
       ['产物', produced],
       ['产物落盘', pagePath],
-      ['traceId', response.traceId ?? '（未回传）'],
-      ['★ 顺带量到的', 'edits 产物尺寸（上面那行）——这是"size 没测过"那条欠账的一半'],
+      // 这条路上 `request_id` **在响应体里**（原生协议），适配器读进 `traceId`——
+      //   报障时报得出号。上一版这里写的是"未回传"，那是照着兼容模式那条路写的
+      ['requestId', response.traceId ?? '（这一次没回）'],
       [
         '仍然没量到的',
-        'edits 扣了多少钱（cost_cny 缺失时适配器按 0.20 元兜底记，那是兜底不是实测）',
+        '这一张扣了多少钱：响应里没有费用字段（适配器按 unitCostCny 兜底记账，那是兜底不是实测）',
       ],
     ]
     if (response.referenceApplied !== true) {
@@ -340,9 +354,11 @@ async function main(): Promise<void> {
     '',
     '## 还欠着的（不许用上面任何一行顶替）',
     '',
-    '- `edits` 的**计费**：没量到。适配器的 0.20 元是从 generations 挪过来的兜底值',
+    '- **一张图扣多少钱**：没量到。响应里没有费用字段，适配器的 `unitCostCny` 是兜底记账',
     '- **照片**当参考图画出来的像不像：没量到（要用户提供照片，且比对器那一环同样未量）',
-    '- `edits` 能不能指定尺寸：没试过（只送过 model / image / prompt 三个字段）',
+    '- **带上参考图之后一致性到底提升多少**：没量到。这条脚本证明的是"参考图真的进了请求"',
+    '  （`usage.input_image_count`），**不是"画得更像了"**——那要专门做一次开/关对照',
+    '- `size` 在 I2I 上守不守：**这一条由这份报告量掉**（上面"请求的尺寸"与"产物"两行对着看）',
     '',
   ].join('\n')
   await writeFile(join(out, 'report.md'), report, 'utf8')

@@ -29,8 +29,9 @@
  * （插画与艺术风格）** 写的：它要求"定义构图、主体、配色、笔触材质、情绪、完成度"，
  * 六个概念**复用同一个模板、只换主体与配色**（那份库对"多概念"的指定）。
  *
- * ★ **但真正渲染它的不是 gpt-image-2，是本仓库接的那个 `wan2.7-image`**
- *   （`IMAGE_MODEL`，见 `src/lib/engine/providers/tokenrhythm-image.ts` 的白名单）。
+ * ★ **但真正渲染它的不是 gpt-image-2，是本仓库接的那个图像模型**
+ *   （`IMAGE_MODEL`，2026-10-21 起是 `qwen-image-3.0`，见
+ *   `src/lib/engine/providers/qwen-image.ts` 的白名单）。
  *   这一条必须写在明处：`make-default-avatar.mts` 的文件头记过一次同类的坑——
  *   一条"写给 gpt-image-2 的提示词"直接喂给另一个模型，主体与反面约束会被整段忽略。
  *   **所以出完必须看图**，不能只看脚本退出码。
@@ -44,7 +45,7 @@
  *
  * ## 尺寸与体积
  *
- * 出图 `1536x1024`（3:2，在 `SIZES_BY_MODEL['wan2.7-image']` 白名单里）。
+ * 出图 `1536x1024`（3:2，在 `SIZES_BY_MODEL['qwen-image-3.0']` 白名单里）。
  * 落库**不放大也不裁**，就是原生尺寸，webp q=72 —— 目标每张 ≤ 200KB。
  * ★ 1920 宽的窗口上 `cover` 要放大 1.25×（DPR2 的屏 2.5×）。认下这一条，
  *   与 `studio-backdrop.css` 那份先例同一个写法：底图是**晕染**，放大看出来才怪。
@@ -61,7 +62,7 @@ import { arg, flag, readEnv } from './env.mts'
 const RAW_DIR = resolve('.out/reader-papers')
 const OUT_DIR = resolve('public/reader-papers')
 
-/** ★ `wan2.7-image` 的模型级白名单里的 3:2（见 `tokenrhythm-image.ts`）。
+/** ★ `qwen-image-3.0` 的模型级白名单里的 3:2（见 `qwen-image.ts`）。
  *  不在白名单里的尺寸在**发请求之前**就被拦下——那是钱的问题，不是洁癖 */
 const SIZE = '1536x1024'
 
@@ -321,7 +322,7 @@ async function main(): Promise<void> {
     } catch (err) {
       /**
        * ★ 一张失败**不掀掉整批**：出图超时是"服务端可能已建单"，**不要重试**
-       *   （`tokenrhythm-image.ts` 第 3 条纪律），拿 `--only=<key>` 单独补那一张。
+       *   （`qwen-image.ts` 第 3 条纪律），拿 `--only=<key>` 单独补那一张。
        *   盘上已经出来的那几张是好好的——`make-default-avatar.mts` 就是在这里
        *   咬过一次：一张超时让整张对照表都拿不到。
        */

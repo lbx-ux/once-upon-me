@@ -567,6 +567,38 @@
   font-size: 12.5px;
 }
 
+/* ★ 2026-10-21（工单 D-28）：身份卡底部那根去隐私页的链。
+   与上面那两颗按钮**不同档**：它是链接（有下划线那种），不是按钮形状——
+   这一栏里已经有五颗长得差不多的药丸了，再加一颗的话，"哪一颗会删东西"
+   就只能靠读字分辨。颜色用这一屏自己的 `--pf-accent`（这一栏的蓝），
+   与 `.pf__tag` / `.pf__quick` 同一支笔；它是这一屏里当**文字色**用过的颜色
+   （见上面那两条规则），不是新配的一对。 */
+.pf__data {
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  line-height: 1.8;
+  color: var(--ink-muted);
+}
+
+.pf__data-link {
+  color: var(--pf-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.pf__data-link:focus-visible {
+  outline: 2px solid var(--pf-accent);
+  outline-offset: 3px;
+}
+
+/* 那半句补充说明。★ 用 `--pf-hairline` 那道分隔把它与链接分开一小段距离，
+   读起来是"链接 ＋ 一句注释"，而不是一个长标题 */
+.pf__data-hint {
+  margin-left: 8px;
+  padding-left: 8px;
+  border-left: 1px solid var(--pf-hairline);
+}
+
 /* 右边那一栏：最近创作 */
 
 .pf__work {

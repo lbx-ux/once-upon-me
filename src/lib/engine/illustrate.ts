@@ -4,19 +4,19 @@
  * 这一层是"自主决策"唯一真实存在的地方：它自己判断画得像不像、自己决定要不要重画、
  * 重画到第几次就交给人。三件事必须在这一层，因为它们共用同一个循环。
  *
- * 六条不显然的规则：
+ * 七条不显然的规则：
  *
- * 1. 比对模型不可用时绝不重试。没有判据的重画是烧钱抽签：一次 0.20 元、结果无人判定、
+ * 1. 比对模型不可用时绝不重试。没有判据的重画是烧钱抽签：一次一张图的钱、结果无人判定、
  *    还把"首次通过率"污染成"我们重画过"。`verdict = 'unavailable'` 直接结束这一页，
  *    并明确标记"这一页没核对过"——这是降级 B（角色卡锁定 + 家长逐页重画）的入口，
  *    不是失败。
- * 2. 参考图没生效要当场喊。带不带参考图由策略决定（`referenceForPages`，默认关），所以
- *    "这一页以为锁了脸其实没锁"是有可能发生的（策略开了、provider 却没有 `edit`）。
- *    症状是整本书画完才发现不像，而那时钱已经花完了——所以 `requireReference` 一旦为真，
- *    拿到 `referenceApplied === false` 就当场抛错，不画完再说。
- *    ★ 这条曾经指向"供应商的参考图字段还是未公开状态"，那句话已被推翻
- *    （`/images/edits` 实测通，见 tokenrhythm-image.ts 文件头）。但这条纪律不跟着翻：
- *    要喊的从来不是"这家不支持"，而是"你说要锁脸，这一页没锁"。
+ * 2. 参考图没生效要当场喊。带不带参考图由策略决定（`referenceForPages`，缺省**开**），
+ *    所以"这一页以为锁了脸其实没锁"是有可能发生的。症状是整本书画完才发现不像，而那时钱
+ *    已经花完了——所以 `requireReference` 一旦为真，真走了 `edit` 而回执里没有参考图，
+ *    就当场抛错，不画完再说。
+ *    ★ 2026-10-21 补的边界：这里喊的是"**你说要锁脸，这一页没锁**"，不是"这家不支持"。
+ *    两个前提缺一不可——**这一次真用了 `edit`**（没有 edit 的 provider 从未声称带参考图，
+ *    离线回放就是这种）**且策略要求它**。判据分开的理由写在下面那个 `if` 上面。
  * 3. 失败的图也落盘。家长要能看见"上一版为什么不像"，技术文档也要那批图当评测数据。
  *    删掉它们等于把过程藏起来。
  * 4. 重画次数是数据不是细节：`firstPassCount / redrawCount` 直接喂 §10.1 公式里的
@@ -32,6 +32,12 @@
  *    `anchorNote` 注进去（见 `anchorNote`）。
  *    ★ 它只认最新一次的结论，而且画面审核那一档不参与——两条理由都写在「③-c」那一段里，
  *    改之前先读那一段。
+ * 7. 整本书那一层有一个**上限 3 的并发池**，但它只许并发"页与页"，不许并发"出图与比对"
+ *    （2026-10-21，D-03）。要防的那个改法很自然：既然要快，就把 20 页的出图先一起发出去、
+ *    回来之后统一比对、再统一重画。那样确实更快，代价是"自己判断像不像、自己决定要不要
+ *    重画"这半截闭环没了——判断与执行分家之后，重画的 prompt 里就没有 `anchorNote`
+ *    （第 6 条那件事会静悄悄失效），而这一层正是 Agent 那 8 分的落点。
+ *    所以池子的单位是 `illustrateNode`（一整页的一生），不是某一次调用。
  */
 
 import {
@@ -40,6 +46,7 @@ import {
   anchorNoteOf,
   DEFAULT_IMAGE_SIZE,
   COVER_IMAGE_SIZE,
+  IMAGE_NEGATIVE_PROMPT,
   IMAGE_PROMPT_VERSION,
 } from '../prompts/image.ts'
 import { checklistOf } from './character-card/card.ts'
@@ -66,7 +73,32 @@ import type {
   VisionComparator,
 } from './providers/types.ts'
 
-export const DEFAULT_THRESHOLD = 0.75
+/**
+ * 一致性通过的分数线：**0.5**（2026-10-21 晚从 0.75 重标）。
+ *
+ * 0.75 是照**上一家比对模型**（`kimi-k2.6`）的分布定的（`docs/tech-selection.md` §7.5：
+ * "分数双峰，阈值 0.75 正落在空隙里"，那一批是 1.00/0.95 vs 0.30/0.10）。
+ * 换到 `deepseek-flash` 之后那把尺子的刻度变了，而阈值没跟着动——症状是**每一页都判 0.55、
+ * 每一页都重画**，用户的原话：「第一次生成的就很标准了啊」。
+ *
+ * 重标的量法（`.out/tmp/compare-scale.mts`，同一张页图分别与三张卡比）：
+ *
+ * | 比的谁 | 分数 | 说明 |
+ * | --- | --- | --- |
+ * | 它自己的卡 | **0.93** | 锚点全中 |
+ * | 另一张卡（男孩，同画风） | **0.20** | 头发/头身比/肤色三条不中 |
+ * | 再一张卡（陌生孩子） | **0.05** | 五条全不中 |
+ * | 用户手上那几页（一条锚点有偏差：头身比 1:3） | **0.55** | 模型自己说"脸型、发型、肤色基本一致" |
+ *
+ * 0.5 落在 0.55 与 0.20 之间：**"像、但有一条锚点偏了"不再自动重画**（那几页重画三次
+ * 也还是 0.55，是白花钱），而"不是一个孩子"（≤0.2）照样拦。
+ *
+ * ★ 两条要说清的边界：
+ *   1. 这是**一次小样本重标**（同一天、一个孩子、四组读数）。样本变大要重跑，判据是"分的双峰还在不在"。
+ *   2. 0.5 意味着"一条硬锚点偏了"也能过——那是产品取舍（家长看过不满意可以手点重画），
+ *      不是"模型画对了"。页面上那一行仍然照实写分数，别把它当装饰。
+ */
+export const DEFAULT_THRESHOLD = 0.5
 export const DEFAULT_MAX_ATTEMPTS = 3
 
 export type IllustrateOptions = {
@@ -99,24 +131,26 @@ export type IllustrateOptions = {
   /** 0–1。阈值靠人工判读校准，别把分数当结论（GLOSSARY「一致性分」） */
   threshold?: number
   maxAttempts?: number
-  /** 一致性是这本书的命：要求参考图却没生效时，宁可当场失败也不要画完 20 页再说 */
+  /** 一致性是这本书的命：要求参考图却没生效时，宁可当场失败也不要画完 20 页再说。
+   *  ★ 它只在"这一次真走了 `edit`"时才会抛（见下面那个 `if` 上面那张表） */
   requireReference?: boolean
   /**
    * 这一本书的每一页要不要拿角色卡的参考图去画（走 provider 的 `edit` 那条路）。
    *
-   * 默认关。这不是"能力没做出来"——`edits` 已经实测通了（工单 02 §一）——而是三条都
-   * 没量全（第一条 2026-10-14 量到一半）：
+   * ★ 2026-10-21：**缺省开**（此前默认关）。原来关着是三条没量全的代价，换模型后前两条消了：
    *
-   * 1. `edits` 那条路没有 `size` 字段（实测只送过 model/image/prompt 三个），所以产物尺寸
-   *    由模型定。★ 现在知道了：实测回来的是 1024×1024（`scripts/e2e-image-reference.mts`，
-   *    两次 1024²、约 1.8 MB、9.4s/9.8s），而页图是按 1440² 写的——也就是说开了这个开关，
-   *    页图尺寸会变。变小的那 30% 对"书里那一页"够不够，还是没看，所以它仍然默认关。
-   * 2. `edits` 扣多少钱没量过（generations 是一口价 0.20 元/张）。
-   * 3. 一页一页带着参考图画，跨页一致性到底提升多少——这正是 ADR-0007 的赌注，要用比对器
-   *    量出来，不能靠"支持了就该开"。
+   * | 原来关着的理由 | 现在 |
+   * | --- | --- |
+   * | 那条路没有 `size` 字段，产物尺寸由模型定（实测请求 1440²、回来 1024²），而页图是按 3:2 写的 | 新这家（qwen-image-3.0）**认 size**，`size` 与文生图同一条接口同一个字段 |
+   * | 参考图有没有真送出去无从确认（适配器自己写 `true`） | 响应里 `usage.input_image_count` 是**读数** |
+   * | 跨页一致性到底提升多少（ADR-0007 的赌注） | **仍未量** |
    *
-   * 所以它是一个策略开关，与"provider 有没有这个能力"（`supportsReference`）分开。
-   * 量完之前开着它等于拿正式跑测当探测。
+   * 所以它翻的是**策略**：开着它证明的是"参考图真的进了请求"，而不是"画得更像了"。
+   * 后者要专门做一次开/关对照，别把前者当后者写进结论。
+   *
+   * 它是策略，与"provider 有没有这个能力"（`supportsReference`）仍然是两件事：
+   * 没有 `edit` 的 provider（离线回放）下，调用方那一层会把策略算成 false——
+   * 那不是沉默降级，是能力不在，而能力在 `describeProviders` 那一行上看得见。
    */
   referenceForPages?: boolean
   /**
@@ -278,7 +312,6 @@ export async function illustrateNode(
     const prompt = pagePrompt({
       card: opts.card,
       page: node.imagePrompt,
-      scene: node.scene,
       mood: node.mood,
       ...(anchorNote ? { anchorNote } : {}),
       ...(opts.fixNote ? { fixNote: opts.fixNote } : {}),
@@ -300,8 +333,14 @@ export async function illustrateNode(
             prompt,
             size: DEFAULT_IMAGE_SIZE,
             referenceDataUrl: opts.referenceDataUrl,
+            // 画面里不许写字（这家真的写过正文，见 `IMAGE_NEGATIVE_PROMPT` 那段）
+            negativePrompt: IMAGE_NEGATIVE_PROMPT,
           })
-        : await opts.image.generate({ prompt, size: DEFAULT_IMAGE_SIZE })
+        : await opts.image.generate({
+            prompt,
+            size: DEFAULT_IMAGE_SIZE,
+            negativePrompt: IMAGE_NEGATIVE_PROMPT,
+          })
     } catch (err) {
       redrawStop = produceFailed(err, attempt)
       break
@@ -321,8 +360,18 @@ export async function illustrateNode(
      * 只会在第 1 次触发，而第 1 次手上必然没有旧图（`produceFailed` 也会抛），两条路在
      * 这里重合。保留"无条件抛"是为了让文件头第 2 条那句话不被降级路径盖住：它要喊的是
      * "这一页没锁脸"，而"用上一张"正好会把这句话咽下去。
+     *
+     * ★ `edit &&` 这个前提是 2026-10-21 补的，它分开的是两件不同的事：
+     *
+     * | 情形 | 这一次发生了什么 | 这里怎么处置 |
+     * | --- | --- | --- |
+     * | 有 `edit`、也真用了它，而回执说参考图没进去 | **我们为一张没锁脸的图付了钱** | 当场抛 |
+     * | 这家根本没有 `edit`（离线回放就是） | 这一次请求**从来没声称**要带参考图 | 不抛（调用方那一层按能力把策略关掉，见 `index.ts` 的 `withReference`） |
+     *
+     * 合成一条会把离线回放整条演示路打死（`createReplayImage` 没有 `edit`，而 ADR-0003
+     * 的演示路径要求它跑得通），而那是"没花钱、也没人被骗"的一格——处置与上面那格不同。
      */
-    if (opts.requireReference && response.referenceApplied === false) {
+    if (edit && opts.requireReference && response.referenceApplied !== true) {
       throw asEngineError(
         new Error(
           `这一页要求锁脸，但参考图没进请求（referenceForPages=${String(
@@ -599,6 +648,9 @@ export async function illustrateNode(
  * 4. 重画只由画面审核触发，不由一致性触发。这正是"重画三次救不了一个构图不对的封面"
  *    不适用于画面审核的原因：那一档报的不是"这张图不好看"，是"这张图坏了"，
  *    而坏图重画一次是真的可能画好的（prompt 是干净的，靠模型重新采样）。
+ * 5. **它现在也带角色卡参考图**（2026-10-21，随换模型一起补的）。在这儿之前它只走
+ *    `generate`——于是页页都锁了脸、封面却是另一个孩子，而封面正是家长第一眼看见的那张。
+ *    开关与页图共用 `referenceForPages`，理由写在它的类型注释里。
  *
  * 它失败就让整本书失败，不像页图那样降级：没有封面的书在货架上认不出来，而"这一页缺"
  * 是可以接受的（书还是完整的）。这个取舍是刻意的。
@@ -614,7 +666,17 @@ export async function illustrateCover(opts: {
   store: AssetStore
   card: CharacterCard
   bookId: string
-  title: string
+  /** 角色卡参考图的 data URL。封面也要锁脸——见下面 §5 那段（2026-10-21 补） */
+  referenceDataUrl: string
+  /**
+   * 封面要不要带参考图。缺省**开**，与 `IllustrateOptions.referenceForPages` 同一个缺省。
+   *
+   * ★ 2026-10-21 补的这一条超出了那个字段的字面范围（它叫 forPages），是刻意的：
+   *   页页都锁了脸而封面是另一个孩子，比整本都不锁更糟——**家长第一眼看到的是封面**，
+   *   而那一眼要判断的正是"这像不像我家孩子"。两条路的开关合成一个，是为了不留
+   *   "有人只开了一半"的状态。要只动内页不动封面，在这里传 false。
+   */
+  referenceForPages?: boolean
   /** 画面审核（`.scratch/safety` 工单 01）。null = 没有这个能力，走"没审过"那条路 */
   pictureReview: PictureReviewer | null
   /** 出图 + 画面审核最多几次。缺省见 `DEFAULT_MAX_ATTEMPTS` */
@@ -631,7 +693,18 @@ export async function illustrateCover(opts: {
    * "图里有不该出现的东西"，而那一档按 `reviewPictureOf` 第 5 条刻意不回灌。
    * 所以这里不是"漏了"，是没有可回灌的东西——页图那一侧已经改了，别照抄过去。
    */
-  const prompt = coverPrompt({ card: opts.card, title: opts.title })
+  const prompt = coverPrompt({ card: opts.card })
+
+  // 与页图同一条判据（`illustrateNode` 那句）：策略说带参考图、而这家没有 `edit`，
+  //   就不该"那就不带参考图画一张"——封面是这个孩子在货架上的脸，画错了整本书都白做
+  const edit = opts.referenceForPages === true ? opts.image.edit : undefined
+  if (opts.referenceForPages === true && typeof edit !== 'function') {
+    throw new EngineError(
+      'reference-invalid',
+      '这一版要求封面也照着角色卡画，但当前图像模型没有带参考图那条路（`edit`）。' +
+        '换一个能收参考图的模型，或者在调用处把封面那一档关掉',
+    )
+  }
 
   let lastAsset: Cover['asset'] | null = null
   let provenance: Provenance | null = null
@@ -647,7 +720,34 @@ export async function illustrateCover(opts: {
       attempt,
       total: maxAttempts,
     })
-    const response = await opts.image.generate({ prompt, size: COVER_IMAGE_SIZE })
+    const response = edit
+      ? await edit.call(opts.image, {
+          prompt,
+          size: COVER_IMAGE_SIZE,
+          referenceDataUrl: opts.referenceDataUrl,
+          negativePrompt: IMAGE_NEGATIVE_PROMPT,
+        })
+      : await opts.image.generate({
+          prompt,
+          size: COVER_IMAGE_SIZE,
+          negativePrompt: IMAGE_NEGATIVE_PROMPT,
+        })
+
+    /**
+     * ★ 说了要锁脸却没锁，当场抛（与页图 `requireReference` 同一条纪律）。
+     *
+     * 封面这一档的代价比页图大——它抛出去就是整本书失败（见文件头那段"刻意接受的代价"）。
+     * 仍然选择抛：一本封面是别人的书，比"这次没出成"更坏，而且家长没有任何办法改它
+     * （有清单的书 `POST /books/<id>/illustrate` 回 409）。
+     */
+    if (edit && response.referenceApplied !== true) {
+      throw new EngineError(
+        'reference-invalid',
+        '封面这一版要求照着角色卡画，但请求里那张参考图没有被确认收到' +
+          '（响应里没有 `usage.input_image_count`）。封面是孩子在货架上第一眼看见的那张，' +
+          '拒绝在没锁脸的情况下继续',
+      )
+    }
     // ★ 文件名带 attempt，与页图同一个理由（文件头第 3 条）：被替掉的那几张留着，
     //   "上一版为什么不行"要看得见。留下的是 `Cover.asset.path` 指的那一张。
     lastAsset = await opts.store.put({
@@ -731,44 +831,123 @@ export async function illustrateCover(opts: {
 }
 
 /**
- * 整本书的逐页生成。串行而不是并发：并发是 W3 的优化（10/13 从 W2 挪后，
- * 见 `.scratch/w2-solo-flow/issues/05-generate-orchestration.md` §三）。
+ * 同时在画的页数上限。**3** 这个数是工单里定的，不是量出来的最优点：
+ * 它要治的是"20 页串行 ≥51.4 分钟"，而 3 路已经把那一段压到 1/3 量级（实测见
+ * `docs/known-tradeoffs.md` 里 D-03 那一段：真路由 + 定长假厂商，串行档与 3 路档各跑两轮）；
+ * 再往上加，收益被"同一台机器"与"供应商那边的限流"吃掉，风险却全在别人手里。
  *
- * 挪后的判据是实测而不是偏好：3 页的书串行实测 77.7s（比对关）/ 455.6s（比对开 + 1 次
- * 重画），而"要不要上并发池（上限 3）"的规则是先量到 20 页 > 8 分钟才做。
+ * ★ 它是**上限**不是目标：页数少于 3 时按页数开（不然会开出两条空转的 worker）。
+ * ★ 想要旧行为（逐页串行、事件流严格按页递增）就传 1——`scripts/` 与测试都用它复现基线。
+ */
+export const DEFAULT_PAGE_CONCURRENCY = 3
+
+export type IllustrateAllOptions = {
+  /** 同时出图/比对的页数上限。缺省 `DEFAULT_PAGE_CONCURRENCY`（3） */
+  concurrency?: number
+}
+
+/**
+ * 整本书的逐页生成。**2026-10-21 起带一个上限 3 的并发池**（工单 D-03）。
  *
- * 2026-10-15：20 页真跑过一趟（`.out/web/books/xiaolu-r1-bf84901c4fcd`），但那一趟没能
- * 量出串行整本的干净耗时——中段撞上约 36 分钟的本机网络中断（18 页 `fetch failed`，
- * 两个不同供应商同时段一起坏）。阈值仍然判"过线"，靠的是下界：串行里每页至少出一次图，
- * 而"一次出图尝试"的耗时是从 mtime 量的——运行起点到 p3 落图共 770.5s、5 次尝试，
- * ≈154 s/次；20 页至少 20 次 ⇒ ≥ 51.4 分钟 > 8 分钟。所以并发池（上限 3、优先并发比对）
- * 是判据要求的，而这一格还没落地——它是独立的一单，不要因为读到这段就顺手在这里开并发。
+ * ── 为什么现在才有 ────────────────────────────────────────────────────────
  *
- * ★ 这句话以前写的是"并发是 W2 的优化"：一句与计划不符的注释，就是下一个人读错代码的
- *   入口（工单 05 的验收里点名了它）。
+ * 在这之前它是逐页串行的，而 `illustrate.ts` 自己的注释里就写着"并发池（上限 3）是判据
+ * 要求的，而这一格还没落地"——评分报告把它记成"并发没做，而它自己的判据要求做"（§2.2 −6，
+ * 另在 §2.8 与 §2.14 各扣一次）。阈值是量出来的：3 页的书串行实测 77.7s（比对关）/
+ * 455.6s（比对开 + 1 次重画）；20 页那本撞上网络中断没量出干净耗时，但下界成立——
+ * 串行里每页至少出一次图，一次出图尝试 ≈154 s，20 页 ≥51.4 分钟 > 8 分钟那条线。
+ * 盘上五本真书是 12.5 / 19.1 / 174.2 / 60.6 / 70.1 分钟（`docs/business.md` §1.2）。
+ *
+ * ★ **那个 154 s 别当典型值读**（2026-10-21 补）。它是从一次**网络中断**的跑测里按 mtime
+ *   反推的"每次尝试"，含重试与等待；同一天一次干净的探针
+ *   （`scripts/probe-image-concurrency.mts`，3 路同发）量到的是 **15.2–17.7 s**
+ *   （1024²、6 次），而**页图真正用的那个尺寸**（1536×1024）三次是 **16.7–18.4 s**。
+ *   作为"过没过 8 分钟那条线"的**下界**它仍然成立，但拿它乘出
+ *   "这本书要跑 56 分钟"就是把一次事故当成了常态。两条的完整对照写在
+ *   `docs/known-tradeoffs.md` 里 D-03 那一段的"★ 二"。
+ *
+ * ── 三条不许被并发改掉的东西 ──────────────────────────────────────────────
+ *
+ * 1. **每一页自己的事件次序一字不变**。池子只是同时跑几个 `illustrateNode`，那个函数一行
+ *    没改——所以"第 7 页第 2 次尝试"仍然紧跟在"第 7 页第 1 次不像"后面，重画还归属同一页。
+ *    变的只有**页与页之间**的穿插：第 2 页的 `illustration` 可能排在第 1 页的 `consistency`
+ *    前面。刻意不做"先把所有页画完、再统一比对"那种批量编排——那会把"自己判断像不像、
+ *    自己决定要不要重画"这半截闭环拆散，而它是 Agent 那 8 分的落点。
+ * 2. **返回的数组仍按页序**。完成顺序与页序无关，可 `illustrations` 进 `book.json`、
+ *    进阅读器，它必须是第 1 页在前。所以下面按 `resultOf` 的下标回收，不是按谁先回来。
+ * 3. **一页失败仍然只影响那一页**（§5 失败语义）：`illustrateNode` 的异常照旧被这一层接住、
+ *    记进 `errors`、发一条非致命事件，其余页照跑。并发只改了"同时有几个人在做"。
+ *
+ * ★ `concurrency: 1` 走的是同一条路（一个 worker 顺序取页），不是另开一条分支：
+ *   两条分支的话，"串行那档还对不对"每次都要单独验，而它已经没人用了。
  */
 export async function illustrateAll(
   nodes: readonly StoryNode[],
   opts: IllustrateOptions,
+  run: IllustrateAllOptions = {},
 ): Promise<{ illustrations: Illustration[]; errors: { pageNo: number; message: string }[] }> {
+  const limit = run.concurrency ?? DEFAULT_PAGE_CONCURRENCY
+  /**
+   * ★ 0 与负数要当场拒。放它们过去是**不会自己报错的**：`limit=0` 会开出 0 个 worker，
+   *   `Promise.all([])` 立刻返回，于是这本书变成"一页都没有"——一本空书，而日志里
+   *   一个字都不会提。非整数（2.5）同理：`Array.from({length: 2.5})` 取整成 2，
+   *   读数与说的不一样。
+   */
+  if (!Number.isInteger(limit) || limit < 1) {
+    throw new EngineError(
+      'invalid-request',
+      `并发的页数上限是 ${String(limit)}，必须是 ≥1 的整数（0 会让这一本书一页都不画，而它不报错）`,
+    )
+  }
+
+  const resultOf: (Illustration | undefined)[] = Array.from({ length: nodes.length })
+  const failureOf: ({ pageNo: number; message: string } | undefined)[] = Array.from({
+    length: nodes.length,
+  })
+
+  /**
+   * 下一个要取的页号。
+   *
+   * `next += 1` 与读它之间没有 `await`，所以"谁拿走哪一页"是确定的：worker 之间按取号
+   * 的先后各拿各的，不会有两页拿到同一个下标。这不是"碰巧安全"——JS 单线程 +
+   * 同步取号，是这条写法成立的全部理由，所以它旁边必须留着这句话。
+   */
+  let next = 0
+  const worker = async (): Promise<void> => {
+    for (;;) {
+      const index = next
+      next += 1
+      if (index >= nodes.length) return
+      const node = nodes[index]!
+      try {
+        resultOf[index] = await illustrateNode(node, opts)
+      } catch (err) {
+        const failure = asEngineError(err)
+        // 一页失败不终止整条流（§5 失败语义），但记下来，书要标"这一页缺"
+        failureOf[index] = { pageNo: node.pageNo, message: failure.message }
+        opts.emit({
+          kind: 'error',
+          stage: 'illustrating',
+          pageNo: node.pageNo,
+          code: failure.code,
+          message: failure.message,
+          fatal: false,
+        })
+      }
+    }
+  }
+
+  // 页数比上限少时就别多开——空转的 worker 不做事，但"开了几个"是读得出来的
+  await Promise.all(Array.from({ length: Math.min(limit, nodes.length) }, () => worker()))
+
+  // 回收按页序，不按完成序（见上面第 2 条）
   const illustrations: Illustration[] = []
   const errors: { pageNo: number; message: string }[] = []
-  for (const node of nodes) {
-    try {
-      illustrations.push(await illustrateNode(node, opts))
-    } catch (err) {
-      const failure = asEngineError(err)
-      // 一页失败不终止整条流（§5 失败语义），但记下来，书要标"这一页缺"
-      errors.push({ pageNo: node.pageNo, message: failure.message })
-      opts.emit({
-        kind: 'error',
-        stage: 'illustrating',
-        pageNo: node.pageNo,
-        code: failure.code,
-        message: failure.message,
-        fatal: false,
-      })
-    }
+  for (let index = 0; index < nodes.length; index += 1) {
+    const illustration = resultOf[index]
+    if (illustration) illustrations.push(illustration)
+    const failure = failureOf[index]
+    if (failure) errors.push(failure)
   }
   return { illustrations, errors }
 }

@@ -54,7 +54,14 @@ export async function POST(req: NextRequest): Promise<Response> {
   if (!parsed.ok) return new Response(parsed.message, { status: parsed.status })
 
   const modelId = (serverEnv()['TTS_MODEL'] ?? '').trim()
-  const voice = voiceProviderOf(serverEnv())
+  // ★ 缺 TTS_BASE_URL 时 `voiceProviderOf` 会抛（不是返回 null）；接住当"没配齐"，
+  //   否则这一屏会收到 500 HTML 而不是下面那句人话。
+  let voice: ReturnType<typeof voiceProviderOf> = null
+  try {
+    voice = voiceProviderOf(serverEnv())
+  } catch {
+    voice = null
+  }
   if (!voice) {
     return new Response('语音没配齐（要 TTS_API_KEY 与 TTS_MODEL）', { status: 400 })
   }

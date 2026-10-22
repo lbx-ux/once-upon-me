@@ -217,8 +217,27 @@ export function describeEvent(event: EngineEvent): string {
   switch (event.kind) {
     case 'stage':
       return `${STAGE_LABELS[event.stage]}${event.phase === 'begin' ? '…' : '完成'}`
-    case 'plan-ready':
-      return `故事编好了：《${event.title}》，${event.nodeCount} 页${event.choicePages.length ? `，${event.choicePages.length} 个选择点` : ''}`
+    case 'plan-ready': {
+      /*
+       * ★ 共读版不能说"32 页"（2026-10-22）：表里 32 个节点是**要画的图**
+       *   （两支各画一条，走不到的那一支也要画），孩子读到的是一条路 20 页。
+       *   一条路 = 选择点那一页 + 一支自己的页（`branchPages.a`）。
+       *   老日志没有 `branchPages`（2026-10-18 之前），那时退回节点数——那是旧口径，
+       *   不假装能算出新口径。
+       */
+      const readPages =
+        event.choicePages.length === 1 && event.branchPages
+          ? (event.choicePages[0] ?? 0) + event.branchPages.a.length
+          : null
+      const count =
+        readPages === null
+          ? `${event.nodeCount} 页`
+          : `两条路各 ${readPages} 页，共 ${event.nodeCount} 张图`
+      return (
+        `故事编好了：《${event.title}》，${count}` +
+        `${event.choicePages.length ? `，${event.choicePages.length} 个选择点` : ''}`
+      )
+    }
     case 'illustration':
       return `${page}画好了`
     case 'consistency':

@@ -1,0 +1,348 @@
+/* privacy-sheet.css —— 「我们怎么处理你和孩子的数据」那一屏的纸（工单 D-28）
+ *
+ * 与 `PrivacySheet.tsx` 同目录同名，在 `app/globals.css` 里 `@import`（与其余各套一致）。
+ * 类名前缀 `pv` 全站唯一（`.hero__` / `.book__` / `.notice__` 那几套之外的新一屏）。
+ *
+ * 这一屏的版面与 `notice__paper`（404 / 错误页）不是一回事，别合：
+ *   那一张是"整屏只有一句话 + 两颗按钮"，居中；这一张是一份**有五节的说明**，
+ *   左对齐、有表格、有一行长到折行的路径。居中排版的文档读起来会散架。
+ *   借过来的是它的纸：同一个 `--page-paper`、同一支发丝边、同一颗圆角，
+ *   因为这一屏也是这个产品的一页，不是浏览器的一张白纸。
+ *
+ * ★ 2026-10-21 第二轮：正文那张表从三列（什么 / 在哪儿 / 里面是什么）变成两列
+ *   （`.pv__table--kept`：什么 / 一句话说明）——真实的路径与命令折进最下面那一栏
+ *   （`.pv__more`，见文件末尾那一组的注释）。三列那张**没有删**，它还在折叠层里，
+ *   类名照旧是 `.pv__table`。
+ *
+ * 颜色一律走令牌（`var(--x)`），一个十六进制都不写——`scripts/check-color-tokens.mts`
+ *   扫的正是组件样式表里「面与墨」位置上的字面量。
+ * 正文与次要文字的配对是照 `notice__paper` 上量过的那两对抄的：
+ *   `--ink` / `--page-paper` 与 `--ink-muted` / `--page-paper`（≈5.0:1，过正文级 AA）。
+ *
+ * 窄屏上那张"表格"会变成一条一条的块（`grid-template-columns` 从三列落成一列）——
+ *   三列里有两列是长句子，手机上并排排不下，压着排会变成每行两个字。
+ */
+
+.pv {
+  display: flex;
+  justify-content: center;
+  box-sizing: border-box;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: clamp(20px, 5vh, 56px) clamp(16px, 4vw, 40px) clamp(40px, 8vh, 88px);
+  background: var(--bg);
+}
+
+.pv__paper {
+  box-sizing: border-box;
+  width: min(880px, 100%);
+  padding: clamp(24px, 4vw, 48px) clamp(20px, 4vw, 56px) clamp(28px, 4vw, 48px);
+  border: 1px solid var(--hairline);
+  border-radius: var(--card-radius);
+  background: var(--page-paper);
+  box-shadow: var(--card-shadow);
+}
+
+.pv__kicker {
+  margin: 0 0 10px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+}
+
+.pv__title {
+  margin: 0 0 16px;
+  color: var(--ink);
+  font-size: clamp(22px, 3vw, 30px);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.pv__lead {
+  margin: 0;
+  max-width: 40em;
+  color: var(--ink-muted);
+  font-size: 15px;
+  line-height: 2;
+}
+
+/* 每一节之间留一条发丝线：这份文档有六节，不画线的话"到下一节了"只能靠字号认 */
+.pv__sec {
+  margin-top: clamp(28px, 4vw, 44px);
+  padding-top: clamp(20px, 3vw, 30px);
+  border-top: 1px solid var(--hairline);
+}
+
+.pv__h2 {
+  margin: 0 0 14px;
+  color: var(--ink);
+  font-size: clamp(17px, 2.1vw, 20px);
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.pv__p {
+  margin: 0 0 12px;
+  max-width: 40em;
+  color: var(--ink-soft);
+  font-size: 14.5px;
+  line-height: 2;
+}
+
+.pv__note {
+  margin: 14px 0 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  /* 只读块底：与创作流那一屏的"只读块"同一档（`--accent-a1`），
+     不是另挑一个 α——α 的档位是一把共用的尺子，理由写在 `globals.css` 那一组令牌上 */
+  background: var(--accent-a1);
+  color: var(--ink-soft);
+  font-size: 13.5px;
+  line-height: 1.95;
+}
+
+/* 那两件"不好看但必须说"的事（自托管谁读得到、没有自动过期）用同一档底色点一下，
+   但与 `.pv__note` 分开：那一档是"补充一句"，这一档是"这句话你别跳过去" */
+.pv__p--blunt {
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--surface-soft);
+  color: var(--ink-soft);
+}
+
+.pv__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pv__item + .pv__item {
+  margin-top: 18px;
+}
+
+.pv__item-what {
+  margin: 0 0 4px;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.pv__item-how {
+  margin: 0 0 4px;
+  max-width: 40em;
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.95;
+}
+
+.pv__bullets {
+  margin: 0 0 12px;
+  padding-left: 1.2em;
+  max-width: 40em;
+  color: var(--ink-soft);
+  font-size: 14.5px;
+  line-height: 2;
+}
+
+.pv__bullets li + li {
+  margin-top: 8px;
+}
+
+/* 那张表：三列（什么 / 在哪儿 / 里面是什么）。
+   在窄屏上落成一列（见文件头），所以行与行之间必须有分隔，不能只靠列对齐 */
+.pv__table {
+  display: grid;
+  gap: 2px;
+}
+
+.pv__row {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.9fr) minmax(180px, 1.2fr) minmax(200px, 2fr);
+  gap: 4px 16px;
+  padding: 12px 0;
+  border-top: 1px solid var(--hairline);
+}
+
+.pv__row:first-child {
+  border-top: 0;
+}
+
+/* 删除那一张只有三列里的两列有长句子，列宽比例与上面那张不同 */
+.pv__table--del .pv__row {
+  grid-template-columns: minmax(110px, 0.8fr) minmax(160px, 1fr) minmax(200px, 2fr);
+}
+
+/* 家长读的那张只有两列（什么 / 一句话说明）：第一版那张带真实路径的三列表
+   折到了最下面那一层（见 .pv__more）。★ 两列的比例不是 1:1：
+   左边一列是四到六个字的词，右边是一整句话，等宽会把右边压成每行三四个字 */
+.pv__table--kept .pv__row {
+  grid-template-columns: minmax(96px, 0.62fr) minmax(220px, 3fr);
+}
+
+.pv__cell {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 13.5px;
+  line-height: 1.9;
+}
+
+.pv__cell--what {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.pv__code {
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--surface-soft);
+  color: var(--ink-soft);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  /* 路径与命令都要能整段选中复制——这一屏叫人来"自己验"，复制不了就白写了 */
+  user-select: all;
+  /* 长路径（`u/<你的账号>/cards/<卡号>/`）在窄屏上要能断，撑破了会横向滚整张纸 */
+  overflow-wrap: anywhere;
+}
+
+.pv__link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.pv__link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.pv__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: clamp(28px, 4vw, 44px);
+  padding-top: clamp(20px, 3vw, 30px);
+  border-top: 1px solid var(--hairline);
+}
+
+/* ── 折起来的那一层（给技术评审）────────────────────────────────────────
+ * 2026-10-21 第二轮加的：第一版把真实路径、命令、对照针全摊在正文里，
+ * 而这一屏的读者是家长（用户的意见："不用写这么复杂"）。
+ * 内容没删，只是折起来——`<details>`，不用一行客户端脚本。
+ *
+ * ★ 不写 `list-style: none`：那个三角是这一屏唯一一处"点得开"的提示，
+ *   抹掉之后它长得就像一句普通的小标题，没人会去点（这一栏就等于不存在）。
+ *   改的是它的颜色与位置，不是它的有无。 */
+.pv__more {
+  margin-top: clamp(28px, 4vw, 44px);
+  padding-top: clamp(20px, 3vw, 30px);
+  border-top: 1px solid var(--hairline);
+}
+
+.pv__more-sum {
+  cursor: pointer;
+  color: var(--ink-muted);
+  font-size: 13.5px;
+  line-height: 1.9;
+}
+
+.pv__more-sum:hover {
+  color: var(--ink);
+}
+
+/* 这一屏不在 `.shell` 下，全站那条通用焦点圈够不到它——与两颗按钮同一个数 */
+.pv__more-sum:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+/* 展开之后 `summary` 与正文之间要断开：`summary` 自己带一个行盒，
+   紧贴着的话第一段读起来像是标题的一部分 */
+.pv__more[open] .pv__more-sum {
+  margin-bottom: 14px;
+}
+
+.pv__more-body {
+  padding-left: clamp(0px, 2vw, 18px);
+  border-left: 2px solid var(--hairline);
+}
+
+/* 折起来那一层里的小标题（"三条可以跑的检查" / "第二节那张表…"）：
+   它比 `.pv__h2` 低一档——它是在一节之内分段，不是新开一节 */
+.pv__h3 {
+  margin: 22px 0 10px;
+  color: var(--ink);
+  font-size: 14.5px;
+  font-weight: 600;
+  line-height: 1.8;
+}
+
+.pv__more-body .pv__h3:first-of-type {
+  margin-top: 4px;
+}
+
+/* 与 404 那一屏、首页那两颗 CTA 同一支笔（`.notice__btn` 也是这么抄的）。
+   刻意复写而不是直接挂 `.notice__btn`：那是另一屏的文件，一份隐私页不该依赖它还在不在。 */
+.pv__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 26px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--surface);
+  font: inherit;
+  font-size: 14.5px;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    transform 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.18s ease;
+  box-shadow: 0 8px 22px rgba(23, 23, 29, 0.16);
+}
+
+.pv__btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(23, 23, 29, 0.22);
+}
+
+.pv__btn:active {
+  transform: translateY(0);
+}
+
+/* 这一屏不在 `.shell` 下，全站那条通用焦点圈够不到它，自己写一遍（两处都是同一个数） */
+.pv__btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.pv__btn--ghost {
+  background: rgba(var(--surface-rgb), 0.86);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px rgba(var(--ink-rgb), 0.1);
+}
+
+/* 窄屏：三列落成一列（`.pv__table--kept` 那张两列的也一起落）。
+   ★ 落之后每一格之间要有一点间距，`gap: 4px 16px` 那一行在单列下只剩行间距，
+   而 4px 读起来是贴在一起的 */
+@media (max-width: 720px) {
+  .pv__row,
+  .pv__table--kept .pv__row,
+  .pv__table--del .pv__row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+}
+
+/* 静止模式：要停的是"动"，不是"内容"——hover 的抬起停掉，
+   纸、表格、按钮的形状与颜色一个都不改。 */
+@media (prefers-reduced-motion: reduce) {
+  .pv__btn {
+    transition: none;
+  }
+  .pv__btn:hover {
+    transform: none;
+  }
+}

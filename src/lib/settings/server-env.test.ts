@@ -16,9 +16,13 @@ const TOUCHED = [
   'LLM_API_KEY',
   'LLM_MODEL',
   'IMAGE_MODEL',
+  'IMAGE_PROMPT_EXTEND',
   'VISION_MODEL',
+  'VISION_COMPARE_MAX_TOKENS',
+  'VISION_SAFETY_MAX_TOKENS',
   'TTS_MODEL',
   'TTS_VOICE',
+  'TTS_VOICE_PREFIX',
 ] as const
 
 let snapshot: Record<string, string | undefined> = {}
@@ -87,5 +91,24 @@ describe('serverEnv', () => {
   it('语音的音色是一等字段（`TTS_VOICE` 也在表里）', () => {
     process.env.TTS_VOICE = 'longjielidou_v3.6'
     expect(serverEnv()['TTS_VOICE']).toBe('longjielidou_v3.6')
+  })
+
+  /**
+   * 换模型之后新增的旋钮必须跟着走。
+   *
+   * 这一条防的正是 2026-10-22 发现的那个缺口：`registry.ts` 认这几个键、
+   * `.env.local` 里也写了，而中间这张白名单没列——于是配了不生效，两边都不报错。
+   * 判据按"引擎真的会读的名字"逐个钉，不按前缀猜。
+   */
+  it('换模型后新增的旋钮一个都不能漏（图像改写 / 视觉两格预算 / 音色前缀）', () => {
+    process.env.IMAGE_PROMPT_EXTEND = 'on'
+    process.env.VISION_COMPARE_MAX_TOKENS = '8192'
+    process.env.VISION_SAFETY_MAX_TOKENS = '2048'
+    process.env.TTS_VOICE_PREFIX = 'xiaozhujue'
+    const env = serverEnv()
+    expect(env['IMAGE_PROMPT_EXTEND']).toBe('on')
+    expect(env['VISION_COMPARE_MAX_TOKENS']).toBe('8192')
+    expect(env['VISION_SAFETY_MAX_TOKENS']).toBe('2048')
+    expect(env['TTS_VOICE_PREFIX']).toBe('xiaozhujue')
   })
 })

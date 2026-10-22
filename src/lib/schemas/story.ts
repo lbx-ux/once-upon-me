@@ -54,11 +54,46 @@ export type ChoiceVia = (typeof CHOICE_VIA)[number]
  *   前者是装饰，后者是孩子在按钮上看见与听见的东西。
  * 九个格子只在选择点那一页写，其余页一个都不写（写了就是形态错误，`tree.ts` 会报）。
  */
-export const nodeDraftCodec: Codec<Record<string, unknown>> = object<{ [k: string]: unknown }>({
+/**
+ * 一页的四个内容字段。单独拎出来是因为共读版的两步规划要单独校验它
+ * （`pageDraftCodec`）：展开那一步只交这几格，`from` / `via` / 九格一个都不写。
+ */
+const PAGE_SHAPE: Record<string, Codec<unknown>> = {
   scene: string({ min: 4, max: 200 }),
   body: stringList({ min: 1, max: 4, itemMax: 120 }),
   imagePrompt: string({ min: 8, max: 400 }),
   mood: enumOf(MOODS),
+}
+
+/** 选择点那一侧的两颗图标：装饰，缺了给兜底值（与 `optionOf` 那一对默认值同源） */
+const CHOICE_ICON_DEFAULTS: Record<string, Codec<unknown>> = {
+  iconA: withDefault(string({ max: 24 }), 'generic'),
+  emojiA: withDefault(string({ max: 4 }), '✨'),
+  iconB: withDefault(string({ max: 24 }), 'generic'),
+  emojiB: withDefault(string({ max: 4 }), '✨'),
+}
+
+/**
+ * 选择点九格里**必须有值**的那五个（提问 + 两侧的 label / spoken）。
+ *
+ * 它与 `nodeDraftCodec` 里那九个同名字段是两套松紧：那张表是"模型可能写一半"，
+ * 缺了由 `tree.ts` 说人话；这一份是**展开那一步单独的 `choice` 对象**——
+ * 它只有在选择点才交，交了就得不缺（缺了不是"这一页不是选择点"，是这一页写坏了）。
+ */
+const CHOICE_REQUIRED_SHAPE: Record<string, Codec<unknown>> = {
+  ask: string({ min: 4, max: 60 }),
+  labelA: string({ min: 2, max: 12 }),
+  spokenA: string({ min: 2, max: 40 }),
+  iconA: CHOICE_ICON_DEFAULTS['iconA'] as Codec<unknown>,
+  emojiA: CHOICE_ICON_DEFAULTS['emojiA'] as Codec<unknown>,
+  labelB: string({ min: 2, max: 12 }),
+  spokenB: string({ min: 2, max: 40 }),
+  iconB: CHOICE_ICON_DEFAULTS['iconB'] as Codec<unknown>,
+  emojiB: CHOICE_ICON_DEFAULTS['emojiB'] as Codec<unknown>,
+}
+
+export const nodeDraftCodec: Codec<Record<string, unknown>> = object<{ [k: string]: unknown }>({
+  ...PAGE_SHAPE,
   /**
    * 父节点是表里的第几页（1 起）。
    *
@@ -90,6 +125,169 @@ export const planDraftCodec: Codec<Record<string, unknown>> = object<{ [k: strin
 /** 给模型的 json_schema 档用（registry 里 LLM_JSON_MODE=schema 时才真的发出去） */
 export function planJsonSchema(): Record<string, unknown> {
   return planDraftCodec.describe()
+}
+
+/* ── 共读版的两步规划（2026-10-22） ─────────────────────────────────────
+ *
+ * 一次调用写一张 29–39 个节点的表时，模型数不准页数。实测（`deepseek-flash`，
+ * 请求 20 页）交给我们的草稿在 13–37 个节点之间乱跳，重试只是重抽；`LLM_MAX_TOKENS`
+ * 从 16000 抬到 32000 也没有改善——限制它的不是输出预算，是"自己数自己写了多少"。
+ *
+ * 所以共读版拆成两步，**页数从模型的判断题变成我们的算术题**：
+ *   ① 提纲（`outlineCodecFor`）：每一页一句话，页数就是数组长度。数不对时当场看得见，
+ *      而且重抽一份只有几百 token（比整张表便宜一个数量级）；
+ *   ② 逐段展开（`expansionCodecFor`）：一次只把 K 行写成 K 页，数量由 schema 的
+ *      `minItems`/`maxItems` 钉死，交多交少根本进不来。
+ * 树形（`from` / `via`）由引擎按提纲拼（`engine/plan-shared.ts`），模型一个字都不写。
+ * 于是"两条路各 20 页"是**构造出来的**，不是它写对的。
+ */
+
+/** 提纲里的一行：一句话说清这一页画什么、发生什么 */
+const OUTLINE_LINE = string({ min: 4, max: 60 })
+
+/**
+ * 选择点放在整条路的第几页（2026-10-22，实测逼出来的）。
+ *
+ * 第一版让模型自己定："主干写几行，选择点就在第几页"。实测（`deepseek-flash`，请求 20 页）
+ * 它交回 main 7 + A 9 + B 10 = 每条路 16 页，**少四页**——它读得懂算术，但"写满 20 行"
+ * 这件事它做不到。既然页数不能交给它数，那"选择点在第几页"也不能交给它答：
+ * 这两个数是同一个算术题的两头。
+ *
+ * 所以位置由这一行定：**全书约 40% 处**（20 页 → 第 8 页，8 页 → 第 3 页，4 页 → 第 2 页）。
+ * 40% 是产品取舍：留出足够的铺垫让岔路有意义，又不至于把一半篇幅花在分岔之前。
+ * 好处不只是"数得对"——三条数组的长度从此是**我们给它的三个数**，
+ * schema 里写成闭区间（`minItems = maxItems`），交多交少根本进不来。
+ *
+ * 上下界：至少第 2 页（第 1 页就分岔等于没有铺垫），最多倒数第 2 页（每条路至少还要 1 页）。
+ */
+export function choicePageOf(pages: number): number {
+  const at = Math.round(pages * 0.4)
+  return Math.min(Math.max(at, 2), Math.max(2, pages - 1))
+}
+
+/**
+ * 提纲的线格式：`main` 一直写到**选择点那一页**（含），`branchA` / `branchB` 是选择点之后
+ * 两条路各自往下直到结尾。
+ *
+ * 三个数组的长度都是**闭区间**（`minItems = maxItems`）：`main` 正好 `choicePageOf(pages)` 行、
+ * 每支正好 `pages − 那个数` 行。这不是"建议"——`parseWith` 按同一份 codec 验收，
+ * 交多交少都进不来，而失败消息里带的就是那个数（"数量不足（7 < 8）"）。
+ *
+ * ★ 为什么位置不交给模型：见 `choicePageOf` 那段。模型写了几行主干，选择点就在第几页
+ *   ——这条不变式仍然成立，只是"几行"现在是我们告诉它的。
+ */
+export function outlineCodecFor(pages: number): Codec<Record<string, unknown>> {
+  const main = choicePageOf(pages)
+  const tail = Math.max(1, pages - main)
+  return object<Record<string, unknown>>({
+    title: string({ min: 2, max: 20 }),
+    main: array(OUTLINE_LINE, { min: main, max: main }),
+    branchA: array(OUTLINE_LINE, { min: tail, max: tail }),
+    branchB: array(OUTLINE_LINE, { min: tail, max: tail }),
+  })
+}
+
+export function outlineJsonSchema(pages: number): Record<string, unknown> {
+  return outlineCodecFor(pages).describe()
+}
+
+/** 校验之后的那份提纲（页数还没验——那是引擎的事） */
+export type StoryOutline = {
+  title: string
+  /** 主干，含选择点那一页。长度 = 选择点在第几页 */
+  main: string[]
+  branchA: string[]
+  branchB: string[]
+}
+
+export function asStoryOutline(value: Record<string, unknown>): StoryOutline {
+  const lines = (key: string): string[] =>
+    (Array.isArray(value[key]) ? (value[key] as unknown[]) : []).map((one) =>
+      String(one ?? '').trim(),
+    )
+  return {
+    title: String(value['title'] ?? ''),
+    main: lines('main'),
+    branchA: lines('branchA'),
+    branchB: lines('branchB'),
+  }
+}
+
+/** 展开那一步交回来的一页：只有四个内容字段 */
+export type PageDraft = {
+  scene: string
+  body: string[]
+  imagePrompt: string
+  mood: string
+}
+
+const pageDraftCodec: Codec<PageDraft> = object<PageDraft>(PAGE_SHAPE)
+
+/**
+ * 展开的线格式：`{"pages":[…K 个…]}`，K 由调用方给。
+ *
+ * 数量写成 `minItems`/`maxItems` 的**同一个数**：交 4 个或 6 个都进不来，
+ * 而失败消息里带的就是那个数（"数量不足（4 < 5）"），模型下一版照着补。
+ *
+ * 选择点那九格单独一个 `choice` 对象，不混进 `pages` 的某一项里：
+ * 数组的每一格用同一个 codec，要让"只有最后一页多九个字段"这件事在形状上成立，
+ * 只有两条路——给每一页都开九个可选字段（那就要在语义层再查一遍"别人写没写"），
+ * 或者拎出来。拎出来之后，"写没写在选择点那一页"由引擎装配（`plan-shared.ts`），
+ * 不需要谁去数。
+ */
+export function expansionCodecFor(
+  count: number,
+  withChoice: boolean,
+): Codec<Record<string, unknown>> {
+  return object<Record<string, unknown>>({
+    pages: array(pageDraftCodec, { min: count, max: count }),
+    ...(withChoice ? { choice: object<ChoiceDraft>(CHOICE_REQUIRED_SHAPE) } : {}),
+  })
+}
+
+export function expansionJsonSchema(count: number, withChoice: boolean): Record<string, unknown> {
+  return expansionCodecFor(count, withChoice).describe()
+}
+
+export type SectionExpansion = {
+  pages: PageDraft[]
+  /** 只有主干那一段有（选择点在主干的最后一页） */
+  choice?: ChoiceDraft
+}
+
+export function asSectionExpansion(
+  value: Record<string, unknown>,
+  withChoice: boolean,
+): SectionExpansion {
+  const raw = Array.isArray(value['pages']) ? (value['pages'] as unknown[]) : []
+  const pages = raw.map((one) => {
+    const record = (one ?? {}) as Record<string, unknown>
+    return {
+      scene: String(record['scene'] ?? ''),
+      body: (record['body'] as string[] | undefined) ?? [],
+      imagePrompt: String(record['imagePrompt'] ?? ''),
+      mood: String(record['mood'] ?? 'calm'),
+    }
+  })
+  if (!withChoice) return { pages }
+  const choice = (value['choice'] ?? {}) as Record<string, unknown>
+  return { pages, choice: asChoiceDraft(choice) }
+}
+
+function asChoiceDraft(record: Record<string, unknown>): ChoiceDraft {
+  const text = (key: keyof ChoiceDraft): string | undefined =>
+    record[key] === undefined ? undefined : String(record[key])
+  return {
+    ask: text('ask'),
+    labelA: text('labelA'),
+    spokenA: text('spokenA'),
+    iconA: text('iconA'),
+    emojiA: text('emojiA'),
+    labelB: text('labelB'),
+    spokenB: text('spokenB'),
+    iconB: text('iconB'),
+    emojiB: text('emojiB'),
+  }
 }
 
 /**

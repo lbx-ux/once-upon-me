@@ -21,7 +21,8 @@ import { EngineError } from '../errors.ts'
 import { createOpenAiText } from './openai-text.ts'
 import { createOpenAiVision } from './openai-vision.ts'
 import { createQwenSpeech } from './qwen-speech.ts'
-import { createTokenrhythmImage } from './tokenrhythm-image.ts'
+import { createQwenImage } from './qwen-image.ts'
+import { thinkingOffOf, visionThinkingOffOf } from './thinking.ts'
 import { createFsStore, createMemoryStore } from './stores.ts'
 import { createReplayImage, createReplayText, type ReplayManifest } from './replay.ts'
 import type {
@@ -48,7 +49,14 @@ export type RegistryInput = {
   assetRoot?: string
 }
 
-const DEFAULT_BASE = 'https://tokenrhythm.studio/v1'
+/**
+ * 文本 / 视觉在没有显式 `*_BASE_URL` 时的缺省地址。
+ *
+ * ★ 2026-10-22 从聚合站（`tokenrhythm.studio/v1`）改成 DeepSeek：全站的模型已经换到
+ *   这一家，旧缺省会让"忘了配地址"的表现变成向一个不再使用的网关发请求——401/404
+ *   看起来像 key 坏了，而真相是一个过期默认值。图像与语音本来就不回落（见各自注释）。
+ */
+const DEFAULT_BASE = 'https://api.deepseek.com/v1'
 
 /**
  * 文本适配器的选项，从 env 派生。
@@ -80,7 +88,11 @@ export function textOptionsOf(env: Env): {
     //   LLM_MAX_TOKENS 提到 16000（实测 5373–7417 tokens 才写完一张故事表）。
     //   例外：glm-5.3-flash 不允许关思考（HTTP 400 REASONING_REQUIRED），
     //   选到它只能 on + 16000，见 docs/tech-selection.md §9.1.1。
-    extra: thinking === 'on' ? undefined : { enable_thinking: false },
+    //
+    // ★ "怎么关"这个词随家而异，所以它由 `thinkingOffOf(modelId)` 一处决定
+    //   （2026-10-21 补：DeepSeek 的默认是**开**，字段名也不同——写错的话两家都不报错，
+    //   症状是思考一直开着）。这里只判"要不要关"。
+    extra: thinking === 'on' ? undefined : thinkingOffOf(env['LLM_MODEL'] ?? ''),
   }
 }
 
@@ -139,22 +151,51 @@ export function textProviderOf(env: Env): TextGenerator {
   )
 }
 
+/**
+ * 图像那一路（2026-10-21 从 tokenrhythm 的 wan2.7-image 换成阿里云百炼的 qwen-image-3.0）。
+ *
+ * 三条与别处不同的地方，都是换家换出来的，不是偏好：
+ *
+ * 1. `IMAGE_BASE_URL` **没有可回落的默认值**（`required: true`），而且必须写成以 `/api/v1`
+ *    结尾（`pathPrefix`）。别家能回落到 `DEFAULT_BASE` 是因为那两个接口共用聚合站的域名；
+ *    这一家（阿里云百炼）的地址与语音那家是**同一个**（`https://dashscope.aliyuncs.com/api/v1`），
+ *    而路径挂在 `/services/aigc/...` 而不是聚合站的 `/images/...`。
+ *    回落到 DEFAULT_BASE 的表现是"配置看着齐了，然后一路 404"——与 `TTS_BASE_URL` 同一条判据。
+ * 2. `IMAGE_SUPPORTS_REFERENCE` 那个开关不在了（工单 02 删的）。它是 W1 那条错误结论的
+ *    化石："七个字段名都被挡回 ⇒ 这家吃不了参考图"，而实际只是没试另一条路由。
+ *    能力现在由适配器自己表达：有没有 `edit` 方法。一个可能忘记同步的环境变量
+ *    比一个方法签名更容易骗人。
+ * 3. `IMAGE_PROMPT_EXTEND` 缺省 **off**（与厂商默认相反）。理由写在适配器
+ *    `QwenImageOptions.promptExtend` 那一段：我们的 prompt 里带着角色卡的锚点段，
+ *    让厂商的改写模型动它，等于把"判据与生成同源"交给一个没量过的黑盒。
+ */
 export function imageProviderOf(env: Env): ImageGenerator {
-  return createTokenrhythmImage(
+  return createQwenImage(
     {
-      baseUrl: requireUrl(env, 'IMAGE_BASE_URL'),
+      baseUrl: requireUrl(env, 'IMAGE_BASE_URL', { required: true, pathPrefix: '/api/v1' }),
       apiKey: requireKey(env, 'IMAGE_API_KEY'),
-      timeoutMs: numberOf(env, 'IMAGE_TIMEOUT_MS') ?? 180_000,
+      timeoutMs: numberOf(env, 'IMAGE_TIMEOUT_MS'),
     },
     requireModel(env, 'IMAGE_MODEL'),
     {
-      // 这里不再有 `IMAGE_SUPPORTS_REFERENCE` 那个开关了（工单 02 §2.2 要求删掉它）。
-      //   它是 W1 那条错误结论的化石："七个字段名都被挡回" ⇒ 记成"这家吃不了参考图"，
-      //   而实际只是 `/images/generations` 那条路由没有入口——`/images/edits` 是通的（实测）。
-      //   能力现在由适配器自己表达：有没有 `edit` 方法。一个可能忘记同步的环境变量
-      //   比一个方法签名更容易骗人。
-      unitCostCny: numberOf(env, 'IMAGE_UNIT_COST_CNY') ?? 0.2,
+      // ★ 没有缺省值：上一家那个 0.20 元是**那家**实测的一口价，对这一家不是任何东西。
+      //   没配 `IMAGE_UNIT_COST_CNY` 就不记账（`costCny` 留空），也不编一个数
+      ...(numberOf(env, 'IMAGE_UNIT_COST_CNY') === undefined
+        ? {}
+        : { unitCostCny: numberOf(env, 'IMAGE_UNIT_COST_CNY') }),
+      promptExtend: promptExtendOf(env),
     },
+  )
+}
+
+/** `IMAGE_PROMPT_EXTEND` 只接受 on / off，缺省 off。配错值要响，不悄悄当 off（同 `jsonModeOf`） */
+function promptExtendOf(env: Env): boolean {
+  const raw = (env['IMAGE_PROMPT_EXTEND'] ?? 'off').trim()
+  if (raw === 'on') return true
+  if (raw === 'off') return false
+  throw new EngineError(
+    'provider-not-configured',
+    `IMAGE_PROMPT_EXTEND 只接受 on / off，当前是「${raw}」`,
   )
 }
 
@@ -211,6 +252,15 @@ export function visionProviderOf(
        */
       safetyMaxTokens:
         numberOf(env, 'VISION_SAFETY_MAX_TOKENS') ?? numberOf(env, 'VISION_MAX_TOKENS'),
+      /**
+       * 关思考的字段（2026-10-21 补，换到 DeepSeek 那天）。
+       *
+       * ★ 视觉这一路**一律关思考**：它三条路要回来的都是一段结构化 JSON（像不像、有没有
+       *   违禁、这孩子长什么样），不是需要推理链的开放问题；而思考链是先花掉 `max_tokens`
+       *   的那一半（`DEFAULT_COMPARE_MAX_TOKENS` 那几段记的都是这个病）。
+       *   规则本身在 `visionThinkingOffOf` 里：**只有 DeepSeek 要显式写**——它的默认是开。
+       */
+      extra: visionThinkingOffOf(visionModel),
     },
   )
 }
@@ -332,7 +382,17 @@ export function describeProviders(env: Env): Record<string, string> {
       one('文本', 'LLM_API_KEY', 'LLM_MODEL', 'LLM_BASE_URL') +
       `（思考 ${(env['LLM_THINKING'] ?? 'off').trim() === 'on' ? '开' : '关'}，` +
       `预算 ${env['LLM_MAX_TOKENS']?.trim() || '4096（缺省）'}）`,
-    image: one('图像', 'IMAGE_API_KEY', 'IMAGE_MODEL', 'IMAGE_BASE_URL'),
+    // 图像这一行把"提示词改写"也报出来：它与厂商默认相反（我们关着），
+    //   而"实际生效的配置"里少了这一项，就会有人按文档以为它是开的
+    image: (() => {
+      if (!env['IMAGE_API_KEY']?.trim()) return '图像: 未配置'
+      const base = env['IMAGE_BASE_URL']?.trim()
+      if (!base) return '图像: 缺 IMAGE_BASE_URL（这一项没有可回落的默认值）'
+      return (
+        `图像: ${env['IMAGE_MODEL']?.trim() || '缺模型名'} @ ${base.replace(/^https?:\/\//, '')}` +
+        `（提示词改写 ${promptExtendOf(env) ? '开' : '关'}）`
+      )
+    })(),
     // 视觉比对缺 key 时回落到 LLM 的 key，所以这里报"用哪个 key"而不是"VISION_API_KEY 空不空"
     vision: env['VISION_MODEL']?.trim()
       ? `视觉比对: ${env['VISION_MODEL'].trim()} @ ${(env['VISION_BASE_URL'] || env['LLM_BASE_URL'] || DEFAULT_BASE).replace(/^https?:\/\//, '')}（key 取 ${env['VISION_API_KEY']?.trim() ? 'VISION_API_KEY' : 'LLM_API_KEY'}）`

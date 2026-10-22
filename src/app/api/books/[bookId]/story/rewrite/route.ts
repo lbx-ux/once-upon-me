@@ -26,6 +26,7 @@
 
 import type { NextRequest } from 'next/server'
 import { createCardStore, createProviders, planBook, type EngineEvent } from '@/lib/engine/index.ts'
+import type { TextDelta } from '@/lib/engine/providers/types.ts'
 import { MAX_TEXT } from '@/lib/book-api.ts'
 import { encodeBookFrameToText, type BookStreamFrame } from '@/lib/book-stream.ts'
 import { createFsEventLog } from '@/lib/event-log.ts'
@@ -136,7 +137,23 @@ export async function POST(
 
   const log = await createFsEventLog(userSliceRoot(root, guard.session.userId))
   // 见文件头第 2 条：上一版故事的过程日志从这一刻起不属于这一本了
-  await log.truncate(bookId)
+  //
+  // ★ 2026-10-20（`books/route-leases.test.ts` 钉着）：这一行**在租约窗口里**，必须包 catch。
+  //   它写盘，会抛（资产根只读、磁盘满、目录权限）。裸着写的话，异常从 `POST` 直穿出去，
+  //   下面那个流 `finally { finishRun(runKey) }` 永远不执行——这一本记在这一进程里
+  //   永远是"在跑"，此后每一次点它都收 409，直到进程重启；而用户看到的是一个未捕获的
+  //   500，不是一句人话。紧邻的 `createProviders` 失败就老老实实还了租约，
+  //   所以这是同一套纪律上漏掉的那一格，不是"设计上没想"。
+  //   码用 `asset-write-failed` 而**不是** `userFailureOf(err)`：后者会把一条非
+  //   `EngineError` 的异常规约成 `provider-call-failed`，而那句文案在
+  //   `provider-messages.ts` 里是讲厂商那边成败的——磁盘写不进去说成"调模型失败"就是假话。
+  //   这个码在本仓库已有先例：`story/route.ts` 的 `writeStory` 失败走的就是它。
+  try {
+    await log.truncate(bookId)
+  } catch (err) {
+    finishRun(runKey)
+    return jsonError(500, 'asset-write-failed', err instanceof Error ? err.message : String(err))
+  }
 
   const encoder = new TextEncoder()
   let clientGone = false
@@ -160,6 +177,18 @@ export async function POST(
         })
       }
 
+      /**
+       * ★ 令牌级增量（2026-10-21，工单 D-04）。重写这一条路上它比"开一本"更有用：
+       *   家长刚写了一句"结局改成她带着全班一起飞"，他要看的就是那句话有没有被听进去——
+       *   而重写一次要等 101 秒（实测那一次 3 遍重试）。
+       *
+       * 与 `/api/books` 那一条逐字同一条纪律：**不落盘**（`book-stream.ts` 文件头第 1 条：
+       *   重放一段打字机动画没有意义，而它会把日志变成几十万行），只 `send`。
+       */
+      const onDelta = (delta: TextDelta): void => {
+        send({ kind: 'delta', text: delta.text, streamed: delta.streamed })
+      }
+
       try {
         // 重写一版也要检索，而且这一条路上它更有用：
         //   家长说"结局改成她带着全班一起飞"时，检索那一栏里的反例正是"他读过的落点"，
@@ -167,7 +196,13 @@ export async function POST(
         //   （与"开一本"那条一样：建这个函数不读盘，失败由引擎发事件）
         const retriever = createPlanRetriever({ store, owner: ownerOf(guard.session.userId) })
 
-        const plan = await planBook(request, { providers, onEvent, reviseNote: note, retriever })
+        const plan = await planBook(request, {
+          providers,
+          onEvent,
+          reviseNote: note,
+          retriever,
+          onDelta,
+        })
         await chain
         const next: StoryDraft = {
           ...draft,

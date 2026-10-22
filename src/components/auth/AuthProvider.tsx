@@ -25,6 +25,7 @@
  */
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 
 import { fetchMe, logout as logoutRequest, updateNickname } from '@/lib/auth/client.ts'
 import { NO_PERMISSIONS, type AuthUser, type Permissions } from '@/lib/auth/state.ts'
@@ -73,6 +74,7 @@ export function useAuth(): AuthContextValue {
 }
 
 export default function AuthProvider({ children }: { children: React.ReactNode }) {
+  const router = useRouter()
   const [user, setUser] = useState<AuthUser | null>(null)
   const [configured, setConfigured] = useState<Permissions>(NO_PERMISSIONS)
   const [speechModel, setSpeechModel] = useState('')
@@ -110,8 +112,16 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
       // 权限与"站里配齐了什么"要再问一次：登录响应里只有权限，
       //   而 `configured` 是 BFF 现算的（它读的是服务端环境变量）
       void refresh()
+      /**
+       * ★ 服务端组件的缓存不认 cookie（2026-10-22 审查）。
+       *   `/shelf`、`/home`、`/account`、`/admin` 都在服务端读登录态，而客户端路由缓存
+       *   按 **URL** 存——甲看过 `/shelf`、登出、乙在同一台浏览器登录，30 秒内点回去
+       *   会拿到甲的 RSC（`next.config.ts` 的 `staleTimes.dynamic: 30`）。
+       *   `router.refresh()` 清掉这份缓存，下一次导航去问服务端。
+       */
+      router.refresh()
     },
-    [refresh],
+    [refresh, router],
   )
 
   const signOut = useCallback(async () => {
@@ -120,7 +130,9 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     setConfigured(NO_PERMISSIONS)
     setSpeechModel('')
     setMeError(null)
-  }, [])
+    // ★ 与 signIn 同一条：不清缓存的话，登出后 30 秒内的回访还会看见上一个账号的书架
+    router.refresh()
+  }, [router])
 
   const rename = useCallback(async (nickname: string) => {
     const result = await updateNickname(nickname)

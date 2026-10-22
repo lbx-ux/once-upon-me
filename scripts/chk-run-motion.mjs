@@ -33,10 +33,23 @@
  * 4. **静止模式下每一条都停在终态**：中途把媒体特性切成 `prefers-reduced-motion: reduce`，
  *    再读一次——那几条动画应当**一条都不在**，而 `.dk__art` 仍然是完全显形的。
  *
- * ★ 走 ① 时它**会花钱**（真出一本书）。别在 CI 里跑，也别拿它当冒烟测试。
+ * ★ 走 ① 时它**会花钱**（真出一本书）。别在 CI 里跑，也别拿它常跑当冒烟测试。
+ *
+ * ★ 走 ②（`--book=`）时这一屏是**要登录的**：`/create` 没有票会 307 回 `/home`，
+ *   而"盯着"那一段等的是画桌 —— 没票的话它等满 `--limit` 也不会有格，症状与
+ *   "这一轮卡住了"一模一样。所以它跟 `chk-mobile.mjs` 用同一个办法：
+ *   **本机现签**一张 `scope:'session'` 的 HS256 票（读 `.env.local` 里的
+ *   `APP_JWT_SECRET`，与 `src/lib/auth/session.ts` 的 `verifyToken` 逐字对齐），
+ *   导航之前用 `Network.setCookie` 塞进 `xzj_session`。★ 密钥只在本进程里用，
+ *   一个字都不打印；`--user=` 给空串就是不带票。
+ *   ★ 而且塞完要**验一次真的进了这一屏**（下面 `waitFor` 那一格）：
+ *   "等满限时也没等到一格"与"根本没到这一屏"在读数上长得一样，
+ *   只有后者该判不过 —— 所以它当场退，不静静地等满七分钟。
  */
 
 import { spawn } from 'node:child_process'
+import { createHmac } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve } from 'node:path'
 
@@ -171,12 +184,82 @@ async function waitFor(expression, ms, step = 500) {
 
 await send('Page.enable')
 
+/**
+ * 本机现签一张票塞进 `xzj_session`（手法与 `chk-mobile.mjs` 那一条逐字一致）。
+ *
+ * ★ 只给 `--book=` 那条路用：`/home` 那一条走的是**真登录**（它要一个真浏览器里的
+ *   Key 才能跑完 ①），给它塞一张本机票只会把那一趟的语义搅浑。
+ * ★ 密钥只在本进程里用，一个字都不打印（`never log the secret`）。
+ * 失败不抛：判据 6 那一路本来就允许"没票"（照实报没进去），
+ *   让调用方自己看下面那一格的结果。
+ */
+async function signIn(userId) {
+  if (userId === '') return '没带票（--user= 给了空串）'
+  let raw
+  try {
+    raw = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '..', '.env.local'), 'utf8')
+  } catch {
+    return '.env.local 读不到，没带票'
+  }
+  const key = raw
+    .split(/\r?\n/)
+    .find((line) => line.startsWith('APP_JWT_SECRET='))
+    ?.slice('APP_JWT_SECRET='.length)
+    .trim()
+    .replace(/^["']|["']$/g, '')
+  if (!key) return '.env.local 里没有 APP_JWT_SECRET，没带票'
+  const b64 = (value) => Buffer.from(value).toString('base64url')
+  const header = b64(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))
+  const payload = b64(
+    JSON.stringify({
+      sub: String(userId),
+      acc: `u${userId}`,
+      role: 'user',
+      scope: 'session',
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    }),
+  )
+  const sig = createHmac('sha256', key).update(`${header}.${payload}`).digest('base64url')
+  const cookie = await send('Network.setCookie', {
+    name: 'xzj_session',
+    value: `${header}.${payload}.${sig}`,
+    url: base,
+    path: '/',
+    httpOnly: true,
+    sameSite: 'Lax',
+  })
+  return cookie.result?.success ? `已带票（u/${userId}）` : '★ 票没塞进去'
+}
+
 /** ② 盯着别人发起的那一轮：直接进重放那一屏，不走 /home 与弹窗 */
 const WATCH = flag('book', '')
+/** 票的户主（`sub`）。空串 = 不带票，见 `signIn` */
+const USER = flag('user', '1')
 
 if (WATCH) {
+  console.log(`登录：${await signIn(USER)}`)
   await send('Page.navigate', { url: `${base}/create?book=${encodeURIComponent(WATCH)}` })
   console.log(`盯着 ${WATCH} 这一轮（重放那条路，画面是打开那一刻的快照）。\n`)
+
+  /**
+   * ★ 先证明**真的进了这一屏**，再开始盯。
+   *
+   * 这一格是踩出来的：没票时 `/create` 会 307 回 `/home`，而"盯着"那一段等的是
+   * 画桌 —— 于是它会安安静静地等满 `--limit`（默认 7 分钟），最后一格都没等到，
+   * 读数与"这一轮卡住了"一模一样。★ 而"这个组件没渲染出来"恰恰是这一族探针最该
+   * 抓住的坏法（`e2e-acceptance-needs-a-discriminating-signal` 那条：判据要落在
+   * 只有真做才会不同的量上），所以这里当场退，不把它读成一次超时。
+   */
+  if (
+    !(await waitFor(
+      `location.pathname === '/create' && !!document.querySelector('.gr__rail')`,
+      20000,
+    ))
+  ) {
+    console.log('✗ 没进运行视图，现在在：', await evaluate(`location.href`))
+    console.log('  多半是没带票（`--user=`）或者这一本不在这个账号名下。')
+    process.exit(1)
+  }
 } else {
   await send('Page.navigate', { url: `${base}/home` })
 }

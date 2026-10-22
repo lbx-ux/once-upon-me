@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { notFound } from 'next/navigation'
 
 import BooklistReader from '@/components/booklist/BooklistReader.tsx'
 import RotateHint from '@/components/reader/RotateHint.tsx'
@@ -36,23 +37,15 @@ export default async function BooklistBookPage({ params }: { params: Promise<{ k
   const { key } = await params
   const book = bookOf(key)
 
-  if (!book) {
-    // 空态要说人话，并给出下一步（与 `/reader` 那个空态同一个写法）
-    return (
-      <main className="reader-page">
-        <div className="reader-page__empty">
-          <h1>找不到这本样书</h1>
-          <p>
-            灵感书单是按主题编的，一共 12 本，没有 <code>{key}</code> 这一本。
-          </p>
-          <p className="reader-page__actions">
-            <Link href="/booklist">回灵感书单</Link>
-            <Link href="/">回首页</Link>
-          </p>
-        </div>
-      </main>
-    )
-  }
+  /**
+   * ★ 2026-10-21（工单 D-43）：这里原来是"200 + 一句人话"，与 `/reader/[bookId]`
+   *   同一个写法——那一处已经被判为软 404（评分报告 §2.16 −5），这一处是同一类。
+   *
+   *   与阅读器不同的是这里**没有第三种成因**要照顾：灵感书单那 12 本是随仓库编好的
+   *   静态样书，不存在"还没画完"这一档，所以 `key` 对不上就是"没有这一页"。
+   *   （阅读器那边得留着 200，是因为「自己的、还没画完的那一本」确实在盘上。）
+   */
+  if (!book) notFound()
 
   const assets = await readBooklistAssets(book.key)
 

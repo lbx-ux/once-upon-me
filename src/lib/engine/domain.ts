@@ -316,7 +316,7 @@ export type StyleLock = {
   key: string
   /** 进 prompt 的风格段 */
   promptFragment: string
-  /** 出图比例。实测供应商支持的尺寸见 providers/tokenrhythm-image.ts 的白名单 */
+  /** 出图比例。实测供应商支持的尺寸见 providers/qwen-image.ts 的白名单 */
   ratio: '3:2' | '3:4' | '1:1'
 }
 
@@ -568,7 +568,8 @@ export type Illustration = {
   attempt: number
   asset: AssetRef
   provenance: Provenance
-  /** 供应商回传的实付金额（元）。实测图像一口价 0.20 元/张，与尺寸无关 */
+  /** 供应商回传的实付金额（元）。★ 2026-10-21 换家之后：图像这一家**不回传费用**，
+   *  所以这一位常常是缺省的——而缺省不等于「我们猜一个单价填上去」（见 IMAGE_UNIT_COST_CNY） */
   costCny?: number
   consistency?: ConsistencyResult
   /**
@@ -723,6 +724,12 @@ export type BookStats = {
   /** 首次通过 / 重画后通过 —— §10.1 公式里的 r_redraw 直接从这里算 */
   firstPassCount: number
   redrawCount: number
+  /**
+   * 累计花费（元）。★ 它是 `costCny ?? 0` 逐次加出来的，所以**没有回传费用的那几次会记成 0**。
+   * 2026-10-21 起图像那一家不回传费用（见 `IMAGE_UNIT_COST_CNY` 与
+   * `docs/known-tradeoffs.md` 里那一节），于是 `0` 在这里的含义是**"没量到"**，
+   * 不是"免费"——要报账请看厂商账单，别拿这一个数当账单。
+   */
   totalCostCny: number
   nodesPlanned: number
   nodesGenerated: number

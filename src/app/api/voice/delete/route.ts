@@ -38,7 +38,13 @@ export async function POST(req: NextRequest): Promise<Response> {
   const voiceId = String(source['voiceId'] ?? '').trim()
   if (voiceId === '') return new Response('没有指定要删哪条音色', { status: 400 })
 
-  const voice = voiceProviderOf(serverEnv())
+  // ★ 配置不全会抛（`requireUrl`），接住当"没配齐"——与下一句同一个口径
+  let voice: ReturnType<typeof voiceProviderOf> = null
+  try {
+    voice = voiceProviderOf(serverEnv())
+  } catch {
+    voice = null
+  }
   if (!voice) {
     return new Response('语音没配齐（要 TTS_API_KEY 与 TTS_MODEL），删不掉', { status: 400 })
   }

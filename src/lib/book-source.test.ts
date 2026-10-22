@@ -416,6 +416,21 @@ describe('resolveBook · 只读请求者那一片', () => {
     })
   })
 
+  it('★★ 书号带 `..` → null，不许借演示分支读别人的清单（2026-10-22 审查）', async () => {
+    await withTempRoot(async (root) => {
+      // 受害者的书在 7 号那一片里。攻击者传一个能爬过去的书号：
+      // store 那一侧会抛，`readBookFrom` 把异常吞成 null，于是控制流掉进
+      // `join(process.cwd(), 'public', 'demo/books', bookId)` 那一条——
+      // 没有入口那道形状判据时，它会读到这一份。
+      await writeManifest(root, join('u', '7', 'books', 'victim'))
+      const store = scopedStore(await createFsStore(root), '7')
+
+      expect(await resolveBook('../u/7/books/victim', store)).toBeNull()
+      expect(await resolveBook('..\\u\\7\\books\\victim', store)).toBeNull()
+      expect(await resolveBook('../../.out/web/u/7/books/victim', null)).toBeNull()
+    })
+  })
+
   it('清单读不回来（半截 JSON）当它不存在，不抛', async () => {
     await withTempRoot(async (root) => {
       await writeManifest(root, join('u', '7', 'books', 'b1'), '{"bookId": "b1"')

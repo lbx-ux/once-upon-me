@@ -390,12 +390,18 @@ describe('⑤ 闸门接上了：planStory 的 flag 与 block', () => {
     expect(events.some((event) => event.kind === 'plan-ready')).toBe(true)
   })
 
-  it('flag 三次都改不动：抛的仍是 schema-validation-failed，但原因里是条款', async () => {
+  /**
+   * ★ 2026-10-22：**最后一次**失败是内容审核时，抛的是 `review-blocked`，不是
+   *   `schema-validation-failed`。后者在界面上的用户版是"这个模型没能写出合格的故事表，
+   *   换一个模型"——原因说反了：故事被红线拦了五次，该改的是这个故事，不是模型。
+   */
+  it('★ flag 改不动：抛 review-blocked（不是"格式不对"），原因里带条款', async () => {
     const dirty = draftWith(0, { body: ['他站在门口，血从窗帘后面渗出来。'] })
     const { error } = await runPlan([dirty, dirty, dirty])
-    expect((error as { code: string }).code).toBe('schema-validation-failed')
-    expect((error as Error).message).toContain('内容审核没过')
+    expect((error as { code: string }).code).toBe('review-blocked')
     expect((error as Error).message).toContain('R-01')
+    // 屏幕上那句话是短的：只带最后一次命中的那一页，不是五次全贴上去
+    expect((error as Error).message).not.toContain('Schema 校验未过')
   })
 
   it('★ block：当场拒发、不重试，而且只调了一次模型', async () => {
@@ -485,7 +491,8 @@ describe('⑥ planBook 那一层（角色卡校验之后、事件工厂之前的
     // ★ 拦下它的是审核（`R-01`），不是别的什么半路绊住——
     //   所以断言落在条款 id上，而不是「反正报错了」
     expect(failure?.message).toContain('R-01')
-    expect(failure?.message).toContain('内容审核没过')
+    // 2026-10-22：上界那一轮抛的是 `review-blocked`，话是"这一版故事里有不该给孩子看的内容"
+    expect(failure?.message).toContain('不该给孩子看的内容')
   })
 })
 
@@ -577,7 +584,7 @@ describe('⑧ 家长那句自由输入：同一份词表，但处置只有一种
     const { events, emit } = emitter()
     await expect(
       planStory({ ...INPUT, theme: '小狗死掉的故事' }, { text, form: 'solo', emit }),
-    ).rejects.toMatchObject({ code: 'review-blocked' })
+    ).rejects.toMatchObject({ code: 'input-blocked' })
 
     // 这条是这一档全部价值的一半：拦在模型之前，那段内容根本没接触过模型。
     //   只断言"抛了错"的话，把闸门挪到第一次调用之后也照样绿
@@ -597,7 +604,7 @@ describe('⑧ 家长那句自由输入：同一份词表，但处置只有一种
     const { events, emit } = emitter()
     await expect(
       planStory({ ...INPUT, wish: '让他知道自杀有多可怕' }, { text, form: 'solo', emit }),
-    ).rejects.toMatchObject({ code: 'review-blocked' })
+    ).rejects.toMatchObject({ code: 'input-blocked' })
     expect(calls()).toBe(0)
     expect(events.find((event) => event.kind === 'review')).toMatchObject({ verdict: 'block' })
   })
@@ -612,7 +619,7 @@ describe('⑧ 家长那句自由输入：同一份词表，但处置只有一种
       const { emit } = emitter()
       await expect(
         planStory({ ...INPUT, ...patch }, { text, form: 'solo', emit }),
-      ).rejects.toMatchObject({ code: 'review-blocked' })
+      ).rejects.toMatchObject({ code: 'input-blocked' })
       expect({ where, calls: calls() }).toEqual({ where, calls: 0 })
     }
   })

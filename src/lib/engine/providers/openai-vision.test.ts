@@ -790,3 +790,64 @@ describe('★ 三份视觉提示词：图里的文字当内容读', () => {
     expect(system).toContain('属于哪一类')
   })
 })
+
+/**
+ * 关思考那个字段要落到**三条路**上（2026-10-21，换 DeepSeek 那天补的）
+ *
+ * 为什么值得单独一组：`opts.extra` 这个口子本来就在（"供应商特有的额外字段，关思考之类的
+ * 参数名各家不一致，在这里补"），但**比对那条路忘了铺它**——另外两条都写了
+ * `...(opts.extra ?? {})`，只有 compare 没有。这种漏不会有任何东西变红：
+ * 请求照发、回包照解，只是那个字段从来没生效过；而症状恰好是那几段注释里记着的老病
+ * （思考链把预算吃光 → 判定全成"没法核对" → 一次重画都不触发）。
+ *
+ * 判据落在"发出去的请求体里有没有那一位"，而不是"函数有没有报错"。
+ */
+describe('opts.extra 要落到全部三条路上', () => {
+  const ok = (content: string) => ({
+    choices: [{ finish_reason: 'stop', message: { role: 'assistant', content } }],
+  })
+
+  it('★ 比对 / 画面审核 / 读照片三条路都带上（比对那条原来漏了）', async () => {
+    const sent: Record<string, unknown>[] = []
+    const provider = createOpenAiVision(
+      {
+        baseUrl: 'https://example.invalid/v1',
+        apiKey: 'k',
+        fetchImpl: async (_url: string | URL | Request, init?: RequestInit) => {
+          sent.push(JSON.parse(String(init?.body)) as Record<string, unknown>)
+          const body =
+            sent.length === 1
+              ? ok('{"score":0.9}')
+              : sent.length === 2
+                ? ok('{"findings":[]}')
+                : ok('{"anchors":{},"lookTags":[]}')
+          return new Response(JSON.stringify(body), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          })
+        },
+      },
+      'deepseek-flash',
+      { extra: { thinking: { type: 'disabled' } } },
+    )
+
+    await provider.compare({
+      checklist: ['头发：黑色直短发'],
+      referenceDataUrl: 'data:image/png;base64,AA',
+      pageDataUrl: 'data:image/png;base64,BB',
+    })
+    await provider.reviewPicture({
+      clauses: [{ id: 'R-01', text: '恐怖、血腥' }],
+      pageDataUrl: 'data:image/png;base64,AA',
+    })
+    await provider.analyzePortrait({ photoDataUrl: 'data:image/png;base64,AA' })
+
+    expect(sent).toHaveLength(3)
+    for (const body of sent) {
+      expect(body['thinking']).toEqual({ type: 'disabled' })
+      // 顺带钉住：那一份 payload 还是照原样送的（没把别的字段挤掉）
+      expect(body['model']).toBe('deepseek-flash')
+      expect(body['temperature']).toBe(0)
+    }
+  })
+})

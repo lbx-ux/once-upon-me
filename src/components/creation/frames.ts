@@ -437,6 +437,23 @@ export function drawnCount(desk: DeskState): number {
 }
 
 /**
+ * 现在是不是"正在编故事"那一段（还没有书名 = `plan-ready` 还没到）。
+ *
+ * 判据 `stage === 'planning' && title === null` 两个都要：
+ *   重跑一本已经画过的书时，日志里老的那条 `plan-ready` 还在，那一刻
+ *   `stage` 已经是 `planning` 而 `title` 不是 null —— 那不是"在编故事"，
+ *   是"在重编这一本的故事，而屏幕上是上一版的画"，两者要说的话不一样。
+ *
+ * ★ 2026-10-21 加 `failed`：失败那一屏上「这一本没做出来」与
+ *   「正在重写（第 2 / 3 次）」同时出现过——后者是一句假话，那一次重写已经结束了。
+ *   判据放在这儿而不是组件里，与这一族其它函数同一条理由：能被 node 钉住的东西
+ *   不该住在 JSX 旁边（`plan-lines.ts` 文件头那段话）。
+ */
+export function planningOf(desk: DeskState, failed: boolean): boolean {
+  return !failed && desk.stage === 'planning' && desk.title === null
+}
+
+/**
  * 这一张桌子上有没有岔路（工单 05 §三）：有没有哪一格属于某一条支。
  *
  * 画桌据此决定说不说那句解释——一个角标不解释，等于让人自己猜那条色带是什么意思。

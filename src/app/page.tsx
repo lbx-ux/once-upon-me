@@ -162,11 +162,11 @@ export default async function HomePage() {
 
           前两屏让人**相信这个产品存在**（12 个不同的孩子 + 一本翻开的书），
           这一屏回答的是下一个问题：凭什么做得出来。五条，全部来自 README
-          已定稿的设计与周计划 —— 卡上只讲机制与做法，排期留在 README 的进度表里。
+          已定稿的设计 —— 卡上只讲机制与做法，不写排期。
 
           视觉上是首屏那个环的压平版（同样的近大远小、后排糊、陶土色只点两处）。
           GSAP 只用在这一屏，前两屏的滚动驱动仍是 useScrollDriver，理由见
-          components/highlights/HighlightsReel.tsx 文件头与 README §五。
+          components/highlights/HighlightsReel.tsx 文件头与 docs/known-tradeoffs.md。
           ★ 手机那一档这一屏换成**竖排五张全宽卡**（`highlights-reel.css` §11），
             于是它也是手机上首页的第二节、也就是最后一节。
           -------------------------------------------------------------------- */}

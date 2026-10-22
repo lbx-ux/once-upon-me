@@ -1,11 +1,13 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { notFound } from 'next/navigation'
 import ReaderBook from '@/components/reader/ReaderBook'
 import RotateHint from '@/components/reader/RotateHint'
 import { createUserStore } from '@/lib/asset-scope'
 import { currentUserId } from '@/lib/auth/session'
-import { resolveBook } from '@/lib/book-source'
+import { resolveBook, type ResolvedBook } from '@/lib/book-source'
 import { assetRoot } from '@/lib/books-runtime'
+import { readStory } from '@/lib/story-draft'
 import type { AssetStore } from '@/lib/engine/providers/types'
 
 /**
@@ -28,6 +30,24 @@ import type { AssetStore } from '@/lib/engine/providers/types'
  *   ★ 这里不兜底去扫别人那几片：那等于把工单 16 刚立起来的归属当场拆掉，
  *     而且判据必须只有一条（"有没有"由你自己那一片说了算）。
  *   未登录 → `null` → `resolveBook` 只走演示书那一条，与书架未登录给空架子同一条口径。
+ *
+ * ★★ 2026-10-21（工单 D-43，评分报告 §2.16 −5）：这一页原来**对三种"读不到"
+ *   都回 200**，靠正文里那几句人话去区分它们。内容是对的，状态码是错的——
+ *   搜索引擎、探针、以及任何拿状态码做判断的东西，读到的都是"这本书在"。
+ *
+ *   现在按"**是不是你自己的、还没画完的那一本**"分开处置（`readerStateOf`）：
+ *
+ * | 盘上（**这个人那一片**里）              | 处置                 | 为什么 |
+ * | --------------------------------------- | -------------------- | ------ |
+ * | `book.json` 在                          | 正常渲染，200        |        |
+ * | 只有 `story.json`（自己的草稿/正在画）  | 200 + 空态           | 它确实在，只是还没画完；而且"刷新会打断那条连接"那句是真的 |
+ * | 两样都没有（不存在 / 是别人的）         | `notFound()` → 404   | ★ 顺带**不泄露"存在但不给你看"**：别人的书与不存在的书回同一个码 |
+ *
+ *   ★ 那条"登录的不是做它的那个人"因此从**空态的文案**里撤掉了：它现在是 404，
+ *     而 404 那一屏（`app/not-found.tsx`，那张纸）有自己的两条出口。
+ *     留着一句永远不会出现的话，就是把一种处置说成另一种。
+ *   ★ 两个判据仍然只有一处：`readerStateOf` 把 `resolveBook` 与"有没有草稿"
+ *     合成一个状态，`generateMetadata` 与页面都读它（下一个人的那句提醒见下）。
  */
 export const dynamic = 'force-dynamic'
 
@@ -42,39 +62,65 @@ async function readerSlice(): Promise<AssetStore | null> {
   return createUserStore(assetRoot(), userId)
 }
 
+/**
+ * 这个书号在**这个人那一片**里是什么（2026-10-21，工单 D-43）。
+ *
+ * 三种状态，三种处置（见文件头那张表）。合成一个函数是为了让 `generateMetadata`
+ *   与页面**问同一件事**：拆成两处各判一次，早晚会出现"标签页说还没画完、
+ *   正文说找不到"这种自相矛盾——那正是上面那条注释记着的旧毛病。
+ *
+ * ★ `'draft'` 的判据是"**我这一片**里有 `story.json` 而 `resolveBook` 读不出清单"：
+ *   ①（编故事）一写完 `story.json` 就落盘，②（逐页画）期间它一直在，
+ *   所以"正在做"与"做了一半被中断"都落在这里——而这两种对读者的下一步是同一件事
+ *   （等，或者回书架看那一栏）。
+ */
+async function readerStateOf(
+  bookId: string,
+  slice: AssetStore | null,
+): Promise<{ kind: 'book'; resolved: ResolvedBook } | { kind: 'draft' } | { kind: 'missing' }> {
+  const resolved = await resolveBook(bookId, slice)
+  if (resolved) return { kind: 'book', resolved }
+  // 没登录（`slice` 为 null）就没有"我这一片"可言：那本书既不是我的、也不存在
+  const mine = slice ? await readStory(slice, bookId) : null
+  return mine ? { kind: 'draft' } : { kind: 'missing' }
+}
+
 export async function generateMetadata({
   params,
 }: {
   params: Promise<{ bookId: string }>
 }): Promise<Metadata> {
   const { bookId } = await params
-  const resolved = await resolveBook(bookId, await readerSlice())
-  return {
-    title: resolved ? `${resolved.book.tree.title} · 小主角` : '找不到这本书 · 小主角',
-  }
+  const state = await readerStateOf(bookId, await readerSlice())
+  if (state.kind === 'book') return { title: `${state.resolved.book.tree.title} · 小主角` }
+  // ★ 标签页上的这一句要与正文一致（见 `readerStateOf` 那段）
+  return { title: state.kind === 'draft' ? '还没画完 · 小主角' : '找不到这本书 · 小主角' }
 }
 
 export default async function ReaderPage({ params }: { params: Promise<{ bookId: string }> }) {
   const { bookId } = await params
-  const resolved = await resolveBook(bookId, await readerSlice())
+  const state = await readerStateOf(bookId, await readerSlice())
 
-  if (!resolved) {
+  /**
+   * ★ 不存在的、以及别人的，都走这里（工单 D-43）。
+   *   两件合成一条出口是刻意的：分开的话，"这个书号存在、只是不给你看"
+   *   就成了一件能被问出来的事（同一个码是对"归属"这条纪律的兑现，与
+   *   `resolveBook` 不兜底去扫别人那几片是同一条）。
+   */
+  if (state.kind === 'missing') notFound()
+
+  if (state.kind === 'draft') {
     // 空态要说人话，并给出下一步（工单 04 §四 那张表里的"阅读器没有这本书"那一行）
     return (
       <main className="reader-page">
         <div className="reader-page__empty">
-          <h1>找不到这本书</h1>
+          <h1>这一本还没画完</h1>
           <p>
-            没有书号 <code>{bookId}</code> 对应的成品。可能是还没生成完，
-            或者这一轮被中断了（刷新会打断那条连接）。
+            书号 <code>{bookId}</code> 的故事已经有了，但还没有画好的成品。
+            可能是还在生成，或者这一轮被中断了（刷新会打断那条连接）。
           </p>
-          {/* ★ 2026-10-17：每本书只属于做它的那个账号（工单 16），所以
-              "找不到"多了一个真实成因：**现在登录的不是做它的那个人**。
-              上一段列的都是"这本书自己的问题"，这一句说的是"看的人不对"——
-              两件事不合并，因为下一步该做的事不一样（等它画完 vs 换回自己的号）。 */}
-          <p>如果这一本是你自己做出来的，登录做它的那个账号再看一次。</p>
           <p className="reader-page__actions">
-            <Link href="/home">回「创作」做一本</Link>
+            <Link href="/shelf">去书架看这一本</Link>
             <Link href="/">回首页</Link>
           </p>
         </div>
@@ -82,6 +128,7 @@ export default async function ReaderPage({ params }: { params: Promise<{ bookId:
     )
   }
 
+  const { resolved } = state
   return (
     <main className="reader-page">
       <nav className="reader-page__back">

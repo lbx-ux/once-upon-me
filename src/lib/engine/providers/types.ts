@@ -203,6 +203,15 @@ export type ImageRequest = {
   /** 参考图（锁脸用）。data URL 形式，适配器自己决定怎么塞进请求 */
   referenceDataUrl?: string
   /**
+   * 负向提示词（"画面里不要出现什么"）。2026-10-21 加，起因是换到 qwen-image-3.0 之后
+   * 它**真的把正文写进了画面**——正向提示词里那句"不要放关键内容、别写字"对它不够。
+   *
+   * 只有支持这个字段的 provider 才会真的发出去（`qwen-image.ts`）；不支持的实现忽略它——
+   * 这是**唯一**允许"传了但可能被忽略"的字段，因为它的性质是"加强一条已有的约束"，
+   * 而不是"换一条路"（参考图那种被忽略的代价完全不同：那是以为锁了脸）。
+   */
+  negativePrompt?: string
+  /**
    * 横评标注：同一个提示词在两个候选模型上跑，回放键必须区分得开。
    * 正式跑测不填它，只有 scripts/w1-image-bakeoff.ts 会填。
    */
@@ -213,14 +222,25 @@ export type ImageResponse = {
   bytes: Uint8Array
   mime: string
   modelId: string
-  /** 实付金额（元）。实测图像一口价 0.20 元/张，与尺寸无关 */
+  /**
+   * 实付金额（元）。★ 2026-10-21 换家之后这一位**常常是缺省的**：新那家（阿里云百炼
+   * 的 qwen-image-3.0）不回传费用，而"缺省"比"编一个像样的单价"诚实——
+   * 代价是 `stats.totalCostCny` 会偏小，所以别拿它当账单（见 `IMAGE_UNIT_COST_CNY`）。
+   * 上一家那 0.20 元/张是**那家**的实测一口价，台账留在 `docs/known-tradeoffs.md`。
+   */
   costCny?: number
+  /** 供应商侧的请求号（这家回 `request_id`，见 `traceId`） */
   providerTaskId?: string
   traceId?: string
   /**
    * 这次请求里的 `referenceDataUrl` 到底有没有进请求体。
-   * 引擎在要求参考图的情况下拿到 false，就发一条 warning 事件——
+   *
+   * ★ 这一位是**读数**，不是声明：适配器读的是响应里的 `usage.input_image_count`
+   *   （2026-10-21 起；上一家没这个数，那时它是适配器自己写的 `true`）。
+   * 引擎在"要求参考图、也真走了带参考图那条路"的情况下拿到非 true，就**当场抛**——
    * 一致性是这本书的命，"以为锁了脸其实没锁"必须当场可见，不能等家长发现。
+   * （这里原来写的是"发一条 warning 事件"，而那条事件从来没有实现过：实际是抛。
+   * 2026-10-21 把注释改成与代码一致。）
    */
   referenceApplied?: boolean
   /** 供应商侧的临时地址与失效时刻，只为排障与"下载是否赶上了"留证 */

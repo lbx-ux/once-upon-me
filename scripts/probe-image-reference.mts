@@ -31,7 +31,7 @@
  *   既没法解释代码，也没法预测下一次调用会怎样。
  *   新的那条路的实测见 `scripts/e2e-image-reference.mts`。
  *
- * 结论要回填到 `tokenrhythm-image.ts` 的注释、`.env.example` 与
+ * 结论要回填到 `qwen-image.ts` 的注释、`.env.example` 与
  * `docs/tech-selection.md` §7 的对应行；本文件留着是为了让那条结论可复现。
  */
 

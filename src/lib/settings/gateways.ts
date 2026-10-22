@@ -14,11 +14,9 @@
  *    `{接口地址}/models` 里挑（`model-list.ts`）。
  *    `gateways.test.ts` 把这一条钉住了。
  *
- * 2. ★ 这些地址是照各家文档抄的，本仓没有逐个实测过。 唯一在这一仓里
- *    真跑过的是聚合站那一家（`tokenrhythm.studio`，见 `.env.example` 与
- *    `docs/tech-selection.md`），而它的地址是站长自己配的那一份，
- *    不在这张表里（当前地址认不出时下拉就显示「自定义」，这是对的）。
- *    所以界面上一律跟着一句：选完点「测试连通」就知道通不通——
+ * 2. ★ 这些地址是照各家文档抄的，本仓没有逐个实测过。 当前真正跑通的是
+ *    DeepSeek（文字/视觉）与阿里云百炼（图像/语音）这几条；其余是地址书签，
+ *    不代表哪个能力已经适配。所以界面上一律跟着一句：选完点「测试连通」就知道通不通——
  *    这张表是地址书签，不是背书。
  *
  * 3. 按能力分（`serves`）。同一家在不同能力上的地址不是同一个：
@@ -52,11 +50,17 @@ export const CUSTOM_GATEWAY_ID = 'custom'
 /**
  * 地址簿。★ 按「哪几家最常见」排，不是按偏好排——这张表不带推荐的意思。
  *
+ * ★ 2026-10-22：**图像那一格只列百炼的原生接口**。图像适配器现在是
+ *   `qwen-image.ts`，它走的是 `{base}/services/aigc/multimodal-generation/generation`
+ *   这条 DashScope **原生**路由，不是 OpenAI 兼容的 `/images/generations`。
+ *   原来 OpenAI / 智谱 / 硅基流动 / 百炼兼容模式那几条都写着 `image`，
+ *   选它们只会换来 404 或 `requireUrl` 的 pathPrefix 拒绝——地址簿不该承诺
+ *   适配器做不到的事（`gateways.test.ts` 现在把这一条钉住）。
+ *
  * 火山方舟（豆包）那一家的图像地址故意不列：它的图像接口要的是
  *   "推理接入点 id"而不是模型名，而我们这一格填的是模型名——
  *   列上去等于教人填一个必然 404 的值。文字与视觉那两项它是 OpenAI 兼容的，照列。
- * OpenAI 的 `/v1` 与 DeepSeek 的 `/v1` 都带 `/v1`：聚合站那一家也是这个形状
- *   （`.env.example` 里 `LLM_BASE_URL=https://tokenrhythm.studio/v1`），
+ * OpenAI 的 `/v1` 与 DeepSeek 的 `/v1` 都带 `/v1`：
  *   而 `requireUrl` 只补协议、不补路径段——地址写全是我们这侧的约定。
  */
 export const GATEWAYS: readonly Gateway[] = [
@@ -64,30 +68,40 @@ export const GATEWAYS: readonly Gateway[] = [
     id: 'openai',
     name: 'OpenAI',
     baseUrl: 'https://api.openai.com/v1',
-    serves: ['text', 'image', 'vision'],
+    // 图像那一格不列：见文件头（当前适配器只认百炼原生路由）
+    serves: ['text', 'vision'],
   },
   {
     id: 'deepseek',
     name: 'DeepSeek（OpenAI 兼容）',
     baseUrl: 'https://api.deepseek.com/v1',
-    // 这一家只有文字：它没有图像接口，也没有读图的模型。
-    //   参考截图里那一格填的是 DeepSeek + `dall-e-3`——那种组合打过去只会 404，
-    //   而这里按 `serves` 过滤之后，图像那张卡的下拉里根本不会出现它
-    serves: ['text'],
+    // ★ 2026-10-21 改：这一家**没有出图接口**（不负责"画插画"那一格），
+    //   但 `deepseek-flash` **能读图**（官方《图像理解》：content 数组里的 image_url 块，
+    //   格式 JPEG/PNG/GIF/WebP，单张 ≤32 MiB，每张最多折 1024 token）。
+    //   所以它进得了视觉那一格，进不了图像那一格——而这两件事以前被写成了同一句
+    //   （"没有图像接口，也没有读图的模型"），后半个分句是错的，会让人白白排除一家。
+    serves: ['text', 'vision'],
   },
   {
     id: 'zhipu',
     name: '智谱 GLM（BigModel）',
     baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
-    serves: ['text', 'image', 'vision'],
+    serves: ['text', 'vision'],
     note: '地址末尾是 /v4，不是 /v1——照它的文档抄，别顺手改成 /v1。',
   },
   {
     id: 'dashscope',
-    name: '阿里云百炼（通义）',
+    name: '阿里云百炼（通义 · 兼容模式）',
     baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-    serves: ['text', 'image', 'vision'],
-    note: '这一条是**兼容模式**的地址；语音那一项要的是另一条（下面那一条）。',
+    serves: ['text', 'vision'],
+    note: '这一条是**兼容模式**的地址，只服务文字与视觉；图像那一项要选下面那条原生接口。',
+  },
+  {
+    id: 'dashscope-image',
+    name: '阿里云百炼（图像生成 · 原生接口）',
+    baseUrl: 'https://dashscope.aliyuncs.com/api/v1',
+    serves: ['image'],
+    note: '图像适配器走的是 /services/aigc/multimodal-generation/generation 这条原生路由，地址必须写到 /api/v1。',
   },
   {
     id: 'dashscope-tts',
@@ -108,7 +122,7 @@ export const GATEWAYS: readonly Gateway[] = [
     id: 'siliconflow',
     name: '硅基流动 SiliconFlow',
     baseUrl: 'https://api.siliconflow.cn/v1',
-    serves: ['text', 'image', 'vision'],
+    serves: ['text', 'vision'],
   },
   {
     id: 'ark',

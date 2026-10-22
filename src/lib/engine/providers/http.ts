@@ -124,9 +124,21 @@ function codeOf(obj: unknown): string {
   return hit === null ? '' : String(hit)
 }
 
+/**
+ * 错误体里那句人话。
+ *
+ * ★ 2026-10-22：原来是一次 `findFirst(obj, ['message','error','detail'])`，于是
+ *   `{"error":{"message":"…"}}` 这种形状（DeepSeek 就是这么回的）在顶层先命中 `error`
+ *   **整个对象**，消息里印出来是 `[object Object]`——一次 400 的调查线索就此断在一句话上。
+ *   现在先单独找 `message`（会递归到底下那层），找不到再用 `error` / `detail`。
+ *   取到的若不是字符串（厂商偶尔塞对象），照实序列化，不印 `[object Object]`。
+ */
 function messageOf(obj: unknown): string {
-  const hit = findFirst(obj, ['message', 'error', 'detail'])
-  return hit === null ? '' : String(hit)
+  const hit = findFirst(obj, ['message']) ?? findFirst(obj, ['error', 'detail'])
+  if (hit === null) return ''
+  // `findFirst` 的静态类型是 string | number，而它其实会把对象原样带回来（`error` 那一格）
+  const raw: unknown = hit
+  return typeof raw === 'object' && raw !== null ? JSON.stringify(raw) : String(raw)
 }
 
 /**

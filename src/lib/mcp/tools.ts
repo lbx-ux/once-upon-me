@@ -265,7 +265,8 @@ const SPECS: readonly ToolSpec[] = [
     name: 'plan_book',
     description:
       '给一个孩子编一版故事（只编故事，**不画图**）。' +
-      '★ 会花一次文本模型的钱（几秒到一分钟），比出图便宜得多。' +
+      '★ 会花几次文本模型的钱（比出图便宜得多）：独读版 1 次调用（几秒），' +
+      '共读版 4–5 次（先写提纲、再分段展开，实测 20 页约 20–25 秒）。' +
       '编完就停在这里：家长在网页上能逐条改，改完才画。' +
       '同一个孩子 + 同一个主题得到同一个书号，所以重编一版是"换掉那一版故事"。',
     inputSchema: {
@@ -275,7 +276,10 @@ const SPECS: readonly ToolSpec[] = [
         theme: STR('主题，一句话（如「第一次离开家也不怕」）'),
         wish: STR('家长想讲的那句话（可选）'),
         form: STR('solo（独读版）或 shared（共读版），缺省 shared'),
-        pages: INT('页数，3–24（缺省：独读版 20，共读版 8）'),
+        pages: INT(
+          '页数，3–24（缺省：独读版 20，共读版 8）。' +
+            '★ 共读版这个数是**一条路读下来**的页数：表里要画的图会比它多（两条支各画一条）',
+        ),
       },
       required: ['child', 'theme'],
       additionalProperties: false,
@@ -350,8 +354,17 @@ function formatShelf(books: BookSummary[], child: string | undefined): string {
   if (books.length === 0) return `${scope}书架上还是空的（一本都还没编过）。`
   const lines = books.map((book) => {
     const form = FORM_LABELS[book.form] ?? book.form
+    /**
+     * ★ 共读版那半截的单位是**张图**，不是页（2026-10-22）：20 页的共读版要画 32 张
+     *   （两支各一条，走不到的那一支也要画），而同一行左边已经写着"读起来 20 页"。
+     *   写成"0/32 页有图"的话，两个数并排着打架。
+     */
     const drawn =
-      book.status === 'story' ? '还没开始画' : `${book.illustratedCount}/${book.nodeCount} 页有图`
+      book.status === 'story'
+        ? '还没开始画'
+        : book.form === 'shared'
+          ? `${book.illustratedCount}/${book.nodeCount} 张图`
+          : `${book.illustratedCount}/${book.nodeCount} 页有图`
     const narration = book.hasNarration ? '｜有朗读' : '｜没有朗读'
     return (
       `- 《${book.title}》｜${form}｜读起来 ${book.pageCount} 页｜${SHELF_STATUS_LABELS[book.status]}` +
@@ -408,7 +421,7 @@ function formatStory(draft: StoryDraft): string {
       (draft.editedAt ? '（家长动手改过）' : ''),
     `书号：${draft.bookId}`,
     `这一版是谁编的：${draft.provenance.modelId}` +
-      `（${draft.provenance.promptVersion}，第 ${draft.provenance.attempts} 次调用才过校验）`,
+      `（${draft.provenance.promptVersion}，共 ${draft.provenance.attempts} 次模型调用）`,
     '',
     draft.doc.nodes.map((node, index) => formatNode(node, index)).join('\n\n'),
   ].join('\n')
@@ -669,7 +682,7 @@ export function createToolRuntime(ctx: ToolContext): ToolRuntime {
         return {
           text:
             `故事编好了：《${plan.doc.title}》，书号 ${bookId}，${plan.doc.nodes.length} 个节点。\n` +
-            `（第 ${plan.attempts} 次调用才过校验，模型 ${plan.modelId}，` +
+            `（共 ${plan.attempts} 次模型调用，模型 ${plan.modelId}，` +
             `用了 ${(plan.elapsedMs / 1000).toFixed(1)} 秒）\n\n` +
             '家长在网页上能逐条改；改完再调 illustrate_book 才出图（那一步才花钱）。' +
             `用 read_book「${bookId}」看全文。`,

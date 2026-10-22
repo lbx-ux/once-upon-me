@@ -206,7 +206,12 @@ export function validateCard(card: CharacterCard): string[] {
     ...checkAnchors(card.anchors),
     ...(card.reference.digest === 'pending' ? ['参考图内容指纹未计算'] : []),
     ...(card.reference.digest === '' ? ['参考图内容指纹为空'] : []),
-    ...(card.cardId.trim() === '' ? ['cardId 为空'] : []),
+    // ★ cardId 也会被拼进路径（`cards/<id>/…`、`books/<id>-<digest>/…`），
+    //   形状判据与 childId 那条同源。空串、`..`、斜杠都在这条里挡掉
+    //   （2026-10-22 审查：原来只查了空串）。
+    ...(/^[A-Za-z0-9_-]{1,128}$/.test(card.cardId)
+      ? []
+      : ['cardId 形状不对（只许字母、数字、下划线、连字符，1–128 字）']),
     ...(card.provenance.modelId.trim() === '' ? ['缺模型出处（provenance.modelId）'] : []),
     ...(card.revision < 1 ? ['revision 必须从 1 起'] : []),
   ]

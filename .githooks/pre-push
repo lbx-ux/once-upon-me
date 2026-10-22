@@ -1,0 +1,19 @@
+#!/bin/sh
+#
+# pre-push —— push 之前跑一遍 `pnpm verify`（2026-10-21，工单 D-39）
+#
+# 为什么是 pre-push 而不是 pre-commit：这一套跑一分钟上下（typecheck 与 vitest 占大头），
+#   而这个人一天要提交几十次、push 几次。挂在 commit 上等于逼着他 `--no-verify`，
+#   而一个天天被绕过的闸门不是闸门（评分报告 §2.12 骂的就是这种"读数没人跑"）。
+#
+# ★ 装上它要一句话（钩子不在仓库里生效——`.git/hooks` 不被跟踪）：
+#
+#     pnpm hooks:install
+#
+#   那一句做的是 `git config core.hooksPath .githooks`：把**这个目录**当成钩子目录。
+#   好处是钩子跟着仓库走（换了机器、另一个克隆都拿得到同一份），
+#   代价是它对这个仓库的**每一条** git 命令生效——所以它是显式装、不是自动装。
+set -e
+cd "$(git rev-parse --show-toplevel)"
+echo "pre-push：跑一遍 pnpm verify（不想跑就 --no-verify）"
+pnpm verify

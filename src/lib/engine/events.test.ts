@@ -51,6 +51,27 @@ describe('describeEvent 的页号', () => {
   })
 
   /**
+   * ★ 共读版那一句不许把节点数说成页数（2026-10-22）。
+   *
+   * 20 页的共读版表里是 32 个节点（主干 8 + 两支各 12）——那是**要画多少张图**，
+   * 孩子读到的是一条路 20 页。两个数摆错位，屏幕上就是"编好了，32 页"，
+   * 而家长要的是 20 页。与当初"已写 12 / 8 页"是同一个病（`plan-lines.ts` 那一段）。
+   */
+  it('★ 共读版：说的是"两条路各 N 页"，节点数标成"张图"', () => {
+    const text = describeEvent({
+      kind: 'plan-ready',
+      stage: 'planning',
+      form: 'shared',
+      title: '云朵小船去旅行',
+      nodeCount: 32,
+      choicePages: [8],
+      // 一支 12 页 → 一条路 8 + 12 = 20 页
+      branchPages: { a: Array.from({ length: 12 }, (_, i) => 9 + i), b: [] },
+    } as unknown as EngineEvent)
+    expect(text).toBe('故事编好了：《云朵小船去旅行》，两条路各 20 页，共 32 张图，1 个选择点')
+  })
+
+  /**
    * 2026-10-18：`retry` 这条事件有两种来源，而它们说的是两件事。
    *
    * 抓它的是用户圈出来的那一行——他在画桌上读到

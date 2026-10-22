@@ -37,6 +37,20 @@ describe('textOptionsOf · 思考开关与预算', () => {
     })
   })
 
+  /**
+   * ★ 换家换出来的第二种写法（2026-10-21 换到 DeepSeek）。
+   *
+   * 这条断言守的是"关思考那个词随家而异"，而不是某一个字符串：
+   *   DeepSeek 的默认是**开**（effort 还是 high），字段名也换成 `thinking.type`——
+   *   写错两家都不报错，症状是思考一直开着。判据在 `thinking.ts` 里，这里只证明
+   *   `textOptionsOf` 真的按模型名把它接上了。
+   */
+  it('★ 模型换成 DeepSeek 时，关思考换成它的写法', () => {
+    expect(textOptionsOf({ ...BASE, LLM_MODEL: 'deepseek-flash' }).extra).toEqual({
+      thinking: { type: 'disabled' },
+    })
+  })
+
   it('★ 配错值拒绝运行，不悄悄退回某一档', async () => {
     // 平台其实还有个 `auto`（实测：UNSUPPORTED_FIELD 的原文是"只支持开启、关闭或自动"），
     // 但它的字面量没验证过，所以这里宁可拒绝也不替用户猜

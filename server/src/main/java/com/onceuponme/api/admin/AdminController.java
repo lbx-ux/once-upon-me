@@ -19,6 +19,7 @@ import com.onceuponme.api.auth.CurrentSession;
 import com.onceuponme.api.auth.JwtService;
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 
 /**
  * 管理页那两个接口。★ 两道闸，都在服务端：
@@ -78,7 +79,7 @@ public class AdminController {
    */
   @PatchMapping("/users/{userId}/permissions")
   public AdminUserRow updatePermissions(
-      @PathVariable long userId, @RequestBody PermissionPatch body, HttpServletRequest request) {
+      @PathVariable long userId, @Valid @RequestBody PermissionPatch body, HttpServletRequest request) {
     requireAdminFresh(request);
     return admin.setAllowed(userId, body.allowed());
   }

@@ -366,12 +366,18 @@ export default function ReaderBook({ bookId, title, coverUrl, story, source }: R
         event.preventDefault()
         turn(-1)
       } else if (event.key === 'Home') {
+        event.preventDefault()
+        // 与 turn() 同一条：翻页就停（2026-10-22 审查）。直接 setQTarget 的话，
+        // 自动朗读会继续念旧页，念完还按旧页号再翻一次——屏幕与声音各走各的。
+        takeOver()
         setQTarget(0)
       } else if (event.key === 'End') {
+        event.preventDefault()
+        takeOver()
         setQTarget(maxTarget)
       }
     },
-    [turn, maxTarget],
+    [turn, maxTarget, takeOver],
   )
 
   /* ── 触摸滑动 ────────────────────────────────────────────────────────

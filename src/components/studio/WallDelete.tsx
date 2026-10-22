@@ -28,6 +28,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 
 import DeleteChildDialog from '@/components/studio/DeleteChildDialog.tsx'
 
@@ -46,14 +47,42 @@ export default function WallDelete({ childId, name }: WallDeleteProps) {
     router.refresh()
   }
 
+  /**
+   * ★★ 2026-10-21：这道弹窗挂到 `document.body` 上，不再留在卡片里。
+   *
+   * 症状是量出来的（不是读代码推的）：在墙上点开「删掉他」之后
+   *   `getComputedStyle('.dlg__backdrop').position` 是 `fixed`，
+   *   **可它只有 339px 宽，而视口是 1414px** —— 弹窗画在了那张卡片里面。
+   *   原因不是它的定位写错了，是 CSS 的一条规矩：`position: fixed` 的包含块
+   *   由**最近的那个带 `transform` 的祖先**决定，而这一屏的每张卡都带着 transform
+   *   （`storybook-flip.css` 那套静置歪角 + 悬停抬起，加上刚才量到的
+   *   `.cw__reveal → matrix(1,0,0,1,0,10)`）。于是 fixed 被关在卡片的盒子里。
+   *
+   * 它落在 D-28（面向家庭的删除入口与凭据）这条路上，代价很具体：
+   *   确认那句话和删完那五行凭据全挤在 306px 宽里——而这一条恰恰是
+   *   "评委最容易看见"的那一屏（评分报告 §4 建议 3）。
+   *   ★ 这不是这次新写出来的毛病：确认框一直是这样（它只是短到看不出来）。
+   *
+   * 为什么**只在这一处**用 portal，不去改 `Dialog.tsx`：
+   *   那一份是全站二十几个弹窗共用的，而组件样式表里有 56 处**组件作用域**的 CSS 变量
+   *   （`--book-*` / `--hero-*` / `--blr-*` …）。整批搬出去，会静悄悄弄坏
+   *   "某个弹窗正好住在某个作用域里、靠那个变量活"的那一种。这一处是量出来坏了的，
+   *   就改这一处；哪天在旁的容器里也量到同样的数，用它自己的判据再改那一处。
+   *   **这一条要留着**：它记的是"为什么只有这里有 portal"。
+   */
+  const dialog = (
+    <DeleteChildDialog childId={childId} name={name} onCancel={close} onDeleted={close} />
+  )
+
   return (
     <>
       <button type="button" className="cw__del" onClick={() => setAsking(true)}>
         删掉他
       </button>
-      {asking ? (
-        <DeleteChildDialog childId={childId} name={name} onCancel={close} onDeleted={close} />
-      ) : null}
+      {/* `typeof document` 那一格是给服务端渲染用的：这一屏是服务端组件，
+          `asking` 初值为 false 所以 SSR 时不走这里，但守卫留着不吃亏
+          （portal 的目标必须是真 DOM 节点） */}
+      {asking && typeof document !== 'undefined' ? createPortal(dialog, document.body) : null}
     </>
   )
 }

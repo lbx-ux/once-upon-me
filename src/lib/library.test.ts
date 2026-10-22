@@ -416,6 +416,28 @@ describe('listBooks', () => {
     })
   })
 
+  /**
+   * ★ 重画的那几张**不算额外的页**（2026-10-21 深夜，用户实测报的）
+   *
+   * 他的书架上一本 **5 页**的书写着「画到第 15 页」。原因是这一行数的是
+   * `page-*.png` 的**文件数**，而重画是"另存一个 attempt"（`page-7-a4.png`，
+   * `illustrate.ts` 文件头第 3 条：失败的图也留着）——5 页 × 每页 3 次 = 15。
+   * `illustratedCount` 的意思是"有几页有图"，不是"盘上有几张图"。
+   */
+  it('★ 同一页的 a1/a2/a3 只算一次（5 页的书不许说成 15 页）', async () => {
+    const store = await createMemoryStore()
+    await store.putJson({ path: 'books/s2/story.json', value: draft('s2', 10) })
+    for (const name of ['page-1-a1.png', 'page-1-a2.png', 'page-1-a3.png', 'page-2-a1.png']) {
+      await store.put({
+        path: `books/s2/${name}`,
+        bytes: new Uint8Array([1]),
+        mime: 'image/png',
+      })
+    }
+    const books = await listBooks(store, noCovers)
+    expect(books[0]?.illustratedCount).toBe(2)
+  })
+
   it('★ 已经在画的那一本要照实说画到第几页（用户实测报的 bug）', async () => {
     // 场景：用户点完「就按这个画」、从运行视图点「退出」——这一本还没有 `book.json`，
     // 而盘上已经躺着两张页图。原来这一行恒写"还没开始画"（`illustratedCount: 0`），

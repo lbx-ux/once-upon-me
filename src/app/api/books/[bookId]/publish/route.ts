@@ -21,13 +21,16 @@
  * 4. ★ 不校验"这本书做完了没有"。有些页没出图的书照样能发——引擎的语义本来
  *   就是"一页失败不等于一本书失败"（`index.ts` 接口约定 3），书里标着哪几页缺。
  *   在这里加一道闸门就等于替用户决定"缺一页就不算一本书"，而他没有要求过这件事。
+ *   ★ 唯一的例外是**安全**，不是完整度：画面审核判了 `flag` 的那几页会挡住发布
+ *   （2026-10-22，见下面那段）。缺一页是"书还没做完"，画面上有不该给孩子看的东西
+ *   是"这一本不能出去"——两件事。
  */
 
 import type { NextRequest } from 'next/server'
-import { manifestPathOf, type Book } from '@/lib/engine/index.ts'
+import { isBookId, manifestPathOf, type Book } from '@/lib/engine/index.ts'
 import { createUserStore } from '@/lib/asset-scope.ts'
 import { requireCapability } from '@/lib/auth/session.ts'
-import { assetRoot } from '@/lib/books-runtime.ts'
+import { assetRoot, finishRun, runKeyOf, tryStartRun } from '@/lib/books-runtime.ts'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -44,7 +47,38 @@ export async function POST(
   if (!guard.ok) return guard.response
 
   const { bookId } = await params
-  const store = await createUserStore(assetRoot(), guard.session.userId)
+  if (!isBookId(bookId)) {
+    return Response.json({ code: 'book-not-found', message: MISSING }, { status: 404 })
+  }
+
+  /**
+   * ★ 发布与「重画一页」共用同一把租约（2026-10-22 审查）。
+   *
+   * 两条路都是"读 `book.json` → 改 → 写回"，而重画一轮要几秒到十几秒。
+   * 不互斥时：发布先写 published、重画后收尾，会把状态写回 `draft`；
+   * 反过来，发布会把重画刚写下的那一页覆盖掉。两种都不报错，只是悄悄少一件事。
+   * 发布本身很快，占着租约的这段时间对用户不可见；画着的时候来发布就拿到 409。
+   */
+  const runKey = runKeyOf(guard.session.userId, bookId)
+  if (!tryStartRun(runKey)) {
+    return Response.json(
+      {
+        code: 'book-busy',
+        message: '这一本正在画，等它画完再点「确定生成」。',
+      },
+      { status: 409 },
+    )
+  }
+
+  try {
+    return await publishLocked(bookId, guard.session.userId)
+  } finally {
+    finishRun(runKey)
+  }
+}
+
+async function publishLocked(bookId: string, userId: string): Promise<Response> {
+  const store = await createUserStore(assetRoot(), userId)
   const path = manifestPathOf(bookId)
 
   let book: Book | null
@@ -61,6 +95,34 @@ export async function POST(
 
   if (book.status === 'published') {
     return Response.json({ bookId, status: 'published' })
+  }
+
+  /**
+   * ★ 画面审核标了页的草稿不许发（2026-10-22）。
+   *
+   * 这条闸原来**只在客户端**：`RunComposer` 把「确定生成」按灰了（文案写着"先重画它们"），
+   * 而服务端这条路由什么都不查。于是两条路都能绕过去——书架那一颗「制作为绘本」直接打
+   * 同一个接口（`ShelfDashboard.makeBook`），以及任何直接 POST 的客户端。
+   * 用户 2026-10-21 原话是「既然已经出现了预警中的词汇，为什么还有生成出来」——
+   * 客户端按钮不是判据，判据在盘上那份 `book.json` 里。
+   *
+   * 判据刻意用 `pictureReview.verdict === 'flag'`，**不用** `needsHumanReview`：
+   * 后者还收"没核对成 / 没配视觉模型"，而那两种是常态（降级 B），拦住它们等于
+   * 这台机器上所有书都发不出去。
+   *
+   * 放在"已发布"那一句**之后**：幂等那条不破——一本早就发出去的书再发一次还是 200，
+   * 不让它因为这次收紧跟变成一句红字。
+   */
+  const flagged = book.illustrations.filter((one) => one.pictureReview?.verdict === 'flag')
+  if (flagged.length > 0) {
+    const pages = flagged.map((one) => one.pageNo).join('、')
+    return Response.json(
+      {
+        code: 'pages-flagged',
+        message: `第 ${pages} 页有内容审核的提醒，先重画它们再生成。`,
+      },
+      { status: 409 },
+    )
   }
 
   try {

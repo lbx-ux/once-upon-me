@@ -217,3 +217,45 @@ describe('500：厂商内部报错（2026-10-20）', () => {
     expect(userMessageFor(already).match(/abc123/g)).toHaveLength(1)
   })
 })
+
+/**
+ * ★ 两种"内容越线"不是同一件事（2026-10-22，用户在创作页踩到的那一次）。
+ *
+ *   `input-blocked`：拦的是**家长打的那句话**（主题 / 想让孩子得到的 / 改稿要求）。
+ *     没有页码可言，出路只有"换个说法"。
+ *   `review-blocked`：拦的是**模型写出来的那一页**，要说"哪一页"。
+ *
+ * 合成一个码时，界面只能说"上面那句写明了是哪一页"——而这一档根本没有页，
+ * 家长会去故事里找一个还不存在的东西。
+ */
+describe('内容红线：家长那句话与模型写的页分开说', () => {
+  const inputBlocked = (): EngineError =>
+    new EngineError(
+      'input-blocked',
+      '你写的那句话里有不适合放进孩子的书里的内容：主题：暴力（R-02）——出现了「流血」。改一下再来',
+    )
+  const pageBlocked = (): EngineError =>
+    new EngineError(
+      'review-blocked',
+      '这一版故事被内容审核拦下了：第 3 页：暴力（R-02）——出现了「血」',
+    )
+
+  it('★ 家长那句话只说一句（2026-10-22 用户拍板：不附原文、不列条款）', () => {
+    const text = userMessageFor(inputBlocked())
+    expect(text).toBe('你写的这句话里有不该给孩子看的内容，已经在编故事之前拦下了')
+    // 同一件事不摆两遍：引擎原文与条款 id 在 `review` 事件与 `error.detail` 里，日志查得到
+    expect(text).not.toContain('供我们排障的原文')
+    expect(text).not.toContain('R-02')
+    // "哪一页"属于模型写的那一档；这一档说它，家长会去找一个还不存在的页
+    expect(text).not.toContain('哪一页')
+  })
+
+  it('模型写的页：仍旧说"哪一页"', () => {
+    expect(userMessageFor(pageBlocked())).toContain('哪一页')
+  })
+
+  it('家长那句话不可重试（原样重发还是同一条红线），且按输入问题回 400', () => {
+    expect(isRetryable(inputBlocked())).toBe(false)
+    expect(userFailureOf(inputBlocked())).toMatchObject({ code: 'input-blocked', status: 400 })
+  })
+})

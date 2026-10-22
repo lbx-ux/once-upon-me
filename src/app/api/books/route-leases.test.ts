@@ -271,7 +271,10 @@ beforeEach(async () => {
   process.env['LLM_BASE_URL'] = NOWHERE
   process.env['LLM_API_KEY'] = 'route-test-key'
   process.env['LLM_MODEL'] = 'route-test-model'
-  process.env['IMAGE_BASE_URL'] = NOWHERE
+  // ★ 图像那一路要求地址以 /api/v1 结尾（registry 的 pathPrefix 判据，2026-10-21）：
+  //   百炼的原生路由挂在 /api/v1 下面。给一个够不着的地址仍然是对的写法——
+  //   "打得通吗"是这一组要测的，"地址形状对不对"不是
+  process.env['IMAGE_BASE_URL'] = `${NOWHERE}/api/v1`
   process.env['IMAGE_API_KEY'] = 'route-test-key'
   process.env['IMAGE_MODEL'] = 'route-test-model'
   process.env['VISION_BASE_URL'] = NOWHERE

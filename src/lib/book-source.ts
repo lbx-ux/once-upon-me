@@ -42,6 +42,7 @@ import { isResizableImage, READER_PAGE_WIDTH } from './thumbs.ts'
 import type { AssetStore } from './engine/providers/types.ts'
 import { iconUrlOf } from './choice-icons.ts'
 import {
+  isBookId,
   linearOrder,
   manifestPathOf,
   type Book,
@@ -230,6 +231,15 @@ export async function resolveBook(
   bookId: string,
   store: AssetStore | null,
 ): Promise<ResolvedBook | null> {
+  // ★ 书号来自 URL（`/reader/<bookId>`），而下面两处会把它拼进路径：
+  //   store 的逻辑路径、以及演示书那一条的 `join(…, 'public', DEMO_DIR, bookId)`。
+  //   store 那一侧有 `assertInsideScope`，可它在 `..` 时**抛**，而 `readBookFrom`
+  //   把异常吞成 null——于是控制流会掉进演示书那一条，绕过商店的边界。
+  //   2026-10-22 审查实测：`..%2F..%2F.out%2Fweb%2Fu%2F7%2F…` 能让匿名读者读到
+  //   另一个账号的清单。判据放在入口，两个分支一起挡住。
+  //   不合法 = "这里没有这本书"，与半截 JSON 同一个口径；不抛、不回声书号。
+  if (!isBookId(bookId)) return null
+
   const manifestPath = manifestPathOf(bookId)
   const runtime = store
     ? await readBookFrom(store, manifestPath)

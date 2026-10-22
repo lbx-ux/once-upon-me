@@ -31,7 +31,7 @@
  *    不带标签的那一档也出了 2 种版本（2.45s / 2.69s）。所以"两次字节不同"不能当作
  *    "标签生效了"的证据；要判效果得拿两组分布比（`.out/tts-mood-dist.mjs` 的噪声底量法）。
  * 6. `pronunciation`（读音纠正）本适配器还没接 —— 它要 SSML 的音素控制，没有实测过，
- *    所以非空时直接报错，与 tokenrhythm-image 对参考图的处理同一条道理：
+ *    所以非空时直接报错，与 qwen-image 对参考图的处理同一条道理：
  *    被忽略的输入会让上游以为它生效了，而症状要到"家长说名字念错了"时才浮出来。
  * 7. `sample_rate` 不发送。实测请求里写 `24000` 被忽略，回的是 48kHz；
  *    发一个不生效的参数会让下一个人以为语速/音质是靠它调的。
@@ -47,7 +47,7 @@
  *    真正稳的那条是"单发会经常失败，所以要重试"。
  *    完整台账（含"失败在厂商侧一条音色都没留下"那条反证）在 `docs/known-tradeoffs.md`。
  *
- * 与 tokenrhythm-image 一样：本文件不 import React，也不假设浏览器 API。
+ * 与 qwen-image 一样：本文件不 import React，也不假设浏览器 API。
  */
 
 import { EngineError } from '../errors.ts'
@@ -312,7 +312,10 @@ export function createQwenSpeech(
           },
         },
         signal: budget?.signal,
-        timeoutMs: budget?.timeoutMs ?? synthTimeoutMs,
+        // ★ 2026-10-22：原来这里只有 `budget?.timeoutMs ?? synthTimeoutMs`，
+        //   `deps.timeoutMs`（也就是 `.env.local` 的 `TTS_TIMEOUT_MS`）被整个忽略。
+        //   与另外三条能力对齐：调用级 > 适配器 deps > 这条路的缺省。
+        timeoutMs: budget?.timeoutMs ?? deps.timeoutMs ?? synthTimeoutMs,
       })
 
       const url = findMediaUrl(body)

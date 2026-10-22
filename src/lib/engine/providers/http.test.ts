@@ -236,6 +236,37 @@ describe('失败消息要能指着下一步走', () => {
     // 结构化字段也要留住，界面文案分流靠它
     expect((err as EngineError).httpStatus).toBe(402)
   })
+
+  /**
+   * ★ `{"error":{"message":"…"}}` 这一种形状（2026-10-22，DeepSeek 400 那天）。
+   *
+   *   原来的 `messageOf` 是一趟 `findFirst(['message','error','detail'])`：顶层没有 `message`、
+   *   有 `error`，于是它把**整个 error 对象**当消息带回来，屏幕上印成 `[object Object]`。
+   *   那一次 400 的调查线索就断在这一句上——所以这条判据落在"那句话本身在不在"。
+   */
+  it('★ 嵌套在 error 里那句人话要读得出来，不是 [object Object]', async () => {
+    const body = JSON.stringify({
+      error: {
+        // ★ 这是**示例**句子，不是那天真的那一句——那天我们只看到 `[object Object]`，
+        //   所以这条用例钉的是"里面那句在不在"，不钉某一句具体的话
+        message: '请求参数有误：messages 不能为空',
+        type: 'invalid_request_error',
+        code: 'invalid_request_error',
+      },
+    })
+    const impl = (() =>
+      Promise.resolve(new Response(body, { status: 400 }))) as unknown as typeof fetch
+    const err = await requestJson(
+      { baseUrl: 'https://example.invalid/v1', apiKey: 'k', fetchImpl: impl },
+      { method: 'POST', path: '/chat/completions' },
+    )
+      .then(() => null)
+      .catch((e: unknown) => e)
+
+    const message = (err as EngineError).message
+    expect(message).toContain('messages 不能为空')
+    expect(message).not.toContain('[object Object]')
+  })
 })
 
 /**

@@ -18,7 +18,7 @@
  * 五条判断，每条都对应一个具体的坏法：
  *
  * 1. 闸是 `requireAdmin`，与 `/api/admin/model-list` 同一条。这一按真花钱
- *    （图像一口价 0.2 元/张，见 `.env.example`），而"谁能按"不是界面上藏按钮能管的。
+ *    （图像出一张图，按厂商计费，见 `.env.example`），而"谁能按"不是界面上藏按钮能管的。
  *
  * 2. 四支都走现成的按组工厂（`textProviderOf` / `imageProviderOf` /
  *    `visionProviderOf` / `voiceProviderOf`），与 `/api/optimize`、
@@ -33,7 +33,7 @@
  *
  * 4. 图像那一支用 `DEFAULT_IMAGE_SIZE`（与跨页插画同一个尺寸），不是随便挑一个方图：
  *    这一按要回答的是"这一家能不能用来出这本书"。
- *    而尺寸白名单是模型级的（`tokenrhythm-image.ts` 的 `SIZES_BY_MODEL`），
+ *    而尺寸白名单是模型级的（`qwen-image.ts` 的 `SIZES_BY_MODEL`），
  *    挑一个产品不用的尺寸去测，通不通都不说明产品能不能跑。
  *
  * 5. 失败一律 `adminFailureOf(err)`（`lib/provider-messages.ts`）。它把厂商回的
@@ -223,7 +223,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       '这一项还缺一个音色：在「音色」那一格填一个（模型厂商那边的音色 id），保存之后再点测试',
     )
   }
-  const voice = voiceProviderOf(env)
+  // ★ 配置不全会抛（`requireUrl`），而这里在 try 之外——所以自己接住当成"没配齐"。
+  //   否则一次缺 TTS_BASE_URL 的测试会回一页 HTML 500，而屏幕上该说的是"这一项还缺"。
+  let voice: ReturnType<typeof voiceProviderOf> = null
+  try {
+    voice = voiceProviderOf(env)
+  } catch {
+    voice = null
+  }
   if (!voice) {
     return bad(
       'provider-not-configured',

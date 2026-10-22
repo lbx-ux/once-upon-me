@@ -4,7 +4,7 @@
  * 跑法（先填 .env.local，再）：
  *
  * ```bash
- * node scripts/w1-image-bakeoff.mts --models=wan2.7-image,qwen-image-2.0 --out=.out/bakeoff-image
+ * node scripts/w1-image-bakeoff.mts --models=qwen-image-3.0,qwen-image-3.0-pro --out=.out/bakeoff-image
  * # 只重出报告（排版改了不必重跑，一张图都不出）：
  * node scripts/w1-image-bakeoff.mts --out=.out/bakeoff-image --reportOnly=1
  * ```
@@ -21,7 +21,7 @@
  * 3. **判据 1 要人看图**。5 页里几张像同一个孩子，是 ≥3 个人眼判出来的，
  *    不是模型打分打出来的。所以脚本除了 JSON 还产出一个**盲评包**：
  *    目录名与文件名都不含候选名（`blind/set-1/…`），对照表只写在
- *    `image-bakeoff.json` 里 —— 目录叫 `blind/wan2.7-image/` 的那种"盲评"
+ *    `image-bakeoff.json` 里 —— 目录叫 `blind/<某个候选名>/` 的那种"盲评"
  *    是自欺（人打开文件夹就已经知道答案了）。
  *    模型给的相似度分只作为对照记录在案（GLOSSARY：它是判据不是事实）。
  *
@@ -38,7 +38,7 @@ import { join, resolve } from 'node:path'
 import { promptFragmentOf, checklistOf } from '../src/lib/engine/character-card/card.ts'
 import { createCardStore } from '../src/lib/engine/character-card/store.ts'
 import { pagePrompt, DEFAULT_IMAGE_SIZE } from '../src/lib/prompts/image.ts'
-import { createTokenrhythmImage } from '../src/lib/engine/providers/tokenrhythm-image.ts'
+import { createQwenImage } from '../src/lib/engine/providers/qwen-image.ts'
 import { createOpenAiVision } from '../src/lib/engine/providers/openai-vision.ts'
 import { createFsStore, extensionOf } from '../src/lib/engine/providers/stores.ts'
 import { digest } from '../src/lib/engine/digest.ts'
@@ -131,12 +131,17 @@ async function main(): Promise<void> {
     return
   }
 
-  const models = arg('models', env['IMAGE_MODEL'] ?? 'wan2.7-image')
-    .split(',')
-    .map((m) => m.trim())
-    .filter(Boolean)
+  // 候选模型名默认取 env 里那一个；★ 不再回落到某个厂商名——
+  //   回落到 `wan2.7-image` 的表现是"没配也能跑"，然后跑出来的表跟正在用的模型无关
+  const models = arg('models', env['IMAGE_MODEL'] ?? '')
+  if (!models.trim())
+    throw new Error('没给候选模型：--models=<逗号分隔> 或先配 IMAGE_MODEL')
+      .split(',')
+      .map((m) => m.trim())
+      .filter(Boolean)
   const apiKey = env['IMAGE_API_KEY'] ?? ''
-  const baseUrl = env['IMAGE_BASE_URL'] ?? 'https://tokenrhythm.studio/v1'
+  const baseUrl = env['IMAGE_BASE_URL'] ?? ''
+  if (!baseUrl) throw new Error('IMAGE_BASE_URL 未配置')
   if (!apiKey) throw new Error('IMAGE_API_KEY 未配置。横评必须真跑，不接受手工填数')
   const seed = Number(arg('seed', String(Date.now())))
 
@@ -194,7 +199,10 @@ async function main(): Promise<void> {
   const results: CandidateRecord[] = []
   for (const [modelIndex, model] of models.entries()) {
     const label = labels[modelIndex] as string
-    const image = createTokenrhythmImage({ baseUrl, apiKey, timeoutMs: 180_000 }, model)
+    // ★ 横评必须**自己造候选适配器**（它测的就是"哪个模型"，那些名字不在 env 里），
+    //   所以这里不走 registry。代价是候选的尺寸白名单得先量过——
+    //   没量过的模型会在发请求前被拒（一次 200 就是一张图的钱）。
+    const image = createQwenImage({ baseUrl, apiKey, timeoutMs: 300_000 }, model)
     const record: CandidateRecord = {
       model,
       blindLabel: label,
@@ -384,7 +392,7 @@ function renderReport(results: readonly CandidateRecord[], withMachineScore: boo
     '',
     '## 还缺的判据（要查官方文档 / 控制台，不是跑脚本能得到的）',
     '',
-    '- 判据 3 比例覆盖：能不能直出 3:2 与 3:4（当前实测白名单只有 1:1 与 16:9，见 tokenrhythm-image.ts）',
+    '- 判据 3 比例覆盖：能不能直出 3:2 与 3:4（当前实测白名单见 qwen-image.ts 的 SIZES_BY_MODEL——它是量出来的，不是文档抄的）',
     '- 判据 5 儿童内容审核政策：拿"孩子当主角 + 冒险情节"试投',
     '- 判据 6 并发与配额：20 页能否并发拉',
     '- 判据 7 可达性：国内直连是否需要代理',

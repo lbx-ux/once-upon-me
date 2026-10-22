@@ -75,9 +75,13 @@ export type StoryDraft = {
   input: StoryInput
   doc: PlanDraft
   /**
-   * 这一版故事是谁编的（ADR-0003 的出处）。`attempts` = 第几次调用才过校验，
+   * 这一版故事是谁编的（ADR-0003 的出处）。`attempts` = **一共调了几次模型**，
    * 它是报价表 §10.1 的 N_plan——重写一版会把它换成新的那一次，
    * 因为这个数说的是"盘上这一版花了多少代价"，不是"这一路上一共试了几次"。
+   *
+   * ★ 独读版一次尝试就是一次调用，所以两种口径在那里是同一个数；
+   *   共读版走两步（提纲 + 三段展开，`engine/plan-shared.ts`），一次成功最少也是 4 次调用
+   *   ——"第几次才成功"这个说法在那一档没有意义，`attempts` 因此统一按调用次数记。
    */
   provenance: {
     modelId: string

@@ -313,6 +313,11 @@ export function createOpenAiVision(
           // 原来是写死的 400（见 `DEFAULT_COMPARE_MAX_TOKENS` 那段：它让 8/8 页
           //   都判成"没法核对"，一次重画都没触发）
           max_tokens: maxTokens,
+          // ★ 这一行是 2026-10-21 补的**漏**：上面两条路都铺开了 `opts.extra`，
+          //   只有比对这条忘了——于是"关思考"这类字段在比对那条路上根本不生效，
+          //   而症状正是那几段注释里写的那个（思考链把预算吃光、判定全成"没法核对"）。
+          //   三处同源的东西各写一份，漏一处不会有任何东西变红，这一行就是那种漏。
+          ...(opts.extra ?? {}),
         },
         signal: budget?.signal,
         // 缺省 300s，不是 90s。这个调用一次要送两张 1440×1440 的 data URL

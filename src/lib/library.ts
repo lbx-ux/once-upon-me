@@ -222,10 +222,26 @@ export async function listBooks(
     // 半路被杀的那一本也该照实说"画到第几页"，而那件事租约不知道。
     // 数的是同一目录下的 `page-*.png`，封面不算——`illustratedCount` 在清单那条路上
     // 数的也是正文页。
+    //
+    // ★ 2026-10-21 深夜修：**数页号，不数文件**。重画是"另存一个 attempt"的
+    //   （`page-7-a4.png`，文件头第 3 条纪律：失败的图也留着），所以一本 5 页、
+    //   每页重画两次的书盘上有 15 个文件——书架上就写成了「画到第 15 页」，
+    //   而这一本一共 5 页（用户实测报的）。`illustratedCount` 的意思是"有几页有图"，
+    //   不是"盘上有几张图"。同一页的 a1/a2/a3 只算一次。
     const prefix = `books/${bookId}/page-`
-    const drawn = paths.filter(
-      (one) => one.startsWith(prefix) && one.endsWith('.png') && !one.includes('/thumbs/'),
-    ).length
+    const drawn = new Set(
+      paths
+        .filter(
+          (one) =>
+            one.startsWith(prefix) &&
+            // 后缀来自 `extensionOf(mime)`，厂商回什么就落什么（png / jpg / webp）。
+            // 只认 png 的话，换一家出图就会把"画到 5 页"写成"还没开始画"。
+            /\.(?:png|jpe?g|webp)$/i.test(one) &&
+            !one.includes('/thumbs/'),
+        )
+        .map((one) => /page-(\d+)(?:-a\d+)?\.(?:png|jpe?g|webp)$/i.exec(one)?.[1])
+        .filter((pageNo): pageNo is string => pageNo !== undefined),
+    ).size
     if (draft) books.push(summarizeStory(bookId, draft, drawn))
   }
 

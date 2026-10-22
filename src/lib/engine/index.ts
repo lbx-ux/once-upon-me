@@ -54,7 +54,7 @@ import { narrateAll, narrateTarget, nextTakeNo, targetsOfNode } from './narrate.
 import { cardDigest, validateCard } from './character-card/card.ts'
 import { digest } from './digest.ts'
 import { toDataUrl } from './providers/http.ts'
-import type { ProviderBundle } from './providers/types.ts'
+import type { ProviderBundle, TextDelta } from './providers/types.ts'
 import type { StoryPlanInput } from '../prompts/story-plan.ts'
 // `PlanDraft` 是模型吐回来的那张故事表（书名 + 每页草稿），而它同时就是"家长看到、
 // 能改的那一份"（`lib/story-draft.ts` 存的就是它）。两个用途同一个形状是刻意的：
@@ -154,10 +154,28 @@ export type BookRequest = {
   theme: string
   wish?: string
   form: BookForm
-  /** 独读版默认 20 页（产品定义 §二），共读版是主干页数 */
+  /**
+   * 独读版默认 20 页（产品定义 §二），共读版默认 8 页。
+   *
+   * ★ 两种形态下它都是**一条路走下来几页**，不是表里几个节点（2026-10-21，工单 D-08）。
+   *   共读版的表里一定比它多：两条支各占各的，`tree.ts` 那句"路长 8 页时 1 层 ≈11 张图"
+   *   说的就是这件事。这句话原来写的是"共读版是主干页数"——"主干"只是路长的一部分
+   *   （选择点之前那几页），按那个读法去卡页数会把**正确**的共读版判错。
+   *   判据与量法在 `buildTree` 的第四个参数上。
+   */
   pages?: number
   /** 跑测与演示都要能缩小规模，所以它是入参不是常量 */
   maxIllustrationAttempts?: number
+  /**
+   * 同时在画的页数上限（2026-10-21，工单 D-03）。缺省 3（`DEFAULT_PAGE_CONCURRENCY`）。
+   *
+   * ★ **传 1 是"回到串行"的那一档**，不是"关掉优化"：池子只有一条路，1 就是"一个 worker
+   *   顺序取页"。跑测要一份与 2026-10-21 之前可比的历史读数时用它。
+   * ★ 不放环境变量、也不放界面：它会改变"同一时刻有几个请求打向供应商"，
+   *   而那个数只该由**跑测的人**按供应商当时的脸色决定（并发会把限流顶出来，见
+   *   `qwen-image.ts` 的 `IMAGE_ATTEMPTS`）。
+   */
+  illustrationConcurrency?: number
   /**
    * 用哪个音色朗读。留给调用方（界面与脚本各自决定默认值），引擎不读环境变量。
    * 不给就不配音并说明——"默认音色"是产品概念，不是引擎概念。
@@ -166,12 +184,21 @@ export type BookRequest = {
   /**
    * 每一页都带角色卡参考图去画（走 provider 的 `edit`）。
    *
-   * 默认关，且这不是能力问题：`/images/edits` 已实测通（工单 02）。关着是因为开了它同时
-   * 改变三件没量过的事——产物尺寸由模型定（那条路没有 `size` 字段）、单张扣费未知、
-   * 以及"跨页一致性到底提升多少"这个 ADR-0007 的赌注本身。判据与代价写在
-   * `illustrate.ts` 的 `referenceForPages` 上。
+   * ★ **2026-10-21 缺省翻成"开"**（此前默认关）。原来关着是因为三条没量过的代价，
+   * 其中两条随换模型消掉了：
    *
-   * 单页重画（`rerunPage`）不读这个字段，理由写在那个函数里——它没有地方可读。
+   * | 原来关着的理由 | 现在 |
+   * | --- | --- |
+   * | 那条路上没有 `size` 字段，产物尺寸由模型定（实测 1440² 请求回 1024²） | 新这家（qwen-image-3.0）**认 size**，页图还是 3:2 |
+   * | 参考图有没有真送出去无从确认（适配器自己写 `true`） | 响应里有 `usage.input_image_count`，它是**读数** |
+   * | 跨页一致性到底提升多少（ADR-0007 的赌注） | **仍未量**——这一条没消 |
+   *
+   * 所以翻的是**策略**，不是结论：开了它只证明"参考图真的进了请求"，
+   * 不证明"画得更像了"。要判后者得专门做一次开/关对照（同一套 prompt、同一张卡各跑一本）。
+   *
+   * `false` 是显式关（跑对照、排查"文字那条路是不是更稳"时用）。
+   * 单页重画（`rerunPage`）跟着同一个缺省——同一本书里重画的那页不锁脸，
+   * 是那种没人会写在文档里的不一致。
    */
   referenceForPages?: boolean
   /**
@@ -220,6 +247,22 @@ export type RunDeps = {
   tools?: readonly ToolDef[]
   /** 工具轮数上限。缺省见 `tool-loop.ts` */
   maxToolSteps?: number
+  /**
+   * 令牌级增量（2026-10-21，工单 D-04）：模型每吐出一段字就叫一次。
+   *
+   * 它落在 `RunDeps` 而不是只挂在 `PlanDeps` 上，与 `retriever` / `tools` 是同一条理由
+   *   —— 脚本与横评走的是 `runBook`，挂在 `PlanDeps` 上那两条路就传不进来。
+   *   `runBook` 把它原样转给 `planBook`（`:550` 那一处 `planBook(request, deps)`），
+   *   所以"脚本走的那条路 == 产品走的那条路"这一条仍然成立。
+   *
+   * ★ 三个约定，两个是既有的、一个是新的：
+   *   1. 与 `tools` **互斥**（工具循环要的是完整回包，不是增量）——`planStory` 当场抛；
+   *   2. 与 `retrieve` 不冲突：检索在重试循环之外（见 `plan.ts`）；
+   *   3. **传了它就等于换了一条 HTTP 路径**（`text.stream` 而不是 `text.complete`），
+   *      所以它不设默认：不传时每一次跑测都与加这条路之前逐字节相同。
+   * 收增量的一方要自己负责"半个字段不算数"（`engine/plan-stream.ts` 那一层）。
+   */
+  onDelta?: (delta: TextDelta) => void
 }
 
 /**
@@ -313,6 +356,11 @@ export async function planBook(request: BookRequest, deps: PlanDeps): Promise<St
     ...(deps.retriever ? { retrieve: deps.retriever } : {}),
     ...(deps.tools ? { tools: deps.tools } : {}),
     ...(deps.maxToolSteps === undefined ? {} : { maxToolSteps: deps.maxToolSteps }),
+    // ★ 2026-10-21（工单 D-04）：令牌级增量原样转给 `planStory`。
+    //   三件东西（`plan.ts` 的 `onDelta`、`providers/openai-text.ts` 的 `stream()`、
+    //   `engine/plan-stream.ts` 的 `readPlanProgress`）早就都在、都有测试，
+    //   只有这一根线没接——于是"故事正在一页页写出来"这个交互在线上一次都没跑过。
+    ...(deps.onDelta ? { onDelta: deps.onDelta } : {}),
     emit: forward,
   })
 
@@ -404,32 +452,67 @@ export async function illustrateBook(
   }
   const referenceDataUrl = toDataUrl(referenceBytes, request.card.reference.mime)
 
-  const { illustrations, errors } = await illustrateAll(linearOrder(tree), {
-    image: providers.image,
-    vision: providers.vision,
-    // ★ 画面审核与比对是同一个 provider（`ProviderBundle.vision` 是两个接口的交集）：
-    //   它们背后是同一个端点的同一个模型。分成两个字段是因为问的问题不一样，
-    //   不是因为可以分别配——见 `IllustrateOptions.pictureReview` 那段
-    pictureReview: providers.vision,
-    store: providers.store,
-    card: request.card,
-    referenceDataUrl,
-    bookId: bookIdOf(request),
-    maxAttempts: request.maxIllustrationAttempts,
-    // 默认关：见 BookRequest.referenceForPages 那段（能力有，代价没量）
-    referenceForPages: request.referenceForPages === true,
-    // 身份那一行（"整本书就是这个孩子（小男孩）"）——2026-10-16 那条"提供的是男孩子，
-    // 生成出来有男有女"的报障：这个称呼原先只进标准像的 prompt，逐页那条路一个字都没有
-    // （卡的锚点里也没有性别词），于是每一页都由模型自己猜。算它的是这一层：手上同时有
-    // gender 与 lookTags 的地方只有这里（`ChildProfile`），而卡那一边两样都没有
-    //   "提供的是男孩子，生成出来有男有女"的报障：这个称呼原先只进标准像的 prompt，
-    //   逐页那条路一个字都没有（卡的锚点里也没有性别词），于是每一页都由模型自己猜。
-    //   算它的是这一层：手上同时有 gender 与 lookTags 的地方只有这里
-    //   （`ChildProfile`），而卡那一边两样都没有
-    childWord: childWordOf(request.child.lookTags, request.child.gender),
-    emit: forward,
-    now,
-  })
+  /**
+   * `request.illustrationConcurrency` 走的是**第三个参数**，不是上面那一份里的字段：
+   * 它管的是"同时有几页在跑"，而 `IllustrateOptions` 里每一项都是"某一页该怎么画"。
+   * 混进去的后果是 `illustrateNode` 也会收到它，而那一层既用不上、又不该沉默地忽略它
+   * （"被忽略的输入会让上游以为它生效了"——`qwen-image` 对参考图那条同理）。
+   */
+  // 页图与封面共用一个策略位。"要不要带参考图"与"要不要查它真进去了"是同一件事的两面，
+  //   所以在这一层算一次，别在两个调用点各写一遍（两处写一样的表达式，迟早只改一处）。
+  // ★ 为什么还要 `&& 有 edit`：没有 `edit` 的 provider（**离线回放**就是这种，
+  //   `createReplayImage` 压根没有这个方法）从来没有声称要带参考图，那一格既没花钱、
+  //   也没人被骗。把它算成"要锁脸"会让 `requireReference` 把整条离线演示路打死
+  //   （ADR-0003 那条路要求跑得通）。能力在 `describeProviders` 那一行上看得见，
+  //   所以这不是沉默降级——是"能力不在，策略就不成立"。
+  const withReference =
+    request.referenceForPages !== false && typeof providers.image.edit === 'function'
+
+  const { illustrations, errors } = await illustrateAll(
+    linearOrder(tree),
+    {
+      image: providers.image,
+      vision: providers.vision,
+      // ★ 画面审核与比对是同一个 provider（`ProviderBundle.vision` 是两个接口的交集）：
+      //   它们背后是同一个端点的同一个模型。分成两个字段是因为问的问题不一样，
+      //   不是因为可以分别配——见 `IllustrateOptions.pictureReview` 那段
+      pictureReview: providers.vision,
+      store: providers.store,
+      card: request.card,
+      referenceDataUrl,
+      bookId: bookIdOf(request),
+      maxAttempts: request.maxIllustrationAttempts,
+      // ★ 2026-10-21 缺省翻成**开**（原来默认关，理由写在 BookRequest.referenceForPages 那段）。
+      //   翻的判据是"能力与代价都变了"：新这家（qwen-image-3.0）带参考图的那条路**认 size**
+      //   （老那家那条路没有这个字段、产物尺寸由模型定），而"参考图到底进没进请求"
+      //   现在有响应里的 `usage.input_image_count` 当凭据。剩下的那条代价（一致性提升多少）
+      //   仍然没量——所以这一位翻的是**策略**，不是结论：验收只说"参考图进了请求"。
+      referenceForPages: withReference,
+      /**
+       * ★ 说带参考图，就要确认它真进去了（2026-10-21 补）。
+       *
+       * 这一位此前**没有任何调用点**：`requireReference` 在 `IllustrateOptions` 里躺着，
+       * 于是"策略说要锁脸、而请求里那张图没被确认收到"这件事不会有任何东西响。
+       * 缺省翻成开之后那就成了默认状态下的静默失败——症状正是文件头第 2 条要防的：
+       * 整本书画完才发现不像，而钱已经花完了。所以策略与"查不查"绑成一件事。
+       */
+      requireReference: withReference,
+      // 身份那一行（"整本书就是这个孩子（小男孩）"）——2026-10-16 那条"提供的是男孩子，
+      // 生成出来有男有女"的报障：这个称呼原先只进标准像的 prompt，逐页那条路一个字都没有
+      // （卡的锚点里也没有性别词），于是每一页都由模型自己猜。算它的是这一层：手上同时有
+      // gender 与 lookTags 的地方只有这里（`ChildProfile`），而卡那一边两样都没有
+      //   "提供的是男孩子，生成出来有男有女"的报障：这个称呼原先只进标准像的 prompt，
+      //   逐页那条路一个字都没有（卡的锚点里也没有性别词），于是每一页都由模型自己猜。
+      //   算它的是这一层：手上同时有 gender 与 lookTags 的地方只有这里
+      //   （`ChildProfile`），而卡那一边两样都没有
+      childWord: childWordOf(request.child.lookTags, request.child.gender),
+      emit: forward,
+      now,
+    },
+    request.illustrationConcurrency === undefined
+      ? {}
+      : { concurrency: request.illustrationConcurrency },
+  )
 
   // 封面
   // 排在页图之后：页图是书的正文，缺一本不成书；封面晚一步不影响任何依赖它的东西，
@@ -439,7 +522,9 @@ export async function illustrateBook(
     store: providers.store,
     card: request.card,
     bookId: bookIdOf(request),
-    title: tree.title,
+    // 封面也锁脸（2026-10-21 补，理由见 illustrateCover 的 §5）
+    referenceDataUrl,
+    referenceForPages: withReference,
     // 封面也要过画面审核（`.scratch/safety` 工单 01）：它是孩子在货架上第一眼看见的那张。
     // 这一档与页图共用一个重画次数（`maxIllustrationAttempts`）——再开一个旋钮
     // 只会多一处"改了那个没改这个"，而它们要表达的是同一件事：愿意为一张图花几次钱
@@ -495,6 +580,10 @@ export async function illustrateBook(
     //   加了封面却不改这里，`imageCalls` 就会比实际少一次——
     //   而这个数字是 §10.1 与 #14 的数据源，"少一次"是账目错，不是舍入。
     extraImageCalls: 1,
+    // ★ 2026-10-22：成本也要跟着算封面。`imageCalls` 早就算进去了，而
+    //   `totalCostCny` 只从 `illustrations` 加——配了 `IMAGE_UNIT_COST_CNY` 之后，
+    //   每本书的总额会稳定少一张封面的钱，而 `imageCalls` 与它说的不是同一件事。
+    extraCostCny: cover.costCny ?? 0,
   })
 
   const book: Book = {
@@ -592,6 +681,13 @@ export type PageRerunRequest = {
   /** 重配用哪个音色。不给就沿用这一页原来那份录音的音色 */
   voiceId?: string
   /**
+   * 这一页要不要带角色卡参考图去画。缺省**跟 `BookRequest.referenceForPages` 同一个值（开）**。
+   *
+   * 为什么留一个显式的口子：重画是"上一版被拦下之后"的那一刻，而那正是最需要做对照的场景
+   * （"是参考图让它不像，还是这句 prompt 本身"）。写死一个值就没有这个出口了。
+   */
+  referenceForPages?: boolean
+  /**
    * 这一页的主角称呼（小男孩 / 小女孩 / 孩子）。
    *
    * 重画必须与第一次跑用同一行 prompt，否则 `provenance.promptVersion` 一样、实际的提示词
@@ -683,10 +779,14 @@ function rerunForward(deps: RerunDeps): (payload: EngineEventPayload) => void {
  *    `firstPassCount` / `redrawCount` 原样不动。那两个数说的是"这本书第一次跑完时一次
  *    通过了几页"，把人事后的干预算进去，等于把人的判断记成模型的成绩（§10.1 的 r_redraw
  *    与 #2 都从它们算）。
- * 4. `referenceForPages` 按 `false` 走。这是个已知的缺口，不是随手写的：那本书原本开没开
- *    参考图没有记在清单里（`Illustration.provenance` 只记了模型、提示词版本、卡版本），
- *    而界面这一路从来没开过（只有脚本会开）。真要让脚本跑的书也重画成同一套，该补的是
- *    `Book` 上的一个字段，不是在这里猜一个值。
+ * 4. `referenceForPages` 按**缺省（开）**走——2026-10-21 改的，此前写死 `false`。
+ *    写死 `false` 的原意是"那本书原本开没开没记在清单里，不猜"（`Illustration.provenance`
+ *    只记模型、提示词版本、卡版本）。但缺省翻成开之后，写死 false 会造成一种更难看的坏法：
+ *    **同一本书里，重画的那一页是全本唯一没锁脸的一页**——而它正好是"上一版刚被拦下、
+ *    家长盯着看"的那一页。所以这里跟着全局缺省走，不再单独猜一个值。
+ *    ★ 仍然欠着的那一半：清单里**没有**记"这一页画的时候开没开参考图"，
+ *    所以事后无法从 `book.json` 反推。要补该补 `Illustration.provenance` 上一个字段，
+ *    那是独立一单——在补上之前，别把"缺省开"读成"每本书都开了"。
  */
 export async function rerunPage(request: PageRerunRequest, deps: RerunDeps): Promise<Book> {
   const { providers } = deps
@@ -703,13 +803,17 @@ export async function rerunPage(request: PageRerunRequest, deps: RerunDeps): Pro
     )
   }
 
+  // 与 runBook 同一个表达式（策略 ∧ 能力），理由见那边 `withReference` 那一段
+  const withReference =
+    request.referenceForPages !== false && typeof providers.image.edit === 'function'
+
   const startedAt = now()
   const illustration = await illustrateNode(node, {
     image: providers.image,
     vision: providers.vision,
     // ★ 单页重画也走画面审核（`.scratch/safety` 工单 01）：重画出来的那一张
-    //   与第一版一样要过这道闸。不开这个口子的理由与 `referenceForPages: false`
-    //   那一段同源——"重画的时候顺便把闸门关掉"是那种没人会写在文档里的豁免，
+    //   与第一版一样要过这道闸。不开这个口子的理由与"重画时要不要锁脸"同源——
+    //   "重画的时候顺便把闸门关掉"是那种没人会写在文档里的豁免，
     //   而它正好发生在"上一版刚被拦下"之后。
     pictureReview: providers.vision,
     store: providers.store,
@@ -717,7 +821,12 @@ export async function rerunPage(request: PageRerunRequest, deps: RerunDeps): Pro
     referenceDataUrl: toDataUrl(referenceBytes, request.card.reference.mime),
     bookId: request.book.bookId,
     attemptBase: previous?.attempt ?? 0,
-    referenceForPages: false,
+    // 缺省跟全局那个缺省（开）走，见 PageRerunRequest.referenceForPages 那段；
+    //   同样是"策略 ∧ 能力"（理由见 runBook 里 `withReference` 那一段）
+    referenceForPages: withReference,
+    // 重画这一页同样要确认参考图真进去了：它是"上一版不像"之后的那一次，
+    //   而这一次再没锁上，家长看到的会是"重画之后更不像了"
+    requireReference: withReference,
     ...(request.childWord ? { childWord: request.childWord } : {}),
     ...(request.fixNote?.trim() ? { fixNote: request.fixNote.trim() } : {}),
     emit: forward,
@@ -887,6 +996,21 @@ export function manifestPathOf(bookId: string): string {
 export const BOOKS_PREFIX = 'books'
 
 /**
+ * 书号能不能直接拼进路径。
+ *
+ * `bookDirOf` 只负责拼，不负责判——它也被引擎内部拿生成出来的书号调用，那些一定合法。
+ * 但凡书号来自 URL（`/reader/<id>`、`/api/books/<id>/events`）就先过这一条：
+ * 书号是外部输入，而 `books/${bookId}` 里的 `..` 会跑出这一片（2026-10-22 审查实测）。
+ * 生成的书号是"卡号 + 十六进制指纹"，卡号又只由 `[A-Za-z0-9_-]` 组成，所以这个形状
+ * 不会误伤任何一本真书（演示书的号 `xiaoyu-r1-<hex>` 同样在这个形状里）。
+ */
+const BOOK_ID_SHAPE = /^[A-Za-z0-9_-]{1,128}$/
+
+export function isBookId(value: string): boolean {
+  return BOOK_ID_SHAPE.test(value)
+}
+
+/**
  * 书号 = 卡 + 版 + 主题指纹。刻意不含时间戳：同一份输入必须得到同一个书号，否则离线演示
  * 的资产每次跑都换目录，"预生成资产"就成了每次都重新生成的东西。
  *
@@ -916,6 +1040,8 @@ function summarize(input: {
   nodesPlanned: number
   /** 页图之外的付费出图调用（目前只有封面一次）。不传 = 0 */
   extraImageCalls?: number
+  /** 页图之外的付费出图花了多少（封面的 `costCny`）。不传 = 0 */
+  extraCostCny?: number
 }): BookStats {
   const judged = input.illustrations.filter(
     (item) => item.consistency && item.consistency.verdict !== 'unavailable',
@@ -934,7 +1060,10 @@ function summarize(input: {
       (input.extraImageCalls ?? 0),
     firstPassCount: firstPass.length,
     redrawCount: Math.max(0, judged.length - firstPass.length),
-    totalCostCny: round2(input.illustrations.reduce((sum, item) => sum + (item.costCny ?? 0), 0)),
+    totalCostCny: round2(
+      input.illustrations.reduce((sum, item) => sum + (item.costCny ?? 0), 0) +
+        (input.extraCostCny ?? 0),
+    ),
     nodesPlanned: input.nodesPlanned,
     nodesGenerated: input.illustrations.length,
   }

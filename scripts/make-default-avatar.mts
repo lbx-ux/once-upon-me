@@ -257,7 +257,8 @@ const CROP = {
   half: 380,
 }
 
-/** 出图尺寸。★ `wan2.7-image` 那张模型级白名单里有它（见 tokenrhythm-image.ts） */
+/** 出图尺寸。★ 这一格在 `qwen-image-3.0` 的**实测**白名单里（见 qwen-image.ts 的
+ *  `SIZES_BY_MODEL`——它是量出来的，不是照文档抄的） */
 const SIZE = '1024x1024'
 
 /** 落库尺寸。★ 最大显示 92px（`.pf__avatar`），2x 有余量；再大是白付字节 */

@@ -30,7 +30,7 @@ import { digest } from './engine/digest.ts'
 import { createCardStore } from './engine/index.ts'
 import { createProfileStore } from './engine/index.ts'
 import type { BookForm, CharacterCard, ChildProfile } from './engine/index.ts'
-import type { ImageGenerator, TextGenerator } from './engine/providers/types.ts'
+import type { ImageGenerator, TextGenerator, TextRequest } from './engine/providers/types.ts'
 
 /** 固定替身演的那个孩子。★ 与 `engine-run` 原来的写死值逐字相同（不能顺手改） */
 export const STUB_CHILD: ChildProfile = {
@@ -44,6 +44,25 @@ export const STUB_CHILD: ChildProfile = {
 
 /** 卡号与版号。★ 它们进 `bookIdOf`，所以改了它 = 换了书号 = 判据 2 的对照臂对不上 */
 export const STUB_CARD_ID = 'xiaolu-r1'
+
+/**
+ * 这份固定剧本**一条路走下来几页**（2026-10-21，工单 D-08）。
+ *
+ * 形状是 `scripts/fixtures/demo-plan.json` 写死的：**6 个节点、选择点在第 2 页**
+ * （主干 2 + 两支各 2）→ 两条路都是 `2 + 2 = 4` 页，所以是 **4 页**
+ * （表里的 6 个节点不算数，共读版的页数按一条路算，见 `tree.ts` 的 `buildTree`）。
+ *
+ * ★ 2026-10-22 这份剧本从 5 节点（选择点第 3 页）改成了 6 节点：共读版走两步规划之后，
+ *   选择点的位置由 `choicePageOf(pages)` 定（4 页 → 第 2 页），主干必须是 2 行。
+ *   剧本不改的话，stub 这一档会在提纲那一步被 schema 拒掉——那是"命令自相矛盾"，
+ *   不是模型不听话。
+ *
+ * ★ 它必须与 `runBook` 收到的 `pages` 一致。以前没人查页数，于是 stub 这条验收路
+ *   一直用着默认的 8 页在那份 4 页的剧本上跑——D-08 之后那会在规划期被拒三次。
+ *   这个数因此是**夹具的属性**，不是可以随手传的旋钮：要跑别的页数，得换一份剧本
+ *   （`stubFormIsSupported` 那条同类：这一档只演得动共读版，因为剧本就是那一本）。
+ */
+export const STUB_PAGES = 4
 
 /**
  * 锚点按 `docs/demo-book-art-prompts.md` 的既定描述写死。
@@ -86,15 +105,76 @@ export function stubProviders(planJson: string): {
   image: ImageGenerator
 } {
   let imageCursor = 0
+  /**
+   * ★ 2026-10-22：共读版走两步规划之后，替身不能再"每次都回整张表"。
+   *   提纲那一步要的是一份提纲、展开那一步要的是**某一段**的 K 页；
+   *   两者都回整表的话，提纲会在 schema 那里被拒五次——而 stub 那一档正是
+   *   "不花钱跑完一本书"的架构验收，它红起来会看起来像引擎坏了。
+   *
+   * 替身不认识"第几步"，它只读请求本身：
+   *   - system 里有「只写**提纲**」→ 回提纲（三段的每一行取剧本的 `scene`）；
+   *   - system 里有「已经定好的提纲」→ 按 user 里那句「只写这一段：主干 / A 支 / B 支」切片；
+   *   - 其余（独读版那一条一次性路径）→ 原样回整张表。
+   * 剧本按"主干 → A 支 → B 支"的顺序排（`demo-plan.json` 的写死约定），
+   *   选择点 = 第一个带 `ask` 的节点。
+   */
+  const plan = JSON.parse(planJson) as { title: string; nodes: Record<string, unknown>[] }
+  const choiceAt = plan.nodes.findIndex((node) => typeof node['ask'] === 'string')
+  const mainCount = choiceAt >= 0 ? choiceAt + 1 : plan.nodes.length
+  const tailCount = choiceAt >= 0 ? (plan.nodes.length - mainCount) / 2 : 0
+  const sections: Record<string, Record<string, unknown>[]> = {
+    主干: plan.nodes.slice(0, mainCount),
+    'A 支': plan.nodes.slice(mainCount, mainCount + tailCount),
+    'B 支': plan.nodes.slice(mainCount + tailCount),
+  }
+  const pageOf = (node: Record<string, unknown>): Record<string, unknown> => ({
+    scene: node['scene'],
+    body: node['body'],
+    imagePrompt: node['imagePrompt'],
+    mood: node['mood'],
+  })
+
+  const replyOf = (req: TextRequest): string => {
+    if ((req.system ?? '').includes('只写**提纲**')) {
+      const lines = (nodes: Record<string, unknown>[]): string[] =>
+        nodes.map((node) => String(node['scene'] ?? ''))
+      return JSON.stringify({
+        title: plan.title,
+        main: lines(sections['主干'] ?? []),
+        branchA: lines(sections['A 支'] ?? []),
+        branchB: lines(sections['B 支'] ?? []),
+      })
+    }
+    const section = /只写这一段：(主干|A 支|B 支)/.exec(req.user ?? '')?.[1]
+    if (section === undefined) return planJson
+    const pages = (sections[section] ?? []).map(pageOf)
+    if (section !== '主干') return JSON.stringify({ pages })
+    const choice = (sections['主干'] ?? [])[(sections['主干'] ?? []).length - 1]
+    return JSON.stringify({
+      pages,
+      choice: {
+        ask: choice?.['ask'],
+        labelA: choice?.['labelA'],
+        spokenA: choice?.['spokenA'],
+        iconA: choice?.['iconA'],
+        emojiA: choice?.['emojiA'],
+        labelB: choice?.['labelB'],
+        spokenB: choice?.['spokenB'],
+        iconB: choice?.['iconB'],
+        emojiB: choice?.['emojiB'],
+      },
+    })
+  }
+
   const text: TextGenerator = {
     id: 'stub-text',
     modelId: 'stub-plan@v1',
-    async complete() {
-      return { text: planJson, modelId: 'stub-plan@v1' }
+    async complete(req) {
+      return { text: replyOf(req), modelId: 'stub-plan@v1' }
     },
-    async stream(_req, _budget, onDelta) {
-      const response = { text: planJson, modelId: 'stub-plan@v1' }
-      onDelta({ text: planJson, streamed: false })
+    async stream(req, _budget, onDelta) {
+      const response = { text: replyOf(req), modelId: 'stub-plan@v1' }
+      onDelta({ text: response.text, streamed: false })
       return response
     },
   }

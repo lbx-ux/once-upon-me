@@ -818,3 +818,35 @@ describe('illustrateNode · 重画时的锚点回灌（`anchorNote`）', () => {
     expect(noteLineOf(prompts[2])).toBeUndefined()
   })
 })
+
+/**
+ * 一致性阈值：0.5（2026-10-21 晚从 0.75 重标）
+ *
+ * 起因：换比对模型之后每一页都判 0.55 < 0.75，于是**每一页都重画**，
+ *   而重画三次还是 0.55（那是一条锚点偏了，不是"不像"）。
+ * 重标的读数写在 `DEFAULT_THRESHOLD` 那段注释里：同卡 0.93 / 一条锚点偏 0.55 /
+ * 换一张卡 0.20 / 陌生孩子 0.05 → 阈值落在 0.55 与 0.20 之间。
+ *
+ * 这两条钉的是**行为**，不是那个数字：0.55 不许再触发重画，0.3 必须触发。
+ * 改阈值时它们会红——那正是该红的时候。
+ */
+describe('一致性阈值：0.55 通过、0.3 不通过', () => {
+  const visionWith = (score: number): VisionComparator =>
+    ({
+      id: 'v',
+      modelId: 'v',
+      compare: async () => ({ score, missed: [], modelId: 'v' }),
+    }) as unknown as VisionComparator
+
+  it('★ 0.55（像，但一条锚点有偏差）→ 判通过，**只画一次**', async () => {
+    const { result, calls } = await run(visionWith(0.55), { maxAttempts: 3 })
+    expect(result.consistency?.verdict).toBe('pass')
+    expect(calls).toHaveLength(1)
+  })
+
+  it('0.3（不像）→ 判 fail，重画照旧发生', async () => {
+    const { result, calls } = await run(visionWith(0.3), { maxAttempts: 2 })
+    expect(result.consistency?.verdict).toBe('fail')
+    expect(calls.length).toBeGreaterThan(1)
+  })
+})

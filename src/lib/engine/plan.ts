@@ -23,6 +23,9 @@ import { asPlanDraft, planDraftCodec, planJsonSchema, type PlanDraft } from '../
 import { formatFailures, parseWith } from '../schemas/schema.ts'
 import { EngineError } from './errors.ts'
 import { completeWithTools, type ToolDef } from './tool-loop.ts'
+import { withFeedback } from './retry-feedback.ts'
+import { DEFAULT_PLAN_ATTEMPTS } from './plan-limits.ts'
+import { planSharedStory } from './plan-shared.ts'
 import type { BookForm, RetrievalProvenance, RetrievedChunkRef, StoryTree } from './domain.ts'
 import { branchPagesOf, buildTree, type TreeProblem } from './tree.ts'
 import { reviewInput, reviewInputText, reviewProblemText, reviewStory } from './review.ts'
@@ -67,7 +70,11 @@ export type PlanOutcome = {
    *   `next` 这些派生出来的东西，让家长去改它们既没有意义，也不可能改对。
    */
   doc: PlanDraft
-  /** 第几次调用才成功。1 = 一次过，是判据 1 的原始数据 */
+  /**
+   * 这一版一共调了几次模型。1 = 一次过，是判据 1 的原始数据。
+   * ★ 共读版走两步（`plan-shared.ts`）：一次成功最少 4 次调用，"1 = 一次过"在那一档
+   *   不成立——它照旧按**调用次数**记，横评与成本那边读的才是同一件事。
+   */
   attempts: number
   /** 每一次的失败原因，横评表要逐条列 */
   failures: readonly string[]
@@ -85,7 +92,6 @@ export type PlanOutcome = {
 export type PlanOptions = {
   text: TextGenerator
   form: BookForm
-  /** 含首次在内的最大次数。默认 3：两次带反馈的重试足够暴露"这家不会出 JSON" */
   maxAttempts?: number
   /**
    * 覆盖生成器的 token 预算。通常不传——留着它是给"同一家模型换个档"用的，
@@ -128,7 +134,7 @@ export type PlanOptions = {
 }
 
 export async function planStory(input: StoryPlanInput, opts: PlanOptions): Promise<PlanOutcome> {
-  const maxAttempts = opts.maxAttempts ?? 3
+  const maxAttempts = opts.maxAttempts ?? DEFAULT_PLAN_ATTEMPTS
   const failures: string[] = []
 
   // 两条互斥在这里当场抛（见 `PlanOptions.tools` 那段）：静默取一个的话，
@@ -174,7 +180,7 @@ export async function planStory(input: StoryPlanInput, opts: PlanOptions): Promi
       reason,
     })
     throw new EngineError(
-      'review-blocked',
+      'input-blocked',
       `你写的那句话里有不适合放进孩子的书里的内容：${reason}。改一下再来`,
       {
         detail: inputReview.problems.map((problem) => `${problem.field}:${problem.clauseId}`),
@@ -187,9 +193,31 @@ export async function planStory(input: StoryPlanInput, opts: PlanOptions): Promi
   //   不是"再找一批参考"。重试时换语料会让"这次为什么变好了"变成一个说不清的问题，
   //   而这批候选里谁的格式化输出最稳，正是要靠这个数回答的。
   const retrieval = await retrieveOnce(input, opts)
+  /**
+   * 共读版分流（2026-10-22）：两步规划（先提纲、再逐段展开）。
+   *
+   * 分流放在这里而不是函数最前面，是因为上面那两件事两种形态都要——
+   * 家长那句话的过闸、检索取一次。分流之后共读版走的是另一套提示词，
+   * 但产物是同一个 `PlanOutcome`，下游一行都不用改。
+   */
+  if (opts.form === 'shared') {
+    return planSharedStory(input, opts, retrieval)
+  }
+
   const baseUser = storyPlanUser(
     retrieval === null ? input : { ...input, retrieval: retrieval.pair },
   )
+
+  /**
+   * 最后一次失败是"内容审核没过"吗？是的话，最终那句错要用 `review-blocked`。
+   *
+   * ★ 2026-10-22 修：原来无论为什么失败，上界那一轮都抛 `schema-validation-failed`，
+   *   而它的用户文案是「这个模型没能写出合格的故事表（换模型时最常见的坏法）」——
+   *   **原因说反了**。故事被红线拦了五次，屏幕上却让家长去换模型；而错的其实是他要的
+   *   那个故事（"换个说法"才对）。三处失败（Schema / 树形 / 内容）在重试上是同一条路，
+   *   在**说给家长听的那句话**上不是。记最后一次，是因为重试提示用的也是最后一次那条。
+   */
+  let lastReview: string | null = null
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     opts.emit({ kind: 'stage', stage: 'planning', phase: 'begin', attempt, total: maxAttempts })
@@ -232,28 +260,51 @@ export async function planStory(input: StoryPlanInput, opts: PlanOptions): Promi
     if (!draft.ok) {
       const message = `第 ${attempt} 次：Schema 校验未过\n${formatFailures(draft.failures)}`
       failures.push(message)
-      opts.emit({
-        kind: 'retry',
-        stage: 'planning',
-        attempt,
-        maxAttempts,
-        reason: `故事表格式不对（${draft.failures.length} 处）`,
-      })
+      lastReview = null
+      /**
+       * ★ 2026-10-20（`plan-retry.test.ts` 钉着）：`retry` **只在真的还有下一次时才发**。
+       *
+       * 它原来每一轮都发，于是上界那一轮（`attempt === maxAttempts`）也发——
+       * 循环随即结束、抛 `schema-validation-failed`，而屏幕上最后留下的那句话是
+       * 「这一版故事没通过校验，正在重写（第 3 / 3 次）」，下面根本没有第 3 次以后的重写。
+       * 收尾的 fatal 帧把它换掉之前，它是那一屏唯一还在说的话：**一句空头承诺**。
+       *
+       * 上界那一轮的失败照旧进 `failures`（它是产出数据，回答的是"这一次为什么没过"，
+       * 也是横评表逐条列的那一份），只是不再宣布"正在重写"。
+       * 同一个引擎里 `illustrate.ts` 那两处 `retry`（一致性没过 / 画面没过）
+       * 一直是 `attempt < lastAttempt` 的形状，这里对齐它，不是新发明的规矩。
+       */
+      if (attempt < maxAttempts) {
+        opts.emit({
+          kind: 'retry',
+          stage: 'planning',
+          attempt,
+          maxAttempts,
+          reason: `故事表格式不对（${draft.failures.length} 处）`,
+        })
+      }
       continue
     }
 
     const plan = asPlanDraft(draft.value)
-    const built = buildTree(opts.form, plan.title, plan.nodes)
+    // ★ 第四个参数是"这一次要几页"（工单 D-08）。它在这里一定能给：`input.pages`
+    //   是这次请求的一部分（缺省也已经在 `planBook` 里落成 20 / 8）。
+    //   少了它，"要 6 给 7"会一路画到钱花完才有人发现
+    const built = buildTree(opts.form, plan.title, plan.nodes, input.pages)
     if (!built.ok) {
       const message = `第 ${attempt} 次：树形不合法\n${formatProblems(built.problems)}`
       failures.push(message)
-      opts.emit({
-        kind: 'retry',
-        stage: 'planning',
-        attempt,
-        maxAttempts,
-        reason: `故事结构不对（${built.problems.length} 处）`,
-      })
+      lastReview = null
+      // 同上一处：只在还有下一次时才说"正在重写"（`plan-retry.test.ts`）
+      if (attempt < maxAttempts) {
+        opts.emit({
+          kind: 'retry',
+          stage: 'planning',
+          attempt,
+          maxAttempts,
+          reason: `故事结构不对（${built.problems.length} 处）`,
+        })
+      }
       continue
     }
 
@@ -285,18 +336,24 @@ export async function planStory(input: StoryPlanInput, opts: PlanOptions): Promi
       }
 
       failures.push(`第 ${attempt} 次：内容审核没过\n${reason}`)
-      opts.emit({
-        kind: 'retry',
-        stage: 'planning',
-        attempt,
-        maxAttempts,
-        // 重试那句话里也要带条款 id（判据 5），但只带前三页：
-        //   它在屏幕上是一行，二十页都说出来就没人读得完。完整的在 `failures` 里。
-        reason: `故事里有不该给孩子看的内容：${flagged
-          .slice(0, 3)
-          .map(reviewProblemText)
-          .join('；')}${flagged.length > 3 ? `…共 ${flagged.length} 处` : ''}`,
-      })
+      lastReview = reason
+      // 同上一处：只在还有下一次时才说"正在重写"（`plan-retry.test.ts`）。
+      //   ★ 上面那条 `review` 事件**不**受影响：它报的是一个真发现（这一版里有什么、
+      //   命中哪条），上界那一轮也发生过，所以它照发。压掉的只是"正在重写"这一句。
+      if (attempt < maxAttempts) {
+        opts.emit({
+          kind: 'retry',
+          stage: 'planning',
+          attempt,
+          maxAttempts,
+          // 重试那句话里也要带条款 id（判据 5），但只带前三页：
+          //   它在屏幕上是一行，二十页都说出来就没人读得完。完整的在 `failures` 里。
+          reason: `故事里有不该给孩子看的内容：${flagged
+            .slice(0, 3)
+            .map(reviewProblemText)
+            .join('；')}${flagged.length > 3 ? `…共 ${flagged.length} 处` : ''}`,
+        })
+      }
       continue
     }
 
@@ -321,6 +378,18 @@ export async function planStory(input: StoryPlanInput, opts: PlanOptions): Promi
       // 没开检索时不给这个字段（不是给一个空的）——见 PlanOutcome 那条注释
       ...(retrieval === null ? {} : { retrieval: retrieval.provenance }),
     }
+  }
+
+  /*
+   * 最后一次失败是内容审核：说内容，不说"格式不对"。
+   * 屏幕上的用户版由 `provider-messages.ts` 的 `review-blocked` 给（"这一版里有不该给孩子看的
+   * 内容…换一个说法再试一次"），这里只把**最后一次**命中的那一页/哪一条带上——五次都贴上去
+   * 是五段一样的字。逐次记录在 `detail` 里，日志与排障读它。
+   */
+  if (lastReview !== null) {
+    throw new EngineError('review-blocked', `这一版故事里有不该给孩子看的内容：${lastReview}`, {
+      detail: failures,
+    })
   }
 
   throw new EngineError(
@@ -406,16 +475,6 @@ function provenanceOf(pair: RetrievePair, corpusVersion: string): RetrievalProve
     topScore: hits.length === 0 ? null : Math.max(...hits.map((hit) => hit.score)),
     hits,
   }
-}
-
-function withFeedback(user: string, failures: readonly string[]): string {
-  return [
-    user,
-    '',
-    '【上一次你的输出不合格，问题如下——只改这些问题，别重写整个故事】',
-    failures[failures.length - 1] ?? '',
-    '只输出 JSON。不要解释，不要围栏之外的任何字。',
-  ].join('\n')
 }
 
 function formatProblems(problems: readonly TreeProblem[]): string {

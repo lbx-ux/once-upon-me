@@ -21,8 +21,8 @@
  */
 
 import { mkdir, readFile, writeFile, appendFile } from 'node:fs/promises'
-import { dirname, join, resolve } from 'node:path'
-import { bookDirOf, type EngineEvent } from './engine/index.ts'
+import { dirname, resolve, sep } from 'node:path'
+import { bookDirOf, isBookId, type EngineEvent } from './engine/index.ts'
 
 export type EventLogRead = {
   events: EngineEvent[]
@@ -73,7 +73,24 @@ export function eventLogPathOf(bookId: string): string {
 
 export async function createFsEventLog(root: string): Promise<EventLog> {
   const base = resolve(root)
-  const full = (bookId: string): string => join(base, eventLogPathOf(bookId))
+  /**
+   * ★ 这里**不走 store**（日志是 app 层的事，引擎不该知道它），所以 store 那道
+   *   `assertInsideScope` 管不到这儿。书号来自 URL 时，`books/../../u/7/…`
+   *   会读到别人的 `events.jsonl`——那里面是整本的提示词与每一页的去向。
+   *   两道判据：书号形状（`isBookId`）+ 解析后仍在本片之内。
+   *   `read` / `exists` 本来就把异常吞成"没有"，所以不合法在这里等价于"这一轮没开始过"。
+   */
+  const full = (bookId: string): string => {
+    if (!isBookId(bookId)) {
+      throw new Error(`书号不合法：${bookId}`)
+    }
+    const target = resolve(base, eventLogPathOf(bookId))
+    const prefix = base.endsWith(sep) ? base : `${base}${sep}`
+    if (!target.startsWith(prefix)) {
+      throw new Error(`事件日志路径越界：${bookId}`)
+    }
+    return target
+  }
 
   const log: EventLog = {
     pathOf: eventLogPathOf,

@@ -29,7 +29,11 @@ const INPUT: StoryPlanInput = {
   lookTags: ['短发'],
   theme: 'cloud',
   form: 'solo',
-  pages: 2,
+  // ★ 3 而不是 2（2026-10-21，工单 D-08）：下面三份夹具都是**三页**——
+  //   schema 的 nodes 是 min 3，所以"请求 2 页"这件事本身就不成立。
+  //   D-08 之后 `buildTree` 会拿这个数去卡页数，写 2 的话三条用例全都红在
+  //   "页数 3 ≠ 请求 2"上，而它们要测的是审核与重试——红的地方不是被测的那件事
+  pages: 3,
 }
 
 /**

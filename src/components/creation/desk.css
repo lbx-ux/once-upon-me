@@ -121,6 +121,55 @@
 
 /* 进度条。★ 长度 = 已经画好的格数 / 总格数（推导与测试都在 `frames.ts` 的 `drawnRatio`），
    所以它与下面那排空画框是同一个数——不是另算的一个百分比 */
+/* ★★ 正在写出来的那半截（2026-10-21，工单 D-04）。
+   在接上令牌级增量之前，`plan-ready` 之前这一屏**一个产出都没有**：一条事件都没有，
+   连一个空画框都摆不出来，只有上面轮播的那一句在说话。这一段就是那几分钟里
+   唯一在长的东西，所以它要有"东西正在落下来"的样子——而不是一段静态的说明文字。
+
+   三条版式上的取舍：
+   1. **限高、可滚**（`max-height` + `overflow: auto`）：20 页的正文摊开来比画桌还高，
+      而此刻画桌才是这一屏的主角。限在 5 行上下，多出来的部分自己滚。
+   2. 用 `--ink-on-sky` 与它上面那两句同一个墨：这一段也在天空带里
+      （`.dk__stage` 那条注释量过那个槽位的对比度）。
+   3. **不做逐字动画**：那半截字是从网络上一段段真到的，它已经在"动"了。
+      再叠一层淡入就是把"真的在写"演成"看起来在写"——与 `plan-lines.ts` 那条
+      "不承诺任何时刻"是同一个分寸。 */
+.dk__draft {
+  margin: 0 0 9px;
+  padding-left: 10px;
+  border-left: 2px solid rgba(var(--accent-rgb), var(--accent-a4));
+}
+
+.dk__draft-title {
+  margin: 0 0 2px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-on-sky);
+}
+
+.dk__draft-lines {
+  margin: 0;
+  padding: 0;
+  max-height: 6.8em;
+  overflow: auto;
+  list-style: none;
+}
+
+.dk__draft-line {
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--ink-on-sky);
+}
+
+/* 数字那一行。★ 它是这一屏**唯一**允许出现数字的进度句（来历见 `plan-lines.ts`），
+   所以给它一点"计数"的样子：等宽数字 + 与正文分开一行。 */
+.dk__draft-count {
+  margin: 4px 0 0;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-muted);
+}
+
 .dk__bar {
   position: relative;
   height: 6px;

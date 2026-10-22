@@ -37,6 +37,16 @@ export type RunPageView = {
   imageUrl: string | null
   /** 这一页现在的录音。null = 这一页没有朗读 */
   narrationUrl: string | null
+  /**
+   * 画面审核的结论（`.scratch/safety` 工单 01）。`null` = 这一页没审过/旧书没有这一位。
+   *
+   * ★ 2026-10-21 晚加：此前这条结论**只在运行时的那条事件流里出现过**
+   *   （`frames.ts` 把 `review` 事件折成卡片上那行红字），而 `book.json` 里那份
+   *   `pictureReview` / `needsHumanReview` 没有任何界面读。于是刷新一次之后，
+   *   "这一页画面上有不该出现的东西"这句话就消失了——而书还能照样生成。
+   *   这份数据就是为了让那句话活过刷新。
+   */
+  review: { verdict: 'pass' | 'flag' | 'unavailable'; reason: string } | null
 }
 
 /**
@@ -53,7 +63,18 @@ export function runPagesOf(
   width: number,
 ): RunPageView[] {
   const illustrationOf = new Map(book.illustrations.map((item) => [item.pageNo, item]))
-  const narrationOf = new Map(book.narrations.map((item) => [item.pageNo, item]))
+  /**
+   * ★ 只取正文那一段（`part` 缺省 = body）。
+   *   共读版的选择点那一页有四段录音（正文 / 提问 / 选项 A / 选项 B），按页号建表时
+   *   后写的会盖掉先写的——最后留下的恰好是选项 B。重配弹窗把它标成"这一页现在的录音"，
+   *   家长听到的却是孩子选 B 时那一句（2026-10-22 审查）。
+   *   这一屏要的是"这一页的正文"，本来就是 body；其余三段由阅读器按 `part` 自己取。
+   */
+  const narrationOf = new Map(
+    book.narrations
+      .filter((item) => (item.part ?? 'body') === 'body')
+      .map((item) => [item.pageNo, item]),
+  )
   const failed = new Set(book.errors.map((item) => item.pageNo))
 
   return linearOrder(book.tree).map((node) => {
@@ -67,12 +88,17 @@ export function runPagesOf(
       prompt: pagePrompt({
         card,
         page: node.imagePrompt,
-        scene: node.scene,
         mood: node.mood,
       }),
       imageUrl:
         illustration && !failed.has(node.pageNo) ? urlOf(illustration.asset.path, width) : null,
       narrationUrl: narration ? urlOf(narration.asset.path, width) : null,
+      review: illustration?.pictureReview
+        ? {
+            verdict: illustration.pictureReview.verdict,
+            reason: illustration.pictureReview.reason ?? '',
+          }
+        : null,
     }
   })
 }

@@ -21,6 +21,22 @@
 /** 这一屏停在哪一段。与 `GenerationRun` 的 `Phase` 同集，但不含 `'planning'`（那是开新书那条路） */
 export type EntryPhase = 'story' | 'replaying' | 'ready' | 'failed'
 
+/**
+ * 这一屏停在哪一段（全集）。
+ *
+ * `'story'` 是 2026-10-17 加的（故事闸门）：编完故事到点「就按这个画」之间。
+ *   它与 `'replaying'` 是两个不同的东西：后者是"画过，但这次没连着看"。
+ *
+ * ★ 2026-10-21（工单 D-34）它从 `GenerationRun.tsx` 搬到这里：那一屏拆成了
+ *   四个模块（`use-run-stream` / `use-run-poll` / `use-story-autosave` /
+ *   `run-phase-lines`），四个都要读这个名字。留在组件里的话，就要么各抄一份
+ *   （`'ready'` 抄成 `'done'` 那天，两处会安静地分家），要么让 hooks 反过来
+ *   import 组件 —— 前者是漂移，后者是环。
+ *   与 `entryPhaseOf` 同一个家：它给的那个 `EntryPhase` 是这一套的一个子集，
+ *   两套名字挨着放，谁多了一档一眼看得见。
+ */
+export type Phase = 'planning' | 'story' | 'running' | 'ready' | 'failed' | 'replaying'
+
 export type EntryStatus = { running: boolean; bookReady: boolean }
 
 export function entryPhaseOf(args: {

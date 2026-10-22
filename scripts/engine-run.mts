@@ -20,7 +20,7 @@
  * | 模式 | 供应商 | 花不花钱 | 干什么用 |
  * | --- | --- | --- | --- |
  * | `stub` | 脚本内的固定替身（规划表 = fixtures/demo-plan.json，图 = public/book 现成成图） | 不花 | **架构验收**：证明 `lib/engine` 能被 node 直接跑完，不碰 React、不碰网络 |
- * | `live` | `.env.local` 里配的模型 | 图像 0.20 元/张 | 真跑测与横评 |
+ * | `live` | `.env.local` 里配的模型 | 图像按厂商计费（单价未量，见 IMAGE_UNIT_COST_CNY） | 真跑测与横评 |
  * | `offline` | 录好的 manifest | 不花 | ADR-0003 的演示路径：断网也能出一本完整的书 |
  *
  * 这条命令本身就是 checklist #11 的交付物，所以它把每一步的事件原样打出来：
@@ -44,6 +44,7 @@ import {
   stubProviders,
   stubReferenceDigest,
   STUB_CHILD,
+  STUB_PAGES,
 } from '../src/lib/stub-fixture.ts'
 import type { BookForm } from '../src/lib/engine/domain.ts'
 import type { ProviderBundle } from '../src/lib/engine/providers/types.ts'
@@ -94,7 +95,6 @@ async function main(): Promise<void> {
   const childId = args['child'] ?? 'xiaolu'
   const theme = args['theme'] ?? '第一次离开家也不怕'
   const pages = args['pages'] ? Number(args['pages']) : undefined
-
   process.stdout.write(`引擎验收 · mode=${mode} form=${form} out=${outDir}\n\n`)
 
   const store = await createFsStore(outDir)
@@ -118,6 +118,18 @@ async function main(): Promise<void> {
     if (!stubFormIsSupported(form)) {
       throw new Error(
         'stub 模式的固定剧本是首页第二屏那本《小宇的云》（共读版），要跑独读版请用 --mode=live',
+      )
+    }
+    /**
+     * ★ `--pages` 在 stub 这一档**不是旋钮**（2026-10-21，工单 D-08）：剧本是写死的那一份，
+     *   它的页数就是 `STUB_PAGES`。以前没人查页数，所以"用 8 页的请求去演一份 4 页的剧本"
+     *   一路都能过；现在 `buildTree` 会拒，而且会连着拒三次——那种失败看着像模型不听话，
+     *   其实是命令本身就矛盾。所以在这里当场说清，别让它跑到规划那一层去。
+     */
+    if (pages !== undefined && pages !== STUB_PAGES) {
+      throw new Error(
+        `stub 那一档的固定剧本是 ${STUB_PAGES} 页（一条路走下来），--pages=${pages} 演不了它。` +
+          '要别的页数请用 --mode=live（或在 fixtures/demo-plan.json 里换一份剧本）',
       )
     }
     const stub = stubProviders(await loadStubPlanJson())
@@ -195,7 +207,9 @@ async function main(): Promise<void> {
       card,
       theme,
       form,
-      pages,
+      // ★ stub 那一档的页数由剧本定（见上面 `--pages` 那段）：喂 8 页的请求去演一份 4 页的
+      //   剧本，D-08 之后会在规划期被拒三次——那是命令自相矛盾，不是模型不听话
+      pages: mode === 'stub' ? STUB_PAGES : pages,
       ...(voiceId ? { voiceId } : {}),
     },
     {

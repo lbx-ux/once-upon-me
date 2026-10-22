@@ -224,12 +224,16 @@ export default function BooklistReader({ book, coverUrl, art, audio }: BooklistR
         event.preventDefault()
         turn(-1)
       } else if (event.key === 'Home') {
+        event.preventDefault()
+        takeOver()
         setQTarget(0)
       } else if (event.key === 'End') {
+        event.preventDefault()
+        takeOver()
         setQTarget(leafCount)
       }
     },
-    [turn, leafCount],
+    [turn, leafCount, takeOver],
   )
 
   /* 触摸滑动

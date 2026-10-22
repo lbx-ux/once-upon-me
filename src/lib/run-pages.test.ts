@@ -81,14 +81,47 @@ describe('runPagesOf', () => {
   it('★ prompt 就是 pagePrompt 算出来的那份（同一个函数，不是这里拼的）', () => {
     const book0 = book()
     const pages = runPagesOf(book0, CARD, urlOf, 768)
-    expect(pages[0]?.prompt).toBe(
-      pagePrompt({ card: CARD, page: '第 1 页的画面', scene: '第 1 页的场景', mood: 'calm' }),
-    )
+    expect(pages[0]?.prompt).toBe(pagePrompt({ card: CARD, page: '第 1 页的画面', mood: 'calm' }))
   })
 
   it('★ prompt 里没有家长补充那一句（补充是这一次才有的）', () => {
     const pages = runPagesOf(book(), CARD, urlOf, 768)
     expect(pages[0]?.prompt).not.toContain('要改掉上一版的问题')
+  })
+
+  /**
+   * ★ 画面审核的结论要活过刷新（2026-10-21 晚）
+   *
+   * 此前它只在运行时的事件流里出现过（`frames.ts` 把 `review` 事件折成卡片上那行红字），
+   * 一刷新就没了——而 `book.json` 里那份 `pictureReview` 没有任何界面读。
+   * 用户那本 20 页的书里第 4 页被标了"恐怖（R-01）"，刷新之后屏幕上就只剩一张图。
+   */
+  it('★ 被画面审核标了的页，结论跟着数据出来（不是只在事件流里）', () => {
+    const flagged = book({
+      illustrations: [
+        {
+          pageNo: 1,
+          attempt: 3,
+          asset: { path: 'books/b1/page-1-a3.png', mime: 'image/png', digest: 'd', bytes: 1 },
+          provenance: { modelId: 'm', promptVersion: 'p', cardRevision: 1, generatedAt: 0 },
+          pictureReview: {
+            pageNo: 1,
+            attempt: 3,
+            verdict: 'flag',
+            problems: [{ clauseId: 'R-01', where: '右侧灌木丛里那只小恐龙' }],
+            reason: '恐怖（R-01）：露出尖牙、身上有红色斑块',
+          },
+          needsHumanReview: true,
+        },
+      ],
+    } as Partial<Book>)
+    const pages = runPagesOf(flagged, CARD, urlOf, 768)
+    expect(pages[0]?.review).toEqual({
+      verdict: 'flag',
+      reason: '恐怖（R-01）：露出尖牙、身上有红色斑块',
+    })
+    // 没审过的那一页就是 null：缺席不许被读成"审过了、没问题"
+    expect(pages[1]?.review).toBeNull()
   })
 
   it('有一页有图有音，另一页两样都没有', () => {

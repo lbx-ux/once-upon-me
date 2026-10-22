@@ -90,7 +90,12 @@ function requireUserId(userId: string | null | undefined): string {
  * 往那个联合类型里加一个只为开发者的码，等于给错误→文案那条链加一处永远用不上的分支。
  */
 function assertInsideScope(path: string, userId: string): void {
-  if (path.split('/').includes('..')) {
+  // ★ 两种分隔符都要看。`path.resolve` 在 Windows 上把 `\` 也当分隔符，
+  //   而 Next 会把 URL 里的 `%5c` 解码成 `\`。只按 `/` 切的话，
+  //   `books/..\..\u\7\books\x/book.json` 在这里放行、到磁盘上却真的出了这一片。
+  //   生产是 Linux（`\` 只是普通文件名字符），但这条边界写得是"结构上不许越界"，
+  //   不该按宿主平台决定松紧。
+  if (path.split(/[\\/]/).includes('..')) {
     throw new EngineError('asset-write-failed', `资产路径越界：${path} 不在 u/${userId}/ 之下`)
   }
 }

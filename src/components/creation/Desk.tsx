@@ -57,8 +57,16 @@ import { useState, type CSSProperties } from 'react'
 import { assetUrlOf } from '@/lib/asset-url.ts'
 import { useRotatingLine } from '@/lib/use-rotating-line.ts'
 
-import { drawnCount, drawnRatio, hasBranches, type DeskState, type Frame } from './frames.ts'
-import { PLAN_LINES } from './plan-lines.ts'
+import {
+  drawnCount,
+  drawnRatio,
+  hasBranches,
+  planningOf,
+  type DeskState,
+  type Frame,
+} from './frames.ts'
+import { PLAN_LINES, writingLineOf } from './plan-lines.ts'
+import type { PlanWriting } from './use-run-stream.ts'
 
 /** 一格里的图。★ 独立的组件是为了让"取不到图"这件事有一个自己的 state */
 function Figure({ frame }: { frame: Frame }) {
@@ -217,22 +225,40 @@ export type DeskProps = {
    *   而它也是唯一知道这件事的地方。
    */
   live?: boolean
+  /**
+   * ★ 正在写出来的那半截故事（2026-10-21，工单 D-04）。
+   *
+   * 它**不是** `desk` 的一部分，这是刻意的：`desk` 只由事件折出来（`deskOf`），
+   *   而那些事件是**落盘的**（重放必须能重建同一串界面状态）；令牌级增量不落盘
+   *   （`book-stream.ts` 的文件头第 1 条），所以它只能从旁边递进来。
+   *   两者混进一个 state 的坏法很具体：刷新一下就没了的那半截，会跟着日志一起
+   *   被折进画桌，于是"重放出来的过程"里多出一段其实没发生过的打字机动画。
+   * `null` = 这一刻没有字在流（还没开始 / 已经写完了）。
+   */
+  writing?: PlanWriting | null
+  /**
+   * 这一轮已经判了失败（`phase === 'failed'`）。★ 2026-10-21 补：失败那一屏上
+   * 「这一本没做出来」与「正在重写（第 2 / 3 次）」同时出现过——后者是一句假话。
+   */
+  failed?: boolean
 }
 
-export default function Desk({ desk, actions, published = false, live = false }: DeskProps) {
+export default function Desk({
+  desk,
+  actions,
+  published = false,
+  live = false,
+  writing = null,
+  failed = false,
+}: DeskProps) {
   const drawn = drawnCount(desk)
   const ratio = drawnRatio(desk)
-  /**
-   * 现在是不是在编故事那一段（还没有书名 = `plan-ready` 还没到）。
-   *
-   * 判据是 `desk.stage === 'planning' && desk.title === null`，两个都要：
-   *   重跑一本已经画过的书时，日志里老的那条 `plan-ready` 还在，那一刻
-   *   `stage` 已经是 `planning` 而 `title` 不是 null —— 那不是"在编故事"，
-   *   是"在重编这一本的故事，而屏幕上是上一版的画"，两者要说的话不一样。
-   */
-  const planning = desk.stage === 'planning' && desk.title === null
+  /** 现在是不是在编故事那一段。判据（含 `failed` 这一位为什么在）见 `frames.ts` 的 `planningOf` */
+  const planning = planningOf(desk, failed)
   /** 轮着播的那一句。`active` 为假时它回到第一句（见 `useRotatingLine`） */
   const planLine = useRotatingLine(PLAN_LINES, planning)
+  /** 真的在写的时候那一句（「正在思考中」）。什么时候说得出口，见 `writingLineOf` */
+  const writingLine = writingLineOf({ pages: writing?.pages ?? 0 })
   return (
     <div className="dk">
       {/* ── 现在在第几段 + 走到哪儿了 ───────────────────────────────────
@@ -274,6 +300,39 @@ export default function Desk({ desk, actions, published = false, live = false }:
             <p className="dk__plan-note" role="status">
               {desk.planning}
             </p>
+          )}
+          {/* ★★ 正在写出来的那半截（2026-10-21，工单 D-04）。
+              在这之前这一屏编故事的几分钟里**没有任何产出**：`plan-ready` 之前
+              一条事件都没有，连一个空画框都摆不出来，屏幕上只有轮播的那一句。
+              接上增量之后，模型真写完的字在这里一句一句落下来。
+              ★ 三条纪律：
+              1. 只认 `readPlanProgress` 认过的字（已经闭合的字符串与对象），
+                 所以"屏幕上闪过的每一个字都是模型真的写完的字"这句话仍然成立；
+              2. 那一句（「正在思考中」）**一个数都没有**——2026-10-21 晚把"已写 k / N 页"整个换掉了
+                （理由见 `plan-lines.ts` 的 `writingLineOf`：分子分母在共读版上不是一个单位）；
+              3. 标题与正文之间不留历史：写完一页落一行，重写一遍就清空重来
+                 （清空那一处在 `use-run-stream.ts` 的 `pushOne`）。
+              ★ 读屏只播数字那一行：正文每落一句都播一次，读屏用户会听到一串
+                没头没尾的句子——那比不播更糟。 */}
+          {planning && writing && (writing.title !== null || writing.lines.length > 0) && (
+            <div className="dk__draft">
+              {writing.title !== null && <p className="dk__draft-title">{writing.title}</p>}
+              {writing.lines.length > 0 && (
+                <ul className="dk__draft-lines">
+                  {writing.lines.map((line, index) => (
+                    // 半截文本只增不改，所以位置就是它的身份（没有更稳的 key 可用）
+                    <li key={index} className="dk__draft-line">
+                      {line}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {writingLine !== null && (
+                <p className="dk__draft-count" role="status">
+                  {writingLine}
+                </p>
+              )}
+            </div>
           )}
           {/* ★ 页数还不知道时（`plan-ready` 之前）**不摆这条**：
               一根分母是 0 的条只能画成"刚起步"的样子，那是在编一个进度 */}

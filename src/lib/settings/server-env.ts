@@ -43,18 +43,26 @@ const KEYS = [
   'IMAGE_MODEL',
   'IMAGE_TIMEOUT_MS',
   'IMAGE_UNIT_COST_CNY',
-  'IMAGE_SUPPORTS_REFERENCE',
+  // ★ 2026-10-22 补：换到 qwen-image-3.0 之后新增的旋钮。漏在这里的表现是
+  //   `.env.local` 里配了、`registry.ts` 也认，但中间这张白名单把它静默丢掉——
+  //   于是"提示词改写开着"变成"其实是关的"，而两边都不会报错。
+  //   （`IMAGE_SUPPORTS_REFERENCE` 已随能力推导删除，不再抄进这张表。）
+  'IMAGE_PROMPT_EXTEND',
   // 视觉（核对形象）
   'VISION_BASE_URL',
   'VISION_API_KEY',
   'VISION_MODEL',
   'VISION_TIMEOUT_MS',
   'VISION_MAX_TOKENS',
+  // 比对与画面审核各自那一格预算（`openai-vision.ts` 的三个旋钮）
+  'VISION_COMPARE_MAX_TOKENS',
+  'VISION_SAFETY_MAX_TOKENS',
   // 语音（朗读）
   'TTS_BASE_URL',
   'TTS_API_KEY',
   'TTS_MODEL',
   'TTS_VOICE',
+  'TTS_VOICE_PREFIX',
   'TTS_TIMEOUT_MS',
 ] as const
 

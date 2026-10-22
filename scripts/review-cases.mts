@@ -42,6 +42,7 @@ import { join } from 'node:path'
 
 import { BOOKLIST } from '../src/components/booklist/booklist.ts'
 import { planBook } from '../src/lib/engine/index.ts'
+import { DEFAULT_PLAN_ATTEMPTS } from '../src/lib/engine/plan-limits.ts'
 import { createMemoryStore } from '../src/lib/engine/providers/stores.ts'
 import { reviewText } from '../src/lib/engine/review.ts'
 import { clauseById } from '../src/lib/rag/review-corpus.ts'
@@ -49,6 +50,7 @@ import type { CharacterCard } from '../src/lib/engine/domain.ts'
 import type {
   ProviderBundle,
   TextGenerator,
+  TextRequest,
   TextResponse,
 } from '../src/lib/engine/providers/types.ts'
 import type { NodeDraft } from '../src/lib/schemas/story.ts'
@@ -185,11 +187,16 @@ const CASES: readonly Case[] = [
 ]
 
 /**
- * 共读版的页表：选择点在第 2 页，两条支各一页，最后合流。
- * ★ 它必须**真的合法**（`buildTree` 那几关：选择点恰好两条支、`via` 对得上）——
- *   树不合法会在审核之前就抛 `schema-validation-failed`，而那会让这条用例
- *   变成"别的原因失败"，红得看不出真因。
+ * 共读版的页表：**一条路 4 页**（主干 2 = 第 1–2 页、选择点在第 2 页，两支各 2）。
+ *
+ * ★ 2026-10-22 起共读版走两步规划（`plan-shared.ts`）：先提纲、再分三段展开
+ *   （主干 2 行 / A 支 2 行 / B 支 2 行 —— 行数由 `choicePageOf(4)` 算出来）。
+ *   所以下面这份页表按"主干 2 + A 2 + B 2"排，假模型也要按请求**分别**交提纲与那一段，
+ *   不能再一次性甩一张整表（那样它会把提纲请求也当成整表，五轮都过不了 schema）。
  */
+const SHARED_PATH_PAGES = 4
+const SHARED_CUT = 2
+
 const SHARED_PAGES: readonly NodeDraft[] = [
   CLEAN[0] as NodeDraft,
   {
@@ -204,24 +211,27 @@ const SHARED_PAGES: readonly NodeDraft[] = [
     iconB: 'flower',
     emojiB: '🌸',
   },
-  { ...(CLEAN[2] as NodeDraft), from: 2, via: 'a' },
+  { ...(CLEAN[2] as NodeDraft) },
+  {
+    scene: '近路的尽头亮着一盏灯',
+    body: ['近路的尽头，亮着一盏灯。'],
+    imagePrompt: '小路尽头有一盏亮着的灯',
+    mood: 'calm',
+  },
   {
     scene: '绕远路上开着一片花',
     body: ['花在风里点着头。'],
     imagePrompt: '绕远的小路两旁开着一片花',
     mood: 'calm',
-    from: 2,
-    via: 'b',
   },
-  { ...(CLEAN[2] as NodeDraft), from: 4 },
+  { ...(CLEAN[2] as NodeDraft) },
 ]
 
 /* ───────────────────────────── 引擎侧的假模型 ───────────────────────────── */
 
-/** 把一条越线写进那一版干净的故事里 */
+/** 独读版：一次交一整张表 */
 function planJsonOf(item: Case): string {
-  const shared = item.form === 'shared'
-  const pages: NodeDraft[] = (shared ? SHARED_PAGES : CLEAN).map((page) => ({ ...page }))
+  const pages: NodeDraft[] = CLEAN.map((page) => ({ ...page }))
   if (item.page >= 0) {
     const page = pages[item.page]
     if (!page) throw new Error(`用例「${item.label}」指到了第 ${item.page} 页，那一份页表里没有`)
@@ -234,23 +244,80 @@ function planJsonOf(item: Case): string {
   })
 }
 
+/** 共读版第一步：提纲（每页一句，三段行数与 `choicePageOf` 同源） */
+function outlineJsonOf(item: Case): string {
+  return JSON.stringify({
+    title: item.field === 'title' ? item.text : TITLE,
+    main: SHARED_PAGES.slice(0, SHARED_CUT).map((page) => page.scene),
+    branchA: SHARED_PAGES.slice(SHARED_CUT, SHARED_CUT * 2).map((page) => page.scene),
+    branchB: SHARED_PAGES.slice(SHARED_CUT * 2).map((page) => page.scene),
+  })
+}
+
+/** 共读版第二步：把请求里的那一段写成 K 页（选择点那九格只在主干那一次） */
+function expansionJsonOf(item: Case, section: string): string {
+  const pages: NodeDraft[] = SHARED_PAGES.map((page) => ({ ...page }))
+  if (item.page >= 0) {
+    const page = pages[item.page]
+    if (!page) throw new Error(`用例「${item.label}」指到了第 ${item.page} 页，那一份页表里没有`)
+    pages[item.page] = { ...page, [item.field]: item.field === 'body' ? [item.text] : item.text }
+  }
+  const start = section === '主干' ? 0 : section === 'A 支' ? SHARED_CUT : SHARED_CUT * 2
+  const slice = pages.slice(start, start + SHARED_CUT).map((page) => ({
+    scene: page.scene,
+    body: page.body,
+    imagePrompt: page.imagePrompt,
+    mood: page.mood,
+  }))
+  if (section !== '主干') return JSON.stringify({ pages: slice })
+  const choice = pages[SHARED_CUT - 1] as NodeDraft
+  return JSON.stringify({
+    pages: slice,
+    choice: {
+      ask: choice.ask,
+      labelA: choice.labelA,
+      spokenA: choice.spokenA,
+      iconA: choice.iconA,
+      emojiA: choice.emojiA,
+      labelB: choice.labelB,
+      spokenB: choice.spokenB,
+      iconB: choice.iconB,
+      emojiB: choice.emojiB,
+    },
+  })
+}
+
+/** 按请求的形状选回包：独读版整表；共读版按"提纲 / 哪一段"分别回 */
+function replyOf(item: Case, req: TextRequest): string {
+  if (item.form !== 'shared') return planJsonOf(item)
+  if (req.system.includes('只写**提纲**')) return outlineJsonOf(item)
+  const section = /只写这一段：(主干|A 支|B 支)/.exec(req.user ?? '')?.[1]
+  if (section === undefined) {
+    throw new Error('共读版的展开请求里没有「只写这一段：…」，假模型不知道该交哪一段')
+  }
+  return expansionJsonOf(item, section)
+}
+
 /** 一个只会把设定好的那版故事交回来的文本模型（照 `engine-run.mts` 的 stub 那一档） */
-function stubText(json: string): { text: TextGenerator; calls: () => number } {
+function stubText(reply: (req: TextRequest) => string): {
+  text: TextGenerator
+  calls: () => number
+} {
   let calls = 0
-  const respond = (): TextResponse => {
+  const respond = (req: TextRequest): TextResponse => {
     calls += 1
-    return { text: json, modelId: 'stub-review@v1' }
+    return { text: reply(req), modelId: 'stub-review@v1' }
   }
   return {
     calls: () => calls,
     text: {
       id: 'stub-text',
       modelId: 'stub-review@v1',
-      async complete() {
-        return respond()
+      async complete(req) {
+        return respond(req)
       },
-      async stream(_req, _budget, onDelta) {
-        const response = respond()
+      async stream(req, _budget, onDelta) {
+        const response = respond(req)
         onDelta({ text: response.text, streamed: false })
         return response
       },
@@ -304,7 +371,7 @@ async function runCase(item: Case): Promise<{
   message: string
   calls: number
 }> {
-  const { text, calls } = stubText(planJsonOf(item))
+  const { text, calls } = stubText((req) => replyOf(item, req))
   const shared = item.form === 'shared'
   try {
     await planBook(
@@ -322,7 +389,7 @@ async function runCase(item: Case): Promise<{
         theme: 'cloud',
         wish: '一朵云变来变去',
         form: shared ? 'shared' : 'solo',
-        pages: shared ? SHARED_PAGES.length : CLEAN.length,
+        pages: shared ? SHARED_PATH_PAGES : CLEAN.length,
       },
       { providers: providers(text) },
     )
@@ -494,7 +561,7 @@ async function runInputCase(item: InputCase): Promise<{
   // ★ 模型回的那一版**永远是干净的**（`page: -1` = 一页都不改）。
   //   这是刻意的：这一组要量的是"家长那句输入有没有到模型那里"，
   //   所以模型那一侧的产物必须是一个常量，否则分不清拦下来的是输入还是输出。
-  const { text, calls } = stubText(planJsonOf({ ...CLEAN_CASE }))
+  const { text, calls } = stubText((req) => replyOf({ ...CLEAN_CASE }, req))
   try {
     await planBook(
       {
@@ -538,10 +605,19 @@ async function main(): Promise<void> {
     if (!ok && item.expect === 'blocked') wrong += 1
     if (!ok && item.expect === 'slipped') surprised += 1
 
-    // ★ 处置与调用次数要**对得上**：`block` 是当场拒发（一次），`rewrite` 是改到次数用尽（三次）。
+    // ★ 处置与调用次数要**对得上**：`block` 是当场拒发（一次），`rewrite` 是改到次数用尽。
     //   这一条只有真跑才看得出来——它证明的不是"函数返回了 flag"，
     //   而是"引擎真的按那个处置走了"（让模型看着那段内容再改一遍是一次多余的接触）。
-    const wanted = clause?.disposition === 'block' ? 1 : 3
+    // ★ 2026-10-22 起共读版走两步：`block` 的"当场"是**写到那一段就停**，
+    //   所以次数 = 提纲 1 次 + 到那一段为止（主干 1 / A 2 / B 3）。
+    const sharedSection = (page: number): number =>
+      page < SHARED_CUT ? 1 : page < SHARED_CUT * 2 ? 2 : 3
+    const wanted =
+      clause?.disposition === 'block'
+        ? item.form === 'shared'
+          ? 1 + sharedSection(item.page)
+          : 1
+        : DEFAULT_PLAN_ATTEMPTS
     const retriedRight = verdict !== 'blocked' || calls === wanted
     if (!retriedRight) wrong += 1
 

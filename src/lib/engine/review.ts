@@ -159,6 +159,31 @@ export function reviewPages(
  * 为什么连 `scene` / `imagePrompt` 都要审：它们不进孩子的耳朵，但进孩子的眼睛——
  *   `scene` 写着"血流了一地"时，那张图就是照着它画的。只审 `body` 会漏掉这一路。
  */
+/**
+ * 一页里要过闸的那几段字。
+ *
+ * `reviewStory` 与共读版的分段展开共用这一份（2026-10-22）。分开写的话，两处对
+ * "这一页到底审哪几段"会开始不一样——而漏掉的那一段正是没人会注意到的那一段。
+ */
+export function reviewTextsOf(page: {
+  scene: string
+  body: readonly string[]
+  imagePrompt: string
+  choice?: { prompt: string; options: readonly { label: string; spoken: string }[] }
+}): string[] {
+  return [
+    page.scene,
+    ...page.body,
+    page.imagePrompt,
+    ...(page.choice
+      ? [
+          page.choice.prompt,
+          ...page.choice.options.flatMap((option) => [option.label, option.spoken]),
+        ]
+      : []),
+  ]
+}
+
 export function reviewStory(tree: StoryTree): {
   verdict: ReviewVerdict
   pages: readonly PageReview[]
@@ -168,17 +193,7 @@ export function reviewStory(tree: StoryTree): {
     { pageNo: 0, texts: [tree.title] },
     ...tree.nodes.map((node) => ({
       pageNo: node.pageNo,
-      texts: [
-        node.scene,
-        ...node.body,
-        node.imagePrompt,
-        ...(node.choice
-          ? [
-              node.choice.prompt,
-              ...node.choice.options.flatMap((option) => [option.label, option.spoken]),
-            ]
-          : []),
-      ],
+      texts: reviewTextsOf(node),
     })),
   ])
 

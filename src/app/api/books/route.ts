@@ -54,6 +54,7 @@ import {
   type BookRequest,
   type EngineEvent,
 } from '@/lib/engine/index.ts'
+import type { TextDelta } from '@/lib/engine/providers/types.ts'
 import { parseCreateBody } from '@/lib/book-api.ts'
 import { encodeBookFrameToText, type BookStreamFrame } from '@/lib/book-stream.ts'
 import { createFsEventLog } from '@/lib/event-log.ts'
@@ -186,7 +187,15 @@ export async function POST(req: NextRequest): Promise<Response> {
     // 一次报全部问题：填表的人宁可一次看到三条，也不愿意改一条提交一次
     return jsonError(400, 'invalid-request', parsed.problems.join('；'), parsed.problems)
   }
-  const body = parsed.value
+  /**
+   * ★ 建书这一步只产出草稿，客户端的 `status` 不采信（2026-10-22 审查）。
+   *
+   * 原来这里原样抄客户端的 `status`，而 `Book.status` 的迁移口径是"缺省 = 成品"。
+   * 于是 `POST /api/books {"status":"published"}`（或者干脆不传）再跑一遍 illustrate，
+   * 一本带着 `pictureReview.verdict === 'flag'` 的书就绕过 `/publish` 那道审核闸门
+   * 直接成了成品。成品只能由 `/publish` 写——它才是判据的持有者。
+   */
+  const body = { ...parsed.value, status: 'draft' as const }
 
   const root = assetRoot()
   const store = await createUserStore(root, guard.session.userId)
@@ -218,8 +227,8 @@ export async function POST(req: NextRequest): Promise<Response> {
     //   也不传，于是引擎收到的永远是 undefined，走那条非致命 error
     //   （"没指定音色，这本书没有朗读"）。工单 02 把它接上。
     ...(body.voiceId ? { voiceId: body.voiceId } : {}),
-    // 草稿 / 成品由调用方声明，引擎原样抄进清单（`BookRequest.status` 那段）
-    ...(body.status ? { status: body.status } : {}),
+    // ★ 恒为草稿（见上面 `body` 那段）：成品只能由 `/publish` 翻，那条路由才查审核标记
+    status: body.status,
   }
   const bookId = bookIdOf(request)
   /** 租约按人记：见 `runKeyOf` 那段（同一个主题在两个人手上是同一个书号） */
@@ -279,7 +288,23 @@ export async function POST(req: NextRequest): Promise<Response> {
   // 第二次来到这一条（上一次只编了故事、没画）时也截断：被弃掉的那一版故事
   //   不该留在日志里——`frames.ts` 的 `deskOf` 里 `total` 只增不减，
   //   12 页重写成 8 页之后会多出 4 个永远填不上的格子
-  await log.truncate(bookId)
+  //
+  // ★ 2026-10-20（`route-leases.test.ts` 钉着）：这一行**在租约窗口里**，必须包 catch。
+  //   它写盘，会抛（资产根只读、磁盘满、目录权限）。裸着写的话，异常从 `POST` 直穿出去，
+  //   下面那个流 `finally { finishRun(runKey) }` 永远不执行——这本书记在这一进程里
+  //   永远是"在跑"，此后每一次点它都收 409，直到进程重启；而用户看到的是一个未捕获的
+  //   500，不是一句人话。紧邻的 `createProviders` 失败就老老实实还了租约，
+  //   所以这是同一套纪律上漏掉的那一格，不是"设计上没想"。
+  //   码用 `asset-write-failed` 而**不是** `userFailureOf(err)`：后者会把一条非
+  //   `EngineError` 的异常规约成 `provider-call-failed`，而那句文案在
+  //   `provider-messages.ts` 里是讲厂商那边成败的——磁盘写不进去说成"调模型失败"就是假话。
+  //   这个码在本仓库已有先例：`story/route.ts` 的 `writeStory` 失败走的就是它。
+  try {
+    await log.truncate(bookId)
+  } catch (err) {
+    finishRun(runKey)
+    return jsonError(500, 'asset-write-failed', err instanceof Error ? err.message : String(err))
+  }
 
   const startedAt = Date.now()
   const encoder = new TextEncoder()
@@ -306,13 +331,32 @@ export async function POST(req: NextRequest): Promise<Response> {
         })
       }
 
+      /**
+       * ★ 令牌级增量（2026-10-21，工单 D-04）。这一根线原来是断的：
+       *   `plan.ts` 的 `onDelta`、`providers/openai-text.ts` 的 `stream()`、
+       *   `engine/plan-stream.ts` 的 `readPlanProgress` 三件都在、都有测试，
+       *   而 `src/app/**` 一处都没传 —— 于是"故事正在一页页写出来"这个交互
+       *   在线上一次都没跑过，故事是在 `plan-ready` 那一刻整张出现的。
+       *
+       * 两条约定（都写在别处，这里只是兑现）：
+       * 1. **不落盘**（`book-stream.ts` 的文件头第 1 条）。落盘的判据是"重放这份日志
+       *    必须能重建出同一串界面状态"，而重放一段打字机动画没有意义，
+       *    它还会把这几十行的日志变成几十万行。所以这里只 `send`，不 `log.append`。
+       * 2. 与 `tools` 互斥（`plan.ts` 的 `PlanOptions.onDelta`）——这条路由不传 `tools`。
+       * ★ `engine` 事件那条路是**先落盘再入流**（文件头第 1 条），增量这一条没有这个讲究：
+       *   它没有"重放"可言，所以丢了就丢了，不必为它排顺序。
+       */
+      const onDelta = (delta: TextDelta): void => {
+        send({ kind: 'delta', text: delta.text, streamed: delta.streamed })
+      }
+
       try {
         // 检索（2026-10-19，`.scratch/rag`）。建这个函数不读盘——语料是惰性的，
         //   读不到会抛在 `plan.ts` 的 `retrieveOnce` 里，由它发事件（那里有事件工厂）。
         //   所以这一行不需要 try/catch：它挡不住任何东西，只会把失败变成静默。
         const retriever = createPlanRetriever({ store, owner: ownerOf(guard.session.userId) })
 
-        const plan = await planBook(request, { providers, onEvent, retriever })
+        const plan = await planBook(request, { providers, onEvent, retriever, onDelta })
         await chain
         // 先写盘、再发收尾帧（文件头最后那一段）
         await writeStory(store, {

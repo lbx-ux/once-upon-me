@@ -16,6 +16,9 @@
     "format:check": "prettier --check .",
     "check:colors": "node scripts/check-color-tokens.mts",
     "check:scrim": "node scripts/check-scrim.mts",
+    "check:family": "node scripts/check-family-data.mts",
+    "verify": "node scripts/verify.mjs",
+    "hooks:install": "git config core.hooksPath .githooks",
     "mcp": "node mcp/server.mts",
     "mcp:session": "node scripts/mcp-session.mts"
   },
