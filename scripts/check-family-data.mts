@@ -313,7 +313,7 @@ const MEDIA_EXT = new Set(['.png', '.jpg', '.jpeg', '.webp', '.mp3', '.wav', '.m
  *
  * 这份白名单不是"我认为会有什么"，是**从生产代码里写下的那几个前缀**抄来的：
  *   `cards/<cardId>/ref.<digest>.<ext>`（`character-card/store.ts` 的 `refPath`）、
- *   `books/<bookId>/{cover,page-N-aM}.<ext>`（`illustrate.ts` 的 `pagePath`）、
+ *   `books/<bookId>/{cover,cover-aM,page-N-aM}.<ext>`（`illustrate.ts` 的 `pagePath`）、
  *   `thumbs/<档>/<原图路径>`（`thumbs.ts`）。
  * ★ 一条照片泄进来最可能的落点（`children/`、裸根、某个临时名）都落不进这些形状里，
  *   于是它会以"认领不了"的形式当场红掉。而"按位置认领"证不到的是
@@ -328,7 +328,13 @@ const CLAIMED: { what: string; test: RegExp }[] = [
     what: '角色卡的版本记录（json，列在这里只为不漏掉路径）',
     test: /^cards\/[^/]+\/r\d+\.[0-9a-f]+\.json$/,
   },
-  { what: '书的封面', test: /^books\/[^/]+\/cover\.[a-z]+$/ },
+  // ★ 封面也带 attempt（`illustrate.ts` 的 `cover-a${attempt}`，2026-10-20 起）：
+  //   被替掉的那几版留着，"上一版为什么不行"要看得见。规则原来只认 `cover.<ext>`，
+  //   于是引擎正常写出的 `cover-a1.png` 被当成"没人认领"——2026-10-22 实测 4 张。
+  {
+    what: '书的封面（第 N 版；引擎保留被替掉的那几张）',
+    test: /^books\/[^/]+\/cover(?:-a\d+)?\.[a-z]+$/,
+  },
   { what: '书的某一页 / 那一页的配音', test: /^books\/[^/]+\/page-\d+-a\d+\.[a-z0-9]+$/ },
   // ★ 下面三条不是推理出来的，是上面那一次实跑"认领不了"点出来的真名字
   {
