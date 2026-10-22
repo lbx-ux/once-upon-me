@@ -24,6 +24,7 @@ import { createCardStore } from '../engine/index.ts'
 import { createEventFactory, describeEvent, type EngineEvent } from '../engine/events.ts'
 import { INJECTION_PHRASES } from '../rag/prompt.ts'
 import { storyPathOf } from '../story-draft.ts'
+import { loadStubPlanJson, stubProviders } from '../stub-fixture.ts'
 import type { EventLog } from '../event-log.ts'
 import type { ChildListItem } from '../children-list.ts'
 import type { CardListItem } from '../cards-list.ts'
@@ -543,6 +544,71 @@ describe('plan_book', () => {
     const read = await log.read(bookId)
     expect(read.events.length).toBeGreaterThan(0)
     expect(read.events[0]?.seq).toBe(1)
+  })
+
+  it('stub 档：不传 pages 时按剧本的页数走，不拿 shared 默认的 8 页去撞 v6 校验', async () => {
+    const store = createMemoryStore()
+    await createCardStore(store).save(CARD)
+    const { log } = memoryLog()
+    const stub = stubProviders(await loadStubPlanJson())
+    const ctx: ToolContext = {
+      children: async () => [childItem()],
+      userId: '1',
+      store,
+      log,
+      mode: 'stub',
+      providers: async () => ({
+        mode: 'offline',
+        text: stub.text,
+        image: stub.image,
+        vision: null,
+        voice: null,
+        store,
+      }),
+      now: () => 1_760_000_000_000,
+    }
+
+    // 不传 pages：产品默认是 shared 8 页，但替身剧本只有 4 页。
+    // 这一格以前会把 8 页带进剧本，v6 的硬页数校验连拒五次——
+    // 症状是 `pnpm mcp:session` 13 格里 5 格红。
+    const { text, isError } = await call({ ctx, store, log }, 'plan_book', {
+      child: 'xiaoman',
+      theme: '恐龙',
+    })
+    expect(isError).toBe(false)
+    expect(text).toContain('6 个节点')
+  })
+
+  it('stub 档：显式要别的页数 → 当场拒，并说清换哪一档', async () => {
+    const store = createMemoryStore()
+    await createCardStore(store).save(CARD)
+    const { log } = memoryLog()
+    const stub = stubProviders(await loadStubPlanJson())
+    const ctx: ToolContext = {
+      children: async () => [childItem()],
+      userId: '1',
+      store,
+      log,
+      mode: 'stub',
+      providers: async () => ({
+        mode: 'offline',
+        text: stub.text,
+        image: stub.image,
+        vision: null,
+        voice: null,
+        store,
+      }),
+      now: () => 1_760_000_000_000,
+    }
+
+    const { text, isError } = await call({ ctx, store, log }, 'plan_book', {
+      child: 'xiaoman',
+      theme: '恐龙',
+      pages: 8,
+    })
+    expect(isError).toBe(true)
+    expect(text).toContain('固定剧本是4页')
+    expect(text).toContain('--mode=live')
   })
 
   it('这个主题已经画过了 → 拒，并说清两条出路', async () => {

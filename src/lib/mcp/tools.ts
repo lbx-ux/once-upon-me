@@ -60,6 +60,7 @@ import { listBooks, noCovers } from '../library.ts'
 import { createPlanRetriever } from '../rag/load.ts'
 import { INJECTION_PHRASES } from '../rag/prompt.ts'
 import { readStory, storyInputOf, writeStory } from '../story-draft.ts'
+import { STUB_PAGES, stubFormIsSupported } from '../stub-fixture.ts'
 
 /* 上下文 */
 
@@ -611,7 +612,29 @@ export function createToolRuntime(ctx: ToolContext): ToolRuntime {
         const theme = requiredBounded(args, 'theme', '主题，一句话')
         const wish = boundedString(args, 'wish', '家长想讲的那句话，一句话')
         const form = oneOf<BookForm>(args, 'form', BOOK_FORMS, 'shared')
-        const pages = optionalInt(args, 'pages', 3, 24)
+        const requestedPages = optionalInt(args, 'pages', 3, 24)
+        /**
+         * ★ stub 档的剧本是一条路 `STUB_PAGES` 页。`engine-run` 已经定了这条纪律：
+         *   请求页数必须与剧本一致，否则 v6 的硬页数校验会在提纲那一步拒掉
+         *   （报"数量不足"，看起来像引擎坏了）。MCP 这一格原来没跟上——它把
+         *   shared 的产品默认 8 页带进了一份 4 页的剧本，`pnpm mcp:session` 的
+         *   5 格红全是这一个根因。
+         *   显式要别的页数时当场说清，不静默改成 4。
+         */
+        if (ctx.mode === 'stub') {
+          if (!stubFormIsSupported(form)) {
+            fail(
+              `stub 档只演得动共读版（form=shared），收到「${form}」。要跑独读版请用 --mode=live。`,
+            )
+          }
+          if (requestedPages !== undefined && requestedPages !== STUB_PAGES) {
+            fail(
+              `stub 档的固定剧本是${String(STUB_PAGES)}页（一条路走下来），` +
+                `请求的是${String(requestedPages)}页。要跑别的页数请用 --mode=live。`,
+            )
+          }
+        }
+        const pages = ctx.mode === 'stub' ? STUB_PAGES : requestedPages
 
         const items = await childrenOf()
         const item = items.find((one) => one.profile.childId === childId)

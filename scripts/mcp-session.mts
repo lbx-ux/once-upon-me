@@ -9,7 +9,7 @@
  *
  * | # | 判据 | 怎么算过 |
  * | - | ---- | -------- |
- * | 2 | 走 MCP 那条路与 `engine-run --mode=stub` 是**同一本书、同一串事件** | `book.json` 去掉时间字段后逐字节相同；`events.jsonl` 去掉 `at` 后逐条相同 |
+ * | 2 | 走 MCP 那条路与 `engine-run --mode=stub` 是**同一本书、同一串事件** | `book.json` 去掉时间字段后逐字节相同；事件流语义相同（全局按序、页级按页归并——并发池会打乱页与页的交错） |
  * | 3 | 进度通知**给 token 才发** | 给 `progressToken` → 每条事件一条 progress；**不给 → 0 条**（一对判别对照） |
  * | 4 | 空态与负例说得清 | 未知方法 → `-32601`；不存在的书号 → `isError: true` + 一句人话 |
  * | 5 | 会话记录可重跑 | `.out/mcp-session/transcript.jsonl`（双向）+ `summary.json` |
@@ -87,6 +87,34 @@ function stable(value: unknown): string {
         .map((key) => [key, record[key]]),
     )
   })
+}
+
+/**
+ * 判据 2 的归一化：**页级事件按页归并，全局事件保持原序。**
+ *
+ * ★ 2026-10-21 出图加了上限 3 的并发池之后，页与页的完成顺序不再确定
+ *   （实测同一份替身两次跑，第 13 条事件一次是 page 3、一次是 page 2）。
+ *   那不是"两条路不一样"，是并发本来就会打乱**页与页之间**的交错。
+ *   所以这里只放松这一层：
+ *   - 全局事件（`retrieved` / `plan-ready` / `book-ready` / 无页号的 `stage`…）顺序照旧；
+ *   - 页级事件按 `pageNo` 稳定归并，**同一页内部的先后照旧**（出图 → 核对）；
+ *   - `seq` 是全局序号，并发之后它必然不同，比之前摘掉。
+ *   如果哪天页内顺序真的错了，这一条仍然会红。
+ */
+function normalizeEvents(value: unknown[]): unknown {
+  const strip = (one: unknown): Record<string, unknown> => {
+    const rest = { ...(stripTime(one) as Record<string, unknown>) }
+    // `seq` 是全局序号：并发之后同一页拿到第几个号也会变，它不是语义
+    delete rest['seq']
+    return rest
+  }
+  const events = value.map(strip)
+  const isPage = (one: Record<string, unknown>): boolean => typeof one['pageNo'] === 'number'
+  const global = events.filter((one) => !isPage(one))
+  const byPage = events
+    .filter(isPage)
+    .sort((a, b) => (a['pageNo'] as number) - (b['pageNo'] as number))
+  return { global, page: byPage }
 }
 
 /* ───────────────────────── 一个很小的 MCP 客户端 ───────────────────────── */
@@ -374,10 +402,10 @@ async function main(): Promise<void> {
   const eventsA = (summaryA?.['eventsRaw'] as unknown[]) ?? []
   const eventsB = await readEvents(`${mine}/books/${bookId}/events.jsonl`)
   check(
-    `events.jsonl 去掉 at 后逐条相同（${eventsB.length} 条）`,
-    stable(stripTime(eventsA)) === stable(stripTime(eventsB)),
+    `事件流语义相同（${eventsB.length} 条；全局按序、页级按页归并）`,
+    stable(normalizeEvents(eventsA)) === stable(normalizeEvents(eventsB)),
     eventsA.length === eventsB.length
-      ? firstDifference(stripTime(eventsA), stripTime(eventsB))
+      ? firstDifference(stable(normalizeEvents(eventsA)), stable(normalizeEvents(eventsB)))
       : `条数就不同：对照臂 ${eventsA.length} 条，MCP ${eventsB.length} 条`,
   )
 
