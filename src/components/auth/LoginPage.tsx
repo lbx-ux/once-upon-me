@@ -28,6 +28,7 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 
 import { useAuth } from '@/components/auth/AuthProvider.tsx'
+import IcpNotice from '@/components/site/IcpNotice.tsx'
 import {
   loginWithPassword,
   sendCode,
@@ -621,6 +622,11 @@ export default function LoginPage({ next }: { next?: string | undefined }) {
             我们怎么处理你和孩子的数据
           </Link>
         </p>
+
+        {/* ★ 2026-10-28：备案号。法规要求站内展示并链到工信部备案系统，
+            而这一屏是"人第一次留下东西"的那一页 —— 与上面那条隐私指路同一栏、
+            比它再轻一档（`.login__icp`，见 login.css 末尾那一组）。 */}
+        <IcpNotice className="login__icp" />
       </section>
 
       <figure className="login__art">

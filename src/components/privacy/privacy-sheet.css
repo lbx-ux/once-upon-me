@@ -346,3 +346,11 @@
     transform: none;
   }
 }
+
+/* 2026-10-28：备案号，这张纸的落款（`IcpNotice`，`components/site/icp-notice.css`
+   管字号与链接的样子）。放在 `pv__actions` 那两颗按钮**之下**、纸内，
+   因为它是这一页的落款而不是一条进一步的动作 —— 与按钮之间只隔 14px，
+   没有上边线（上面那条 border-top 已经把"正文结束"分过了，再来一条就是两条线夹一行字）。 */
+.pv__icp {
+  margin: 14px 0 0;
+}

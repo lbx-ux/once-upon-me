@@ -6,6 +6,7 @@ import HeroOrbit from '@/components/hero/HeroOrbit'
 import HeroTypewriter, { type TypewriterLine } from '@/components/hero/HeroTypewriter'
 import HighlightsReel from '@/components/highlights/HighlightsReel'
 import SceneBackdrop from '@/components/scene/SceneBackdrop'
+import IcpNotice from '@/components/site/IcpNotice.tsx'
 import StartCreating from '@/components/hero/StartCreating'
 import { readDemoBookAudio } from '@/lib/demo-book-audio'
 import { THEMES, artPath } from '@/lib/themes'
@@ -175,6 +176,16 @@ export default async function HomePage() {
       {/* 全页浮层：三屏加起来约 6 屏滚动量，滚到底想回头看第一屏不该一路往上拽。
           （手机上两节短得多，"滚过首屏才出现"这条门槛仍然成立。） */}
       <BackToTop />
+
+      {/* 备案号（2026-10-28）：法规要求站内展示并链到工信部备案系统。
+          ★ 位置在 `BackToTop` 之后、也就是整个文档的最末：它是"网站底部"，
+            而 `BackToTop` 是浮层（`position: fixed`），不受文档流影响。
+          ★ 它是这一页**唯一**一处会改变文档总高的新增块（约 60px），而第三屏用
+            `enter-exit` 量程、最后一节的量程会被 `docScrollHeight` 夹一道
+            （`useScrollDriver.ts` 的 `enterExitSpan`）。所以这一笔上线前量过：
+            文档总高与亮点那一节的真实量程，改前改后的差写在
+            `docs/known-tradeoffs.md`「手机横屏」那一节之后的新条目里。 */}
+      <IcpNotice className="icp--home" />
     </>
   )
 }

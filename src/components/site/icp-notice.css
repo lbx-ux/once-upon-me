@@ -1,0 +1,64 @@
+/* icp-notice.css —— 备案号那一行
+ *
+ * 与 `IcpNotice.tsx` 同目录同名，在 `app/globals.css` 里 `@import`（与其余各套一致）。
+ * 类名前缀 `icp` 全站唯一。
+ *
+ * 这一份只管**那一行字本身**（字号、墨色、链接的样子）。三个落点各自的位置与边距
+ * 写在它们自己那一屏的样式表里（`highlights-reel.css` 不管、`.icp--home` 在这里，
+ * 因为首页没有"自己的一张表"）：`.icp--home` 是首页最底那张小纸，
+ * `.login__icp` 在 `login.css`，`.pv__icp` 在 `privacy-sheet.css`。
+ * 分开的理由与全站一致：一屏的版面归那一屏，别把五个页面的边距堆进一个文件。
+ *
+ * 颜色一律走令牌，一个十六进制都不写——`scripts/check-color-tokens.mts` 扫的正是
+ * 组件样式表里「面与墨」位置上的字面量。`--ink-muted` / `--page-paper` 这一对
+ * 是 `privacy-sheet.css` 上量过的（≈5.0:1，过正文级 AA），这里照抄同一对。
+ */
+
+.icp {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.9;
+  color: var(--ink-muted);
+}
+
+.icp__link {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+}
+
+.icp__link:hover,
+.icp__link:focus-visible {
+  color: var(--accent);
+}
+
+/* 首页最底：一张小纸，不贴在背景上
+ *
+ * ★ 为什么不直接写一行裸字：首页最底那一段压着 `SceneBackdrop` 的**第三幕**
+ *   （夜晚台灯下的书桌），而那一幕的颜色**随滚动在变**。`check:scrim` 量的是
+ *   `globals.css` 里那几张固定的面与墨的配对，量不到"一行字浮在一张会变的图上"。
+ *   给这一行自己的面（`--page-paper`），配对就又回到量具能管的那一对上了。
+ * ★ `padding-bottom` 是紧跟在 `.hl` 那条 `clamp(72px, 10vh, 132px)` 之后的第二段留白，
+ *   刻意比它小一档：备案号是落款，不是第三屏的结尾。
+ */
+.icp--home {
+  position: relative;
+  z-index: 1; /* 与前两屏同一套层序：压在 fixed 的场景背景之上（它写的是 0） */
+  display: flex;
+  justify-content: center;
+  padding: 0 clamp(16px, 4vw, 32px) clamp(28px, 5vh, 56px);
+}
+
+.icp--home .icp__link {
+  padding: 8px 16px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: var(--page-paper);
+  text-decoration: none;
+}
+
+.icp--home .icp__link:hover,
+.icp--home .icp__link:focus-visible {
+  text-decoration: underline;
+}

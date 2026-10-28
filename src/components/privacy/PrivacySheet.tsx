@@ -49,6 +49,8 @@
 
 import Link from 'next/link'
 
+import IcpNotice from '@/components/site/IcpNotice.tsx'
+
 /** 一条"我们存了什么"。★ 第二层（给评委）里的 `where` 写的是磁盘上真实的那一段路径 */
 type Stored = {
   what: string
@@ -337,6 +339,9 @@ export default function PrivacySheet({ signedIn }: PrivacySheetProps) {
             {signedIn ? '去个人主页' : '去登录'}
           </Link>
         </nav>
+
+        {/* 2026-10-28：备案号挂在这一页的落款处（`.pv__icp`，见 privacy-sheet.css 末尾） */}
+        <IcpNotice className="pv__icp" />
       </article>
     </main>
   )
