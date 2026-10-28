@@ -4,6 +4,7 @@
 #
 # ```
 #   ./scripts/deploy-web.sh --provision     # 一次性（幂等）：装运行时、建目录、写 web.env / unit / nginx conf，一律**不启动**
+#   ./scripts/deploy-web.sh --tls           # 一次性（幂等）：签发 / 续期 Let's Encrypt 证书（DNS 指过来、80 放行之后才跑）
 #   ./scripts/deploy-web.sh --assets        # 一次性：把本机作品搬到 /var/lib/xiaozhujue/assets（183 MB）
 #   ./scripts/deploy-web.sh                 # 日常：只传代码（压缩后约 1.6 MB）
 #   ./scripts/deploy-web.sh --full          # 含 public/（61 MB；美术变过才用）
@@ -60,6 +61,8 @@
 set -euo pipefail
 
 HOST="${XZJ_HOST:-root@123.56.148.105}"
+# 证书签给这个名字；nginx 两个 server 块里写死它（301 的目标也写死它，见那里的注释）
+DOMAIN="${XZJ_DOMAIN:-lbx99.xyz}"
 APP_DIR="/opt/xiaozhujue/app"
 ASSETS_DIR="/var/lib/xiaozhujue/assets"
 WEB_ENV="/etc/xiaozhujue/web.env"
@@ -193,7 +196,14 @@ UNITEOF
   rsh 'cat > /etc/nginx/sites-available/xiaozhujue' <<'NGINXEOF'
 # xiaozhujue —— 公网那一侧只有这一个进程
 #
-# 四行必须写对，每一行都对应一次实测过的坏结局：
+# ★ 2026-10-28：上了域名与证书（https://lbx99.xyz）。80 只做两件事
+#   （ACME 验证、开发机的 /backend/ 直连），其余一律 301 到 https。
+#   证书是 Let's Encrypt，由 certbot 续（`--tls` 签发；续期钩子在
+#   /etc/letsencrypt/renewal/lbx99.xyz.conf 的 renew_hook = systemctl reload nginx）。
+#   ★ 新机器上的顺序是 `--provision` → `--tls` → `--go-live`：
+#    这份 conf 引用了 /etc/letsencrypt/live/ 下的证书，证书没签之前 `nginx -t` 会红。
+#
+# 四行必须写对，每一行都对应一次实测过的坏结局（**两个 server 块里逐字相同**，改一处另一处也要改）：
 #   client_max_body_size     录音克隆要传音频，默认 1m 会在上传那一刻 413
 #   proxy_read_timeout 900s  出图那条流 20–35 分钟、中间几分钟不吐字；
 #                            默认 60 秒会在**整本生成的第 1 页**就掐断
@@ -201,7 +211,53 @@ UNITEOF
 #   /backend/ 末尾那个斜杠    少了它 /backend/api/x 会变成 /backendapi/x（404）
 server {
   listen 80 default_server;
-  server_name 123.56.148.105;
+  server_name lbx99.xyz www.lbx99.xyz 123.56.148.105;
+
+  client_max_body_size 24m;
+
+  # Let's Encrypt HTTP-01：certbot --webroot 把验证文件落在这里。
+  # `^~` 前缀匹配，下面那条 301 吃不掉它。
+  location ^~ /.well-known/acme-challenge/ {
+    root /var/www/certbot;
+    default_type text/plain;
+  }
+
+  # 给**开发机**用的一条：本机 .env.local 写 BACKEND_URL=http://123.56.148.105/backend
+  # 就不必本地再起一个 Java。它不是给线上用的（线上 BFF 直连回环 8080）。
+  # ★ 它一通到 Java，而 Java 仍然要 X-Internal-Token，缺了就是 403（/api/health 豁免）。
+  # ★ 它**不跳 https**：本机 dev server 打的是明文，跳过去只会撞上一个证书对不上的名字。
+  location /backend/ {
+    proxy_pass http://127.0.0.1:8080/;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  }
+
+  # ★ 目标写死域名、不写 $host：从 http://123.56.148.105 进来时 $host 是那个 IP，
+  #   跳到 https://IP 会撞上证书名不符（浏览器里是一整页红警告）。
+  location / {
+    return 301 https://lbx99.xyz$request_uri;
+  }
+}
+
+server {
+  listen 443 ssl http2;
+  server_name lbx99.xyz www.lbx99.xyz;
+
+  ssl_certificate     /etc/letsencrypt/live/lbx99.xyz/fullchain.pem;
+  ssl_certificate_key /etc/letsencrypt/live/lbx99.xyz/privkey.pem;
+  ssl_trusted_certificate /etc/letsencrypt/live/lbx99.xyz/chain.pem;
+  ssl_protocols TLSv1.2 TLSv1.3;
+  ssl_prefer_server_ciphers off;
+  ssl_session_cache shared:SSL:10m;
+  ssl_session_timeout 1d;
+  # ★ 不写 ssl_stapling：Let's Encrypt 2025 年起不再提供 OCSP，加了只会每次
+  #   reload 都吐一行 "ssl_stapling ignored, no OCSP responder URL"（2026-10-28 实测）。
+
+  # 一年。★ 不加 includeSubDomains / preload：这台机器只管这两个名字，
+  #   别的子域将来可能落在别处，加了就把它们一起锁死了。
+  add_header Strict-Transport-Security "max-age=31536000" always;
 
   client_max_body_size 24m;
 
@@ -219,9 +275,6 @@ server {
     proxy_buffering off;
   }
 
-  # 给**开发机**用的一条：本机 .env.local 写 BACKEND_URL=http://123.56.148.105/backend
-  # 就不必本地再起一个 Java。它不是给线上用的（线上 BFF 直连回环 8080）。
-  # ★ 它一通到 Java，而 Java 仍然要 X-Internal-Token，缺了就是 403（/api/health 豁免）。
   location /backend/ {
     proxy_pass http://127.0.0.1:8080/;
     proxy_http_version 1.1;
@@ -468,6 +521,10 @@ rollback() {
 
 go_live() {
   say "★ 这一步就是「上前端」本身：启用 nginx site + web unit"
+  # ★ 证书没签之前这份 conf 过不了 `nginx -t`（443 那块的 ssl_certificate 指向一个不存在的文件），
+  #   所以这里先判一句，免得人对着一条语法错误猜半天。
+  rsh "[ -f /etc/letsencrypt/live/$DOMAIN/fullchain.pem ]" \
+    || die "证书不在（/etc/letsencrypt/live/$DOMAIN/）—— 先跑 ./scripts/deploy-web.sh --tls"
   # ★ 先把占位页撤掉（`--test-page` 那一份）：它自己也 listen 80，
   #   留着会让"打到 80 的请求归谁"变成一件要读两份 conf 才说得清的事。
   # ★ **改完链接必须 `reload`** —— 2026-10-19 在这里栽过一次：nginx 本来就在跑
@@ -494,7 +551,12 @@ go_live() {
   fi
 
   rsh "systemctl is-active nginx $SERVICE"
-  say "外面那一侧（手机/另一台机器）：http://${HOST##*@}/ —— 出得来首页才算成"
+  # ★ 2026-10-28 起判据是 https：`--resolve` 把域名指到回环，验的是"证书 + 443 那块 conf"，
+  #   与 DNS 无关（DNS 归注册商管，不归这台机器）。
+  rsh "curl -s -o /dev/null -w '本机走域名 https / = %{http_code}（证书校验 %{ssl_verify_result}）\n' \
+        --resolve $DOMAIN:443:127.0.0.1 https://$DOMAIN/" || true
+  say "外面那一侧（手机/另一台机器）：https://${DOMAIN}/ —— 出得来首页才算成"
+  say "打不开就先看阿里云安全组放没放行 443（我在透明代理后面测不准）"
 }
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -551,6 +613,39 @@ NGINXEOF
   say "  撤回这一页：ssh 上去 rm 掉 sites-enabled 那个链接再 reload（或直接 --go-live 换成真站点）"
 }
 
+# ══════════════════════════════════════════════════════════════════════════
+# --tls：签发（幂等：有了就查续期）Let's Encrypt 证书。
+#
+# ★ 为什么自动签、而不是去阿里云控制台下免费证书：后者要人点、要手动续（一年一次），
+#   而 certbot 的 systemd timer 每天自己看一眼，到期前 30 天续掉。
+# ★ 要能签成，前提是三条**都在**：DNS 的 A 记录指着这台机器、80 放行、
+#   `nginx` 里那条 `/.well-known/acme-challenge/` 能读到 `/var/www/certbot`。
+#   （2026-10-28 实测：三条当时都满足，签发一次成功。）
+# ★ 没有邮箱：用 `--register-unsafely-without-email`，代价是证书快到期时收不到提醒——
+#   但那台机器有 timer 自己续，提醒本来也只是第二道保险。要补：
+#   `certbot update_account --email you@example.com`。
+tls() {
+  say "签发 / 续期证书：$DOMAIN + www.$DOMAIN"
+  rsh "set -e
+       export DEBIAN_FRONTEND=noninteractive
+       apt-get install -y -qq certbot >/dev/null
+       mkdir -p /var/www/certbot/.well-known/acme-challenge
+       chown -R www-data:www-data /var/www/certbot
+       if [ -f /etc/letsencrypt/live/$DOMAIN/fullchain.pem ]; then
+         echo '已有证书 —— 交给 certbot 自己判要不要续'
+         certbot renew --cert-name $DOMAIN --no-random-sleep-on-renew --non-interactive | tail -3
+       else
+         certbot certonly --webroot -w /var/www/certbot -d $DOMAIN -d www.$DOMAIN \\
+           --agree-tos --register-unsafely-without-email --non-interactive \\
+           --preferred-challenges http
+       fi
+       grep -q '^renew_hook' /etc/letsencrypt/renewal/$DOMAIN.conf 2>/dev/null ||
+         sed -i '/^\[renewalparams\]/a renew_hook = systemctl reload nginx' /etc/letsencrypt/renewal/$DOMAIN.conf
+       echo '—— 盘上那张证书 ——'
+       openssl x509 -in /etc/letsencrypt/live/$DOMAIN/fullchain.pem -noout -subject -dates -ext subjectAltName"
+  say "续期由 certbot.timer 管：$(rsh 'systemctl is-enabled certbot.timer 2>/dev/null; systemctl list-timers certbot.timer --no-pager 2>/dev/null | head -2' || true)"
+}
+
 # ★ `--expect=...` 可以出现在任意位置，所以先剥出来再分派。
 #   写这段是因为 `[ x ] && cmd` 在 `set -e` 下会要命：条件不成立时整条列表返回 1，
 #   脚本当场退出 —— 而那种退出看起来像"命令本身失败了"。
@@ -568,6 +663,7 @@ case "${1:-}" in
   --provision) provision ;;
   --assets)    sync_assets ;;
   --test-page) test_page ;;
+  --tls)       tls ;;
   --full)      deploy 1 "$EXPECT" ;;
   --go-live)   go_live ;;
   --rollback)  rollback ;;

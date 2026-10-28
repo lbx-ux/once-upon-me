@@ -521,8 +521,10 @@ listBooks(store, coverUrlOf)        ← 默认序（这条规则仍然是真的�
 
 **① 那条地址栏不是我们的。** 它是手机浏览器自己的界面，**网页碰不到它**（CSS 也碰不到
 浏览器界面）。能碰到它的只有两条路：**全屏 API**（`reader/FullscreenButton.tsx`）与
-**加到主屏幕**（manifest `display: fullscreen`）。★ 后者现在走不通 —— 它要**安全来源**，
+**加到主屏幕**（manifest `display: fullscreen`）。★ 后者**当时**走不通 —— 它要**安全来源**，
 而站点跑在 `http://123.56.148.105`（没有域名也没有证书，见上面「先 IP + HTTP」那一节）。
+★ 2026-10-28 补：域名与证书有了，**这条门槛没了**，但 manifest 这一轮没做 ——
+所以"加到主屏幕"现在是**能做而没做**，不再是"做不了"。
 前者查过 MDN：`requestFullscreen()` **没有安全上下文要求**，只要求一次用户手势 +
 Permissions-Policy，所以现在这个 http 站也能用；★ 但它在 **iOS Safari 上不存在**
 （那一支里元素全屏只对 `<video>` 生效）—— 于是那颗钮在 iOS 上**根本不渲染**，
@@ -1469,7 +1471,11 @@ git ls-files --eol        # 63 个 i/lf w/crlf · 60 个 i/lf w/lf · 27 个 i/-
 实测收益：角色卡墙 **5,590,702 → 156,342 字节**（35.8 倍）；
 创作流第 3 步 **约 8.4 MB → 95,096 字节**；演示书三页 **11,192 KB → 563 KB**（19.9 倍）。
 
-### 先 IP + HTTP：登录口令与内部令牌在公网是明文（2026-10-17）
+### 先 IP + HTTP：登录口令与内部令牌在公网是明文（2026-10-17，2026-10-28 已收口）
+
+★ **2026-10-28：这一条已经关掉了。** 备案下来之后站点挪到了 `https://lbx99.xyz`
+（Let's Encrypt，certbot 续期），80 那一跳 301 过来，HSTS 一年。
+下面这段留着是因为它写清了"为什么当初敢先这样"，以及那三件缓解措施现在仍然是事实。
 
 站点跑在 `http://123.56.148.105` 上，没有域名也没有证书。这意味着**登录口令、
 短信验证码、会话 cookie 在公网上是明文**——同一段 Wi-Fi 里的人抓得到。
@@ -1485,6 +1491,32 @@ git ls-files --eol        # 63 个 i/lf w/crlf · 60 个 i/lf w/lf · 27 个 i/-
 
 ★ 上域名与 HTTPS 是**下一步**，不是"以后有空再说"：这件事的代价随用户数增长，
 而它现在只有两个账号。
+
+**收口时改的三处**（都是"当初标记了以后要改"的那些点）：
+
+1. `src/lib/auth/session.ts` 的 `sessionCookie()` 加 `secure` —— 但**不是写死 true**：
+   本机 `pnpm dev` 是 `http://localhost:3000`，写死就是"本机登录成功、cookie 存不下来"。
+   判据是 Nginx 送的 `x-forwarded-proto`（见 `isHttps()`）。
+2. Nginx 从"一个 80 块"变成"80 只做 ACME + 开发机通路、其余 301"+"443 那块"，HSTS 一年；
+   签发与续期归 `scripts/deploy-web.sh --tls`（certbot + systemd timer），
+   续期钩子写在 `/etc/letsencrypt/renewal/lbx99.xyz.conf` 的
+   `renew_hook = systemctl reload nginx` —— 没有它，续下来的新证书要等下一次
+   nginx reload 才会被用上，而那可能是 90 天以后。
+3. README 头部的演示地址从 IP 换成 `https://lbx99.xyz`。
+
+**还留着的两件**（写在这里，免得读成"HTTPS 之后就没有边界了"）：
+
+- `http://123.56.148.105/backend/` 这一条**故意不跳 https**：它是给开发机本地
+  `.env.local` 用的明文通路（`BACKEND_URL=http://123.56.148.105/backend`），
+  跳过去只会撞上证书名不符。它一通到 Java，仍然要 `X-Internal-Token`。
+- 加 `secure` 之后，**已经发出去的老 cookie 仍然是不带 secure 的**，直到它过期或重登一次。
+  这不构成漏洞（它们本来就走明文发出去的），只是"HTTPS 上线那一刻不等于所有票都升级了"。
+
+★ 顺带解锁了一件当初写在这里的事：**"加到主屏幕"（manifest `display: fullscreen`）
+现在走得通了**——它要安全来源，而站点现在有了。上面「手机横屏」那一节里
+"iOS 上那颗全屏钮不渲染"的结论**没有变**（那是 iOS Safari 不支持元素全屏，与证书无关）；
+变的是**安卓可以加到主屏幕、并且真的全屏**。这一轮没有做 manifest，只是别再把
+"走不通"当成既成事实。
 
 ### 没有 token 黑名单：登出只删 cookie（2026-10-17）
 

@@ -12,8 +12,9 @@
  *   ① 全屏 API（就是这里）。一次用户手势之内 `requestFullscreen()`，
  *      Chrome 会把地址栏（以及 Android 上的系统栏）一起收走。
  *   ② 加到主屏幕（manifest `display: fullscreen`）。最彻底，但要安全来源 ——
- *      现在站点跑在 `http://123.56.148.105`（没有域名也没有证书），Chrome 不给装。
- *      这一条与 README 里"域名与 HTTPS 是下一步"是同一件事，不是这一屏能修的。
+ *      2026-10-28 之前站点跑在 `http://123.56.148.105`（没有域名也没有证书），
+ *      所以那条路走不通；现在有了 `https://lbx99.xyz`，**门槛没了**，
+ *      但 manifest 这一轮还没做。要做的时候从这里接着往下写。
  *
  * 这是平台差异，不是"没做全"：`document.fullscreenEnabled` 在 iOS Safari 上
  *   是 `undefined`（那一支里元素全屏只对 `<video>` 生效）—— 于是**那颗钮在 iOS 上

@@ -244,3 +244,33 @@
   而 401/403 才是"钥匙无效"。以后看到"生成失败"先看这句厂商原文
   （`lib/provider-messages.ts` 会把它翻成人话并原样附上）。
   · 本机 `.env.local` 里那三把是**另一把**（指纹与服务器不同），本次没动。
+
+- 2026-10-28（**HTTPS**：备案下来之后收口「先 IP + HTTP」那一笔）：
+  域名 `lbx99.xyz` / `www.lbx99.xyz` 的 A 记录本来就指着这台机器
+  （从服务器上 `nslookup @223.5.5.5` 读的，不是猜的），所以这一步只剩证书与 conf。
+  做了这些：
+  · `apt install certbot`（2.9.0）→ `/var/www/certbot` 作 ACME webroot。
+  · `certbot certonly --webroot -d lbx99.xyz -d www.lbx99.xyz` 一次签成，
+    到期 2027-01-26；`certbot renew --dry-run` 全绿（staging）。
+  · conf 改成两块：80（ACME + 开发机 `/backend/` 原样，其余 `301 https://lbx99.xyz`）
+    + 443（`ssl_certificate` 那套 + `HSTS max-age=31536000`，**不加** includeSubDomains）。
+    ★ 301 的目标**写死域名**：从 `http://123.56.148.105` 进来时 `$host` 是那个 IP，
+    跳到 `https://IP` 会撞上证书名不符（一整页红警告）。
+    ★ **不写 `ssl_stapling`**：LE 2025 年起不给 OCSP，加了每次 reload 都吐
+    `ssl_stapling ignored, no OCSP responder URL`（实测）。
+  · 续期钩子：`/etc/letsencrypt/renewal/lbx99.xyz.conf` 的
+    `renew_hook = systemctl reload nginx`（没有它，续下来的证书要等下一次 reload 才生效）。
+  · `scripts/deploy-web.sh`：conf 那段换成上面这份；新增 `--tls`
+    （幂等：有证书就 `renew --no-random-sleep-on-renew`，没有就签）；`--go-live`
+    先判证书在不在、判据改成 https。★ 新机器上的顺序：`--provision` → `--tls` → `--go-live`。
+  · 判据（都是实测，不是"配好了"）：外网 `https://lbx99.xyz/` **200**、
+    `ssl_verify_result=0`、`Subject CN=lbx99.xyz` / SAN 两个名字；
+    `http://123.56.148.105` 与 `http://lbx99.xyz` 都 **301 到 `https://lbx99.xyz/`**
+    （带路径的 `/studio?x=1` 也原样带过去）；响应头有 `Strict-Transport-Security`；
+    **443 在安全组里是开的**（从开发机打真 IP 通，不用改控制台）；
+    演示号在 https 上登录 **200**，首页 HTML 里**没有** `http://` 绝对地址（无混合内容）。
+  · ★ 没做、留给下一轮的：`.env` 里的 cookie `secure` —— 代码改了
+    （`session.ts` 的 `isHttps()`，按 `x-forwarded-proto` 判，本机 http 不误伤），
+    但**还没部署**（`git archive` 只打已提交内容），所以线上那份票现在还**不带 Secure**。
+  · ★ 还没做的合规项：页面底部**没有**挂备案号（`晋ICP备2026016635号-1`）。
+    《互联网信息服务管理办法》要求挂出来并链到 `beian.miit.gov.cn`，这一条与证书无关。
