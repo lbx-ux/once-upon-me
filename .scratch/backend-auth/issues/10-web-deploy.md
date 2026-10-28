@@ -269,8 +269,9 @@
     （带路径的 `/studio?x=1` 也原样带过去）；响应头有 `Strict-Transport-Security`；
     **443 在安全组里是开的**（从开发机打真 IP 通，不用改控制台）；
     演示号在 https 上登录 **200**，首页 HTML 里**没有** `http://` 绝对地址（无混合内容）。
-  · ★ 没做、留给下一轮的：`.env` 里的 cookie `secure` —— 代码改了
-    （`session.ts` 的 `isHttps()`，按 `x-forwarded-proto` 判，本机 http 不误伤），
-    但**还没部署**（`git archive` 只打已提交内容），所以线上那份票现在还**不带 Secure**。
+  · cookie `secure`：`session.ts` 的 `isHttps()` 按 `x-forwarded-proto` 判，
+    本机 http 不误伤；**已提交并部署**（`5867c50` / `63a52da`，同一天）。
+    判据：https 上登录回的 `set-cookie` 里 `Secure; HttpOnly; SameSite=lax` 全在，
+    拿着这张票打 `/api/auth/me` 回 `allowed:true`（环回一次，票存得下、带得回）。
   · ★ 还没做的合规项：页面底部**没有**挂备案号（`晋ICP备2026016635号-1`）。
     《互联网信息服务管理办法》要求挂出来并链到 `beian.miit.gov.cn`，这一条与证书无关。
