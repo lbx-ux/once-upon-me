@@ -16,7 +16,13 @@ import { NextResponse, type NextRequest } from 'next/server'
 
 import { backendFetch } from '@/lib/auth/backend.ts'
 import { badJson, failureResponse, jsonBody } from '@/lib/auth/bff.ts'
-import { clearedCookie, sessionCookie, TICKET_COOKIE, ticketTokenOf } from '@/lib/auth/session.ts'
+import {
+  clearedCookie,
+  isHttps,
+  sessionCookie,
+  TICKET_COOKIE,
+  ticketTokenOf,
+} from '@/lib/auth/session.ts'
 
 // ★ 段配置必须是字面量：成员表达式 Next 读不了，而它只在 `pnpm build` 那一刻才报（判据见 lib/route-config.test.ts）
 export const runtime = 'nodejs'
@@ -43,7 +49,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (!result.ok) return failureResponse(result)
 
   const response = NextResponse.json({ user: result.data.user })
-  response.cookies.set(sessionCookie(result.data.token))
-  response.cookies.set(clearedCookie(TICKET_COOKIE))
+  response.cookies.set(sessionCookie(result.data.token, isHttps(request)))
+  response.cookies.set(clearedCookie(TICKET_COOKIE, isHttps(request)))
   return response
 }

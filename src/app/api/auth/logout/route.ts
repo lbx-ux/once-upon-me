@@ -11,24 +11,24 @@
  * 一张七天有效的票的风险小于多一张表、多一次查询、多一个备份对象。
  */
 
-import { NextResponse } from 'next/server'
+import { NextResponse, type NextRequest } from 'next/server'
 
 import { backendFetch } from '@/lib/auth/backend.ts'
 
-import { clearedCookie, SESSION_COOKIE, TICKET_COOKIE } from '@/lib/auth/session.ts'
+import { clearedCookie, isHttps, SESSION_COOKIE, TICKET_COOKIE } from '@/lib/auth/session.ts'
 
 // ★ 段配置必须是字面量：成员表达式 Next 读不了，而它只在 `pnpm build` 那一刻才报（判据见 lib/route-config.test.ts）
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-export async function POST(): Promise<NextResponse> {
+export async function POST(request: NextRequest): Promise<NextResponse> {
   // 通知后端一声（它只记日志）。★ 失败不影响登出：
   // cookie 清掉之后这个人在这台浏览器上就已经不是谁了，
   // 而后端收不到那一笔通知并不改变这件事。反过来（后端不通就登不出去）才是坏的
   await backendFetch('/api/auth/logout', { method: 'POST' })
 
   const response = NextResponse.json({ ok: true })
-  response.cookies.set(clearedCookie(SESSION_COOKIE))
-  response.cookies.set(clearedCookie(TICKET_COOKIE))
+  response.cookies.set(clearedCookie(SESSION_COOKIE, isHttps(request)))
+  response.cookies.set(clearedCookie(TICKET_COOKIE, isHttps(request)))
   return response
 }

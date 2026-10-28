@@ -327,21 +327,45 @@ function failureJson(status: number, code: string, message: string): NextRespons
 /* 写 cookie */
 
 /**
+ * 这一次请求是不是走的 https —— 决定 cookie 要不要带 `secure`。
+ *
+ * ★ 2026-10-28 起线上是 `https://lbx99.xyz`（80 那一跳 301 过来），`secure` 该开：
+ * 不带它，票就还能从一次明文请求里发出去。
+ * ★ 但**不能写死 `true`**：本机 `pnpm dev` 是 `http://localhost:3000`，
+ * 加了 `secure` 就是"登录成功但 cookie 存不下来"，而那是开发时最常见的一条路。
+ * 判据取 Nginx 送的 `x-forwarded-proto`（它在两个 server 块里都设了 `$scheme`），
+ * 没有这个头时退回到 URL 自己的协议（本机直连 Next 就是这种情况）。
+ */
+export function isHttps(request: Request): boolean {
+  const forwarded = request.headers.get('x-forwarded-proto')?.split(',')[0]?.trim().toLowerCase()
+  if (forwarded) return forwarded === 'https'
+  try {
+    return new URL(request.url).protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+/**
  * 会话 cookie 的选项。
  *
  * `httpOnly` + `sameSite: 'lax'`：脚本读不到（XSS 拿走不了），
  * 而 `lax` 仍然允许从外站"点进来"那种导航（登录完跳回来那一步要靠它）。
- * ★ `secure` 现在不能开：这一轮是 `http://` 的 IP 访问（用户选的），
- * 加了它就等于"登录成功但 cookie 存不下来"。等有了域名与 HTTPS 再打开——
- * 这一条写在 docs/known-tradeoffs.md 的取舍里，标记了一个明确的"以后要改这里"。
+ * `secure` 由调用方按协议给（见 `isHttps`）：https 下为真，明文下为假。
+ * ★ 默认 `false` 是**故意的**：默认值该是"本机跑得起来"，
+ * 线上那一侧由 Nginx 保证一定带了 `x-forwarded-proto: https`。
  */
-export function sessionCookie(token: string): {
+export function sessionCookie(
+  token: string,
+  secure = false,
+): {
   name: string
   value: string
   httpOnly: true
   sameSite: 'lax'
   path: string
   maxAge: number
+  secure: boolean
 } {
   return {
     name: SESSION_COOKIE,
@@ -350,14 +374,15 @@ export function sessionCookie(token: string): {
     sameSite: 'lax',
     path: '/',
     maxAge: SESSION_MAX_AGE_SECONDS,
+    secure,
   }
 }
 
-export function ticketCookie(token: string): ReturnType<typeof sessionCookie> {
-  return { ...sessionCookie(token), name: TICKET_COOKIE, maxAge: TICKET_MAX_AGE_SECONDS }
+export function ticketCookie(token: string, secure = false): ReturnType<typeof sessionCookie> {
+  return { ...sessionCookie(token, secure), name: TICKET_COOKIE, maxAge: TICKET_MAX_AGE_SECONDS }
 }
 
 /** 清 cookie 用（退出登录 / 设完密码之后那张票就作废） */
-export function clearedCookie(name: string): ReturnType<typeof sessionCookie> {
-  return { ...sessionCookie(''), name, maxAge: 0 }
+export function clearedCookie(name: string, secure = false): ReturnType<typeof sessionCookie> {
+  return { ...sessionCookie('', secure), name, maxAge: 0 }
 }

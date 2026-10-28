@@ -16,7 +16,7 @@ import { NextResponse } from 'next/server'
 
 import { backendFetch } from '@/lib/auth/backend.ts'
 import { badJson, failureResponse, jsonBody } from '@/lib/auth/bff.ts'
-import { sessionCookie, ticketCookie } from '@/lib/auth/session.ts'
+import { isHttps, sessionCookie, ticketCookie } from '@/lib/auth/session.ts'
 
 // ★ 段配置必须是字面量：成员表达式 Next 读不了，而它只在 `pnpm build` 那一刻才报（判据见 lib/route-config.test.ts）
 export const runtime = 'nodejs'
@@ -46,9 +46,9 @@ export async function POST(request: Request): Promise<NextResponse> {
   })
 
   if (verdict.kind === 'needs-password') {
-    response.cookies.set(ticketCookie(verdict.token))
+    response.cookies.set(ticketCookie(verdict.token, isHttps(request)))
   } else {
-    response.cookies.set(sessionCookie(verdict.token))
+    response.cookies.set(sessionCookie(verdict.token, isHttps(request)))
   }
   return response
 }
