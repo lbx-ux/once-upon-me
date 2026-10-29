@@ -43,12 +43,20 @@
  *    一个 Xing 头都没有，所以时长只能靠"读末尾"得到，而那就需要 Range）。
  *    原来的注释写着"对朗读音频是可以接受的"——那句话是没有量过的推测，
  *      量过之后它是错的：`seekable` 恒为 0，"从头播完就够"只是没人去拖而已。
+ * 6. `?share=<票>` 是第二条入口，而且**比第一条窄**（2026-10-29）。
+ *    分享页给没有登录的人看，所以这一条不能要求会话；但它只放行
+ *    `books/<票里那本书>/` 之下的字节，且要求票验得过、没过期、没收回。
+ *    上面第 3 条那条纪律一个字没松：读的仍然是**主人那一片**，
+ *    换的只是"凭什么读"——从"你自己登录了"换成"有人拿着一张只对这一本书有效的票"。
+ *    判据与取舍在 `src/lib/share/access.ts` 的文件头。
  */
 
 import { createUserStore } from '@/lib/asset-scope.ts'
 import { assetRoot } from '@/lib/books-runtime.ts'
+import { isBookId } from '@/lib/engine/index.ts'
 import type { AssetStore } from '@/lib/engine/providers/types.ts'
 import { requireCapability } from '@/lib/auth/session.ts'
+import { resolveShareAccess, shareAllowsAsset } from '@/lib/share/access.ts'
 import { parseRange } from '@/lib/http-range.ts'
 
 import type { NextRequest } from 'next/server'
@@ -161,12 +169,6 @@ export async function GET(
   req: NextRequest,
   ctx: { params: Promise<{ path: string[] }> },
 ): Promise<Response> {
-  // ★ 只要"登录了"（不要求任何能力）：看不见的书也不该看得见图。
-  //   匿名 → 401。★ 未登录时界面上那些 `<img>` 会是一张碎图，但未登录的人
-  //   本来也没有书可看（书架是空的），所以那不是一个"小明忽然看不见图"的故障。
-  const guard = await requireCapability(req, [])
-  if (!guard.ok) return guard.response
-
   const { path } = await ctx.params
   // ★ 不再 decode：Next 已经解码过一次（见 events 路由文件头那条）。再解一次会让
   //   `%252e%252e` 变成 `..`，也会让一个坏的 `%` 直接抛 URIError（500 而不是 404）。
@@ -176,7 +178,36 @@ export async function GET(
     return new Response('不认识的资产前缀', { status: 404 })
   }
 
-  const store = await createUserStore(assetRoot(), guard.session.userId)
+  /**
+   * ★ 第二条入口：`?share=<票>`（2026-10-29）。
+   *
+   * 分享页是给**没有登录的人**看的，而这一条路由原来是"只认登录"。
+   * 所以这里加的不是"匿名也可以"，是"拿着一张只对这一本书有效的票也可以"：
+   *   · 票必须验签、没过期、没被收回（`resolveShareAccess`）；
+   *   · 路径必须在 `books/<这本书>/` 之下（`shareAllowsPath`）——
+   *     书号是内容指纹、猜得出来，漏了这一条，"分享一本"就变成"公开这一片"；
+   *   · 读的仍然是主人那一片（`access.store`），不是无主根。
+   *
+   * 顺序是刻意的：先判前缀，再认人。不认识的前缀对谁都回同一个 404，
+   *   不必为一条注定要被拒的路径去碰磁盘或后端。
+   */
+  const shareToken = req.nextUrl.searchParams.get('share')
+  let store: AssetStore
+  if (shareToken !== null) {
+    const access = await resolveShareAccess(shareToken, assetRoot())
+    if (!access || !isBookId(access.bookId) || !shareAllowsAsset(access.bookId, relative)) {
+      // 过期、伪造、收回、越界、不是图或朗读——五件事同一个出口，不回声是哪一件
+      return new Response('资产不存在', { status: 404 })
+    }
+    store = access.store
+  } else {
+    // ★ 只要"登录了"（不要求任何能力）：看不见的书也不该看得见图。
+    //   匿名 → 401。★ 未登录时界面上那些 `<img>` 会是一张碎图，但未登录的人
+    //   本来也没有书可看（书架是空的），所以那不是一个"小明忽然看不见图"的故障。
+    const guard = await requireCapability(req, [])
+    if (!guard.ok) return guard.response
+    store = await createUserStore(assetRoot(), guard.session.userId)
+  }
   const name = relative.split('/').pop() ?? ''
   const cacheable = FINGERPRINTED.test(name)
   /** 那个 `<audio>` 拖得动、也知道时长，全靠这一条（见 `http-range.ts` 文件头） */

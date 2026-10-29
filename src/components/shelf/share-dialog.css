@@ -1,0 +1,65 @@
+/**
+ * share-dialog.css —— 「发给家人」那张纸里的三样东西
+ *
+ * 挂在 `Dialog` 那个壳里，所以底栏两颗按钮、标题栏、遮罩都是 `dialog.css` 的事，
+ * 这一份只管弹窗**里面**那三样：链接框、收回那颗、以及它们的间距。
+ *
+ * 两条讲究
+ *
+ * 1. `.share__field` 是只读框，不是正文块。用 `dlg__readonly`（那是给"原来那段
+ *    提示词"这种整段文字准备的）会让一条 URL 换成两行、行高 1.75——
+ *    复制的时候人分不清哪儿断了。这里按单行输入框画，字号压到 13，
+ *    并且 `text-overflow` 不动：宁可看见两头，也不要一个看不见的省略号。
+ * 2. `.share__revoke` 用 `--danger` 而不是 `--warn`：收回之后对方手里那条
+ *    立刻打不开，那是"会失去"的一侧（`dialog.css` 里 `.dlg__danger` 同一条分工：
+ *    warn 说代价，danger 说不可逆）。
+ */
+
+.share__url {
+  margin-top: 14px;
+}
+
+.share__field {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 11px 13px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--card-radius);
+  background: var(--surface-soft);
+  color: var(--ink);
+  font-family: ui-monospace, 'Cascadia Mono', 'Segoe UI Mono', Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.share__field:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.share__revoke {
+  display: inline-block;
+  margin-top: 16px;
+  padding: 6px 2px;
+  border: 0;
+  background: transparent;
+  color: var(--danger);
+  font: inherit;
+  font-size: 13px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.share__revoke:hover,
+.share__revoke:focus-visible {
+  outline: 2px solid var(--danger);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.share__revoke:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

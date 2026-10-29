@@ -187,7 +187,7 @@ export default function PrivacySheet({ signedIn }: PrivacySheetProps) {
 
         <section className="pv__sec">
           <h2 className="pv__h2">三、会发给谁</h2>
-          <p className="pv__p">只有两次，而且是不发就做不成的那两次：</p>
+          <p className="pv__p">我们自己这边只有两次，而且是不发就做不成的那两次：</p>
           <ul className="pv__bullets">
             <li>
               画他的第一张形象那一步，那张照片会<strong>发给出图模型厂商</strong>
@@ -201,6 +201,12 @@ export default function PrivacySheet({ signedIn }: PrivacySheetProps) {
           <p className="pv__p">
             两次都在服务器上发生，浏览器里不留副本。除此之外没有第三处拿到过它：
             照片和录音不进记录、也不进日志。
+          </p>
+          <p className="pv__p">
+            还有一处是<strong>你自己发出去的</strong>：书架上每本成品可以生成一条只读链接，
+            拿到这条链接的人（以及任何再把它转发出去的人）都能读这本书。 链接默认 30
+            天后失效，你也可以随时收回；收回之后我们这边就打不开了——
+            但已经被对方浏览器缓存下来的那一份，不归我们管。
           </p>
           <p className="pv__p pv__p--blunt">
             ★ 还有一件要说在前面：这个站是<strong>自己架的</strong>。谁能让这台服务器跑起来，

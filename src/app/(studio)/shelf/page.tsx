@@ -5,6 +5,7 @@ import { assetRoot } from '@/lib/books-runtime.ts'
 import { coverUrlOf, runtimeAssetUrl } from '@/lib/book-source.ts'
 import { listBooks, SHELF_COVER_WIDTH } from '@/lib/library.ts'
 import { applyOrder, loadOrder } from '@/lib/shelf-order.ts'
+import { shareStatesOf } from '@/lib/share/store.ts'
 
 /**
  * /shelf —— 书架
@@ -51,5 +52,11 @@ export default async function ShelfPage() {
     coverUrlOf(book, (path) => runtimeAssetUrl(path, SHELF_COVER_WIDTH)),
   )
 
-  return <ShelfDashboard books={applyOrder(books, await loadOrder(store))} />
+  // 分享状态与书一起在服务端读好：首帧就画对那个小圆点，不在客户端等一次 fetch
+  return (
+    <ShelfDashboard
+      books={applyOrder(books, await loadOrder(store))}
+      shareUntil={await shareStatesOf(store)}
+    />
+  )
 }

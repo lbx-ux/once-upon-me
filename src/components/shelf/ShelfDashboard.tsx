@@ -87,9 +87,17 @@ import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerE
 import type { BookSummary } from '@/lib/library.ts'
 import { publishBook } from '@/lib/creation/api.ts'
 import { moveTo } from '@/lib/shelf-order.ts'
+import ShareDialog from './ShareDialog.tsx'
 
 export type ShelfDashboardProps = {
   books: BookSummary[]
+  /**
+   * 这本书有没有活着的分享链接（书号 → 最晚到期，毫秒）。服务端读好递进来
+   * （`lib/share/store.ts` 的 `shareStatesOf`），这样首帧就是对的——
+   * 与次序、草稿那两条同一条纪律：不在客户端等一次 fetch 再"猜对"。
+   * 缺省 `{}`：未登录的空书架与老调用点不用改。
+   */
+  shareUntil?: Record<string, number>
 }
 
 /** 空态那条线出去的成品书（ADR-0003 的演示书）。
@@ -136,7 +144,10 @@ type DragState = {
   rect: { left: number; top: number; width: number; height: number }
 }
 
-export default function ShelfDashboard({ books }: ShelfDashboardProps) {
+export default function ShelfDashboard({
+  books,
+  shareUntil: serverShareUntil = {},
+}: ShelfDashboardProps) {
   const router = useRouter()
   const rackRef = useRef<HTMLUListElement | null>(null)
   const confirmRef = useRef<HTMLElement | null>(null)
@@ -159,6 +170,21 @@ export default function ShelfDashboard({ books }: ShelfDashboardProps) {
   const [error, setError] = useState<string | null>(null)
   /** 读屏播报（挪了一格之后要能听见自己挪到第几位了） */
   const [announce, setAnnounce] = useState('')
+
+  /**
+   * 分享（2026-10-29）。`sharing` = 弹窗正开着的那一本；`shareUntil` = 这一屏
+   * 现在认为哪几本有活链接。初值来自服务端（首帧就对），生成/收回之后由弹窗
+   * 回调改这一份——不 `router.refresh()`：那一趟会把整排书重读一遍，而这里
+   * 变的只有一个小圆点的颜色。
+   */
+  const [sharing, setSharing] = useState<BookSummary | null>(null)
+  const [shareUntil, setShareUntil] = useState<Record<string, number>>(serverShareUntil)
+  /** 服务端给了新的一份（刷新、另一个标签页收回）就跟着走；依赖同 `serverKey` 那条理由 */
+  const shareKey = JSON.stringify(serverShareUntil)
+  useEffect(() => {
+    setShareUntil(serverShareUntil)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 见上一行：靠序列化后的值判变化
+  }, [shareKey])
 
   const dragRef = useRef<DragState | null>(null)
   /** 服务端确认过的次序。写盘失败就退回它，见文件头第 3 条 */
@@ -700,6 +726,22 @@ export default function ShelfDashboard({ books }: ShelfDashboardProps) {
                 </Link>
               )}
 
+              {/* 分享那一颗：只给成品书，且只在非编辑模式出现。
+                  ★ 编辑模式下那个角是「移除」，两颗叠在一起会变成"想点分享、结果删了" */}
+              {!editing && book.status === 'published' && (
+                <button
+                  type="button"
+                  className="shelf__share"
+                  data-nodrag=""
+                  data-shared={shareUntil[book.bookId] ? 'true' : undefined}
+                  aria-label={`把《${book.title}》发给家人`}
+                  title="发给家人（对方不用登录就能读）"
+                  onClick={() => setSharing(book)}
+                >
+                  分享
+                </button>
+              )}
+
               {editing && (
                 /* 移除那一颗是真的按钮（`data-nodrag` 让拖动的 pointerdown 放过它）：
                    它点下去有动作，所以它该有按钮的语义与名字 */
@@ -779,6 +821,25 @@ export default function ShelfDashboard({ books }: ShelfDashboardProps) {
             </button>
           </div>
         </section>
+      )}
+
+      {/* 分享那张纸。★ 不挂 `router.refresh()`：这一屏只有一个小圆点的颜色变了，
+          重读整排书会让人看见一次没必要的闪 */}
+      {sharing && (
+        <ShareDialog
+          bookId={sharing.bookId}
+          title={sharing.title}
+          initialUntil={shareUntil[sharing.bookId] ?? null}
+          onClose={() => setSharing(null)}
+          onChanged={(bookId, until) => {
+            setShareUntil((current) => {
+              const next = { ...current }
+              if (until === null) delete next[bookId]
+              else next[bookId] = until
+              return next
+            })
+          }}
+        />
       )}
 
       {/* 一本都没有时给一句人话 + 一条能走的路。★ 不放"书架还空着"这种感慨：

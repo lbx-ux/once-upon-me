@@ -21,6 +21,7 @@ import { describe, expect, it } from 'vitest'
 import { bookTargets, deleteBookEverywhere, type BookDeletionDeps } from './book-deletion.ts'
 import { createMemoryStore } from './engine/providers/stores.ts'
 import { manifestPathOf } from './engine/index.ts'
+import { putShare, readShare } from './share/store.ts'
 import { loadOrder, saveOrder } from './shelf-order.ts'
 import { THUMB_WIDTHS } from './thumbs.ts'
 
@@ -99,6 +100,33 @@ describe('deleteBookEverywhere', () => {
     ])
   })
 
+  it('★ 分享记录跟着书一起删：同一个书号重做一本，旧链接不会复活', async () => {
+    const f = fixture()
+    await seedBook(f)
+    const hash = 'a'.repeat(64)
+    const other = 'b'.repeat(64)
+    await putShare(f.store, hash, {
+      bookId: BOOK,
+      createdAt: NOW,
+      expiresAt: NOW + 60_000,
+      revokedAt: null,
+    })
+    await putShare(f.store, other, {
+      bookId: 'probe-02',
+      createdAt: NOW,
+      expiresAt: NOW + 60_000,
+      revokedAt: null,
+    })
+
+    const receipt = await deleteBookEverywhere(BOOK, f.deps)
+    expect(receipt.complete).toBe(true)
+    expect((await bookTargets(BOOK, f.deps)).shareLinks).toBe(0)
+    expect(await readShare(f.store, hash)).toBeNull()
+    // 别的书的链接一条不动
+    expect(await readShare(f.store, other)).not.toBeNull()
+    expect(receipt.places.find((one) => one.place === '分享链接')?.deleted).toBe(1)
+  })
+
   it('凭据上那句解释把"这一本有什么"说清楚（数字来自枚举，不估）', async () => {
     const f = fixture()
     await seedBook(f)
@@ -127,7 +155,7 @@ describe('deleteBookEverywhere', () => {
     await saveOrder(f.store, ['probe-03', BOOK, 'probe-02'], NOW)
 
     const receipt = await deleteBookEverywhere(BOOK, f.deps)
-    expect(receipt.places[2]?.deleted).toBe(1)
+    expect(receipt.places.find((one) => one.place === '书架上的顺序记录')?.deleted).toBe(1)
     expect(await loadOrder(f.store)).toEqual(['probe-03', 'probe-02'])
   })
 
@@ -136,8 +164,10 @@ describe('deleteBookEverywhere', () => {
     await seedBook(f)
     await saveOrder(f.store, ['probe-03', 'probe-02'], NOW)
     const receipt = await deleteBookEverywhere(BOOK, f.deps)
-    expect(receipt.places[2]?.deleted).toBe(0)
-    expect(receipt.places[2]?.note).toContain('从来没被拖动过')
+    expect(receipt.places.find((one) => one.place === '书架上的顺序记录')?.deleted).toBe(0)
+    expect(receipt.places.find((one) => one.place === '书架上的顺序记录')?.note).toContain(
+      '从来没被拖动过',
+    )
     expect(await loadOrder(f.store)).toEqual(['probe-03', 'probe-02'])
   })
 

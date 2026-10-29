@@ -15,14 +15,15 @@
  * 全是我自己在前面几刀里删掉的探针留下的（删探针时缩略图已经生成过）。
  * 所以 `thumbs` 是这张清单里的一个位置，不是一个可选的清理步骤。
  *
- * 四个存储位置 + 一条"没落盘"的记录
+ * 五个存储位置 + 一条"没落盘"的记录
  *
  * | 位置 | 里面是什么 | 为什么必须在清单里 |
  * | --- | --- | --- |
  * | `children/<id>.json` | 档案（他是谁） | 名字、读音、年龄档 |
  * | `cards/<cardId>/` | 全部版本的卡与参考图 | 旧书的那些页指着它们（ADR-0007） |
  * | `books/<bookId>/` | 他的书（含 `events.jsonl`） | 书里是他 20 页的形象 |
- * | `thumbs/<档>/…` | 上面两样的缩略缓存 | 派生内容也是他的脸（见上） |
+ * | `shares/<哈希>.json` | 他的书发出去的分享链接记录 | 记录不删，同一个书号重做一本时旧链接会活过来 |
+ * | `thumbs/<档>/…` | 上面几样的缩略缓存 | 派生内容也是他的脸（见上） |
  * | （无） | 照片原图 | 从来没有落盘——但"处理过"这件事要报出来 |
  *
  * 预演与真删报的是两个不同的数，而且这件事是刻意的
@@ -54,6 +55,7 @@ import type { AssetStore } from './engine/providers/types.ts'
 import type { CardStore } from './engine/character-card/store.ts'
 import type { ProfileStore } from './engine/character-card/profile-store.ts'
 import { bookDirOf } from './engine/index.ts'
+import { deleteSharesOf, listShares } from './share/store.ts'
 import { THUMB_PREFIX, THUMB_WIDTHS } from './thumbs.ts'
 
 /** 清单里的一行。`deleted` 是条数（文件 / 记录），不是字节 */
@@ -108,6 +110,8 @@ export type DeletionTargets = {
   cardBytes: number
   books: { bookId: string; title: string }[]
   bookFiles: number
+  /** 他的书发出去过的分享记录有几条（活着的 + 过期的 + 收回过的，全删） */
+  shareLinks: number
   /** 缩略图目录前缀（带尾斜杠）。★ 用目录不用文件，见文件头那一段 */
   thumbDirs: string[]
   thumbFiles: number
@@ -151,6 +155,11 @@ export async function targetsOf(childId: string, deps: DeletionDeps): Promise<De
   for (const book of books) {
     bookFiles += (await deps.store.list(`${bookDirOf(book.bookId)}/`)).length
   }
+  // 分享记录按"他的书"那一个集合数，与真删那一段用的是同一个集合
+  const hisBookIds = new Set(books.map((book) => book.bookId))
+  const shareLinks = (await listShares(deps.store)).filter((one) =>
+    hisBookIds.has(one.record.bookId),
+  ).length
 
   // 缩略图：每个档位 × 每张卡 / 每本书，各是一个目录（见文件头）
   const thumbDirs: string[] = []
@@ -170,6 +179,7 @@ export async function targetsOf(childId: string, deps: DeletionDeps): Promise<De
     cardBytes,
     books,
     bookFiles,
+    shareLinks,
     thumbDirs,
     thumbFiles,
     photoCards,
@@ -226,7 +236,7 @@ function receiptOf(
   childId: string,
   name: string,
   targets: DeletionTargets,
-  numbers: { profile: number; cards: number; books: number; thumbs: number },
+  numbers: { profile: number; cards: number; books: number; shares: number; thumbs: number },
   at: number,
   stage: 'plan' | 'done',
   failures: Record<string, string>,
@@ -259,6 +269,18 @@ function receiptOf(
         ? { note: '还没有用他做过书' }
         : { note: `${targets.books.length} 本（含每本的过程日志 events.jsonl）` }),
       ...(failures['books'] ? { failed: failures['books'] } : {}),
+    },
+    {
+      place: '分享链接',
+      at: 'shares/',
+      deleted: numbers.shares,
+      // 与删一本书那条同一条理由：书号是"卡 + 主题"的指纹，同一份表单重做一本
+      //   就是同一个号——记录不删，旧链接会在新书上复活
+      note:
+        targets.shareLinks === 0
+          ? '他的书没有发过分享链接'
+          : '这些链接当场作废（记录一起删：同一个书号重做一本时旧链接会跟着活过来）',
+      ...(failures['shares'] ? { failed: failures['shares'] } : {}),
     },
     {
       place: '缩略图缓存',
@@ -304,6 +326,7 @@ export async function planDeletion(childId: string, deps: DeletionDeps): Promise
       profile: targets.hasProfile ? 1 : 0,
       cards: targets.cardFiles,
       books: targets.bookFiles,
+      shares: targets.shareLinks,
       thumbs: targets.thumbFiles,
     },
     deps.now ?? Date.now(),
@@ -326,7 +349,7 @@ export async function deleteChildEverywhere(
   const profile = await deps.profiles.load(childId)
   const targets = await targetsOf(childId, deps)
   const failures: Record<string, string> = {}
-  const numbers = { profile: 0, cards: 0, books: 0, thumbs: 0 }
+  const numbers = { profile: 0, cards: 0, books: 0, shares: 0, thumbs: 0 }
 
   const attempt = async (key: keyof typeof numbers, run: () => Promise<number>): Promise<void> => {
     try {
@@ -343,6 +366,8 @@ export async function deleteChildEverywhere(
   }
   for (const book of targets.books) {
     await attempt('books', () => deps.store.deletePrefix(`${bookDirOf(book.bookId)}/`))
+    // 书没了，链接就不该再活着——见 `deleteSharesOf` 的文件头
+    await attempt('shares', () => deleteSharesOf(deps.store, book.bookId))
   }
   for (const dir of targets.thumbDirs) {
     await attempt('thumbs', () => deps.store.deletePrefix(dir))

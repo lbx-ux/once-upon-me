@@ -213,8 +213,25 @@ async function readBookFrom(store: AssetStore, path: string): Promise<Book | nul
  *   （封面原来就是一张 2.8 MB 的 PNG，正是这条注释要挡的那件事）。
  *   判据是扩展名，所以"这一页有没有朗读"这件事不受缩放影响。
  */
-export function runtimeAssetUrl(path: string, width: number): string {
-  return assetUrlOf(path, isResizableImage(path) ? width : undefined)
+export function runtimeAssetUrl(path: string, width: number, query?: string): string {
+  const url = assetUrlOf(path, isResizableImage(path) ? width : undefined)
+  if (!query) return url
+  return `${url}${url.includes('?') ? '&' : '?'}${query}`
+}
+
+/**
+ * `resolveBook` 的两个可选旋钮。缺省 = 老行为，所有既有调用一个字都不用改。
+ *
+ * - `assetQuery`：拼到运行期资产 URL 后面（不带 `?`）。分享页用它带 `share=<票>`——
+ *   那些 `<img>` 是浏览器匿名取的，`/api/assets` 那条路由要靠这张票认人。
+ *   ★ 只对**运行期**那条生效：演示书走 `public/` 静态文件，查询字符串它看不懂
+ *   （`demoAssetPathFor` 上面那段写过同一件事）。
+ * - `allowDemo`：分享页传 `false`。理由不是安全（演示书是公开的），是"这条链接
+ *   指向的是主人这一本"：主人把书删了之后，它不该悄悄变成公共样书。
+ */
+export type ResolveBookOptions = {
+  assetQuery?: string
+  allowDemo?: boolean
 }
 
 /**
@@ -230,6 +247,7 @@ export function runtimeAssetUrl(path: string, width: number): string {
 export async function resolveBook(
   bookId: string,
   store: AssetStore | null,
+  options: ResolveBookOptions = {},
 ): Promise<ResolvedBook | null> {
   // ★ 书号来自 URL（`/reader/<bookId>`），而下面两处会把它拼进路径：
   //   store 的逻辑路径、以及演示书那一条的 `join(…, 'public', DEMO_DIR, bookId)`。
@@ -248,7 +266,8 @@ export async function resolveBook(
       null
   if (runtime) {
     // 图与封面走同一条 urlOf（1024 档，`/api/assets` 现缩并落盘缓存）
-    const runtimeUrl = (path: string): string => runtimeAssetUrl(path, READER_PAGE_WIDTH)
+    const runtimeUrl = (path: string): string =>
+      runtimeAssetUrl(path, READER_PAGE_WIDTH, options.assetQuery)
     return {
       book: runtime,
       source: 'runtime',
@@ -257,6 +276,9 @@ export async function resolveBook(
       story: readerStory(runtime, runtimeUrl),
     }
   }
+
+  // 分享页传 `allowDemo: false`：链接只指向主人这一本（见 `ResolveBookOptions`）
+  if (options.allowDemo === false) return null
 
   const demoDir = join(process.cwd(), 'public', DEMO_DIR, bookId)
   const demo = await readBook(join(demoDir, 'book.json'))

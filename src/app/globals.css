@@ -20,6 +20,7 @@
 @import '../components/reader/rotate-hint.css';
 @import '../components/reader/fullscreen-button.css';
 @import '../components/shelf/shelf.css';
+@import '../components/shelf/share-dialog.css';
 @import '../components/admin/admin.css';
 @import '../components/shell/app-shell.css';
 @import '../components/shell/settings-dialog.css';

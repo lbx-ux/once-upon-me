@@ -31,6 +31,9 @@ import { createProfileStore } from './engine/character-card/profile-store.ts'
 import { createMemoryStore } from './engine/providers/stores.ts'
 import type { AssetStore } from './engine/providers/types.ts'
 import type { CharacterAnchor } from './engine/domain.ts'
+import { putShare, readShare } from './share/store.ts'
+
+const NOW = 1_700_000_000_000
 
 const ANCHORS: CharacterAnchor[] = [
   { slot: 'bone', value: '圆脸、颊部饱满、下颌线软' },
@@ -219,6 +222,7 @@ describe('凭据报的是真删掉的条数，不是预演数出来的', () => {
       '孩子的档案',
       '角色卡与参考图',
       '他的书',
+      '分享链接',
       '缩略图缓存',
       '照片原图',
     ])
@@ -254,6 +258,47 @@ describe('照片那一行：0 条，但有一张卡的血缘里有照片', () =>
     await seedChild(f, 'kid-a')
     const receipt = await planDeletion('kid-a', f.deps)
     expect(receipt.places.find((one) => one.place === '照片原图')?.note).toContain('不是从照片来的')
+  })
+})
+
+describe('★ 分享记录跟着他的书一起删（同一个书号重做一本，旧链接不会复活）', () => {
+  it('他书上的链接全删，别的孩子的链接一条不动；预演就把条数说准', async () => {
+    const f = await fixture()
+    const { cardId } = await seedChild(f, 'kid-a')
+    await f.put(
+      `books/${cardId}-aaaa/book.json`,
+      new TextEncoder().encode(JSON.stringify({ cardId })),
+    )
+    const mine = 'a'.repeat(64)
+    const other = 'b'.repeat(64)
+    await putShare(f.store, mine, {
+      bookId: `${cardId}-aaaa`,
+      createdAt: NOW,
+      expiresAt: NOW + 60_000,
+      revokedAt: null,
+    })
+    // 不是他的书（书号对不上任何一本）→ 与这条删除无关
+    await putShare(f.store, other, {
+      bookId: 'kid-b-sheet-bbbb',
+      createdAt: NOW,
+      expiresAt: NOW + 60_000,
+      revokedAt: null,
+    })
+
+    const plan = await planDeletion('kid-a', f.deps)
+    expect(plan.places.find((one) => one.place === '分享链接')?.deleted).toBe(1)
+
+    const done = await deleteChildEverywhere('kid-a', f.deps)
+    expect(done.places.find((one) => one.place === '分享链接')?.deleted).toBe(1)
+    expect(await readShare(f.store, mine)).toBeNull()
+    expect(await readShare(f.store, other)).not.toBeNull()
+  })
+
+  it('没发过链接时说清"没有发过"，不是含糊一个 0', async () => {
+    const f = await fixture()
+    await seedChild(f, 'kid-a')
+    const receipt = await planDeletion('kid-a', f.deps)
+    expect(receipt.places.find((one) => one.place === '分享链接')?.note).toContain('没有发过')
   })
 })
 
