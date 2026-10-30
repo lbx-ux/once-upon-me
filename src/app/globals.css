@@ -41,6 +41,7 @@
 @import '../components/studio/voice-picker.css';
 @import '../components/studio/new-voice-panel.css';
 @import '../components/system/system-notice.css';
+@import '../components/system/route-skeleton.css';
 @import '../components/privacy/privacy-sheet.css';
 @import '../components/site/icp-notice.css';
 @import '../components/back-to-top.css';

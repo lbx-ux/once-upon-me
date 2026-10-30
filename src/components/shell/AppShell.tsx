@@ -408,6 +408,18 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="shell" data-collapsed={collapsed}>
+      {/* 跳过导航（2026-10-30）。
+          ★ 为什么是**壳**里的一条、不是根布局的一条：这一站唯一重复出现在每一屏的
+            导航就是这条侧栏（九格 + 通知 + 设置 + 收起），旁路它才有意义。
+            首页、阅读器、书单那几屏没有这种重复块，给它们挂一条只会跳到一个
+            本来就挨着的位置。
+          ★ 它是页面里第一个可聚焦元素，所以第一下 Tab 就能看见——键盘用户不用
+            一路按过十三个链接才摸到正文。
+          ★ `position: fixed` + 藏到视口外，是在 `app-shell.css` 那条里；
+            在这里它为什么不占布局：`.shell` 是 flex 行，任何进流的兄弟都会挤侧栏。 */}
+      <a className="shell__skip" href="#main">
+        跳到正文
+      </a>
       {/* 背景：`/account` 是那片蓝底（`ProfileBackdrop`），其余几屏是与首页
           第一幕同一片天。放在 DOM 最前面、两层的 `inset` 都是 0，
           所以侧栏与内容区自然压在它上面（层序与首页 `.scene-backdrop` 同一个处理） */}
@@ -631,7 +643,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </Link>
       </div>
 
-      <div className="shell__main">{children}</div>
+      <div className="shell__main" id="main" tabIndex={-1}>
+        {children}
+      </div>
 
       {/* ★ 弹窗挂在**壳上**（不是某一页里）：侧栏在哪一屏都在，所以「设置」
           也在哪一屏都点得开——挂进某一页的话，只有那一页能用 */}

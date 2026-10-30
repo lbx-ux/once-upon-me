@@ -29,6 +29,7 @@ import { planSharedStory } from './plan-shared.ts'
 import type { BookForm, RetrievalProvenance, RetrievedChunkRef, StoryTree } from './domain.ts'
 import { branchPagesOf, buildTree, type TreeProblem } from './tree.ts'
 import { reviewInput, reviewInputText, reviewProblemText, reviewStory } from './review.ts'
+import { judgeIfSuspect } from './review-judge.ts'
 import type { EngineEventPayload } from './events.ts'
 import type { TextDelta, TextGenerator, TextRequest } from './providers/types.ts'
 import type { RetrievePair } from '../rag/retrieve.ts'
@@ -91,6 +92,15 @@ export type PlanOutcome = {
 
 export type PlanOptions = {
   text: TextGenerator
+  /**
+   * 语义复核（2026-10-30）：词表闸之外那一档，只在可疑信号命中时问一次模型。
+   * 见 `review-judge.ts` 与 `suspicion.ts`。
+   *
+   * 不传 = 这一条路不做语义复核（脚本、离线跑测、以及测试）；应用层（`index.ts`）
+   * 始终传 `providers.text`。它与 `vision: … | null` 同一条写法：省略一个可选能力时，
+   * 调用方必须知道自己在省什么，而不是让"没跑"和"跑过了"在结果上分不出来。
+   */
+  judge?: TextGenerator
   form: BookForm
   maxAttempts?: number
   /**
@@ -352,6 +362,47 @@ export async function planStory(input: StoryPlanInput, opts: PlanOptions): Promi
             .slice(0, 3)
             .map(reviewProblemText)
             .join('；')}${flagged.length > 3 ? `…共 ${flagged.length} 处` : ''}`,
+        })
+      }
+      continue
+    }
+
+    /**
+     * ③-b 语义复核（2026-10-30，评分表 #5 的第二档）。
+     *
+     * 位置紧挨着词表闸：只有词表一条都没命中时才走到这里（上面那段 `continue` 已经
+     * 把命中的挡掉了）。它**只在可疑信号命中时**才真花一次调用（`suspicion.ts`），
+     * 正常的一本书零额外调用。
+     *
+     * `unavailable` 不拦：词表已经过了，网络错误不该变成"你的故事不安全"。
+     * 那条事件由 `judgeIfSuspect` 发出去，界面能说出"这一档没跑成"。
+     */
+    const judged = await judgeIfSuspect(built.tree, {
+      text: opts.judge,
+      input: {
+        theme: input.theme,
+        ...(input.wish === undefined ? {} : { wish: input.wish }),
+        ...(input.reviseNote === undefined ? {} : { reviseNote: input.reviseNote }),
+      },
+      emit: opts.emit,
+      stage: 'planning',
+    })
+    if (judged && (judged.outcome.verdict === 'flag' || judged.outcome.verdict === 'block')) {
+      const reason = judged.outcome.reason
+      if (judged.outcome.verdict === 'block') {
+        throw new EngineError('review-blocked', `这一版故事被内容审核拦下了：${reason}`, {
+          detail: judged.outcome.findings.map((finding) => `${finding.pageNo}:${finding.clauseId}`),
+        })
+      }
+      failures.push(`第 ${attempt} 次：语义复核没过\n${reason}`)
+      lastReview = reason
+      if (attempt < maxAttempts) {
+        opts.emit({
+          kind: 'retry',
+          stage: 'planning',
+          attempt,
+          maxAttempts,
+          reason: `故事里有不该给孩子看的内容：${reason}`,
         })
       }
       continue

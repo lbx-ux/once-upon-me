@@ -37,7 +37,10 @@
     "**/*.ts",
     "**/*.tsx",
     ".next-credits/types/**/*.ts",
+    ".next-insp/types/**/*.ts",
     ".next-judge/types/**/*.ts",
+    ".next-opt1/types/**/*.ts",
+    ".next-perf/types/**/*.ts",
     ".next-redeem/types/**/*.ts",
     ".next-session/types/**/*.ts",
     ".next-share/types/**/*.ts",
@@ -45,7 +48,7 @@
     ".next-shots/types/**/*.ts",
     ".next/types/**/*.ts",
     "next-env.d.ts",
-    ".next-insp/types/**/*.ts"
+    ".next-judge-build/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

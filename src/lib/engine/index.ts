@@ -50,6 +50,7 @@ import { EngineError } from './errors.ts'
 import { planStory, type PlanRetriever } from './plan.ts'
 import type { ToolDef } from './tool-loop.ts'
 import { reviewProblemText, reviewStory } from './review.ts'
+import { judgeIfSuspect } from './review-judge.ts'
 import { illustrateAll, illustrateCover, illustrateNode } from './illustrate.ts'
 import { narrateAll, narrateTarget, nextTakeNo, targetsOfNode } from './narrate.ts'
 import { cardDigest, validateCard } from './character-card/card.ts'
@@ -352,6 +353,9 @@ export async function planBook(request: BookRequest, deps: PlanDeps): Promise<St
 
   const plan = await planStory(planInput, {
     text: deps.providers.text,
+    // ★ 2026-10-30：语义复核用的是同一个文本能力（见 `PlanOptions.judge`）。应用层始终给，
+    //   它只在可疑信号命中时才真发一次调用。
+    judge: deps.providers.text,
     form: request.form,
     // ★ 不传就是这一轮不检索（`PlanOptions.retrieve` 那条注释）
     ...(deps.retriever ? { retrieve: deps.retriever } : {}),
@@ -483,6 +487,32 @@ export async function illustrateBook(
         (page) => `${page.pageNo}:${page.problems.map((p) => p.clauseId).join(',')}`,
       ),
     })
+  }
+
+  /**
+   * 语义复核的第二道（2026-10-30）：规划那一步审过一遍，这里为什么再审一次？
+   *
+   * 与上面词表闸同一条理由——家长可以在故事闸门上逐字改，而改过的 `story.json` 不经过
+   * 规划那一步。词表能抓住字面词，抓不住"改成了一句委婉的死亡"。所以这里也补一次
+   * 可疑才触发的模型复核；`unavailable` 不拦（词表已经过了）。
+   */
+  const judged = await judgeIfSuspect(tree, {
+    text: providers.text,
+    input: {
+      theme: request.theme,
+      ...(request.wish === undefined ? {} : { wish: request.wish }),
+    },
+    emit: forward,
+    stage: 'auditing',
+  })
+  if (judged && (judged.outcome.verdict === 'flag' || judged.outcome.verdict === 'block')) {
+    throw new EngineError(
+      'review-blocked',
+      `这一版故事被内容审核拦下了：${judged.outcome.reason}`,
+      {
+        detail: judged.outcome.findings.map((finding) => `${finding.pageNo}:${finding.clauseId}`),
+      },
+    )
   }
 
   const referenceBytes = await providers.store.read(request.card.reference.path)

@@ -14,8 +14,16 @@
  * | - | ------------------------------------------------------------------- | ------------------------------------------------ |
  * | 1 | `/no-such-page` 返回**真 404**，页面上是那张纸（标题、两条出口、纸色） | 落到 Next 自带的错误页 / 200 带一句"没有这一页"  |
  * | 2 | 客户端导航（RSC 与 page chunk 拦住 1.5s）：**全程没有那张纸**，        | 那张纸又冒出来了（用户 2026-10-20 明确不要它）   |
- * |   | 那 1.5s 里**旧那一屏原地留着**，放行后**新那一屏真的到了**            |                                                  |
+ * |   | 那 1.5s 里**旧那一屏原地留着**，放行后**新那一屏真的到了**            | 骨架顶掉旧屏 / 新屏没到                          |
  * | 3 | 工作台**组内**导航：同上，且 `.shell` 那 1.5s 全程在场                | 侧栏一起被换掉 → 读起来像"整个应用重启了"        |
+ * | 4 | 冷启动（直接打开 `/home`、`/shelf`）：**HTML 里有骨架，且排在内容之前** | `loading.tsx` 没接上 / 骨架被塞到页面尾巴上      |
+ *
+ * ★ 2026-10-30 加了骨架（两个 `loading.tsx`），而**判据 2/3 一个字没改**：
+ *   实测（2026-10-30，dev）客户端导航期间骨架**不出现**，旧屏照旧留着——
+ *   RSC 没到之前路由手里没有新树，`loading.tsx` 只在服务端流式那一趟生效。
+ *   所以骨架那件事单开判据 4：冷启动的响应体里 `.skel` 在内容之前。
+ *   ★ 生产档开了预取，骨架**有可能**在点下去那一刻出现；这种情形本轮没有量
+ *     （`next build` + 生产服务器那一趟没跑），所以判据 2b/3b 只对开发档下判词。
  *
  * ★ 判据 2/3 的三格是**绑在一起的**：只量"没看见那张纸"会被"导航根本没发生"骗过
  *   （一次都没点动、或者点了没反应，读数与"做对了"一模一样）。
@@ -246,6 +254,7 @@ heldRsc.length = 0
 /**
  * 点一个链接，然后每 `SAMPLE_MS` 采一次。三件事一起采，因为它们互为判据：
  *   · `notice`  —— 那张纸（`null` = 不在 DOM 里）
+ *   · `skel`    —— 骨架（2026-10-30 起，等待期间该出现的就是它）
  *   · `old`     —— 旧那一屏的标志物还在不在
  *   · `next`    —— 新那一屏的标志物到了没有
  */
@@ -258,6 +267,7 @@ const watchNav = (linkHref, oldMark, newMark) => `new Promise((resolve) => {
     samples.push({
       t: Math.round(performance.now() - t0),
       notice: !!document.querySelector('.notice'),
+      skel: !!document.querySelector('.skel'),
       old: !!document.querySelector('${oldMark}'),
       next: !!document.querySelector('${newMark}'),
       shell: !!document.querySelector('.shell'),
@@ -302,7 +312,8 @@ check(
   '2b 那 1.5s 里**旧那一屏还在**（不是空白、也不是那张纸）',
   h2sHeld.length > 0 && h2sHeld.every((s) => s.old),
   h2sHeld.length
-    ? `拦截期间 ${h2sHeld.length} 次采样，首页标志物在场 ${[...new Set(h2sHeld.map((s) => s.old))].join('/')}（要 true）`
+    ? `拦截期间 ${h2sHeld.length} 次采样，首页标志物在场 ${[...new Set(h2sHeld.map((s) => s.old))].join('/')}（要 true）` +
+        ` · 骨架 ${[...new Set(h2sHeld.map((s) => s.skel))].join('/')}（开发档不该出现，见判据 4）`
     : '拦截期间一次都没采到（窗口太短，判不了）',
 )
 
@@ -318,9 +329,9 @@ check(
 /* ══════════════════════════════════════════════════════════════════════════
  * 判据 3：**工作台组内**导航 —— 同样不许出现那张纸，且 `.shell` 全程在场
  *
- * 这一格是"为什么不再要那两个 `loading.tsx`"的验收：以前组内那一档存在的
- * 全部理由就是"根那一档会把 `.shell` 一起换掉"，而现在是**两个都不在了** ——
- * 导航期间既不换壳，也不再画纸。
+ * 这一格验的是"组内那一档不会把壳一起换掉"：2026-10-20 量到过根那一档
+ * 会把 `.shell` 一起换掉（判据 2a 的 `shell=false` 就是它），所以任何加载态
+ * 都只许挂在组内这一段上——壳全程在场。2026-10-30 加的骨架也守这一条。
  * ══════════════════════════════════════════════════════════════════════════ */
 await open('/home')
 heldRsc.length = 0
@@ -343,7 +354,8 @@ check(
   '3b 那 1.5s 里旧那一屏还在（`.cl` 是 /home 的标志物）',
   insHeld.length > 0 && insHeld.every((s) => s.old),
   insHeld.length
-    ? `拦截期间 ${insHeld.length} 次采样，/home 标志物在场 ${[...new Set(insHeld.map((s) => s.old))].join('/')}（要 true）`
+    ? `拦截期间 ${insHeld.length} 次采样，/home 标志物在场 ${[...new Set(insHeld.map((s) => s.old))].join('/')}（要 true）` +
+        ` · 骨架 ${[...new Set(insHeld.map((s) => s.skel))].join('/')}（开发档不该出现）`
     : '拦截期间一次都没采到',
 )
 
@@ -354,6 +366,36 @@ check(
     ? `末尾 ${insTail.length} 次采样（t≥${insTail[0].t}ms）：书架 ${[...new Set(insTail.map((s) => s.next))].join('/')}（要 true）` +
         ` · /home 标志物 ${[...new Set(insTail.map((s) => s.old))].join('/')}（要 false）`
     : '末尾一段一次都没采到',
+)
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * 判据 4：冷启动那一趟的 HTML 里**骨架在内容之前**（2026-10-30）
+ *
+ * 为什么单开一格：`loading.tsx` 在客户端导航里没有出现（判据 2b/3b 量到旧屏留着），
+ * 它生效的地方是**服务端流式**——直接打开一屏时，HTML 先吐骨架、再吐内容。
+ * 所以这一格判的是"响应体里 `.skel` 确实在，且排在内容标志物之前"。
+ * ★ 只判"含 skel"不够：一个空文件也能被 Next 渲染成空骨架；要它**在内容前**，
+ *   才证明它是流式的第一帧，而不是被塞到了页面尾巴上。
+ * ★ 客户端导航里为什么没有它：RSC 没到之前，路由手里没有新树，旧屏照旧留着——
+ *   这是开发档的读数。生产档开了预取，骨架可能在点下去那一刻出现，**这一条没量**。
+ * ══════════════════════════════════════════════════════════════════════════ */
+const cold = await evaluate(`(async () => {
+  const out = {}
+  for (const [path, mark] of [['/home', 'cl__'], ['/shelf', 'shelf__']]) {
+    const html = await (await fetch(path, { credentials: 'same-origin' })).text()
+    const skel = html.indexOf('skel')
+    const content = html.indexOf(mark)
+    out[path] = { skel, content, has: skel >= 0, before: skel >= 0 && content >= 0 && skel < content }
+  }
+  return out
+})()`)
+const coldAll = Object.values(cold)
+check(
+  '4 冷启动：两屏的 HTML 里都有骨架，且骨架排在内容之前',
+  coldAll.length === 2 && coldAll.every((c) => c.has && c.before),
+  Object.entries(cold)
+    .map(([p, c]) => `${p} skel@${c.skel} 内容@${c.content} ${c.before ? '✓' : '✗'}`)
+    .join(' · '),
 )
 
 await send('Fetch.disable')

@@ -9,7 +9,7 @@
  * 就会有三份会各自漂的"关闭规矩"——而它们必须一模一样，
  * 不然用户在同一个屏幕上会遇到两套习惯（一个 Esc 关得掉、一个关不掉）。
  *
- * 四条它替调用方摁住的事：
+ * 五条它替调用方摁住的事：
  *
  * 1. `role="dialog"` + `aria-modal` + `aria-labelledby`：读屏要能知道
  *    "现在在一个对话框里"，并且念得出它叫什么。少了 `aria-labelledby`，
@@ -18,14 +18,23 @@
  *    用"没点在面板里"去判，会在面板外边距上误关。
  * 3. Esc 关。只挂 `window`，不挂面板——焦点还没进来时 Esc 也应该关得掉。
  * 4. 打开就把焦点拿进来。否则键盘用户的第一下 Tab 会从文档开头开始走。
+ * 5. **Tab 不出去**（2026-10-30 补的）。`aria-modal` 是**说给读屏的**，它不妨住键盘：
+ *    原来连按四下 Tab，焦点就走到遮罩后面的侧栏链接上了，而读屏仍然告诉用户
+ *    "你在对话框里"——那句承诺从那一刻起就是假的。绕回规则在 `focus-trap.ts`
+ *    （纯函数，有单测）。
  *
- * 它不管"关掉之后焦点还给谁"：那件事只有调用方知道（通常是打开它的那颗按钮）。
- *   壳里猜一个 `<body>` 之类的落点，就把这件本该明确的事变成了一个默认值。
+ * 关掉之后焦点还回**打开它之前那一个元素**（2026-10-30 补的）。这一条与文件头
+ *   原来的那句"壳里不该猜一个落点"不冲突：猜 `<body>` 是猜，而"谁打开的还给谁"
+ *   是 WAI-ARIA 的模态规矩，也是唯一一个不用调用方再记一遍的答案。打开的那一刻
+ *   记下 `document.activeElement`，卸载时还回去（元素已经不在 DOM 里就不还，
+ *   比如删除对话框把被删那一行一起带走了）。
  * 它不管面板里有什么，也不给默认底栏：底栏上有几颗按钮、哪一颗是主按钮，
  *   是每个模态自己的判断（"这一本要怎么做"是取消/确认，重画是取消/重画）。
  */
 
 import { useEffect, useRef, type ReactNode, type RefObject } from 'react'
+
+import { focusablesIn, wrapTabIndex } from './focus-trap.ts'
 
 export type DialogProps = {
   title: string
@@ -52,14 +61,45 @@ export default function Dialog({
   initialFocus,
 }: DialogProps) {
   const panelRef = useRef<HTMLDivElement | null>(null)
+  /** 打开之前焦点在谁身上。关掉时还回去（见文件头最后一段） */
+  const openerRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
+    const opener = document.activeElement
+    openerRef.current = opener instanceof HTMLElement ? opener : null
     ;(initialFocus?.current ?? panelRef.current)?.focus()
+
+    return () => {
+      const opener = openerRef.current
+      // 不在 DOM 里就不还：删除对话框把被删的那一行一起带走的场景
+      if (opener?.isConnected) opener.focus()
+    }
   }, [initialFocus])
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') onClose()
+      if (event.key === 'Escape') {
+        onClose()
+        return
+      }
+      if (event.key !== 'Tab') return
+
+      const panel = panelRef.current
+      if (!panel) return
+
+      const list = focusablesIn(panel)
+      // 面板里一个能聚焦的都没有：把焦点摁在面板自己身上，别让它走到遮罩后面
+      if (list.length === 0) {
+        event.preventDefault()
+        panel.focus()
+        return
+      }
+
+      const current = list.indexOf(document.activeElement as HTMLElement)
+      const target = wrapTabIndex(list.length, current, event.shiftKey)
+      if (target === null) return
+      event.preventDefault()
+      list[target]?.focus()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)

@@ -1,0 +1,79 @@
+/**
+ * route-skeleton.css —— `RouteSkeleton` 那份占位的形状与出场时间
+ *
+ * 两块：**形状**（纸的色、线的高、格的比例）与**什么时候出现**（晚 120ms 淡入）。
+ * 后者是这一份文件里唯一有判断的部分：
+ *
+ * ★ 120ms 与 `AppShell` 的 `PENDING_SHOW_AFTER_MS` 是同一个数。那边是"被点那一格的
+ *   转圈什么时候亮"，这里是"骨架什么时候显形"，要回答的是同一件事——
+ *   快的那一趟不该闪任何东西。冷启动里数据比 120ms 先到的，这一屏骨架就一次都不显形。
+ *
+ * ★ 颜色全部走令牌：`--ink-rgb` 带透明度，深浅两档（线 6% / 格 5%）。
+ *   不新增颜色，所以 `check:colors` 那一条没有新字面量要看。
+ *
+ * ★ 没有"呼吸"动画。静止模式（`prefers-reduced-motion`）下没有第二套画法——
+ *   它本来就不动；只把淡入的时长收到零，视觉上就是"到点直接出现"。
+ */
+
+.skel {
+  /* 内容区的形状：标题一行、正文两行、下面一排方块 */
+  display: grid;
+  gap: 18px;
+  align-content: start;
+  min-height: 60vh;
+  min-height: 60dvh;
+  padding-top: 8px;
+  /* 先不出现，120ms 后再显形（见文件头） */
+  opacity: 0;
+  animation: skel-in 220ms ease-out 120ms forwards;
+}
+
+@keyframes skel-in {
+  to {
+    opacity: 1;
+  }
+}
+
+.skel__title,
+.skel__line,
+.skel__tile {
+  display: block;
+  background: rgba(var(--ink-rgb), 0.06);
+  border-radius: 8px;
+}
+
+.skel__title {
+  width: min(320px, 42%);
+  height: 30px;
+}
+
+.skel__line {
+  height: 14px;
+  border-radius: 7px;
+  background: rgba(var(--ink-rgb), 0.05);
+}
+
+.skel__line--short {
+  width: 62%;
+}
+
+.skel__tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 16px;
+  margin-top: 10px;
+}
+
+.skel__tile {
+  aspect-ratio: 4 / 3;
+  border-radius: 14px;
+  background: rgba(var(--ink-rgb), 0.05);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* 不动的那一档：不要 220ms 的淡，但要保留 120ms 的"别闪"——
+     把时长收到零、延迟不动 */
+  .skel {
+    animation-duration: 0.001ms;
+  }
+}

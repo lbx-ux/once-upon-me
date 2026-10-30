@@ -468,6 +468,39 @@
   position: relative;
 }
 
+/* 跳过导航（2026-10-30）。见 `AppShell.tsx` 那一处的三条。
+   ★ `position: fixed`：`.shell` 是 flex 行，进流的兄弟会挤侧栏。
+   ★ 移出视口而不是 `display: none`：`display: none` 收不进 Tab 序列，
+     而那正是这条链接唯一的存在方式——键盘按第一下就要能看见它。
+   ★ 不用 `transition`：它一出现就该在位，滑进来反而是第二件要等的事；
+     静止模式因此没有它的事。 */
+.shell__skip {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 40; /* 底栏 20 / 顶栏 15 之上，弹窗遮罩之下的那一层随便取的一个数 */
+  padding: 10px 16px;
+  border-radius: 10px;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 14px;
+  line-height: 1;
+  text-decoration: none;
+  transform: translateY(-240%);
+}
+
+.shell__skip:focus,
+.shell__skip:focus-visible {
+  transform: none;
+}
+
+/* 跳到正文之后，焦点落在整块内容区上。那一圈轮廓会框住整屏——
+   它不是"这一格可操作"，而是一个程序化的落点，所以不收外框；
+   键盘用户接着按 Tab，落到的第一格照常带 `:focus-visible` 那圈橙。 */
+.shell__main:focus {
+  outline: none;
+}
+
 /* 手机那一档的顶栏。★ 桌面上它整块不存在（`display: none`），
    里面那两格（设置 / 我是谁）在桌面上住在侧栏底部 —— 两边各在对方的档里藏起来，
    所以任何时刻辅助技术只看得见一组。完整理由写在 `AppShell.tsx` 那一处。 */

@@ -97,14 +97,14 @@
 
 这张表是索引，不是自我打分。想验哪一条，按路径点进去。
 
-| 子项           | 干了什么                                                                                                                                                                                                                                                                                                                                                                           |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 大模型集成     | `src/lib/engine/providers/` 是能力接口 + 适配器 + 回放；`src/lib/prompts/` 带版本号，每版升级写清为什么；`src/lib/schemas/` 是自写校验器，一份定义同时出 JSON Schema 和运行时校验；`plan.ts` 负责失败定位和带反馈重试                                                                                                                                                              |
-| Agent / 工作流 | `src/lib/engine/illustrate.ts`：出图 → 视觉比对 → 判分 → 不达标重画。2026-10-20 起把"上一版哪几条锚点不像"注回下一次 prompt，闭环自己合上                                                                                                                                                                                                                                          |
-| RAG            | `src/lib/rag/`：中文字符 bigram + BM25，**索引就是一个文件**，随仓库提交（[ADR-0011](docs/adr/0011-index-is-a-file-not-a-vector-db.md)）。三份语料归属分开，两条极性一次取且保证正反不重叠                                                                                                                                                                                         |
-| 多模态         | 四种模态四家适配器：文本（故事表）、图像（出图）、语音（TTS + 声音克隆）、视觉（一致性比对 + 画面审核）。`providers/types.ts` 是接口，`registry.ts` 把环境变量接到实现上。**输入那一侧另有一路浏览器语音识别**（`lib/speech.ts` / `lib/use-speech.ts`）：创作框与共读版选择点都能"用嘴说"，不经过供应商、不花钱，失败退回键盘（取舍见 [known-tradeoffs](docs/known-tradeoffs.md)） |
-| AI 安全        | `src/lib/engine/review.ts` 一道词表闸，三处落点：家长的自由输入、模型写出来的字、画出来的图。家长输入那一处拦下来时**一次模型调用都没发出去**（脚本量的就是这个 0）                                                                                                                                                                                                                |
-| MCP / 工具     | `mcp/server.mts` 是薄壳，逻辑在 `src/lib/mcp/`（手写 JSON-RPC，[ADR-0012](docs/adr/0012-mcp-server-handwritten-jsonrpc.md)），七条工具；规划那一步模型还能调四件（`src/lib/plan-tools.ts`）                                                                                                                                                                                        |
+| 子项           | 干了什么                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 大模型集成     | `src/lib/engine/providers/` 是能力接口 + 适配器 + 回放；`src/lib/prompts/` 带版本号，每版升级写清为什么；`src/lib/schemas/` 是自写校验器，一份定义同时出 JSON Schema 和运行时校验；`plan.ts` 负责失败定位和带反馈重试                                                                                                                                                                                                                                                                     |
+| Agent / 工作流 | `src/lib/engine/illustrate.ts`：出图 → 视觉比对 → 判分 → 不达标重画。2026-10-20 起把"上一版哪几条锚点不像"注回下一次 prompt，闭环自己合上                                                                                                                                                                                                                                                                                                                                                 |
+| RAG            | `src/lib/rag/`：中文字符 bigram + BM25，**索引就是一个文件**，随仓库提交（[ADR-0011](docs/adr/0011-index-is-a-file-not-a-vector-db.md)）。三份语料归属分开，两条极性一次取且保证正反不重叠                                                                                                                                                                                                                                                                                                |
+| 多模态         | 四种模态四家适配器：文本（故事表）、图像（出图）、语音（TTS + 声音克隆）、视觉（一致性比对 + 画面审核）。`providers/types.ts` 是接口，`registry.ts` 把环境变量接到实现上。**输入那一侧另有一路浏览器语音识别**（`lib/speech.ts` / `lib/use-speech.ts`）：创作框与共读版选择点都能"用嘴说"，不经过供应商、不花钱，失败退回键盘（取舍见 [known-tradeoffs](docs/known-tradeoffs.md)）                                                                                                        |
+| AI 安全        | `src/lib/engine/review.ts` 一道词表闸，三处落点：家长的自由输入、模型写出来的字、画出来的图。家长输入那一处拦下来时**一次模型调用都没发出去**（脚本量的就是这个 0）。2026-10-30 起多一层兜底：`suspicion.ts` 命中可疑信号（家长话里的离别词根 / 正文里的信号词与委婉二元组 / 超长句 / 短得反常 / 句子数少于页数）时，`review-judge.ts` 才问一次模型；**它报的每一条都要回原文逐字找到才算数**。盘上 17 本干净书（5 真书 + 12 样书）**0 本触发**，见 `scripts/safety-judge-real-books.mts` |
+| MCP / 工具     | `mcp/server.mts` 是薄壳，逻辑在 `src/lib/mcp/`（手写 JSON-RPC，[ADR-0012](docs/adr/0012-mcp-server-handwritten-jsonrpc.md)），七条工具；规划那一步模型还能调四件（`src/lib/plan-tools.ts`）                                                                                                                                                                                                                                                                                               |
 
 AI 交互那几项单独说一句，因为容易漏：规划是流式的（`plan-stream.ts`），界面上能看到它写到哪一句；失败不静默降级，`errors.ts` 抛出来，根目录 `error.tsx` 接住，`digest` 原样给用户。出图是异步的，进度走 SSE，断线能从 `/api/books/<书号>/events` 把这一轮重放出来。
 
@@ -258,22 +258,24 @@ set -a; . ./.env.local; set +a; mvn -o -f server/pom.xml spring-boot:run
 
 ### 常用脚本
 
-| 命令                                         | 干什么                                                                        |
-| -------------------------------------------- | ----------------------------------------------------------------------------- |
-| `pnpm lint` / `pnpm typecheck` / `pnpm test` | 三条闸门。测试 **1644 条、123 个文件**（2026-10-30 实测，`vitest run` 7.1 s） |
-| `pnpm format:check`                          | 只检查不写入                                                                  |
-| `pnpm check:colors` / `pnpm check:scrim`     | 配色两条：扫写死的颜色；按令牌真值算对比度，掉到 4.5:1 以下就红               |
-| `node scripts/engine-run.mts --mode=stub`    | 不启动浏览器、不联网、不花钱跑完一本书                                        |
-| `node scripts/engine-run.mts --mode=live`    | 真供应商跑一本，顺手录一份离线回放包                                          |
-| `node scripts/chk-perf.mjs URL`              | 页面级性能读数，要对生产构建跑                                                |
-| `node scripts/chk-mobile.mjs URL`            | 手机那一档：不横向溢出、横屏铺书、首页两副形态                                |
-| `node scripts/chk-shared-reader.mjs URL`     | 共读版阅读器：阅读顺序、选完零生成、缺图兜底、键盘、断网                      |
-| `node scripts/chk-share-link.mts --base=URL` | 分享链接：匿名可读、过期/收回/改一字节都 404、无写按钮、零模型调用            |
-| `node scripts/chk-print-pdf.mjs --base=URL`  | 打印/存 PDF：纸是 A4 横向、页数对得上、字体嵌入、文件 < 20 MB                 |
-| `node scripts/e2e-shared-reading.mts`        | 共读版全链路，一句话到读完（真花钱，`--until=story` 只验到闸门）              |
-| `node scripts/cost-model.mts`                | 一本绘本花多少钱：价目表 + 真书的出图次数与计费字符                           |
-| `node scripts/chk-admin-model.mjs`           | 管理页形状；`--live=1` 时才四种能力各真打一次                                 |
-| `pnpm mcp` / `pnpm mcp:session`              | 起 MCP server；或起一次真会话跑四条判据（含与 engine-run 的等价对照）         |
+| 命令                                         | 干什么                                                                                |
+| -------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `pnpm lint` / `pnpm typecheck` / `pnpm test` | 三条闸门。测试 **1644 条、123 个文件**（2026-10-30 实测，`vitest run` 7.1 s）         |
+| `pnpm format:check`                          | 只检查不写入                                                                          |
+| `pnpm check:colors` / `pnpm check:scrim`     | 配色两条：扫写死的颜色；按令牌真值算对比度，掉到 4.5:1 以下就红                       |
+| `node scripts/engine-run.mts --mode=stub`    | 不启动浏览器、不联网、不花钱跑完一本书                                                |
+| `node scripts/engine-run.mts --mode=live`    | 真供应商跑一本，顺手录一份离线回放包                                                  |
+| `node scripts/chk-perf.mjs URL`              | 页面级性能读数，要对生产构建跑                                                        |
+| `node scripts/chk-mobile.mjs URL`            | 手机那一档：不横向溢出、横屏铺书、首页两副形态                                        |
+| `node scripts/chk-shared-reader.mjs URL`     | 共读版阅读器：阅读顺序、选完零生成、缺图兜底、键盘、断网                              |
+| `node scripts/chk-share-link.mts --base=URL` | 分享链接：匿名可读、过期/收回/改一字节都 404、无写按钮、零模型调用                    |
+| `node scripts/chk-print-pdf.mjs --base=URL`  | 打印/存 PDF：纸是 A4 横向、页数对得上、字体嵌入、文件 < 20 MB                         |
+| `node scripts/e2e-shared-reading.mts`        | 共读版全链路，一句话到读完（真花钱，`--until=story` 只验到闸门）                      |
+| `node scripts/cost-model.mts`                | 一本绘本花多少钱：价目表 + 真书的出图次数与计费字符                                   |
+| `node scripts/safety-judge-cases.mts`        | 语义复核：10 条词表抓不到的越线 + 10 条正常，分三栏报（真花钱，`--limit=` 先试）      |
+| `node scripts/safety-judge-real-books.mts`   | 同一条闸在盘上 5 本真书 + 12 本样书上的触发率与误拦（每本 3 次；`--dump=1` 只摊语料） |
+| `node scripts/chk-admin-model.mjs`           | 管理页形状；`--live=1` 时才四种能力各真打一次                                         |
+| `pnpm mcp` / `pnpm mcp:session`              | 起 MCP server；或起一次真会话跑四条判据（含与 engine-run 的等价对照）                 |
 
 其余脚本在 `scripts/` 里，六十来个，每个文件头写了它量什么、判据几条、修前是什么读数。别照着 README 抄，直接看脚本。
 

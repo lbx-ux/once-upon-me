@@ -55,6 +55,7 @@ import {
   reviewTextsOf,
   type PageReview,
 } from './review.ts'
+import { judgeIfSuspect } from './review-judge.ts'
 import type { StoryPlanInput } from '../prompts/story-plan.ts'
 import type { RetrievalProvenance } from './domain.ts'
 import type { RetrievePair } from '../rag/retrieve.ts'
@@ -153,6 +154,33 @@ export async function planSharedStory(
         (page) => `${page.pageNo}:${page.problems.map((p) => p.clauseId).join(',')}`,
       ),
     })
+  }
+
+  /**
+   * 语义复核（2026-10-30）：与独读版同一道兜底，位置也一样——词表过了之后、plan-ready 之前。
+   *
+   * 它在这里**不重试**：共读版是一次提纲 + 三次展开拼出来的，到了这一步整本已经写完，
+   * 重试等于把三段全部重写一遍。所以 `flag` 与 `block` 的下一步与这道闸的上一段一样：
+   * 拒发，退回去改。事件由 `judgeIfSuspect` 发。
+   */
+  const judged = await judgeIfSuspect(built.tree, {
+    text: opts.judge,
+    input: {
+      theme: input.theme,
+      ...(input.wish === undefined ? {} : { wish: input.wish }),
+      ...(input.reviseNote === undefined ? {} : { reviseNote: input.reviseNote }),
+    },
+    emit: opts.emit,
+    stage: 'planning',
+  })
+  if (judged && (judged.outcome.verdict === 'flag' || judged.outcome.verdict === 'block')) {
+    throw new EngineError(
+      'review-blocked',
+      `这一版故事被内容审核拦下了：${judged.outcome.reason}`,
+      {
+        detail: judged.outcome.findings.map((finding) => `${finding.pageNo}:${finding.clauseId}`),
+      },
+    )
   }
 
   opts.emit({
