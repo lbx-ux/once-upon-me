@@ -23,7 +23,11 @@ import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
  */
 @SpringBootApplication
 @ConfigurationPropertiesScan
-@MapperScan({"com.onceuponme.api.auth.mapper", "com.onceuponme.api.voice.mapper"})
+@MapperScan({
+  "com.onceuponme.api.auth.mapper",
+  "com.onceuponme.api.voice.mapper",
+  "com.onceuponme.api.credit.mapper"
+})
 public class ApiApplication {
   public static void main(String[] args) {
     SpringApplication.run(ApiApplication.class, args);

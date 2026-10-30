@@ -50,29 +50,17 @@
 import { useCallback, useState } from 'react'
 
 import ModelConfigPanel from '@/components/admin/ModelConfig.tsx'
+import CreditsPanel, { type CreditsSeed } from '@/components/admin/CreditsPanel.tsx'
 import { createUser, deleteUser, resetPassword, setAllowed, setStatus } from '@/lib/admin/client.ts'
 import {
   ACCESS_COLUMN,
+  shortTimeOf,
   usageTextOf,
   type AdminOverview,
   type AdminUsage,
   type AdminUser,
 } from '@/lib/admin/state.ts'
 import type { ModelConfigView } from '@/lib/settings/model-config-state.ts'
-
-/** 时间那一栏。★ 与 `ProfileHome.formatJoined` 同一条：格式写死，不跟运行环境走 */
-function shortTime(iso: string | null): string {
-  if (!iso) return '没来过'
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return '记不清了'
-  return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: 'numeric',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
 
 function nameOf(user: AdminUser): string {
   if (user.nickname.trim() !== '') return user.nickname.trim()
@@ -84,12 +72,19 @@ export default function AdminScreen({
   initial,
   modelConfig,
   usage,
+  credits,
 }: {
   initial: AdminOverview
   /** 模型配置（服务端读好的，见 `admin/page.tsx`） */
   modelConfig: ModelConfigView
   /** 每个人做了多少东西，按 userId（服务端数完磁盘给的）。缺一个人就是数不出来 */
   usage: Record<string, AdminUsage>
+  /**
+   * 额度与兑换码那一块的总账（2026-10-30）。
+   * ★ 与用户表分开取（`readAdminCredits`）：额度读不出来不该让整张用户表消失，
+   *   反过来也一样——两件事的下一步不同（一个是"去查 Java"，一个是"去查权限"）。
+   */
+  credits: CreditsSeed
 }) {
   const [users, setUsers] = useState<AdminUser[]>(initial.users)
   const [busy, setBusy] = useState<string | null>(null)
@@ -324,8 +319,8 @@ export default function AdminScreen({
                       user.nickname
                     )}
                   </td>
-                  <td className="adm__time">{shortTime(user.createdAt)}</td>
-                  <td className="adm__time">{shortTime(user.lastLoginAt)}</td>
+                  <td className="adm__time">{shortTimeOf(user.createdAt)}</td>
+                  <td className="adm__time">{shortTimeOf(user.lastLoginAt)}</td>
                   {/* ★ 数不出来是「—」，一份都没有是「还没有」——这两件事在这里分开说
                       （见 `admin/state.ts` 的 `usageTextOf`） */}
                   <td className="adm__usage">{usageTextOf(usage[user.userId])}</td>
@@ -388,6 +383,10 @@ export default function AdminScreen({
         // 一个人都没有时说这句，而不是留一张空表：空表与"读失败"长得一样
         <p className="adm__empty">库里一个人都还没有。</p>
       ) : null}
+
+      {/* ★ 额度那一块放在表下面：站长这一屏每天打开是为了改权限，
+          发码是隔一阵子一次的事。放在上面会把那张表推到屏幕外。 */}
+      <CreditsPanel seed={credits} users={users} />
     </section>
   )
 }

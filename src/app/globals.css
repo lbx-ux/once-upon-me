@@ -24,10 +24,12 @@
 @import '../components/shelf/share-dialog.css';
 @import '../components/notices/notices.css';
 @import '../components/admin/admin.css';
+@import '../components/admin/credits-panel.css';
 @import '../components/shell/app-shell.css';
 @import '../components/shell/settings-dialog.css';
 @import '../components/shell/studio-backdrop.css';
 @import '../components/studio/create-landing.css';
+@import '../components/studio/redeem.css';
 @import '../components/studio/generation-setup-dialog.css';
 @import '../components/studio/character-wall.css';
 @import '../components/studio/delete-child-dialog.css';

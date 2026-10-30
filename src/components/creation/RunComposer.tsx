@@ -49,6 +49,12 @@ export type RunComposerProps = {
   flaggedPages?: readonly number[]
   /** 单页重做正忙（那一颗要跟着禁用） */
   busy: boolean
+  /**
+   * 还剩几本创作额度。`null` = 读不出来（显示「—」，**不**禁用按钮）。
+   * ★ 0 与 null 是两件事：0 是"用完了"（下一步去兑换），null 是"这一格坏了"
+   * （下一步是刷新）。把 null 当 0 会让人以为自己的额度没了。
+   */
+  credits?: number | null
   onIllustrate: () => void
   onConfirm: () => void
 }
@@ -65,10 +71,13 @@ export default function RunComposer({
   ready,
   busy,
   flaggedPages = [],
+  credits = null,
   onIllustrate,
   onConfirm,
 }: RunComposerProps) {
   const saveLine = saveLineOf(saveState)
+  /** 额度用完了：按钮按不动，并且把出口写在旁边（不是只给一句"没额度"） */
+  const outOfCredits = atGate && credits === 0
 
   return (
     <footer className="gr__composer">
@@ -83,6 +92,15 @@ export default function RunComposer({
           {atGate && saveLine && (
             <span className="gr__save" data-state={saveState} role="status">
               {saveLine}
+            </span>
+          )}
+          {/* ★ 额度只在闸门那一屏说：那是**钱要花出去**的那一刻，
+              前面编故事不花钱，说在这里才是"花钱的时候告诉你花多少"。
+              `null` 不画这一格——读不出来时屏幕上少一行，比写一个假数好 */}
+          {atGate && credits !== null && (
+            <span className="gr__credits" data-empty={credits === 0 ? 'true' : undefined}>
+              {credits === 0 ? '创作额度用完了 · ' : `这一本消耗 1 本 · 还剩 ${credits} 本 · `}
+              <Link href="/redeem">去兑换</Link>
             </span>
           )}
         </p>
@@ -102,8 +120,12 @@ export default function RunComposer({
               type="button"
               className="gr__primary"
               data-tone="go"
-              disabled={!canDraw}
-              title={problemText ?? '按这一版故事开始画'}
+              disabled={!canDraw || outOfCredits}
+              title={
+                outOfCredits
+                  ? '创作额度用完了，先去「兑换」输入一张码'
+                  : (problemText ?? '按这一版故事开始画')
+              }
               onClick={onIllustrate}
             >
               {illustrating ? '开始画了…' : '就按这个画'}

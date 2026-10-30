@@ -383,6 +383,49 @@
   color: var(--ink-muted);
 }
 
+/* 创作额度（2026-10-30）
+ * ★ 一行字，不是第三枚标签、也不是一张卡：上面那两枚说的是"已经做出来的东西"，
+ *   这一行说的是"还能做几件"——同一个问题的另一半，所以留在这一栏、字号再收一档。
+ * ★ `--ink-muted` 在这里是安全的：这一格坐在 `--surface`（纸）上，与 `.pf__tag--soft`
+ *   同一个底。它破 AA 的那一处是**上面那层蓝底**（见 `.pf__sub` 的注释），不是这里。
+ * ★ 读不出来时（`data-unknown`）数字换成「—」并退成同一档灰，**不写 0**：
+ *   0 会把人赶去兑换一个其实不缺的额度。
+ */
+.pf__credit {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: baseline;
+  margin: 14px 0 0;
+  color: var(--ink-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.pf__credit b {
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.pf__credit[data-unknown='true'] b {
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
+.pf__credit-go {
+  margin-left: 2px;
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.pf__credit-go:hover {
+  text-decoration-thickness: 2px;
+}
+
 /* 这一栏底部那两个动作（2026-10-17）
  * 两根按钮并排、一静一重。★ 它们为什么不是原来那条
  *   「.pf__card .pf__ghost 全是红的」：那条规则成立的前提是"这张卡里只有一个

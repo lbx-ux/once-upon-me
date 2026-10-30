@@ -342,7 +342,15 @@ const CLAIMED: { what: string; test: RegExp }[] = [
     test: /^books\/[^/]+\/page-\d+-opt-[ab]-a\d+\.mp3$/,
   },
   { what: '那一页的口播提问（`-prompt-`）', test: /^books\/[^/]+\/page-\d+-prompt-a\d+\.mp3$/ },
-  { what: '缩略图缓存（派生资产，`thumbs/<档>/<原图路径>.webp`）', test: /^thumbs\/\d+\/.+$/ },
+  { what: '缩略图缓存（派生资产，`thumbs/<宽度>/<原图路径>.webp`）', test: /^thumbs\/\d+\/.+$/ },
+  // ★ 2026-10-30：打印页那个探针跑完之后，这里当场红了 6 张——上面那条只认宽度那一档，
+  //   而打印档的缓存键是 `printKeyOf` 写的 `thumbs/print/native/<原图路径>.jpg`
+  //   （`.<ext>.jpg` 两个后缀是有意的：原图名整个留在里面，`native` 表示没缩）。
+  //   规则照 `printKeyOf` 抄，`native` 与数字宽度两种都收。
+  {
+    what: '打印那一档的 JPEG 缓存（派生资产，`thumbs/print/<宽度|native>/<原图路径>.jpg`）',
+    test: /^thumbs\/print\/(?:\d+|native)\/.+\.jpg$/,
+  },
 ]
 
 type Claimed = { file: string; what: string }

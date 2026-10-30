@@ -87,9 +87,11 @@ export type GenerationRunProps = {
   plan?: RunPlan
   /** 接着做一份已经在盘上的：进哪一条路由 `story` 决定 */
   resume?: RunResume
+  /** 还剩几本创作额度。`null` = 读不出来（显示「—」，不禁用按钮）。见 `RunComposer` */
+  credits?: number | null
 }
 
-export default function GenerationRun({ plan, resume }: GenerationRunProps) {
+export default function GenerationRun({ plan, resume, credits = null }: GenerationRunProps) {
   /* ── 六块 ─────────────────────────────────────────────────────────────
      依赖方向：流在下（它最早知道自己成了没有），动作与草稿在它上面。 */
 
@@ -369,6 +371,7 @@ export default function GenerationRun({ plan, resume }: GenerationRunProps) {
         ready={ready}
         busy={busy !== null}
         flaggedPages={flaggedPages}
+        credits={credits}
         onIllustrate={() => void illustrate()}
         onConfirm={() => void confirm()}
       />

@@ -37,7 +37,10 @@ import {
   createProviders,
   illustrateBook,
   maxSeqOf,
+  type Cover,
   type EngineEvent,
+  type Illustration,
+  type Narration,
 } from '@/lib/engine/index.ts'
 import { encodeBookFrameToText, type BookStreamFrame } from '@/lib/book-stream.ts'
 import { createFsEventLog } from '@/lib/event-log.ts'
@@ -48,7 +51,9 @@ import { isStoryDoc } from '@/lib/story-draft.ts'
 import { storyProblemText, storyProblemsOf } from '@/lib/story-problems.ts'
 import { serverEnv } from '@/lib/settings/server-env.ts'
 import { createUserStore, userSliceRoot } from '@/lib/asset-scope.ts'
-import { requireCapability } from '@/lib/auth/session.ts'
+import { requireCapability, sessionTokenOf } from '@/lib/auth/session.ts'
+import { refundOne, spendOne } from '@/lib/credits/server.ts'
+import { clearProgress, readProgress, storyDigestOf, writeProgress } from '@/lib/book-progress.ts'
 import { addNotice } from '@/lib/notices.ts'
 import { asPlanDraft, planDraftCodec, type PlanDraft } from '@/lib/schemas/story.ts'
 
@@ -158,8 +163,57 @@ export async function POST(
     return jsonError(failure.status, failure.code, failure.message)
   }
 
+  /**
+   * 扣额度：★ **在租约之后、真正开画之前**。
+   *
+   * 为什么在这个位置而不是更早：前面每一条 4xx（书已经画过、故事不在、正在跑、
+   * 角色卡不在）都不该扣钱。为什么不是更晚：`illustrateBook` 一开口就花钱，
+   * 扣在它后面等于"花了才发现没额度"。
+   *
+   * 为什么扣在租约之后：租约挡住的是"同一本正在画"的第二次点击，
+   * 那一条会在扣之前返回 409——不然一次误点会扣两次。
+   *
+   * ★ 余额是在 Java 那张余额表上用一条带条件的 UPDATE 扣的
+   * （`balance = balance - 1 WHERE balance >= 1`），不是"这里先读再减"。
+   * 两个标签页同时点这一下时，只有一条能成功。
+   */
+  const token = sessionTokenOf(req) ?? ''
   const log = await createFsEventLog(userSliceRoot(root, guard.session.userId))
   const { events } = await log.read(bookId)
+
+  /**
+   * ★ 断点续画（2026-10-30）。上一轮画到一半失败时留下的那份断点，指纹与这一版故事
+   * 对得上才作数（故事改过 = 页号与正文都变了，那份断点指向的是另一本书）。
+   *
+   * 有断点 ⇒ **这一次不扣额度**：一个书号只该收一次，而那一次已经收过了。
+   * 没有 ⇒ 走老路：先结清上一轮（零页的那种），再扣这一次。
+   */
+  const progress = await readProgress(store, bookId)
+  const digest = storyDigestOf(built.tree)
+  const resumed = progress !== null && progress.digest === digest ? progress : null
+  const resuming = resumed !== null && resumed.illustrations.length > 0
+
+  if (!resuming) {
+    /* ★ 先结清上一轮：判据与下面那个退款分支同一句——**这本书的事件日志里一条
+       `illustration` 都没有** = 一页都没画出来。而走到这里还没被 409 挡掉，
+       说明这次是"同一本书再画一遍"。于是"扣过、却没人退成"的那一笔只可能来自
+       一种情况：上一轮**扣完、开画的路上进程没了**（部署、OOM、systemd 拉起），
+       `catch` 与 `finally` 都没轮到。
+
+       为什么敢无条件打这一下：Java 那边按书号封顶（只退"扣过 − 退过"那部分），
+       且按次退。所以"这本书从没扣过"回 400、"已经退过"回 200 不动余额，
+       两种都是我们要的噪音而不是错误——`.catch` 吞掉即可。 */
+    if (!events.some((event) => event.kind === 'illustration')) {
+      await refundOne(token, bookId).catch(() => undefined)
+    }
+
+    const spent = await spendOne(token, bookId)
+    if (!spent.ok) {
+      finishRun(runKey)
+      // `status: 0` 是"后端没通"（见 `lib/auth/response.ts`），归到 503
+      return jsonError(spent.status >= 400 ? spent.status : 503, spent.code, spent.message)
+    }
+  }
 
   // 见文件头第 3 条：盘上留着的必须是真拿去画的那一段（所以写的是归一化过的那一份）
   // ★ 这一段在 `tryStartRun` 之后、流建立之前，所以它的失败要自己还租约
@@ -171,6 +225,8 @@ export async function POST(
       await writeStory(store, next)
     } catch (err) {
       finishRun(runKey)
+      // ★ 已经扣过了：写盘失败意味着这一轮一页都不会画，退回去
+      await refundOne(token, bookId).catch(() => undefined)
       const failure = userFailureOf(err)
       return jsonError(failure.status, failure.code, failure.message)
     }
@@ -179,6 +235,30 @@ export async function POST(
   const request = storyRequestOf(draft.input, card)
   const encoder = new TextEncoder()
   let clientGone = false
+  /**
+   * 这一轮画出来了几页。★ 退款判据用它，不用 `stats`：
+   * 失败时 `illustrateBook` 可能根本没返回，而事件是一条条到的。
+   * 只认 `illustration`（那一页的图真的落盘了），不认 `retry`——
+   * 重画过一次但最终没成的页也花过钱，只是这一页没拿到东西。
+   */
+  // ★ 断点里已经有几页：退款判据要算上它们（否则"接着画、这一轮一页没画成"
+  //   会被读成"整本零页"，把上一笔额度也退掉——白送一本）
+  let pagesDrawn = resumed?.illustrations.length ?? 0
+
+  /**
+   * 断点落盘。★ 串成一条链：出图是并发的（上限 3），两份快照同时写会乱序，
+   * 而乱序的结果是断点退回上一版（少几页），下一轮就重画那几页——每一页都是钱。
+   */
+  let saving: Promise<void> = Promise.resolve()
+  const saveProgress = (value: {
+    illustrations: readonly Illustration[]
+    cover: Cover | null
+    narrations: readonly Narration[]
+  }): void => {
+    saving = saving
+      .then(() => writeProgress(store, bookId, { digest, ...value }))
+      .catch(() => undefined)
+  }
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -193,6 +273,7 @@ export async function POST(
 
       let chain: Promise<void> = Promise.resolve()
       const onEvent = (event: EngineEvent): void => {
+        if (event.kind === 'illustration') pagesDrawn += 1
         chain = chain.then(async () => {
           await log.append(bookId, event)
           send({ kind: 'engine', event })
@@ -200,14 +281,50 @@ export async function POST(
       }
 
       try {
-        await illustrateBook(request, built.tree, {
+        const book = await illustrateBook(request, built.tree, {
           providers,
           onEvent,
           startSeq: maxSeqOf(events),
           planMs: draft.planMs,
           createdAt: draft.createdAt,
+          // ★ 续画：把断点里那几页递进去，引擎跳过它们（不重画 = 不再付钱）
+          ...(resumed
+            ? {
+                resume: {
+                  illustrations: new Map(resumed.illustrations.map((one) => [one.pageNo, one])),
+                  ...(resumed.cover ? { cover: resumed.cover } : {}),
+                  ...(resumed.narrations.length > 0 ? { narrations: resumed.narrations } : {}),
+                },
+              }
+            : {}),
+          onProgress: saveProgress,
         })
         await chain
+        // ★ 装订完 = `book.json` 已经在盘上，断点就该走了（留着只会让"盘上有断点"
+        //   这件事有两种意思）。先等落盘那条链跑完，别把刚写的删成半截。
+        await saving
+        await clearProgress(store, bookId)
+        /* ★ 一页都没画出来（所有页都失败，但引擎按"一页失败不影响整本"吞掉了）：
+           这一本没有可读的内容，额度必须退回；也不能发 `book-ready`——
+           那会让界面把一本空书说成"做好了"。
+           ★ 退的判据在 Java 那边是"这本书扣过几次、退过几次"，两个合计对齐：
+             这次重试扣的那一本退得回来，退的合计也不会超过扣的（2026-10-30 改）。 */
+        if (book.stats.nodesGenerated === 0) {
+          /* ★ 退没退成，话得分开说（2026-10-30）：这一句原来是写死的"额度已经退回"，
+             而退款是一次网络请求。退不回去时说退了，用户会以为自己还欠着一本，
+             或者反过来——他去兑换页发现少了一本，以为是我们吃了。 */
+          const refund = await refundOne(token, bookId).catch(() => null)
+          send({
+            kind: 'fatal',
+            code: 'no-pages',
+            message:
+              refund !== null && refund.ok
+                ? '这一本一页都没画出来，额度已经退回。多半是模型那一头的问题，过一会儿再试；这一本要先从书架上删掉，才能重做。'
+                : `这一本一页都没画出来，但额度这次没能自动退回（${refund?.message ?? '连不上服务'}）。把这个书号发给站长，让他从后台补回来。`,
+            retryable: true,
+          })
+          return
+        }
         /* 站内信（2026-10-30）：一本书实测要 12–174 分钟，画完那一刻用户多半不在这块屏前。
            写失败不挡收尾帧——书已经画完了，不该因为一条通知写不进去就把这一轮说成失败。
            ★ 写在 `book.json` 之后（`illustrateBook` 返回就是装订完了）：早了会通知一本
@@ -221,6 +338,12 @@ export async function POST(
       } catch (err) {
         const failure = userFailureOf(err)
         await chain.catch(() => undefined)
+        /* ★ 一页都没画出来就失败了：额度退回。画出来过就不退——
+           那几页的图是真花了钱的，退等于让一次"画到一半撤了"变成免费。
+           判据是上面那个 `pagesDrawn`，不是异常的文案。 */
+        if (pagesDrawn === 0) {
+          await refundOne(token, bookId).catch(() => undefined)
+        }
         /* 失败也留一条：这条路的失败常常发生在用户离开几十分钟之后
            （出图超时、网关排队、审核拦下），不记下来，他回来只看到一屏安静的画桌。 */
         await addNotice(store, {

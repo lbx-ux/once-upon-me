@@ -36,6 +36,7 @@ import type { ChildListItem } from '../children-list.ts'
 import type { BookStatus, BookSummary } from '../library.ts'
 import type { StoryDraft } from '../story-draft.ts'
 import type { ToolResult, ToolRuntime, ToolSpec } from './protocol.ts'
+import type { CreditPort } from './credit-port.ts'
 
 import { createEventFactory } from '../engine/events.ts'
 import { AGE_BAND_LABELS } from '../engine/domain.ts'
@@ -53,7 +54,11 @@ import {
   type BookRequest,
   type CharacterCard,
   type ChildProfile,
+  type Cover,
+  type Illustration,
+  type Narration,
 } from '../engine/index.ts'
+import { clearProgress, readProgress, storyDigestOf, writeProgress } from '../book-progress.ts'
 import { bookExists } from '../books-runtime.ts'
 import type { EventLog } from '../event-log.ts'
 import { listBooks, noCovers } from '../library.ts'
@@ -95,6 +100,14 @@ export type ToolContext = {
   mode: string
   /** 建一整包能力。只在真要动手的两条（`plan_book` / `illustrate_book`）里才调 */
   providers: () => Promise<ProviderBundle>
+  /**
+   * 花钱那一关：扣一本、退一本。★ 入口**只在 `mode === 'live'` 时注入**。
+   *
+   * 理由与 `providers` 同一个形状：`stub` / `offline` 出的图不花钱，那两档不该
+   * 去动额度；而"按谁的身份扣"是入口的决定（`mcp/credit-port.ts`），不是这一层。
+   * 不注入时 `live` 那一档**拒绝开工**——没有"先画着、回头再补"这条路。
+   */
+  credits?: CreditPort | null
   now?: () => number
 }
 
@@ -758,21 +771,134 @@ export function createToolRuntime(ctx: ToolContext): ToolRuntime {
         const existing = await log.read(bookId)
         const startSeq = maxSeqOf(existing.events)
 
+        /**
+         * ★ 断点续画（2026-10-30）：上一轮画到一半留下的断点，指纹与这一版故事对得上
+         * 才作数。有断点 ⇒ 这一次**不扣额度**（一个书号只该收一次，而它已经收过了）；
+         * 没有 ⇒ 先说结清上一轮（零页的那种），再扣这一次。
+         */
+        const progress = await readProgress(ctx.store, bookId)
+        const digest = storyDigestOf(built.tree)
+        const resumed = progress !== null && progress.digest === digest ? progress : null
+        const resuming = resumed !== null && resumed.illustrations.length > 0
+
+        /**
+         * 扣额度：★ 在**所有检查之后、真正开画之前**（与出图路由同一个位置）。
+         *
+         * 前面每一条 `isError`（没故事、卡不在、树不合法、正在跑）都不该扣钱；
+         * 而 `illustrateBook` 一开口就是真金白银，扣在它后面等于"花了才发现没额度"。
+         *
+         * `mode !== 'live'` 不扣：stub 的图是仓库里的替身、offline 是录好的，
+         *   那两档一分钱不花，扣了才是错账。
+         * live 却没注入 `credits`（没配账号口令）就**拒开**——这里不提供
+         *   "先画着、回头再补"这条路：那条路就是原来那个洞本身。
+         */
+        const credits = ctx.credits ?? null
+        /** 只有 live 才扣、才退。★ 非 live 那一档就算注入了票也不碰它 */
+        const spender = ctx.mode === 'live' ? credits : null
+        let spentNote = resuming
+          ? `接着上一轮画：已有 ${resumed.illustrations.length} 页，不另扣额度。`
+          : ''
+        if (ctx.mode === 'live' && !resuming) {
+          if (!spender) {
+            fail(
+              '这一轮是 live（真花钱），但没有配「用哪个账号扣额度」：在 .env.local 里写 ' +
+                'MCP_ACCOUNT / MCP_PASSWORD（就是网页上登录的那个号），或者用 --mode=stub / offline 跑。',
+            )
+          }
+          /* ★ 先结清上一轮（与出图路由同一条判据、同一个理由）：日志里一条 `illustration`
+             都没有 = 上一轮扣完、开画的路上进程没了（关掉客户端就是这个形状），
+             退款那行没跑到。先退旧账再扣新账。退多少由 Java 按账本封顶，重复打无害。 */
+          if (countsOf(existing.events).illustration === 0) await spender.refund(bookId)
+          const spent = await spender.spend(bookId)
+          if (!spent.ok) fail(`额度这一关没过，没有开画：${spent.message}`)
+          const left = typeof spent.data?.balance === 'number' ? spent.data.balance : null
+          spentNote = left === null ? '额度扣了 1 本。' : `额度扣了 1 本，还剩 ${left} 本。`
+        }
+
         running.set(bookId, now())
+        const forwardAll = forward(bookId, notify)
+        /**
+         * 这一本画出来了几页（含断点里那些）。★ 退款的判据是它，不是 `stats`：
+         * 失败时引擎可能根本没返回。续画的页必须算进去，否则"接着画、这次一页没成"
+         * 会被读成"整本零页"，把上一笔也退掉。
+         */
+        let pagesDrawn = resumed?.illustrations.length ?? 0
+
+        /** 断点落盘。★ 串成链：出图是并发的，两份快照同时写会乱序、把断点写回上一版 */
+        let saving: Promise<void> = Promise.resolve()
+        const saveProgress = (value: {
+          illustrations: readonly Illustration[]
+          cover: Cover | null
+          narrations: readonly Narration[]
+        }): void => {
+          saving = saving
+            .then(() => writeProgress(ctx.store, bookId, { digest, ...value }))
+            .catch(() => undefined)
+        }
+
         // 不等它（文件头那段）。起来了之后即使客户端走了，这一轮该做完的还是做完。
         void illustrateBook(request, built.tree, {
           providers,
-          onEvent: forward(bookId, notify),
+          onEvent: (event) => {
+            if (event.kind === 'illustration') pagesDrawn += 1
+            forwardAll(event)
+          },
           startSeq,
           planMs: draft.planMs,
           createdAt: draft.createdAt,
+          ...(resumed
+            ? {
+                resume: {
+                  illustrations: new Map(resumed.illustrations.map((one) => [one.pageNo, one])),
+                  ...(resumed.cover ? { cover: resumed.cover } : {}),
+                  ...(resumed.narrations.length > 0 ? { narrations: resumed.narrations } : {}),
+                },
+              }
+            : {}),
+          onProgress: saveProgress,
         })
+          .then(async (book) => {
+            // ★ 装订完 = book.json 在盘上，断点该走了（留着只会让"盘上有断点"有两种意思）
+            await saving
+            await clearProgress(ctx.store, bookId)
+            // ★ 一页都没画出来（所有页都失败，而引擎按"一页失败不影响整本"吞掉了）：
+            //   这一本没有可读的内容，额度退回——与出图路由同一个判据。
+            if (book.stats.nodesGenerated !== 0) return
+            const back = spender ? await spender.refund(bookId).catch(() => null) : null
+            // ★ 先把这一轮的事件写完再读号：日志是 seq 的唯一可信来源，
+            //   而 `startSeq` 是开跑**之前**那个数——照它造会撞上引擎已经写过的那几条
+            await settle(bookId)
+            const emit = createEventFactory(now, maxSeqOf((await log.read(bookId)).events))
+            await log
+              .append(
+                bookId,
+                emit({
+                  kind: 'error',
+                  stage: 'assembling',
+                  code: 'no-pages',
+                  // 退没退成分开说：退不回去时说退了，用户会以为我们吃了那一本
+                  message:
+                    back !== null && back.ok
+                      ? '一页都没画出来，额度已经退回。多半是模型那一头的问题，过一会儿再试。'
+                      : `一页都没画出来，额度这次没能自动退回（${back === null ? '没配扣额度的账号' : back.message}）。把书号发给站长。`,
+                  fatal: true,
+                }),
+              )
+              .catch(() => undefined)
+          })
           .catch(async (err: unknown) => {
+            // ★ 一页都没画出来就失败了：额度退回。画出来过就不退——
+            //   那几页的图真花过钱，退等于让"画到一半撤了"变成免费。
+            if (pagesDrawn === 0 && spender) await spender.refund(bookId).catch(() => undefined)
             // 失败也进事件流：不然 `book_status` 上只看得到"跑到一半停了"，
             //   而停的原因一个字都没有——那是最难查的一种现场。
             //   用 `createEventFactory` 造它，是为了 `seq` / `at` / `stage` 三个头字段
             //   走与别处同一条路（手拼一个对象的话，`seq` 迟早会与日志里已有的撞上）。
-            const emit = createEventFactory(now, startSeq)
+            // ★ 号取日志当下的最大号，不取 `startSeq`：后者是开跑**之前**那个数，
+            //   而这一轮引擎已经写过 `startSeq + 1` 之后的几条，照它造就是撞号
+            //   （与上面 `no-pages` 那条同一条改法，2026-10-30）。
+            await settle(bookId)
+            const emit = createEventFactory(now, maxSeqOf((await log.read(bookId)).events))
             const event = emit({
               kind: 'error',
               stage: 'assembling',
@@ -789,6 +915,7 @@ export function createToolRuntime(ctx: ToolContext): ToolRuntime {
             `开工了：书号 ${bookId}，${draft.doc.nodes.length + 1} 张图（含封面）。\n` +
             `这一轮模式是 ${ctx.mode}` +
             `${ctx.mode === 'live' ? '（**会真的花钱**：一页约 0.20 元）' : '（不花钱）'}。\n` +
+            `${spentNote === '' ? '' : `${spentNote}\n`}` +
             '★ 它**已经在后台跑了**，这个调用不等它。用 book_status 收进度——' +
             '一本 20 页的书要几十分钟，别关掉客户端。',
         }

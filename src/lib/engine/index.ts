@@ -34,6 +34,7 @@ import type {
   BookStats,
   CharacterCard,
   ChildProfile,
+  Cover,
   Illustration,
   Narration,
   NarrationPart,
@@ -392,6 +393,27 @@ export type IllustrateDeps = RunDeps & {
    *   故事草稿的 `createdAt`——两者说的是同一件事：这一本是从哪一刻开始的。
    */
   createdAt?: number
+  /**
+   * 断点续画（2026-10-30）：上一轮已经画好的东西，这一轮跳过。
+   *
+   * ★ 指纹对不对得上由**调用方**判（`lib/book-progress.ts` 的 `storyDigestOf`）：
+   *   引擎不知道盘上的断点是怎么存的，也不该知道。给什么就跳什么——
+   *   给错了（比如故事已经改过）的症状是"缺页"，所以那道判据放在有文件的那一侧。
+   */
+  resume?: {
+    illustrations: ReadonlyMap<number, Illustration>
+    cover?: Cover
+    narrations?: readonly Narration[]
+  }
+  /**
+   * 每有进展叫一次（每画好一页、封面画好、配音配完）。断点靠它落盘。
+   * ★ 不叫不代表失败：跳过的页、失败的页都不叫——那两个不改变"已经有什么"。
+   */
+  onProgress?: (snapshot: {
+    illustrations: readonly Illustration[]
+    cover: Cover | null
+    narrations: readonly Narration[]
+  }) => void
 }
 
 /**
@@ -414,6 +436,26 @@ export async function illustrateBook(
   const startedAt = deps.createdAt ?? now()
   /** ①那一段的机器时间。★ 见 `IllustrateDeps.planMs`：口径是机器时间，不是挂钟 */
   const planMs = deps.planMs ?? 0
+
+  /**
+   * 断点续画的三样产出（2026-10-30）：页图、封面、配音。
+   *
+   * ★ 页图用一个 Map 累积（页号 → 那一页），起点是上一轮给的那一份。这样"每画好一页
+   *   落一次盘"拿到的永远是一份**完整**的断点，而不是"这一轮新画的那几页"——
+   *   后者会让第二轮再崩一次时把第一轮的成果覆盖掉。
+   * ★ 排序按页号：Map 的插入序是"完成的先后"，而书里的页是页号序。
+   */
+  let coverSoFar: Cover | null = deps.resume?.cover ?? null
+  let narrationsSoFar: readonly Narration[] = deps.resume?.narrations ?? []
+  const drawn = new Map<number, Illustration>(deps.resume?.illustrations ?? [])
+  const snapshot = (): void => {
+    if (!deps.onProgress) return
+    deps.onProgress({
+      illustrations: [...drawn.values()].sort((a, b) => a.pageNo - b.pageNo),
+      cover: coverSoFar,
+      narrations: [...narrationsSoFar].sort((a, b) => a.pageNo - b.pageNo),
+    })
+  }
 
   /**
    * 内容审核的最后一道（2026-10-19，`.scratch/rag` 工单 05）。
@@ -509,35 +551,52 @@ export async function illustrateBook(
       emit: forward,
       now,
     },
-    request.illustrationConcurrency === undefined
-      ? {}
-      : { concurrency: request.illustrationConcurrency },
+    {
+      ...(request.illustrationConcurrency === undefined
+        ? {}
+        : { concurrency: request.illustrationConcurrency }),
+      ...(deps.resume ? { resume: deps.resume.illustrations } : {}),
+      // ★ 每画好一页：进断点、落一次盘（调用方决定落哪儿）
+      onPage: (illustration) => {
+        drawn.set(illustration.pageNo, illustration)
+        snapshot()
+      },
+    },
   )
 
   // 封面
   // 排在页图之后：页图是书的正文，缺一本不成书；封面晚一步不影响任何依赖它的东西，
   // 而且万一封面这次出图失败，前面花的钱至少还在页图里（封面失败是硬失败，见下面）。
-  const cover = await illustrateCover({
-    image: providers.image,
-    store: providers.store,
-    card: request.card,
-    bookId: bookIdOf(request),
-    // 封面也锁脸（2026-10-21 补，理由见 illustrateCover 的 §5）
-    referenceDataUrl,
-    referenceForPages: withReference,
-    // 封面也要过画面审核（`.scratch/safety` 工单 01）：它是孩子在货架上第一眼看见的那张。
-    // 这一档与页图共用一个重画次数（`maxIllustrationAttempts`）——再开一个旋钮
-    // 只会多一处"改了那个没改这个"，而它们要表达的是同一件事：愿意为一张图花几次钱
-    pictureReview: providers.vision,
-    maxAttempts: request.maxIllustrationAttempts,
-    emit: forward,
-    now,
-  })
+  // ★ 断点里有封面就跳过——封面是一次真金白银的调用（2026-10-30）
+  if (coverSoFar === null) {
+    coverSoFar = await illustrateCover({
+      image: providers.image,
+      store: providers.store,
+      card: request.card,
+      bookId: bookIdOf(request),
+      // 封面也锁脸（2026-10-21 补，理由见 illustrateCover 的 §5）
+      referenceDataUrl,
+      referenceForPages: withReference,
+      // 封面也要过画面审核（`.scratch/safety` 工单 01）：它是孩子在货架上第一眼看见的那张。
+      // 这一档与页图共用一个重画次数（`maxIllustrationAttempts`）——再开一个旋钮
+      // 只会多一处"改了那个没改这个"，而它们要表达的是同一件事：愿意为一张图花几次钱
+      pictureReview: providers.vision,
+      maxAttempts: request.maxIllustrationAttempts,
+      emit: forward,
+      now,
+    })
+    snapshot()
+  }
+  // ★ 走到这里 `coverSoFar` 必然有值（要么刚画完，要么断点里有）。
+  //   留这一句是因为类型上它是可空的，而"用一个 assert 糊过去"会让真正
+  //   "封面拿不到"的那一天变成一本没有封面的书——那比报错糟。
+  const cover = coverSoFar
+  if (cover === null) throw new EngineError('asset-write-failed', '封面没画出来，也没有可用的断点')
 
   // 配音
   // 三种状态都发一条说清原因的事件，而不是只有"成功"与"沉默"两种：
   // 没配音的书在阅读器里是没有播放控件的，用户要知道为什么没有。
-  let narrations: readonly Narration[] = []
+  let narrations: readonly Narration[] = narrationsSoFar
   if (!providers.voice) {
     forward({
       kind: 'error',
@@ -555,14 +614,31 @@ export async function illustrateBook(
       fatal: false,
     })
   } else {
-    const narrated = await narrateAll(linearOrder(tree), {
-      voice: providers.voice,
-      voiceId: request.voiceId,
-      store: providers.store,
-      bookId: bookIdOf(request),
-      emit: forward,
-    })
-    narrations = narrated.narrations
+    /**
+     * ★ 断点续画（2026-10-30）：配音是这条流水线的最后一步，也是"整段重来很贵"的那一步。
+     *
+     * 判据取严的**按页**：断点里已经有录音的页跳过，其余的照配。不整本重来——
+     * 那会把上一轮已经付过的钱再付一遍；也不整本跳过——中途崩掉时后面几十页没有声音，
+     * 而"孩子按了没声音"比"多花一次钱"坏。
+     *
+     * 一页有多段（正文 / 引导提问 / 选项 A/B），而 `narrateAll` 一次会把一页的每一段走完，
+     * 所以"这页配过"按"有任意一段"算——只差几段的那一种只可能来自"上一轮崩在半页上"，
+     * 那一种重配一遍是对的（少一段录音是真的缺）。
+     */
+    const narratedPages = new Set(narrations.map((one) => one.pageNo))
+    const todo = linearOrder(tree).filter((node) => !narratedPages.has(node.pageNo))
+    if (todo.length > 0) {
+      const narrated = await narrateAll(todo, {
+        voice: providers.voice,
+        voiceId: request.voiceId,
+        store: providers.store,
+        bookId: bookIdOf(request),
+        emit: forward,
+      })
+      narrations = [...narrations, ...narrated.narrations]
+      narrationsSoFar = narrations
+      snapshot()
+    }
     // ★ 配不上音的页**不进 `errors`**：那个字段是"这一页没有图"（见 domain.ts 里
     //   PageFailure 那段注释，它专门警告过不要与"未核对"合并——同一个教训）。
     //   音频缺席的记录在 `narrations` 本身：有 entry 的页才有录音，

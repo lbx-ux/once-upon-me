@@ -23,6 +23,7 @@ import com.onceuponme.api.auth.mapper.UserMapper;
 import com.onceuponme.api.auth.mapper.UserPermissionMapper;
 import com.onceuponme.api.auth.sms.SmsRateLimiter;
 import com.onceuponme.api.config.AppProperties;
+import com.onceuponme.api.credit.CreditService;
 import com.onceuponme.api.support.ApiException;
 
 /**
@@ -53,6 +54,8 @@ public class AdminService {
   private final AppProperties properties;
   /** 建号与重置密码要用它。★ 只在服务端出现，口令明文到这一层为止 */
   private final PasswordEncoder encoder;
+  /** 建号时顺手开一个额度户头（0 本）。见 `createUser` 里那一段 */
+  private final CreditService credits;
 
   public AdminService(
       UserMapper users,
@@ -60,13 +63,15 @@ public class AdminService {
       SmsRateLimiter rateLimiter,
       AuthService auth,
       AppProperties properties,
-      PasswordEncoder encoder) {
+      PasswordEncoder encoder,
+      CreditService credits) {
     this.users = users;
     this.permissions = permissions;
     this.rateLimiter = rateLimiter;
     this.auth = auth;
     this.properties = properties;
     this.encoder = encoder;
+    this.credits = credits;
   }
 
   public AdminOverview overview() {
@@ -158,6 +163,9 @@ public class AdminService {
     users.insert(user);
 
     permissions.insert(UserPermission.allowedFor(user.getId(), Times.now()));
+    // ★ 开户 0 本。不在这里开的话，下一次重启 `CreditBootstrap` 会把这个新号
+    //   当成"上线前就在的老号"补 2 本——那不是赠送，是一次误判
+    credits.ensureAccount(user.getId(), 0, "开户");
     return AdminUserRow.of(user, true);
   }
 

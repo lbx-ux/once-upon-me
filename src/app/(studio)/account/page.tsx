@@ -3,6 +3,7 @@ import { assetRoot } from '@/lib/books-runtime.ts'
 import { coverUrlOf, runtimeAssetUrl } from '@/lib/book-source.ts'
 import { createUserStore, userSliceRoot } from '@/lib/asset-scope.ts'
 import { currentUserId } from '@/lib/auth/session.ts'
+import { readBalance } from '@/lib/credits/server.ts'
 import { listCardItems } from '@/lib/cards-list.ts'
 import { booksOnly, listBooks, SHELF_COVER_WIDTH } from '@/lib/library.ts'
 
@@ -83,5 +84,13 @@ export default async function AccountPage() {
     coverUrl: book.coverUrl,
   }))
 
-  return <ProfileHome counts={{ cards: cards.length, books: books.length }} books={recent} />
+  // 额度是另一跳（Java 那一侧）。读不到回 null，那一格显示「—」
+  const credits = await readBalance()
+  return (
+    <ProfileHome
+      counts={{ cards: cards.length, books: books.length }}
+      books={recent}
+      credits={credits}
+    />
+  )
 }

@@ -6,7 +6,11 @@
     "forceConsistentCasingInFileNames": true,
     "allowImportingTsExtensions": true,
     "target": "ES2017",
-    "lib": ["dom", "dom.iterable", "esnext"],
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
@@ -24,17 +28,25 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": [
+        "./src/*"
+      ]
     }
   },
   "include": [
     "**/*.ts",
     "**/*.tsx",
+    ".next-credits/types/**/*.ts",
     ".next-judge/types/**/*.ts",
+    ".next-redeem/types/**/*.ts",
     ".next-session/types/**/*.ts",
+    ".next-share/types/**/*.ts",
+    ".next-shots/types/**/*.ts",
     ".next/types/**/*.ts",
     "next-env.d.ts",
-    ".next-share/types/**/*.ts"
+    ".next-sharecheck/types/**/*.ts"
   ],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules"
+  ]
 }

@@ -1,0 +1,349 @@
+/**
+ * credits-panel.css —— 管理页上的「额度与兑换码」（2026-10-30）
+ *
+ * ★ 版式跟着 `admin.css` 走，不另起一套：这一块长在管理页里，与上面那张用户表
+ *   是同一屏。批次表直接用 `adm__tablewrap` + `adm__table`（同一个文件里有），
+ *   提示那一条用 `adm__note`——一张屏上的表不该各长一种样子。
+ *   这个文件只管这一块**自己的**东西：那一排数、两个表单、以及"明文码只出现一次"
+ *   那一格（它需要一层浅浅的底色，好让人一眼看出"这块跟别处不一样"）。
+ *
+ * 配色只取现成令牌：`--surface` / `--surface-soft`（纸与浅纸）、`--hairline`（格线）、
+ *   `--ink` / `--ink-muted` / `--ink-soft`（三级墨）、`--accent`（主按钮与那一格）、
+ *   `--danger`（对账差与读不到）。不新调颜色。
+ */
+
+.crd {
+  /* 与上面那张用户表之间留一道空气：它换了一个题目（钱，不是权限） */
+  margin-top: 30px;
+  padding-top: 26px;
+  border-top: 1px solid var(--hairline);
+}
+
+.crd__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px 24px;
+  margin-bottom: 16px;
+}
+
+.crd__title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.crd__sub {
+  max-width: 62em;
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--ink-muted);
+}
+
+.crd__refresh {
+  padding: 6px 13px;
+  border: 1px solid var(--hairline);
+  border-radius: 7px;
+  background: var(--surface-soft);
+  font: inherit;
+  font-size: 12px;
+  color: var(--ink-muted);
+  cursor: pointer;
+}
+
+.crd__refresh:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: var(--ink-muted);
+}
+
+.crd__refresh:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.crd__refresh:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* 读不到总账。★ 与下面那张表的"空"分开：空是"还没有码"，这一句是"这一下没读到" */
+.crd__error {
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  border-left: 3px solid var(--danger);
+  border-radius: 0 8px 8px 0;
+  background: var(--surface-soft);
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--danger);
+}
+
+.crd__error-hint {
+  display: block;
+  color: var(--ink-muted);
+}
+
+/* 那四个数 */
+.crd__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 32px;
+  margin: 0 0 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.crd__stats div {
+  min-width: 96px;
+}
+
+.crd__stats dt {
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+.crd__stats dd {
+  margin: 2px 0 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--ink);
+  /* 与 `.adm__stats dd` 同一条：几十 / 几百两档切换时这一格不跳 */
+  font-variant-numeric: tabular-nums;
+}
+
+.crd__cap {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--ink-muted);
+}
+
+/* 对账差。★ 它平时根本不渲染（`ledgerDrift === 0`），所以这里不用考虑"太吵" */
+.crd__drift {
+  margin: 0 0 18px;
+  padding: 10px 14px;
+  border-left: 3px solid var(--danger);
+  border-radius: 0 8px 8px 0;
+  background: var(--surface-soft);
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--danger);
+}
+
+.crd__drift code {
+  padding: 0 3px;
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* 两个表单。★ 一列一列排，不在窄屏上挤成两行半：
+   每个格子有自己的名字，跨行之后名字与框还要挨着 */
+.crd__form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px 16px;
+  margin: 0 0 16px;
+  padding: 16px;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.crd__formtitle {
+  flex: 1 1 100%;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.crd__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+.crd__field--wide {
+  flex: 1 1 200px;
+}
+
+.crd__field input,
+.crd__field select {
+  min-width: 110px;
+  padding: 7px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.crd__field--wide input,
+.crd__field--wide select {
+  width: 100%;
+}
+
+.crd__field input::placeholder {
+  color: var(--ink-muted);
+}
+
+.crd__field input:focus-visible,
+.crd__field select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.crd__go {
+  padding: 8px 20px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: var(--accent);
+  font: inherit;
+  font-size: 13px;
+  color: var(--surface);
+  cursor: pointer;
+}
+
+.crd__go:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.crd__go:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* 表单下面那两句"留空是什么意思"——它们属于表单，所以与框同一个 flex 行里占满一行 */
+.crd__hint {
+  flex: 1 1 100%;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--ink-muted);
+}
+
+/* ── 明文码那一格 ───────────────────────────────────────────────────────
+ * ★ 一层浅浅的 accent 底色，不是为了好看：它是这一屏上唯一一块"关掉就没了"的内容，
+ *   与上下那些随时可以再读一遍的数要长得不一样。
+ */
+.crd__issued {
+  margin: 0 0 16px;
+  padding: 16px;
+  border: 1px solid rgba(var(--accent-rgb), var(--accent-a2));
+  border-radius: 12px;
+  background: rgba(var(--accent-rgb), var(--accent-a1));
+}
+
+.crd__issued-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-bottom: 8px;
+}
+
+.crd__issued-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.crd__dl {
+  padding: 6px 16px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.crd__dl:hover {
+  background: var(--accent);
+  color: var(--surface);
+}
+
+.crd__dl:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.crd__warn {
+  margin: 0 0 12px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--ink-soft);
+}
+
+.crd__codes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 6px 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  color: var(--ink);
+}
+
+/* ── 表的标题与格子 ─────────────────────────────────────────────────── */
+
+.crd__subhead {
+  margin: 20px 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.crd__empty {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--ink-muted);
+}
+
+/* 单号 / 金额 / 分数：等宽数字，一整列才对得齐 */
+.crd__num {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* 备注那一列是站长手写的，长短差得远：
+   ★ 给它一个上限并截断，而不是让一行把表格撑到横向滚起来（`title` 上是全文） */
+.crd__note-cell {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 720px) {
+  .crd__stats {
+    gap: 12px 20px;
+  }
+
+  .crd__stats div {
+    min-width: 72px;
+  }
+
+  .crd__codes {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  }
+
+  .crd__note-cell {
+    max-width: 160px;
+  }
+}

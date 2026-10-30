@@ -17,6 +17,7 @@ import com.onceuponme.api.auth.sms.DevSmsCodeSender;
 import com.onceuponme.api.auth.sms.SmsCodeSender;
 import com.onceuponme.api.auth.sms.SmsRateLimiter;
 import com.onceuponme.api.config.AppProperties;
+import com.onceuponme.api.credit.CreditService;
 import com.onceuponme.api.support.ApiException;
 
 /**
@@ -46,6 +47,7 @@ public class AuthService {
   private final LoginAttemptGuard guard;
   private final PasswordEncoder encoder;
   private final AppProperties properties;
+  private final CreditService credits;
 
   public AuthService(
       UserMapper users,
@@ -55,7 +57,8 @@ public class AuthService {
       JwtService jwt,
       LoginAttemptGuard guard,
       PasswordEncoder encoder,
-      AppProperties properties) {
+      AppProperties properties,
+      CreditService credits) {
     this.users = users;
     this.permissions = permissions;
     this.smsSender = smsSender;
@@ -64,6 +67,7 @@ public class AuthService {
     this.guard = guard;
     this.encoder = encoder;
     this.properties = properties;
+    this.credits = credits;
   }
 
   /* ── 第一步：发验证码 ───────────────────────────────────────────────────── */
@@ -362,6 +366,10 @@ public class AuthService {
     users.insert(user);
 
     permissions.insert(UserPermission.allowedFor(user.getId(), Times.now()));
+    // ★ 开户，0 本。开户本身是一次写入、而不是"缺行按 0 算"：
+    //   启动时那条迁移（CreditBootstrap）扫的是"谁还没有户头"，
+    //   新账号不在这里开的话，下一次重启会被当成老账号补上 2 本
+    credits.ensureAccount(user.getId(), 0, "开户");
     return user;
   }
 

@@ -9,13 +9,17 @@
  * 3. 同一毫秒写两次是同一个文件、同一份内容：覆盖无害（幂等）。
  * 4. 已读只改自己那一条，且不改已经是已读的那条（"第一次读到"的时间不许被刷新）。
  * 5. 删一本书要连它的通知一起删；保留期之外的清理不碰新的。
+ * 6. 清空是**整片**清：读不出来的那些也走，报的是真删掉的条数，而且只动自己那一片
+ *    （2026-10-30 加「清空」那颗钮时补的）。
  */
 
 import { describe, expect, it } from 'vitest'
 
+import { scopedStore } from './asset-scope.ts'
 import { createMemoryStore } from './engine/providers/stores.ts'
 import {
   addNotice,
+  clearNotices,
   deleteNoticesOf,
   listNotices,
   markAllNoticesRead,
@@ -119,6 +123,48 @@ describe('已读', () => {
     expect(unreadCountOf(await listNotices(store))).toBe(0)
     // 全读完再点一次：一条都没有改
     expect(await markAllNoticesRead(store, T0 + 4)).toBe(0)
+  })
+})
+
+describe('清空', () => {
+  it('整片清掉，报的是真删掉的条数；再点一次回 0 而不是报错', async () => {
+    const store = createMemoryStore()
+    for (let i = 0; i < 3; i += 1) {
+      await addNotice(store, { kind: 'book-ready', bookId: `b${i}`, title: `T${i}`, at: T0 + i })
+    }
+    expect(await clearNotices(store)).toBe(3)
+    expect(await listNotices(store)).toEqual([])
+    expect(await clearNotices(store)).toBe(0)
+  })
+
+  it('读不出来的那些也一起走：清空之后这一片是空的', async () => {
+    const store = createMemoryStore()
+    await addNotice(store, { kind: 'book-ready', bookId: 'ok', title: '好的一条', at: T0 })
+    // 这两种都进不了 `listNotices`（见「写与读」那个用例），逐条列着删会漏掉它们
+    await store.put({
+      path: `${NOTICE_DIR}README.md`,
+      bytes: new Uint8Array([35]),
+      mime: 'text/markdown',
+    })
+    await store.put({
+      path: noticePathOf(noticeIdOf('book-ready', 'half', T0)),
+      bytes: new TextEncoder().encode('{"kind":"book-ready"'),
+      mime: 'application/json',
+    })
+    expect(await clearNotices(store)).toBe(3)
+    expect(await store.list(NOTICE_DIR)).toEqual([])
+  })
+
+  it('只清自己那一片：别人的通知一条不动', async () => {
+    const base = createMemoryStore()
+    const mine = scopedStore(base, '7')
+    const yours = scopedStore(base, '8')
+    await addNotice(mine, { kind: 'book-ready', bookId: 'a', title: '我的', at: T0 })
+    await addNotice(yours, { kind: 'book-ready', bookId: 'b', title: '你的', at: T0 + 1 })
+
+    expect(await clearNotices(mine)).toBe(1)
+    expect(await listNotices(mine)).toEqual([])
+    expect((await listNotices(yours)).map((one) => one.title)).toEqual(['你的'])
   })
 })
 

@@ -203,3 +203,26 @@ export function parseUserRow(raw: unknown): AdminUser | null {
 export function isAdmin(role: string | undefined | null): boolean {
   return role === 'ADMIN'
 }
+
+/**
+ * 时间那一栏怎么排（2026-10-30 从 `AdminScreen.shortTime` 搬进来）。
+ *
+ * ★ 格式写死，不跟运行环境走（与 `ProfileHome.formatJoined` 同一条）：
+ *   同一张表在站长与同事的浏览器上不能各排一种日期。
+ * ★ 三种情形是三件事，与 `usageTextOf` 同一条判断：
+ *   没有这个时间（`null`）→「没来过」；有但读不懂 →「记不清了」；能读 → 照实写。
+ * 搬进来的理由：额度那一块（`CreditsPanel`）也要排时间，而第二份
+ *   `toLocaleString` 迟早会与这一份排得不一样。
+ */
+export function shortTimeOf(iso: string | null): string {
+  if (!iso) return '没来过'
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return '记不清了'
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}

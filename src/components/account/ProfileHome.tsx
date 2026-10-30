@@ -175,10 +175,13 @@ const AVATAR = DEFAULT_AVATAR
 export default function ProfileHome({
   counts,
   books,
+  credits = null,
 }: {
   counts: WorkCounts
   /** 最近做过的几本，新的在前。★ 服务端已经排过序、也截过条数了 */
   books: RecentBook[]
+  /** 还剩几本创作额度（2026-10-30）。`null` = 读不出来，那一格显示「—」 */
+  credits?: number | null
 }) {
   const { user, ready, signOut, rename } = useAuth()
   const [draft, setDraft] = useState<string | null>(null)
@@ -376,6 +379,15 @@ export default function ProfileHome({
               <span className="pf__tag">{counts.cards} 张角色卡</span>
               <span className="pf__tag pf__tag--soft">{narrated} 本可朗读</span>
             </div>
+            {/* 额度（2026-10-30）。★ 放在身份卡里而不是"作品"那一栏：
+                它回答的是"这个人还能做什么"，与两张作品标签是同一个问题。
+                读不出来时写「—」，不写 0——0 会把人赶去兑换一个其实不缺的额度 */}
+            <p className="pf__credit" data-unknown={credits === null ? 'true' : undefined}>
+              创作额度 <b>{credits === null ? '—' : `${credits} 本`}</b>
+              <Link className="pf__credit-go" href="/redeem">
+                兑换
+              </Link>
+            </p>
           </div>
 
           <form className="pf__rename" onSubmit={(event) => void saveNickname(event)}>

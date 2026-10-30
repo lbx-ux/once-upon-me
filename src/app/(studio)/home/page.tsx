@@ -89,5 +89,8 @@ export default async function CreateHome() {
       faceUrl: faceOf(card),
     }
   })
+  // ★ 额度 2026-10-30 起**不在这一屏读**：那条「还剩 N 本 / 兑换」从这一屏拿掉了
+  //   （用户：「额度用完了，不要显示在这，不好看」）。额度改在 `/account` 那一行看，
+  //   而真用完时出图那一路的 402 会把人指去兑换。
   return <CreateLanding cards={picks} />
 }

@@ -16,6 +16,7 @@ import {
 } from '@/lib/engine/index.ts'
 import { readStory } from '@/lib/story-draft.ts'
 import { DEFAULT_PAGES } from '@/lib/creation/state.ts'
+import { readBalance } from '@/lib/credits/server.ts'
 import { THEMES } from '@/lib/themes.ts'
 
 /**
@@ -75,6 +76,13 @@ export default async function CreatePage({
   const userId = await currentUserId()
   if (!userId) redirect('/home')
   const root = assetRoot()
+  /**
+   * 还剩几本。★ 服务端读一次就够：这一屏中途不会有人给他加额度，
+   *   而"点下去之后扣了多少"由出图那一路的响应与动作自己刷新。
+   *   读不到（后端那一跳失败）是 `null`，界面显示「—」并且**不**拿 0 去禁用按钮——
+   *   "不知道"与"用完了"是两件事，后者的下一步是去兑换，前者是刷新。
+   */
+  const creditBalance = await readBalance()
 
   /* 接着做一份草稿 */
 
@@ -90,6 +98,7 @@ export default async function CreatePage({
     if (book) {
       return (
         <GenerationRun
+          credits={creditBalance}
           resume={{
             bookId,
             // 配音开没开看 `voiceId`，不看 `narrations` 空不空：
@@ -206,5 +215,5 @@ export default async function CreatePage({
     pages,
     ...(voiceId ? { voiceId } : {}),
   }
-  return <GenerationRun plan={plan} />
+  return <GenerationRun plan={plan} credits={creditBalance} />
 }

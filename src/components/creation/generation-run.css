@@ -298,6 +298,26 @@
   color: var(--ink);
 }
 
+/* 闸门那一屏的额度（2026-10-30）。★ 与自动保存同一行，但它说的是"要花钱了"：
+   这一本消耗 1 本、还剩几本。用完了转 `--danger`，旁边那颗链接就是出口——
+   "没额度"这件事必须带着下一步，否则它只是一句坏消息 */
+.gr__credits {
+  margin-left: 8px;
+  font-size: 13px;
+  color: var(--ink-muted);
+  white-space: nowrap;
+}
+
+.gr__credits a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.gr__credits[data-empty='true'] {
+  color: var(--danger);
+}
+
 .gr__composer-acts {
   display: flex;
   align-items: center;

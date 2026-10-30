@@ -82,11 +82,11 @@
 | 样式       | **Tailwind CSS v4**                                            | `@theme` 让设计令牌同时是 CSS 变量和工具类，一处定义两处可用                                                                                                                                   |
 | 状态       | React Context + 自定义 hook + SSE                              | 跨屏共享的只有账号、音色和这一轮的事件流；没有需要全局 store 的状态，不引 Zustand / Redux                                                                                                      |
 | 动效       | **GSAP 3.15**                                                  | 亮点那屏那张"被一角托起的纸"要每帧跟指针，`quickTo` 比自己写 rAF 稳。滚动驱动是自写的 `useScrollDriver` / `useScrollTick`，边界和踩过的坑在 [docs/known-tradeoffs.md](docs/known-tradeoffs.md) |
-| 后端框架   | **Spring Boot 3.3.5**（Java 17）                               | 只管账号、权限、音色记录。引擎不搬进 Java                                                                                                                                                      |
-| 后端数据层 | **MyBatis-Plus 3.5.7**                                         | 表只有五张（users / user_permissions / voices / sms 两张），SQL 写在 mapper 里就够，不需要 JPA 那套对象映射                                                                                    |
+| 后端框架   | **Spring Boot 3.3.5**（Java 17）                               | 只管账号、权限、音色记录和额度账本。引擎不搬进 Java                                                                                                                                            |
+| 后端数据层 | **MyBatis-Plus 3.5.7**                                         | 表只有八张（账号 4 张 / 音色 1 张 / 额度 3 张），SQL 写在 mapper 里就够，不需要 JPA 那套对象映射                                                                                               |
 | 数据库     | **MySQL 8**（生产）/ **H2 文件库**（本地）                     | 建表语句只有一份 `server/src/main/resources/db/schema.sql`；本地 H2 开 `MODE=MySQL`，不用先装 MySQL                                                                                            |
 | 认证       | **JJWT 0.12.6**（HS256）+ httpOnly cookie                      | 票一个字节都不回给 JS；浏览器只跟 Next 说话，Next 带 `X-Internal-Token` 打 Java                                                                                                                |
-| 存储       | 磁盘资产（带内容指纹）+ MySQL 只存关系                         | 作品是文件，可逐字节比对；数据库里只有账号、权限、音色、短信记录                                                                                                                               |
+| 存储       | 磁盘资产（带内容指纹）+ MySQL 只存关系                         | 作品是文件，可逐字节比对；数据库里只有账号、权限、音色、短信记录和额度账本                                                                                                                     |
 | 第三方     | **阿里云短信**（dypnsapi 2.0.0）                               | 登录验证码。本地默认关（`APP_SMS_ENABLED=false`），走固定开发码                                                                                                                                |
 | 部署       | **Nginx + systemd** + bash 脚本                                | 同机四件：Nginx :80 → Next 3000 / Java 8080 → MySQL 3306。前端构建到 `.next-new` 再换目录，失败自动回滚                                                                                        |
 | 包管理     | **pnpm**                                                       | 安装脚本白名单能精确到单个依赖，本地和 CI 一个行为                                                                                                                                             |
@@ -133,13 +133,19 @@ RAG 的开关挂在规划那一步的一个入参上（`retrieve`），不传就
 
 ### 后端只管账号
 
-分工一句话：**密钥、引擎、作品文件在 Next 那一侧；Java 只管账号、权限和音色记录。**
+分工一句话：**密钥、引擎、作品文件在 Next 那一侧；Java 只管账号、权限、音色记录和额度账本。**
 
-| 归 Next（`src/`）                 | 归 Java（`server/`）                                         |
-| --------------------------------- | ------------------------------------------------------------ |
-| 模型密钥、`serverEnv()`、模型配置 | 手机号/密码、会话票、有没有创作权（一位）                    |
-| 引擎、prompt、资产字节            | MySQL 那几张表：users / user_permissions / voices / sms 两张 |
-| BFF 路由（`/api/*`）              | 短信频控、登录失败锁、管理页动作                             |
+| 归 Next（`src/`）                 | 归 Java（`server/`）                                                       |
+| --------------------------------- | -------------------------------------------------------------------------- |
+| 模型密钥、`serverEnv()`、模型配置 | 手机号/密码、会话票、有没有创作权（一位）                                  |
+| 引擎、prompt、资产字节            | MySQL 那八张表：users / user_permissions / sms 两张 / voices / credit 三张 |
+| BFF 路由（`/api/*`）              | 短信频控、登录失败锁、管理页动作、额度扣减与兑换                           |
+
+**额度是钱那一侧的事，所以整条落在 Java**（2026-10-30）：一本书扣 1 本额度，账本
+（`book_credits`，只追加）是真相、余额表（`credit_accounts`）是能原子扣减的缓存，
+两者恒等（管理页上那个「对账差」就是它们的差）。兑换码只存 HMAC 与后四位，明文
+只在站长生成那一次出现。**没有支付通道，也没有订单台账**（2026-10-30 决定不做）：
+额度只从兑换码与站长补发进来，没有任何一个按钮能凭网页给自己加额度。
 
 浏览器只跟 Next 说话，从不直接打 Java：
 
@@ -248,24 +254,26 @@ set -a; . ./.env.local; set +a; mvn -o -f server/pom.xml spring-boot:run
 
 语音那一栏有个警告：克隆音色绑死在创建它时的模型上（实测跨模型 400 `[411]`），换语音模型会让用户手里那些克隆音色当场失效。这句写在卡上，不只在文档里。
 
+四张卡下面还有一块「额度」：发兑换码（明文只在这一屏出现一次，旁边一个 CSV 下载）、给某个账号直接加额度。顶上那个「对账差」平时不显示——它是 `book_credits` 求和与 `credit_accounts.balance` 的差，只有两边对不上才冒出来。
+
 ### 常用脚本
 
-| 命令                                         | 干什么                                                                |
-| -------------------------------------------- | --------------------------------------------------------------------- |
-| `pnpm lint` / `pnpm typecheck` / `pnpm test` | 三条闸门。测试 **1592 条、117 个文件**（2026-10-29 实测）             |
-| `pnpm format:check`                          | 只检查不写入                                                          |
-| `pnpm check:colors` / `pnpm check:scrim`     | 配色两条：扫写死的颜色；按令牌真值算对比度，掉到 4.5:1 以下就红       |
-| `node scripts/engine-run.mts --mode=stub`    | 不启动浏览器、不联网、不花钱跑完一本书                                |
-| `node scripts/engine-run.mts --mode=live`    | 真供应商跑一本，顺手录一份离线回放包                                  |
-| `node scripts/chk-perf.mjs URL`              | 页面级性能读数，要对生产构建跑                                        |
-| `node scripts/chk-mobile.mjs URL`            | 手机那一档：不横向溢出、横屏铺书、首页两副形态                        |
-| `node scripts/chk-shared-reader.mjs URL`     | 共读版阅读器：阅读顺序、选完零生成、缺图兜底、键盘、断网              |
-| `node scripts/chk-share-link.mts --base=URL` | 分享链接：匿名可读、过期/收回/改一字节都 404、无写按钮、零模型调用    |
-| `node scripts/chk-print-pdf.mjs --base=URL`  | 打印/存 PDF：纸是 A4 横向、页数对得上、字体嵌入、文件 < 20 MB         |
-| `node scripts/e2e-shared-reading.mts`        | 共读版全链路，一句话到读完（真花钱，`--until=story` 只验到闸门）      |
-| `node scripts/cost-model.mts`                | 一本绘本花多少钱：价目表 + 真书的出图次数与计费字符                   |
-| `node scripts/chk-admin-model.mjs`           | 管理页形状；`--live=1` 时才四种能力各真打一次                         |
-| `pnpm mcp` / `pnpm mcp:session`              | 起 MCP server；或起一次真会话跑四条判据（含与 engine-run 的等价对照） |
+| 命令                                         | 干什么                                                                        |
+| -------------------------------------------- | ----------------------------------------------------------------------------- |
+| `pnpm lint` / `pnpm typecheck` / `pnpm test` | 三条闸门。测试 **1644 条、123 个文件**（2026-10-30 实测，`vitest run` 7.1 s） |
+| `pnpm format:check`                          | 只检查不写入                                                                  |
+| `pnpm check:colors` / `pnpm check:scrim`     | 配色两条：扫写死的颜色；按令牌真值算对比度，掉到 4.5:1 以下就红               |
+| `node scripts/engine-run.mts --mode=stub`    | 不启动浏览器、不联网、不花钱跑完一本书                                        |
+| `node scripts/engine-run.mts --mode=live`    | 真供应商跑一本，顺手录一份离线回放包                                          |
+| `node scripts/chk-perf.mjs URL`              | 页面级性能读数，要对生产构建跑                                                |
+| `node scripts/chk-mobile.mjs URL`            | 手机那一档：不横向溢出、横屏铺书、首页两副形态                                |
+| `node scripts/chk-shared-reader.mjs URL`     | 共读版阅读器：阅读顺序、选完零生成、缺图兜底、键盘、断网                      |
+| `node scripts/chk-share-link.mts --base=URL` | 分享链接：匿名可读、过期/收回/改一字节都 404、无写按钮、零模型调用            |
+| `node scripts/chk-print-pdf.mjs --base=URL`  | 打印/存 PDF：纸是 A4 横向、页数对得上、字体嵌入、文件 < 20 MB                 |
+| `node scripts/e2e-shared-reading.mts`        | 共读版全链路，一句话到读完（真花钱，`--until=story` 只验到闸门）              |
+| `node scripts/cost-model.mts`                | 一本绘本花多少钱：价目表 + 真书的出图次数与计费字符                           |
+| `node scripts/chk-admin-model.mjs`           | 管理页形状；`--live=1` 时才四种能力各真打一次                                 |
+| `pnpm mcp` / `pnpm mcp:session`              | 起 MCP server；或起一次真会话跑四条判据（含与 engine-run 的等价对照）         |
 
 其余脚本在 `scripts/` 里，六十来个，每个文件头写了它量什么、判据几条、修前是什么读数。别照着 README 抄，直接看脚本。
 

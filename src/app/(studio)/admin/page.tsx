@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import AdminScreen from '@/components/admin/AdminScreen.tsx'
 import { readModelConfig, readOverview } from '@/lib/admin/server.ts'
 import { usageByUser } from '@/lib/admin/usage.ts'
+import { readAdminCredits } from '@/lib/credits/server.ts'
 
 /**
  * /admin —— 管理页（工作台的一屏，追加工单 09）
@@ -63,11 +64,16 @@ export default async function AdminPage() {
   //   那份数据里虽然没有 key 的值，但它仍然只该进管理员的进程。
   //   它是本地读一个文件（不发请求），所以"等确认完再读"的代价约等于零。
   //   `readOverview` 已经确认过角色了——非管理员在上面的 `forbidden` 就 return 掉了。
+  //
+  // 额度那一份（2026-10-30）也在这一步之后：它要带着这张票去打 Java，
+  //   而这张票只有确认过是管理员之后才值得花。★ 它读失败**不拦**这一屏
+  //   （`kind: 'error'` 原样递进去）：用户表还是能看的，只是额度那几格说一句读不到。
   return (
     <AdminScreen
       initial={result.overview}
       modelConfig={readModelConfig()}
       usage={await usageByUser()}
+      credits={await readAdminCredits()}
     />
   )
 }

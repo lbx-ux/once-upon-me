@@ -19,11 +19,13 @@
 import { describe, expect, it } from 'vitest'
 
 import { createToolRuntime, type ToolContext } from './tools.ts'
+import type { CreditPort } from './credit-port.ts'
 import { createMemoryStore } from '../engine/providers/stores.ts'
-import { createCardStore } from '../engine/index.ts'
+import { createCardStore, buildTree } from '../engine/index.ts'
 import { createEventFactory, describeEvent, type EngineEvent } from '../engine/events.ts'
+import { storyDigestOf, writeProgress } from '../book-progress.ts'
 import { INJECTION_PHRASES } from '../rag/prompt.ts'
-import { storyPathOf } from '../story-draft.ts'
+import { readStory, storyPathOf } from '../story-draft.ts'
 import { loadStubPlanJson, stubProviders } from '../stub-fixture.ts'
 import type { EventLog } from '../event-log.ts'
 import type { ChildListItem } from '../children-list.ts'
@@ -691,5 +693,252 @@ describe('illustrate_book', () => {
     //   这一条就是"立刻返回"与"等它画完"的判别——两者返回的文字可以一样，
     //   但盘上的状态不可能一样。
     expect(await store.exists(`books/${bookId}/book.json`)).toBe(false)
+  })
+})
+
+/**
+ * 额度那一关（2026-10-30）。
+ *
+ * 这一组盯的是"live 会不会白画"。判据不落在"返回了一句错话"上，落在两件真的东西上：
+ * **盘上有没有 `book.json`**、**扣与退各被调了几次**。只测文字的话，
+ * 一个"拦了但还是把活干完了"的实现在这里会全绿。
+ */
+describe('illustrate_book · 额度那一关', () => {
+  /** 一本已经编好故事的书。造草稿最省事的办法还是走一遍 plan_book */
+  async function planned(fx: Fixture): Promise<string> {
+    const result = await call(fx, 'plan_book', {
+      child: 'xiaoman',
+      theme: '恐龙',
+      form: 'solo',
+      pages: 3,
+    })
+    expect(result.isError).toBe(false)
+    const bookId = /书号 (\S+?)，/.exec(result.text)?.[1] ?? ''
+    expect(bookId).not.toBe('')
+    return bookId
+  }
+
+  /** 三档共用的夹具。`credits` 故意是注入的：这一层不该知道票从哪儿来 */
+  async function modeFixture(opts: {
+    mode?: string
+    credits?: CreditPort | null
+    image?: 'ok' | 'fail'
+  }): Promise<Fixture> {
+    const store = createMemoryStore()
+    await createCardStore(store).save(CARD)
+    await store.put({
+      path: CARD.reference.path,
+      bytes: new Uint8Array([1, 2, 3, 4]),
+      mime: 'image/png',
+    })
+    const { log } = memoryLog()
+    const base = fakeProviders(store)
+    // `fail`：每一页都失败的替身。引擎按"一页失败不影响整本"吞掉，整本 0 页——
+    //   那正是"该退"的那一种（与出图路由上的判据同一句）
+    const providers: () => Promise<ProviderBundle> =
+      opts.image === 'fail'
+        ? async () => ({
+            ...(await base()),
+            image: {
+              id: 'fake-image',
+              modelId: 'fake-image',
+              supportedRatios: ['1:1'],
+              supportsReference: false,
+              async generate() {
+                throw new Error('厂商 500（测试替身）')
+              },
+            },
+          })
+        : base
+    const ctx: ToolContext = {
+      children: async () => [childItem()],
+      userId: '1',
+      store,
+      log,
+      mode: opts.mode ?? 'live',
+      providers,
+      ...(opts.credits === undefined ? {} : { credits: opts.credits }),
+      now: () => 1_760_000_000_000,
+    }
+    return { ctx, store, log }
+  }
+
+  /** 一张永远不会成功的票：`ok: false` 的 `Result`，`status` 就是后端那个数 */
+  function failingPort(code: string, message: string, status = 402): CreditPort {
+    const result = { ok: false as const, status, code, message }
+    return { spend: async () => result, refund: async () => result }
+  }
+
+  /** 记下每一次扣 / 退。判据是这两个数组，不是返回值 */
+  function recordingPort(balance = 7): {
+    port: CreditPort
+    spends: string[]
+    refunds: string[]
+  } {
+    const spends: string[] = []
+    const refunds: string[] = []
+    return {
+      spends,
+      refunds,
+      port: {
+        async spend(bookId) {
+          spends.push(bookId)
+          return { ok: true, data: { balance: balance - 1 } }
+        },
+        async refund(bookId) {
+          refunds.push(bookId)
+          return { ok: true, data: { balance } }
+        },
+      },
+    }
+  }
+
+  async function waitUntil(check: () => Promise<boolean>, what: string): Promise<void> {
+    const until = Date.now() + 5_000
+    while (Date.now() < until) {
+      if (await check()) return
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+    throw new Error(`等不到：${what}`)
+  }
+
+  it('★ live 但没配扣额度的账号 → 拒开，一页都不画', async () => {
+    const fx = await modeFixture({ credits: null })
+    const bookId = await planned(fx)
+    const started = await call(fx, 'illustrate_book', { bookId })
+
+    expect(started.isError).toBe(true)
+    expect(started.text).toContain('MCP_ACCOUNT')
+    expect(await fx.store.exists(`books/${bookId}/book.json`)).toBe(false)
+    // 连一条 illustration 事件都不该有：引擎压根没启动
+    const { events } = await fx.log.read(bookId)
+    expect(events.filter((one) => one.kind === 'illustration')).toHaveLength(0)
+  })
+
+  it('★ 额度不够（后端回 402）→ 拒开，后端那句话原样喂回模型', async () => {
+    const fx = await modeFixture({
+      credits: failingPort('no-credits', '这一本的额度用完了，去「兑换」输入一张码。'),
+    })
+    const bookId = await planned(fx)
+    const started = await call(fx, 'illustrate_book', { bookId })
+
+    expect(started.isError).toBe(true)
+    expect(started.text).toContain('额度用完了')
+    expect(await fx.store.exists(`books/${bookId}/book.json`)).toBe(false)
+  })
+
+  it('★ live：开画前扣一本，"开工了"带着扣完还剩多少；画成了就不退', async () => {
+    const { port, spends, refunds } = recordingPort(8)
+    const fx = await modeFixture({ credits: port })
+    const bookId = await planned(fx)
+
+    const started = await call(fx, 'illustrate_book', { bookId })
+    expect(started.isError).toBe(false)
+    expect(started.text).toContain('开工了')
+    expect(started.text).toContain('还剩 7 本')
+    expect(spends).toEqual([bookId])
+    // ★ 开画之前那一次退款是"结清上一轮"：这本书日志里一页都没有，打一下是幂等的
+    //   （没扣过 / 退过都无害）。判据是"画成之后不再多一次"，见下面那行
+    expect(refunds).toEqual([bookId])
+
+    await waitUntil(() => fx.store.exists(`books/${bookId}/book.json`), '这本书画完')
+    expect(refunds).toEqual([bookId])
+  })
+
+  it('★ 日志里已经画出来过页的书：开画前不去结清（那几页真花过钱）', async () => {
+    const { port, spends, refunds } = recordingPort(8)
+    const fx = await modeFixture({ credits: port })
+    const bookId = await planned(fx)
+    // 造一条"上一轮画出来过"的证据：书却不见了（没有 book.json），正是"画到一半失败"
+    await fx.log.append(
+      bookId,
+      createEventFactory(
+        () => 1_760_000_000_000,
+        100,
+      )({
+        kind: 'illustration',
+        stage: 'illustrating',
+        assetPath: `books/${bookId}/page-1.png`,
+        modelId: 'fake-image',
+      }),
+    )
+
+    const started = await call(fx, 'illustrate_book', { bookId })
+
+    expect(started.isError).toBe(false)
+    expect(spends).toEqual([bookId])
+    // ★ 判据：一次结清都不该有。去掉了"日志里有没有 illustration"那道判据的话，
+    //   这里会是 [bookId] —— 也就是把"画到一半撤了"变成免费
+    expect(refunds).toHaveLength(0)
+  })
+
+  it('★ live：一页都没画出来 → 退一本', async () => {
+    const { port, refunds } = recordingPort(8)
+    // 每一页都画不出来：引擎吞掉页级失败，整本 0 页，正是"该退"的那一种
+    const fx = await modeFixture({ credits: port, image: 'fail' })
+    const bookId = await planned(fx)
+
+    const started = await call(fx, 'illustrate_book', { bookId })
+    // 扣是同步发生的（拒开之前），退在后台那一轮失败之后
+    expect(started.isError).toBe(false)
+    await waitUntil(async () => refunds.length >= 2, '这一轮的退款被调到')
+    // ★ 两次：开画前"结清上一轮"那一下（幂等，这里没得退）+ 这一轮 0 页之后真退的那一下
+    expect(refunds).toEqual([bookId, bookId])
+  })
+
+  it('★ 有断点：接着上一轮画，额度不再扣第二次', async () => {
+    const { port, spends, refunds } = recordingPort(8)
+    const fx = await modeFixture({ credits: port })
+    const bookId = await planned(fx)
+
+    const draft = await readStory(fx.store, bookId)
+    if (!draft) throw new Error('草稿不在')
+    const built = buildTree(draft.input.form, draft.doc.title, draft.doc.nodes)
+    if (!built.ok) throw new Error('这一版故事的结构不合法')
+    // 造一份与这版故事对得上的断点：第 1 页上一轮已经画好了
+    await writeProgress(fx.store, bookId, {
+      digest: storyDigestOf(built.tree),
+      illustrations: [
+        {
+          pageNo: 1,
+          attempt: 1,
+          asset: { path: 'books/x/page-1.png', mime: 'image/png', bytes: 4, digest: 'd1' },
+          provenance: {
+            modelId: 'fake-image',
+            promptVersion: 'page@v1',
+            cardRevision: 1,
+            generatedAt: 0,
+          },
+          needsHumanReview: false,
+        },
+      ],
+      cover: null,
+      narrations: [],
+    })
+
+    const started = await call(fx, 'illustrate_book', { bookId })
+
+    expect(started.isError).toBe(false)
+    expect(started.text).toContain('接着上一轮')
+    // ★ 判据：一次扣都没有、一次结清也没有——一个书号只该收一次，而它已经收过了
+    expect(spends).toHaveLength(0)
+    expect(refunds).toHaveLength(0)
+  })
+
+  it('★ stub / offline 不扣也不退：那两档出的图不花钱', async () => {
+    const { port, spends, refunds } = recordingPort()
+    // ★ 两件都故意摆成"最容易被误扣"的样子：注入了票、而且这一轮一页都画不出来。
+    //   判据是"一次都没调"——只看 spends 的话，一个"退了没扣过的账"的实现会溜过去
+    const fx = await modeFixture({ mode: 'offline', credits: port, image: 'fail' })
+    const bookId = await planned(fx)
+    const started = await call(fx, 'illustrate_book', { bookId })
+
+    expect(started.isError).toBe(false)
+    await waitUntil(
+      async () => (await fx.log.read(bookId)).events.some((one) => one.kind === 'error'),
+      '这一轮收尾',
+    )
+    expect(spends).toHaveLength(0)
+    expect(refunds).toHaveLength(0)
   })
 })

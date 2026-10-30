@@ -207,6 +207,21 @@ export async function markAllNoticesRead(store: AssetStore, now = Date.now()): P
 }
 
 /**
+ * 清空这一片的**全部**通知（`/notices` 上那颗「清空」），返回真删掉的条数。
+ *
+ * ★ 整片删，不逐条列：`deletePrefix(NOTICE_DIR)` 是这个 store 的一键删除原语，
+ *   回来的数就是它真删掉的条数（删除凭据要的是这个数，不是预估）。
+ *   逐条 `listNotices` 再删会**漏掉那些读不出来的**（半截 JSON、名字不合形状的杂文件），
+ *   而"清空之后这一片是空的"才是按那颗钮要的结果：留着几个看不见的文件，
+ *   下一版换了格式它们会在别的屏幕上重新冒出来。
+ *
+ * 清空**只动通知**：书、草稿、分享记录、额度都在别的目录里，这一片删干净不影响任何一本。
+ */
+export async function clearNotices(store: AssetStore): Promise<number> {
+  return store.deletePrefix(NOTICE_DIR)
+}
+
+/**
  * 删掉这本书的全部通知。删一本书时要调它。
  *
  * 不删的话：书没了，通知还在，点进去 404。而书号是"卡 + 形态 + 主题"的指纹，

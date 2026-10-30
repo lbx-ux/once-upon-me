@@ -1,14 +1,15 @@
 /**
- * /api/notices —— 站内信：读、标已读（2026-10-30）
+ * /api/notices —— 站内信：读、标已读、清空（2026-10-30）
  *
  * ```
- *   GET  /api/notices            → { unread, items }
- *   GET  /api/notices?count=1    → { unread }          ← 侧栏那颗红点只问这一个数
- *   POST { id }                  → { unread }          ← 标一条已读
- *   POST { all: true }           → { unread }          ← 全标已读
+ *   GET    /api/notices            → { unread, items }
+ *   GET    /api/notices?count=1    → { unread }          ← 侧栏那颗红点只问这一个数
+ *   POST  { id }                   → { unread }          ← 标一条已读
+ *   POST  { all: true }            → { unread }          ← 全标已读
+ *   DELETE                         → { removed, unread }  ← 清空（整片删）
  * ```
  *
- * 四条判断
+ * 五条判断
  *
  * 1. **只要登录，不要任何能力。** 看"我的书好了没有"与权限那一位无关：
  *    权限收回去之后，手上已经做好的书还在书架上、也还读得到（`/shelf` 同一条口径）。
@@ -25,6 +26,13 @@
  * 4. **`POST` 只认 `id` 与 `all`，别的一概不读。** 没有"标某本书的全部"这种入口：
  *    那需要书号 → 通知的反查，而通知列表本来就不长；多一个入口就多一处
  *    与"删一本书要删它全部通知"（`deleteNoticesOf`）重叠的语义。
+ *
+ * 5. **清空是 `DELETE`，不是 `POST { clear: true }`。** 它与"标已读"不是同一种改动：
+ *    一个是改字段、一个是**让文件不再存在**，而且它删的是整片（连一屏之外、
+ *    连读不出来的那些一起）。方法与后果对得上，路径上也就不用再解释"all 与 clear 谁先"。
+ *    回报的 `removed` 是 `deletePrefix` **真删掉的条数**（`clearNotices` 那段）；
+ *    `unread` 在删完**重新数一次**：正好有另一个标签页在画、并发写进来一条时，
+ *    红点该按新的那一份亮，而不是按这一次删完的空目录想当然地回 0。
  */
 
 import type { NextRequest } from 'next/server'
@@ -33,6 +41,7 @@ import { createUserStore } from '@/lib/asset-scope.ts'
 import { requireCapability } from '@/lib/auth/session.ts'
 import { assetRoot } from '@/lib/books-runtime.ts'
 import {
+  clearNotices,
   listNotices,
   markAllNoticesRead,
   markNoticeRead,
@@ -80,4 +89,13 @@ export async function POST(req: NextRequest): Promise<Response> {
   const one = await markNoticeRead(store, body.id)
   if (!one) return fail(404, 'notice-not-found', '这条通知不在了（也许已经被清掉了）')
   return Response.json({ unread: unreadCountOf(await listNotices(store)) })
+}
+
+export async function DELETE(req: NextRequest): Promise<Response> {
+  const guard = await requireCapability(req, [])
+  if (!guard.ok) return guard.response
+
+  const store = await createUserStore(assetRoot(), guard.session.userId)
+  const removed = await clearNotices(store)
+  return Response.json({ removed, unread: unreadCountOf(await listNotices(store)) })
 }

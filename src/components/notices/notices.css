@@ -12,6 +12,12 @@
  *
  * 没有任何写死的颜色：四颗令牌（`--surface` / `--hairline` / `--ink*` / `--accent` /
  *   `--danger`）都在 `globals.css` 的 `:root`，`pnpm check:colors` 会盯着这一条。
+ *
+ * 页头右边那两颗钮不同权重（2026-10-30 加「清空」时定的，同日用户要求换成图标）：
+ *   常做的「全部标为已读」是白胶囊，「清空」是一颗 32px 的垃圾桶图标——它会让记录消失，
+ *   长相就不该与前者一样重；只有图标，所以 `aria-label` / `title` 补全了它要说的话。
+ *   按下之后那一行换成 `.ntc__confirm`（确认清空 / 算了），与 `voice-picker.css`
+ *   那颗垃圾桶同一套两步。
  */
 
 .ntc {
@@ -67,6 +73,116 @@
 .ntc__all:disabled {
   cursor: default;
   opacity: 0.6;
+}
+
+/* 页头右边那一簇（「全部标为已读」与「清空」）。窄屏上它会换行——
+   两颗钮不缩字：缩到 11px 的"清空"是最容易被误点的那种 */
+.ntc__acts {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px 14px;
+}
+
+/* 「清空」是一颗图标钮（2026-10-30 用户："弄成一个垃圾桶的样式，不要写字"）。
+   ★ 32px 透明底方钮，与 `voice-picker.css` 的 `.vc__del` 同一副骨架：它同样是
+     "删东西"那颗，同样点下去还有两步确认——所以它不需要长得更醒目。
+   ★ 颜色用 `--ink-on-sky`：这一屏整屏在天空带里，`--ink-muted` 在这个底上过不了
+     4.5:1（`scripts/check-scrim.mts`）。悬停换 `--danger`（在 `--sky` 上 6.15:1）：
+     那是"它要删东西"的提示，不是把危险颜色一直挂着吓人。
+   ★ 悬停不铺底：`--surface-soft` 是按 `--paper` 标定的半透明层（`check-scrim` 明写
+     它上面连 `--accent` 都只有 4.40:1），而这里压的是天空。只换色，不动底。 */
+.ntc__clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--ink-on-sky);
+  cursor: pointer;
+}
+
+.ntc__clear-icon {
+  width: 17px;
+  height: 17px;
+}
+
+.ntc__clear:hover:not(:disabled) {
+  color: var(--danger);
+}
+
+.ntc__clear:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.ntc__clear:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+/* 两步确认那一行：与 `voice-picker.css` 的 `.vc__confirm` 同一副骨架 */
+.ntc__confirm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ntc__danger {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 999px;
+  background: var(--danger);
+  color: var(--surface);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.ntc__danger:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.ntc__cancel {
+  padding: 8px 16px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.ntc__danger:focus-visible,
+.ntc__cancel:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.ntc__danger:disabled,
+.ntc__cancel:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+/* 清空这一次的回执。它不是空态文案（那一块 2026-10-30 被用户圈掉了）：
+   它只在刚点完「确认清空」之后出现，下一次进这一屏就没有了 */
+.ntc__receipt {
+  margin: 0 0 18px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--ink-on-sky);
+}
+
+.ntc__receipt[data-tone='failed'] {
+  color: var(--danger);
 }
 
 .ntc__list {
@@ -188,6 +304,12 @@
   .ntc__head {
     flex-direction: column;
     gap: 14px;
+  }
+
+  /* 页头立起来之后，那两颗钮跟在说明行底下、靠左——靠右在窄屏上会与屏幕边齐平，
+     看着像贴边的角标 */
+  .ntc__acts {
+    justify-content: flex-start;
   }
 
   .ntc__item {

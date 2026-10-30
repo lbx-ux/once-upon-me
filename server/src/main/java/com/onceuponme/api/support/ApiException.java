@@ -58,4 +58,12 @@ public class ApiException extends RuntimeException {
   public static ApiException locked(String message) {
     return new ApiException(HttpStatus.TOO_MANY_REQUESTS, "too-many-attempts", message);
   }
+
+  /**
+   * 额度不够。★ 402 而不是 403：403 是"你不被允许"，402 是"你被允许，但这一次要付的东西不够"。
+   * 界面据这一条把用户带去兑换页，而不是让他去怀疑自己的账号权限（那两件事的下一步完全不同）。
+   */
+  public static ApiException paymentRequired(String code, String message) {
+    return new ApiException(HttpStatus.PAYMENT_REQUIRED, code, message);
+  }
 }

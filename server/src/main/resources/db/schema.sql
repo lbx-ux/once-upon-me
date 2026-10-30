@@ -1,12 +1,18 @@
 -- ============================================================================
--- 小主角的账号与配置表 —— 五张，一张不多
+-- 小主角的账号、配置与额度表 —— 八张，一张不多
 --
 -- ★ 这句原来是"三张，一张不多"（2026-10-15 写第一版时确实是三张）。
 --   ★ 2026-10-18：`permission_requests`（权限申请）随"权限收成一位、注册即全开"
 --   一起退场，所以从六张回到五张：users / user_permissions / voices /
 --   sms_send_log / sms_codes —— 每加一张都有它当时非加不可的理由，
 --   而那些理由各自写在那一张上面。
---   ★ 它**只在新建的库上不再出现**：已经建过的库里那张表还在（`SchemaUpgrades`
+--   ★ 2026-10-30：加了额度那三张（credit_accounts / book_credits / redeem_codes），
+--   五张变八张。它们回答的是同一个新问题："谁能画几本"。三张的分工见每一张上面那一段
+--   ——账本、余额、码，各是各的事，不合并。
+--   ★ 同一天又去掉了一张：`credit_orders`（对公转账订单）随"这一版不要订单台账"
+--   一起退场，所以是九张回到八张。它不是"没做"，是**决定不做**——额度只从兑换码与
+--   站长补发进来，站外那笔钱不再在系统里留凭证。
+--   ★ 它**只在新建的库上不再出现**：已经建过的库里那些旧表还在（`SchemaUpgrades`
 --   刻意不做 DROP，见它的文件头），只是没有任何代码再读写它。
 --   ★ 把总数写在这里是因为它会过期：这一行 2026-10-17 就过期过一次
 --   （加了 voices 之后没人改它）。改表的时候顺手改这一行。
@@ -23,11 +29,9 @@
 --       所以：**次级索引一律写成建表语句里的 `KEY 名字 (列)`**，两个库都认
 --       （`KEY` 那种写法 2026-10-17 在 H2 的 MySQL 兼容档与 MySQL 8.0.46 上各测过一次，
 --       见工单 03 的记录）。
---       ★ 2026-10-18：这条纪律留着，而这份文件里此刻**一条 `KEY` 都没有**——
---       唯一那条（`permission_requests` 的排序索引）随那张表一起退场了。
---       下次要加索引照这个写法写，别写 `CREATE INDEX`。
---       现在唯一"写在建表语句里的索引"是那两条唯一约束
---       （`uk_users_account` / `uk_voices_user_voice`），
+--       ★ 2026-10-30：额度那两张表又把这条用上了（`book_credits` 与 `redeem_codes`
+--       各一条），写法照旧，没有 `CREATE INDEX`。
+--       现在"写在建表语句里的索引"有五条：两条唯一约束 + 三条 `KEY`，
 --       `SchemaSqlPortabilityTest` 拿它们当"索引这件事我们确实做了"的锚点。
 --       ★ 而"给**已经建过**的表补索引"没有 `IF NOT EXISTS` 可用：
 --       那种情况按 `config/SchemaUpgrades` 的做法来（先问库，再 ALTER）。
@@ -184,4 +188,69 @@ CREATE TABLE IF NOT EXISTS voices (
   created_at DATETIME     NOT NULL,
   PRIMARY KEY (id),
   CONSTRAINT uk_voices_user_voice UNIQUE (user_id, voice_id)
+);
+
+-- ── 额度（2026-10-30）─────────────────────────────────────────────────────
+-- 三张表回答同一个问题："谁能画几本"。它们**不合并**，因为各自记的是不同的事：
+--   credit_accounts  现在还剩几本（余额，扣减要能原子判够不够）
+--   book_credits     这个数是怎么变成现在这个数的（只追加的账本）
+--   redeem_codes     一张码值几本、谁核销的（码就是钱，存 HMAC 不存明文）
+-- 把三张压成一张，退一次款就要改写两条互相依赖的历史；分开之后每一张都能单独对账。
+-- ★ 第四张 `credit_orders`（对公转账订单）同日**决定不做**：这一版没有支付通道，
+--   也没有订单台账。已经建过的库里它还在（本文件不做 DROP），只是没有代码再读写它。
+--
+-- ★ 余额那一列是**账本的缓存**，不是账本本身：`SUM(book_credits.delta)` 必须
+--   永远等于 `credit_accounts.balance`。留它只为一件事——扣减用一条
+--   `UPDATE ... SET balance = balance - 1 WHERE balance >= 1` 完成"读、判、写"。
+--   两者的差就是管理页上那个"账本差额"（正常恒为 0）。
+CREATE TABLE IF NOT EXISTS credit_accounts (
+  user_id    BIGINT   NOT NULL,
+  -- 还剩几本。★ 缺行 = 0 本（与 user_permissions 的"缺行 = 有"刻意相反）
+  balance    INT      NOT NULL DEFAULT 0,
+  updated_at DATETIME NOT NULL,
+  PRIMARY KEY (user_id)
+);
+
+-- 额度账本：一行 = 一次授予（+）或一次扣减（-）。只追加，不改、不删。
+--
+-- ★ 列名是 `ref_no` 而不是 `ref`：后者在某个方言里太容易撞上保留字，
+--   而这一类问题只在 H2 或 MySQL 的一侧出现——正是 `chosen` 那一列付过学费的形状。
+-- ★ `reason` 只有四个值（grant / redeem / consume / refund），见 `BookCredit`。
+-- ★ 退款按书号**求和封顶**：这个书号的 consume 合计减去 refund 合计，就是还能退多少
+--   （同一本书失败两次、重试两次，两笔都退得回来）。判据走 (user_id, reason, ref_no)
+--   三列，规模只有几百行，不另建索引。
+CREATE TABLE IF NOT EXISTS book_credits (
+  id         BIGINT       NOT NULL AUTO_INCREMENT,
+  user_id    BIGINT       NOT NULL,
+  delta      INT          NOT NULL,
+  reason     VARCHAR(24)  NOT NULL,
+  ref_no     VARCHAR(128) DEFAULT NULL,
+  note       VARCHAR(200) NOT NULL DEFAULT '',
+  created_at DATETIME     NOT NULL,
+  PRIMARY KEY (id),
+  KEY idx_book_credits_user (user_id, created_at)
+);
+
+-- 兑换码。一码一行，主键是**明文码的 HMAC**（十六进制 64 字符），不是明文。
+--
+-- ★ 库里没有明文，只有后四位（`code_tail`）。这不是"前端小心一点"：
+--   那张表里根本没有可以还原明文的列，库被读走也拿不到码。
+--   代价是码丢了只能补发、不能查回——这是对的。
+-- ★ 核销是一条带条件的 UPDATE：
+--   `SET redeemed_by = ? WHERE code_hash = ? AND redeemed_by IS NULL
+--    AND (expires_at IS NULL OR expires_at > ?)`。
+--   "先查再写"在两个人同时提交同一张码时会发两份额度。
+-- ★ `batch` 不是一张表，只是生成时写下的一个标签（同一批一起导出、一起对账）。
+CREATE TABLE IF NOT EXISTS redeem_codes (
+  code_hash   CHAR(64)     NOT NULL,
+  code_tail   CHAR(4)      NOT NULL,
+  books       INT          NOT NULL,
+  batch       VARCHAR(40)  NOT NULL,
+  note        VARCHAR(200) NOT NULL DEFAULT '',
+  expires_at  DATETIME     DEFAULT NULL,
+  redeemed_by BIGINT       DEFAULT NULL,
+  redeemed_at DATETIME     DEFAULT NULL,
+  created_at  DATETIME     NOT NULL,
+  PRIMARY KEY (code_hash),
+  KEY idx_redeem_codes_batch (batch)
 );

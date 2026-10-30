@@ -844,6 +844,15 @@ export const DEFAULT_PAGE_CONCURRENCY = 3
 export type IllustrateAllOptions = {
   /** 同时出图/比对的页数上限。缺省 `DEFAULT_PAGE_CONCURRENCY`（3） */
   concurrency?: number
+  /**
+   * 断点续画：这些页号上一轮已经画好了（2026-10-30）。
+   * ★ 直接进结果表，**不重画、不发事件**——事件是"这一轮发生了什么"，
+   *   而这一页什么也没发生。要不要把它算进这一轮的页数，是调用方的事
+   *   （出图路由的退款判据要算，见那里）。
+   */
+  resume?: ReadonlyMap<number, Illustration>
+  /** 每画好一页叫一次。断点靠它落盘；失败与跳过都不叫 */
+  onPage?: (illustration: Illustration) => void
 }
 
 /**
@@ -905,6 +914,15 @@ export async function illustrateAll(
     length: nodes.length,
   })
 
+  // ★ 断点续画：上一轮画好的页先坐进结果表，worker 取号时会**跳过它们**
+  //   （`if (resultOf[index]) continue`）——重画一页就是再付一次钱。
+  if (run.resume) {
+    for (let index = 0; index < nodes.length; index += 1) {
+      const done = run.resume.get(nodes[index]!.pageNo)
+      if (done) resultOf[index] = done
+    }
+  }
+
   /**
    * 下一个要取的页号。
    *
@@ -919,8 +937,11 @@ export async function illustrateAll(
       next += 1
       if (index >= nodes.length) return
       const node = nodes[index]!
+      if (resultOf[index]) continue // 断点里已经有这一页了（见上面那段）
       try {
         resultOf[index] = await illustrateNode(node, opts)
+        // ★ 每画好一页就报一次，落盘由调用方决定（断点续画靠它，2026-10-30）
+        run.onPage?.(resultOf[index]!)
       } catch (err) {
         const failure = asEngineError(err)
         // 一页失败不终止整条流（§5 失败语义），但记下来，书要标"这一页缺"

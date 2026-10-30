@@ -1,0 +1,232 @@
+/* redeem.css —— 「兑换额度」那一屏（2026-10-30）
+ *
+ * 版式沿用工作台那一套：左对齐的衬线标题 + 两张纸。★ 两张纸而不是一张：
+ * 左边回答"我现在还剩几本、怎么加"，右边回答"刚才那几笔对不对"，
+ * 两件事的读者动作不同（一个要输入，一个只看）。
+ */
+
+.rdm {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: clamp(40px, 7vh, 88px) clamp(22px, 4vw, 60px) 80px;
+}
+
+.rdm__title {
+  display: table;
+  margin: 0 0 14px;
+  font-family: var(--font-serif);
+  font-size: clamp(32px, 4.2vw, 54px);
+  font-weight: 600;
+  line-height: 1.24;
+  color: var(--ink);
+}
+
+.rdm__sub {
+  max-width: 42em;
+  margin: 0 0 30px;
+  color: var(--ink-muted);
+  font-size: 15px;
+  line-height: 1.8;
+}
+
+.rdm__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 22px;
+  align-items: start;
+}
+
+.rdm__card {
+  padding: 24px 24px 22px;
+  border: 1px solid var(--hairline);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--sheet-shadow);
+}
+
+.rdm__balance-label {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
+.rdm__balance {
+  margin: 4px 0 20px;
+  font-family: var(--font-serif);
+  font-size: clamp(48px, 6vw, 72px);
+  font-weight: 600;
+  line-height: 1;
+  color: var(--ink);
+}
+
+/* 读不出来时不要长成"0 本"的样子：字号收回正文、颜色退一档 */
+.rdm__balance[data-unknown='true'] {
+  font-size: 40px;
+  color: var(--ink-muted);
+}
+
+.rdm__unit {
+  margin-left: 6px;
+  font-family: var(--font-body, inherit);
+  font-size: 15px;
+  font-weight: 400;
+  color: var(--ink-muted);
+}
+
+.rdm__form {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.rdm__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1 1 240px;
+  font-size: 13px;
+  color: var(--ink-muted);
+}
+
+.rdm__input {
+  width: 100%;
+  padding: 11px 14px;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  background: var(--surface-soft, var(--surface));
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.rdm__input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.rdm__go {
+  padding: 11px 22px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--accent);
+  /* ★ 与 `.adm__newgo` 同一条：主按钮上的字取 `--surface`（纸），不另调一颗白。
+     原来这里写的是 `var(--on-accent, #fff)`，而 `--on-accent` 这颗令牌根本不存在
+     （`check:colors` 逮到的就是这个兜底值）——一个不存在的令牌 + 一个写死的白，
+     等于这里一直就是 #fff。 */
+  color: var(--surface);
+  font: inherit;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.rdm__go:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.rdm__note {
+  margin: 14px 0 0;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--ink);
+}
+
+.rdm__note[data-bad='true'] {
+  color: var(--danger);
+}
+
+.rdm__next {
+  margin: 16px 0 0;
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
+.rdm__next a {
+  color: var(--accent);
+}
+
+/* 流水 */
+
+.rdm__log-title {
+  margin: 0 0 14px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.rdm__empty {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.rdm__log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.rdm__row {
+  display: grid;
+  grid-template-columns: 5.5em minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: baseline;
+  padding: 9px 0;
+  border-top: 1px solid var(--hairline);
+  font-size: 13px;
+}
+
+.rdm__row:first-child {
+  border-top: 0;
+}
+
+.rdm__row-what {
+  color: var(--ink);
+}
+
+.rdm__row-note {
+  overflow: hidden;
+  color: var(--ink-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rdm__row-time {
+  color: var(--ink-muted);
+  white-space: nowrap;
+}
+
+.rdm__row-delta {
+  min-width: 4.5em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.rdm__row-delta[data-sign='plus'] {
+  color: var(--accent);
+}
+
+.rdm__row-delta[data-sign='minus'] {
+  color: var(--ink-muted);
+}
+
+@media (max-width: 860px) {
+  .rdm__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .rdm__row {
+    grid-template-columns: 5.5em minmax(0, 1fr) auto;
+  }
+
+  .rdm__row-time {
+    display: none;
+  }
+}

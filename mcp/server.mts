@@ -42,6 +42,7 @@ import { createReplayImage, createReplayText } from '../src/lib/engine/providers
 import type { ProviderBundle } from '../src/lib/engine/providers/types.ts'
 import { createFsEventLog } from '../src/lib/event-log.ts'
 import { dispatch, INITIAL_SESSION, type Session } from '../src/lib/mcp/protocol.ts'
+import { createCreditPort, type CreditPort } from '../src/lib/mcp/credit-port.ts'
 import { createToolRuntime } from '../src/lib/mcp/tools.ts'
 import { serverEnv } from '../src/lib/settings/server-env.ts'
 import {
@@ -121,6 +122,26 @@ async function main(): Promise<void> {
       createProviders({ env: serverEnv(), mode: 'live', assetRoot: root, store })
   }
 
+  /**
+   * 花钱那一关（2026-10-30）。★ 只在 `live` 注入：stub / offline 出的图不花钱，
+   * 那两档不该去动额度——与"这两档不进任何供应商的账"是同一条口径。
+   *
+   * 口令从 `.env.local` 来（上面 `readEnv()` 已经并进 `process.env`）：
+   * 与模型密钥同一个落点、同一条纪律（永不入库）。没配就**不注入**，
+   * live 那一档的 `illustrate_book` 会因此拒开——见 `tools.ts` 里那段。
+   */
+  let credits: CreditPort | null = null
+  if (mode === 'live') {
+    const account = (process.env['MCP_ACCOUNT'] ?? '').trim()
+    const password = process.env['MCP_PASSWORD'] ?? ''
+    if (account === '' || password === '') {
+      note('没有 MCP_ACCOUNT / MCP_PASSWORD：illustrate_book 会拒开（这一轮是真花钱的）')
+    } else {
+      credits = createCreditPort({ account, password, userId })
+      note(`额度按账号 ${account} 扣（--user=${userId}）；对不上会当场拒`)
+    }
+  }
+
   const runtime = createToolRuntime({
     // ★ 与 `/api/children` 是**同一处实现**（`children-list.ts`）。
     //   这一层拿的是"这一片的根"，与路由那边传 `userSliceRoot(...)` 是同一个值。
@@ -130,6 +151,7 @@ async function main(): Promise<void> {
     log,
     mode,
     providers,
+    credits,
   })
 
   note(`起来了一档：user=${userId} · mode=${mode} · 资产根=${sliceRoot}`)
