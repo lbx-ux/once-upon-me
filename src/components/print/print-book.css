@@ -1,0 +1,383 @@
+/* print-book.css —— 打印 / 存 PDF 那一屏（2026-10-29）
+ *
+ * 这一屏没有 PDF 库：浏览器自己的打印就是 PDF 生成器（见 `PrintNow.tsx` 文件头）。
+ * 所以这份样式表要做的事只有一件——**屏幕上看到的那张纸与打印出来的那张纸是同一个盒子**。
+ *
+ * 四条判断
+ *
+ * 1. **一张纸 = 一页 A4 横向 = 297mm × 210mm，尺寸只写在这里。**
+ *    组件那边一个内联尺寸都没有：两处各写一遍，迟早变成"屏幕上刚好、打印时下一页
+ *    第一行被切掉"。
+ * 2. **`@page { margin: 0 }`，纸自己也不留边距——内页是满版的。**
+ *    交给浏览器留边距的话，边距是打印机那台机器的属性，不是这本书的版式。
+ *    所以纸把边距收成 0、图铺到四条边（绘本那一页本来就是画满的），
+ *    机器打不到的那 3–5mm 由机器自己切——切掉的必须是画，不能是字，
+ *    于是正文守在里面 6mm 处（`.print-sheet__text`）。
+ *    ★ 2026-10-30 改的：前三版都在纸里留了一圈白，用户连着两次说的是"四周这么大的空白"
+ *      与"并没有铺满整张纸"。留白不是版式，是上一版的失误。
+ * 3. **屏幕预览不缩放，宁可横向滚动。**
+ *    297mm 在 96dpi 下是 1122px，比笔记本屏幕宽。`transform: scale()` 能把预览塞进去，
+ *    但那样"屏幕上量到的字有多大"与打印出来就不是一回事了——预览的意义正是量它。
+ * 4. **打印时把顶栏整个去掉。** 那一行（回去看这本书 / 说明 / 按钮）在纸上没有用处，
+ *    而且它会占掉第一页的位置（`display: none`，不是 `visibility: hidden`：
+ *    后者仍然占位，第一张纸会被挤到第二页去）。
+ */
+
+@page {
+  size: A4 landscape;
+  margin: 0;
+}
+
+.print-page {
+  min-height: 100dvh;
+  padding-bottom: 64px;
+  background: var(--bg);
+}
+
+/* ── 顶栏：只在屏幕上有 ─────────────────────────────────────────────────── */
+
+.print-page__bar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 12px 20px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.print-page__back {
+  color: var(--ink-soft);
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.print-page__back:hover {
+  color: var(--accent);
+}
+
+.print-page__hint {
+  flex: 1;
+  min-width: 240px;
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.print-page__go {
+  padding: 8px 18px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--surface);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.print-page__go:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+/* ── 纸 ─────────────────────────────────────────────────────────────────── */
+
+.print-book {
+  display: grid;
+  gap: 28px;
+  justify-items: center;
+  padding: 24px 16px 0;
+  overflow-x: auto;
+}
+
+.print-sheet {
+  position: relative;
+  box-sizing: border-box;
+  display: block;
+  width: 297mm;
+  height: 210mm;
+  /* ★ 2026-10-30 第四版：**整张纸都是图**，一个毫米的纸边都不留。
+     前三版都在纸里留了一圈外边距，用户第三次说的还是同一句话："并没有铺满整张纸"——
+     绘本那一页本来就是画满的，留一圈白框就不再是绘本。
+     ★ 代价写在明处：家用打印机四边各有 3–5mm 打不到，那一圈会被机器自己切掉或缩进去。
+       所以这不是"图被切了"，是**图必须多画出去**：满版印刷就是这么干的。
+     ★ 正文那块仍然守在 6mm 以内（见 `.print-sheet__text`），任何一台打印机的死区都碰不到它。 */
+  padding: 0;
+  /* 满版之后，图与正文都贴着边：一个像素的溢出都会被排版成第二张空白纸 */
+  overflow: hidden;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--sheet-shadow);
+  /* 一张纸一页：两条写法都给（老浏览器认 page-break-*） */
+  break-after: page;
+  page-break-after: always;
+  /* 纸的背景、压深与那层渐变要真的印出来，不是被打印机当成"背景色"省掉 */
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+
+.print-sheet:last-child {
+  break-after: auto;
+  page-break-after: auto;
+}
+
+/* 图那一块：整张纸都是它 */
+.print-sheet__art {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+/* ★ 第四版改成 `cover`：满版，图铺到纸的四条边。
+ *   A4 横向是 1.414:1、页图是 3:2，要铺满就得裁掉左右各 34px（约 9mm、合 2.9%）——
+ *   换来的是整页画满。第三版用 `contain` 时上下各留 15px 纸色，用户圈出来的就是那道边。
+ *   方图（演示书那几张 1440×1440）会被裁掉上下各 7.5%：那是旧版生成尺寸的遗留，
+ *   为一本演示书去加一套"按比例换算法"不值——账记在 docs/known-tradeoffs.md。 */
+.print-sheet__image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* 缺图：一句人话占住那块地方，而不是留白（文件头第 3 条） */
+.print-sheet__absent {
+  margin: 0;
+  padding: 8mm;
+  border: 1px dashed var(--hairline);
+  border-radius: 4mm;
+  color: var(--ink-muted);
+  font-size: 12pt;
+  text-align: center;
+}
+
+/* ── 正文：叠在左下角，位置与屏幕上那本一模一样 ──────────────────────────────
+ *
+ * 用户的原话："按绘本是什么样的，打印出来就是什么样的，把左下角的字按绘本那样放到图片上"。
+ * 位置抄的是 `components/reader/reader-book.css` 的 `.reader__text`（同一个左下角、同一个
+ * 衬线字体、同一个 `--ink-soft`）；**字的底衬从第七版起不一样了**——纸上没有那块板了。
+ *
+ * ★ 位置不是随手定的：出图时那条构图约束写的就是"主体偏右或居中，
+ *   左下方约四分之一留出相对干净、可叠字的区域"（`prompts/image.ts`）。
+ *   两块是一对合同——纸上把正文挪到别处，那块留白就成了图上的一块白斑。
+ * ★ `left/bottom: 6mm` 现在只剩一个意思：**这是打印机的安全区，不是版面留白**。
+ *   满版之后图铺到纸边，家用打印机四边各有 3–5mm 打不到——那一圈裁掉的必须是画，
+ *   不能是字。6mm 是"任何一台能买到的喷墨机都印得到"的那条线。
+ *
+ * ★ 2026-10-30 第七版：**那块纸色矩形整个拿掉**（用户原话"直接把底下的这个白色的背景板
+ *   去掉"）。前六版再怎么调，它都是一块带边界的板——底边是 6mm 处的一条横线、右边靠
+ *   `mask` 淡出，边界本身就是被看见的东西（用户这次圈的就是底边与右边）。
+ *   现在字下面没有面，只有**字形自带的一圈纸色描边**（八向零模糊 `text-shadow`）：
+ *   描边跟着字形走，没有矩形，也就没有边可看。
+ *   读数：描边是纸色 `--surface`，与墨色 `--ink-soft` **17.08:1**——这一对与底下是什么
+ *   无关，所以字永远是"深色字带上白边"，不会因为画深就糊掉。上一版整块最薄处是 6.93:1。
+ *   ★ 但填充那一层不再有底衬垫着：墨色压在整块区域最暗的那个像素上只有 **1.10–1.21:1**
+ *   （第六版是 6.93:1）。这不是"没算"，是这一版拿掉的正是那层底衬——字靠的是描边
+ *   而不是填充去分界。所以出图那条构图合同（`prompts/image.ts`：左下约四分之一留出
+ *   可叠字的干净区域）从"最好遵守"变成**承载可读性**的那一条。
+ *   算法：sRGB 相对亮度；纸色 `--surface` #ffffff、墨色 `--ink-soft` #1c1b22；
+ *   整块区域取正文那几行的包围盒，逐像素取相对亮度后取最小值 / 5% 分位（探针数）。
+ *   ★ 还有两种托字写法是量过之后否掉的：模糊 `text-shadow`（三层、1.8mm 模糊）会被
+ *   `Page.printToPDF` 每层栅格成一张 96dpi 灰度 JPEG——一本 6 页的书多出 57 张这样的图、
+ *   多 126 KB，探针判据 9（"图数 = 有图的纸数"）直接红；`-webkit-text-stroke` 是矢量，
+ *   但 Chrome 把带描边的字整段改画成 Type3 字形轮廓（33 个 `/Type3`、正文不再是"字"、
+ *   文件多 534 KB）。零模糊的八向投影两头都不占：字还是字，一本 6 页的书仍是 6 个图片对象。
+ * ★ 屏幕阅读器那一版还留着纸色板（`reader-book.css` 的 `.reader__text`）——那是另一屏，
+ *   孩子案头那本书要的是"能压住任何一张图"，这次改的是纸。
+ */
+.print-sheet__text {
+  position: absolute;
+  left: 6mm;
+  bottom: 6mm;
+  /* ★ 第五版：宽度不再"刚好包住字"。原来是 `max-width: 74%` + 绝对定位的收缩宽度，
+     于是盒子贴着最长那行缩到 90mm——白纸的右边缘正好切在最后一个字上，用户圈的就是那里。
+     第七版把纸色整块拿掉之后，这个宽度只剩一件事：**行在哪里断**。 */
+  width: 64%;
+  /* 右 18mm 是从"给那块板留位置"留下来的，现在只管断行——动它，长句会换行。 */
+  padding: 0 18mm 6mm 8mm;
+  font-family: var(--font-serif);
+  font-size: 13pt;
+  line-height: 1.7;
+  color: var(--ink-soft);
+  /* 字下面没有面了，靠字形自带的一圈纸色描边把字从画上托起来（第七版）。
+     八向零模糊：每个方向印一遍纸色的字，叠起来就是字外围那圈 0.25mm 的边——
+     画在填充下面（`text-shadow` 本来就在字后面），笔画不会被吃掉。
+     轴上是 0.25mm、对角是 0.18mm（= 0.25 / √2，四个对角连起来才是同一个宽度的圈）。
+     ★ 颜色是 `--surface`，不是写死的白：#fffdf7 是阅读器那张纸的色，
+       而这张纸的纸色就是 `--surface`——描边要用"这张纸的纸色"，改配色时它才跟着走。
+     ★ 为什么不是别的两种写法、为什么不是模糊，见文件头第七版那段（都是量出来的）。 */
+  text-shadow:
+    0.25mm 0 0 var(--surface),
+    -0.25mm 0 0 var(--surface),
+    0 0.25mm 0 var(--surface),
+    0 -0.25mm 0 var(--surface),
+    0.18mm 0.18mm 0 var(--surface),
+    -0.18mm 0.18mm 0 var(--surface),
+    0.18mm -0.18mm 0 var(--surface),
+    -0.18mm -0.18mm 0 var(--surface);
+}
+
+/* ★ 第七版：`::before` 那块纸色**没有了**（用户原话"直接把底下的这个白色的背景板去掉"）。
+ * 前六版一直在调它的透明度与渐隐，但它始终是一块**有边界的矩形**：底边是 6mm 处的一条横线、
+ * 右边靠 `mask` 淡出——边界本身就是被看见的东西，用户这次圈的就是那条底边与那道右边。
+ * 只要面还在，翻来覆去改的只是"边界有多明显"。所以不再留面，改用字形自带的描边
+ * （`.print-sheet__text` 的八向 `text-shadow`）。
+ * 历史读数留着备查：第五版 0.94/0.72、第六版 0.80/0.62（折点 72%），整块最薄处 6.93:1。 */
+
+.print-sheet__text p {
+  margin: 0;
+}
+
+/* 共读版那行小字：这一页属于哪条支 */
+.print-sheet__mark {
+  margin: 0 0 2mm;
+  color: var(--accent);
+  font-size: 9.5pt;
+  letter-spacing: 0.08em;
+}
+
+.print-sheet__prompt {
+  margin: 2mm 0 0;
+  color: var(--ink-soft);
+  font-size: 12pt;
+}
+
+.print-sheet__options {
+  display: flex;
+  gap: 6mm;
+  margin: 1mm 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12pt;
+}
+
+.print-sheet__options li {
+  display: flex;
+  align-items: center;
+  gap: 2mm;
+  padding: 1.5mm 4mm;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+}
+
+.print-sheet__emoji {
+  font-size: 13pt;
+  line-height: 1;
+}
+
+/* 页码：叠在图上就看不见了（图有深有浅），所以挪进正文那一块，
+   靠右对齐当书口上的数字——它落在纸色渐变里，读得到 */
+.print-sheet__no {
+  display: block;
+  margin-top: 3mm;
+  text-align: right;
+  color: var(--ink-muted);
+  font-size: 9pt;
+  letter-spacing: 0.08em;
+}
+
+/* ── 封面 ─────────────────────────────────────────────────────────────────
+ * ★ 2026-10-30 第五版：**封面图也铺到纸边**。
+ *   前四版封面是"图居中 + 书名 + 品牌"三行，105 × 140mm 的一张图浮在 297mm 宽的纸上，
+ *   左右各空 96mm——用户圈的就是这两块。既然内页已经满版，封面留一圈白就只是没改完。
+ *   封面图是 3:4（1152 × 1536），而纸是 1.414:1，它铺不满纸的全部面积——
+ *   所以封面不是一个"铺满的盒子"，是**两栏**：右边一栏正好 53%（= 210mm × 0.75 = 157.5mm），
+ *   图 `cover` 铺满这一栏、上右下三条边都到纸边；左边 139.5mm 是书名那一栏。
+ *   ★ 53% 这个数是照着"3:4 的图在高 210mm 时正好占 157.5mm"算的，不是拍的。
+ *     换一种比例的封面图会按这一栏裁（`cover`）：封面本来就是画满的，宁可裁也不留白条。
+ * ★ 没有封面图的书（仓库里那本演示书）照旧出书名页：居中、不带图，见 `[data-art]` 那条。 */
+
+.print-sheet--cover {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6mm;
+  padding: 14mm;
+  text-align: center;
+}
+
+/* 有封面图的那一档：两栏，图在右、书名在左 */
+.print-sheet--cover[data-art] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 53%;
+  /* 只给一行：书名那一组自己用 flex 竖向居中（靠 `1fr auto auto 1fr` 四行分配时，
+     跨全部行的图会按自身比例参与行高分配，书名会被挤到底下去） */
+  grid-template-rows: 1fr;
+  gap: 0;
+  padding: 0;
+  text-align: left;
+}
+
+.print-sheet--cover[data-art] .print-sheet__cover-art {
+  grid-column: 2;
+  grid-row: 1;
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* 书名页那条 `max-height: 140mm` 在这会把它压矮，图就贴不到上下两条边 */
+  max-height: none;
+  object-fit: cover;
+}
+
+.print-sheet--cover[data-art] .print-sheet__cover-front {
+  grid-column: 1;
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 0 16mm;
+}
+
+.print-sheet__cover-front {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6mm;
+}
+
+.print-sheet__title {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 28pt;
+  font-weight: 400;
+}
+
+.print-sheet__brand {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 10pt;
+  letter-spacing: 0.12em;
+}
+
+/* ── 打印 ───────────────────────────────────────────────────────────────── */
+
+@media print {
+  .print-page {
+    min-height: 0;
+    padding: 0;
+    background: none;
+  }
+
+  /* `display: none` 而不是 `visibility: hidden`：后者仍占位，第一张纸会被挤到第二页 */
+  .print-page__bar {
+    display: none;
+  }
+
+  .print-book {
+    display: block;
+    padding: 0;
+    overflow: visible;
+  }
+
+  .print-sheet {
+    box-shadow: none;
+  }
+}

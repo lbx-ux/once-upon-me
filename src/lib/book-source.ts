@@ -213,8 +213,8 @@ async function readBookFrom(store: AssetStore, path: string): Promise<Book | nul
  *   （封面原来就是一张 2.8 MB 的 PNG，正是这条注释要挡的那件事）。
  *   判据是扩展名，所以"这一页有没有朗读"这件事不受缩放影响。
  */
-export function runtimeAssetUrl(path: string, width: number, query?: string): string {
-  const url = assetUrlOf(path, isResizableImage(path) ? width : undefined)
+export function runtimeAssetUrl(path: string, width: number | null, query?: string): string {
+  const url = assetUrlOf(path, isResizableImage(path) && width !== null ? width : undefined)
   if (!query) return url
   return `${url}${url.includes('?') ? '&' : '?'}${query}`
 }
@@ -232,6 +232,15 @@ export function runtimeAssetUrl(path: string, width: number, query?: string): st
 export type ResolveBookOptions = {
   assetQuery?: string
   allowDemo?: boolean
+  /**
+   * 页图要哪一档宽（2026-10-29）。缺省 = `READER_PAGE_WIDTH`（1024，阅读器那一档）；
+   * 传 `null` = **不缩，用原尺寸**。
+   *
+   * 打印那一屏传 `null`：一页铺在 297mm 宽的纸上，1024 px 只有约 88 dpi，
+   *   而原图是 1536 px（约 131 dpi）。★ 这不是"越大越好"——真正让它可行的是
+   *   `?fmt=jpeg`（见 `thumbs.ts` 的 `PRINT_QUALITY`），否则原尺寸会把 PDF 撑到 30 MB。
+   */
+  pageWidth?: number | null
 }
 
 /**
@@ -266,8 +275,9 @@ export async function resolveBook(
       null
   if (runtime) {
     // 图与封面走同一条 urlOf（1024 档，`/api/assets` 现缩并落盘缓存）
+    const pageWidth = options.pageWidth === undefined ? READER_PAGE_WIDTH : options.pageWidth
     const runtimeUrl = (path: string): string =>
-      runtimeAssetUrl(path, READER_PAGE_WIDTH, options.assetQuery)
+      runtimeAssetUrl(path, pageWidth, options.assetQuery)
     return {
       book: runtime,
       source: 'runtime',

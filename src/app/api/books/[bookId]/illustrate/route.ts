@@ -49,6 +49,7 @@ import { storyProblemText, storyProblemsOf } from '@/lib/story-problems.ts'
 import { serverEnv } from '@/lib/settings/server-env.ts'
 import { createUserStore, userSliceRoot } from '@/lib/asset-scope.ts'
 import { requireCapability } from '@/lib/auth/session.ts'
+import { addNotice } from '@/lib/notices.ts'
 import { asPlanDraft, planDraftCodec, type PlanDraft } from '@/lib/schemas/story.ts'
 
 export const runtime = 'nodejs'
@@ -207,10 +208,27 @@ export async function POST(
           createdAt: draft.createdAt,
         })
         await chain
+        /* 站内信（2026-10-30）：一本书实测要 12–174 分钟，画完那一刻用户多半不在这块屏前。
+           写失败不挡收尾帧——书已经画完了，不该因为一条通知写不进去就把这一轮说成失败。
+           ★ 写在 `book.json` 之后（`illustrateBook` 返回就是装订完了）：早了会通知一本
+             还读不开的书，用户点进来是 404。 */
+        await addNotice(store, {
+          kind: 'book-ready',
+          bookId,
+          title: normalized.title,
+        }).catch(() => undefined)
         send({ kind: 'status', running: false, bookReady: true })
       } catch (err) {
         const failure = userFailureOf(err)
         await chain.catch(() => undefined)
+        /* 失败也留一条：这条路的失败常常发生在用户离开几十分钟之后
+           （出图超时、网关排队、审核拦下），不记下来，他回来只看到一屏安静的画桌。 */
+        await addNotice(store, {
+          kind: 'book-failed',
+          bookId,
+          title: normalized.title,
+          message: failure.message,
+        }).catch(() => undefined)
         send({
           kind: 'fatal',
           code: failure.code,

@@ -144,6 +144,14 @@ export default async function ReaderPage({ params }: { params: Promise<{ bookId:
           </span>
           <span className="reader-page__back-text">再做一本</span>
         </Link>
+        {/* 导出打印那一件的入口（2026-10-29）。`?auto=1` 让那一屏到位之后自己弹一次
+            打印对话框——从"想打印"这条路进来的人，下一步只可能是它。
+            ★ 手机横屏那一档不出现这颗（理由见 `globals.css` 那条媒体查询）。
+            ★ 它只在这一屏：分享页（`/r/<票>`）没有这条导航，所以对方手里那条链接
+              不会长出"打印"这个入口——那一页给的是"读"，打印是主人自己的事。 */}
+        <Link className="reader-page__print" href={`/print/${bookId}?auto=1`}>
+          打印 / 存成 PDF
+        </Link>
       </nav>
       {/* 竖屏手机进这一屏时那层「把手机横过来」（2026-10-19 移动端适配）。
           ★ 挂在**页面这一层**而不是 `ReaderBook` 里：它管的是"这块屏幕要不要提示"，

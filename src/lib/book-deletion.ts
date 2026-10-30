@@ -34,6 +34,7 @@
 
 import { bookDirOf, manifestPathOf } from './engine/index.ts'
 import type { AssetStore } from './engine/providers/types.ts'
+import { deleteNoticesOf, listNotices } from './notices.ts'
 import { deleteSharesOf, listShares } from './share/store.ts'
 import { loadOrder, saveOrder } from './shelf-order.ts'
 import { THUMB_PREFIX, THUMB_WIDTHS } from './thumbs.ts'
@@ -79,6 +80,8 @@ export type BookTargets = {
   thumbFiles: number
   /** 这本书的分享记录有几条（活着的 + 过期的 + 收回过的，全删） */
   shareLinks: number
+  /** 这本书的站内信有几条（画好了 / 没画完）。不删的话，点进去是 404 */
+  notices: number
   /** 这本书在不在顺序清单里（删完要划掉；报 0/1 条） */
   inOrder: boolean
 }
@@ -111,6 +114,7 @@ export async function bookTargets(bookId: string, deps: BookDeletionDeps): Promi
   const shareLinks = (await listShares(deps.store)).filter(
     (one) => one.record.bookId === bookId,
   ).length
+  const notices = (await listNotices(deps.store)).filter((one) => one.bookId === bookId).length
 
   return {
     bookFiles: files.length,
@@ -123,6 +127,7 @@ export async function bookTargets(bookId: string, deps: BookDeletionDeps): Promi
     thumbDirs,
     thumbFiles,
     shareLinks,
+    notices,
     inOrder: (await loadOrder(deps.store)).includes(bookId),
   }
 }
@@ -155,7 +160,7 @@ function receiptOf(
   bookId: string,
   title: string,
   targets: BookTargets,
-  numbers: { book: number; thumbs: number; shares: number; order: number },
+  numbers: { book: number; thumbs: number; shares: number; notices: number; order: number },
   at: number,
   failures: Record<string, string>,
 ): BookDeletionReceipt {
@@ -186,6 +191,16 @@ function receiptOf(
           ? '这本书没有发过分享链接'
           : '发出去的链接当场作废——不删的话，同一个书号重做一本来，旧链接会跟着活过来',
       ...(failures['shares'] ? { failed: failures['shares'] } : {}),
+    },
+    {
+      place: '站内信',
+      at: 'notices/',
+      deleted: numbers.notices,
+      note:
+        targets.notices === 0
+          ? '这本书没有留下过通知'
+          : '「画好了 / 没画完」那几条一起删掉——书没了，点进去只会是 404',
+      ...(failures['notices'] ? { failed: failures['notices'] } : {}),
     },
     {
       place: '书架上的顺序记录',
@@ -221,7 +236,7 @@ export async function deleteBookEverywhere(
   const targets = await bookTargets(bookId, deps)
   const title = await titleOf(bookId, deps)
   const failures: Record<string, string> = {}
-  const numbers = { book: 0, thumbs: 0, shares: 0, order: 0 }
+  const numbers = { book: 0, thumbs: 0, shares: 0, notices: 0, order: 0 }
 
   const attempt = async (key: keyof typeof numbers, run: () => Promise<number>): Promise<void> => {
     try {
@@ -237,6 +252,8 @@ export async function deleteBookEverywhere(
   }
   // 书没了，链接就不该再活着——见 `deleteSharesOf` 的文件头（同号重建会让旧链接复活）
   await attempt('shares', () => deleteSharesOf(deps.store, bookId))
+  // 站内信同一条：书号是"卡 + 形态 + 主题"的指纹，同号重做会让旧通知挂到新书上
+  await attempt('notices', () => deleteNoticesOf(deps.store, bookId))
   await attempt('order', async () => {
     const order = await loadOrder(deps.store)
     if (!order.includes(bookId)) return 0

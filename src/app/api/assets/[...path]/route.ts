@@ -60,7 +60,14 @@ import { resolveShareAccess, shareAllowsAsset } from '@/lib/share/access.ts'
 import { parseRange } from '@/lib/http-range.ts'
 
 import type { NextRequest } from 'next/server'
-import { isResizableImage, renderThumb, thumbKeyOf, thumbWidthOf } from '@/lib/thumbs.ts'
+import {
+  isResizableImage,
+  printKeyOf,
+  renderPrintImage,
+  renderThumb,
+  thumbKeyOf,
+  thumbWidthOf,
+} from '@/lib/thumbs.ts'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -212,8 +219,40 @@ export async function GET(
   const cacheable = FINGERPRINTED.test(name)
   /** 那个 `<audio>` 拖得动、也知道时长，全靠这一条（见 `http-range.ts` 文件头） */
   const rangeHeader = req.headers.get('range')
+  const params = new URL(req.url).searchParams
 
-  const width = thumbWidthOf(new URL(req.url).searchParams.get('w'))
+  /**
+   * `?fmt=jpeg`：打印那一档（2026-10-29）。
+   *
+   * 为什么要有它：打印那一屏把图交给浏览器自己的 PDF 生成器，而 Chrome 对 PNG/WebP
+   *   一律**按无损重新压**——一本书 20 页实测 30 MB 上下，超过"能发出去"的那条线。
+   *   先在这里换成 JPEG，Chrome 就原样把那串 DCT 字节搬进 PDF。读数与判据在
+   *   `scripts/chk-print-pdf.mjs`；编码与质量的取舍在 `lib/thumbs.ts` 的 `PRINT_QUALITY`。
+   *
+   * ★ 与屏幕那一档共用"读缓存 → 没有就现做 → 写缓存"的骨架，但**缓存键不同**
+   *   （`thumbs/print/…`）：同一个宽度的 WebP 与 JPEG 是两份派生物，混用一个键会让
+   *   先到的那一种冒充另一种。★ 不带 `w` 时按原尺寸（打印要的就是原尺寸）。
+   * ★ 出不来时**不 500**：往下走，回原图——与 `?w=` 那一档同一条纪律，
+   *   一个优化不该变成一次故障。
+   */
+  if (params.get('fmt') === 'jpeg' && isResizableImage(relative)) {
+    const printWidth = thumbWidthOf(params.get('w'))
+    const key = printKeyOf(relative, printWidth)
+    const cached = await readOrNull(store, key)
+    if (cached) return byteResponse(cached, 'image/jpeg', cacheable, rangeHeader)
+
+    const original = await readOrNull(store, relative)
+    if (!original) return new Response('资产不存在', { status: 404 })
+    try {
+      const jpeg = await renderPrintImage(original, printWidth)
+      await store.put({ path: key, bytes: jpeg, mime: 'image/jpeg' }).catch(() => undefined)
+      return byteResponse(jpeg, 'image/jpeg', cacheable, rangeHeader)
+    } catch {
+      // 回原图（PNG/WebP）：Chrome 照样能印，只是 PDF 会大一些
+    }
+  }
+
+  const width = thumbWidthOf(params.get('w'))
   if (width !== null && isResizableImage(relative)) {
     const key = thumbKeyOf(relative, width)
     const cached = await readOrNull(store, key)

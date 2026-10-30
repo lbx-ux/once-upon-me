@@ -65,7 +65,7 @@
 
 留守儿童场景：在外打工的父母录 30 秒声音，孩子在家听爸妈读一本自己当主角的绘本。声音能跨距离，这个我们验证不了效果，但东西是照这个场景做的。
 
-2026-10-29 起，书架上每本成品都能生成一条**只读分享链接**（`/r/<票>`）：对方不用登录、不用装东西，打开就是阅读器；默认 30 天到期，随时可以收回（收回后页面与图同时 404）。它补的是这个场景最后那段「送过去」的第一段——**离线包、导出打印、做好了通知仍然没有**，那三件在 [docs/business.md](docs/business.md) §5.4 末尾按挡不挡事排着。
+2026-10-29 起，书架上每本成品都能生成一条**只读分享链接**（`/r/<票>`）：对方不用登录、不用装东西，打开就是阅读器；默认 30 天到期，随时可以收回（收回后页面与图同时 404）。同一本书还多了一屏 `/print/<书号>`：摊成几张 A4 横向的纸，交给浏览器自己的打印，「另存为 PDF」出来的是一本 6 页 **1.73 MB** 的文件（判据与量法在 `scripts/chk-print-pdf.mjs`，两件事的账都在 [docs/known-tradeoffs.md](docs/known-tradeoffs.md)）。它们补的是这个场景最后那段「送过去」——**离线包、做好了通知仍然没有**，那两件在 [docs/business.md](docs/business.md) §5.4 末尾按挡不挡事排着。
 
 一本 20 页的 API 成本实测 **¥5.8–11.6**（两个可调旋钮决定落点，量法见 `node scripts/cost-model.mts`）。"一个家庭负担得起"这句话有数撑着。成本、定价、竞品对照在 [docs/business.md](docs/business.md)。
 
@@ -252,7 +252,7 @@ set -a; . ./.env.local; set +a; mvn -o -f server/pom.xml spring-boot:run
 
 | 命令                                         | 干什么                                                                |
 | -------------------------------------------- | --------------------------------------------------------------------- |
-| `pnpm lint` / `pnpm typecheck` / `pnpm test` | 三条闸门。测试 **1585 条、116 个文件**（2026-10-29 实测）             |
+| `pnpm lint` / `pnpm typecheck` / `pnpm test` | 三条闸门。测试 **1592 条、117 个文件**（2026-10-29 实测）             |
 | `pnpm format:check`                          | 只检查不写入                                                          |
 | `pnpm check:colors` / `pnpm check:scrim`     | 配色两条：扫写死的颜色；按令牌真值算对比度，掉到 4.5:1 以下就红       |
 | `node scripts/engine-run.mts --mode=stub`    | 不启动浏览器、不联网、不花钱跑完一本书                                |
@@ -261,6 +261,7 @@ set -a; . ./.env.local; set +a; mvn -o -f server/pom.xml spring-boot:run
 | `node scripts/chk-mobile.mjs URL`            | 手机那一档：不横向溢出、横屏铺书、首页两副形态                        |
 | `node scripts/chk-shared-reader.mjs URL`     | 共读版阅读器：阅读顺序、选完零生成、缺图兜底、键盘、断网              |
 | `node scripts/chk-share-link.mts --base=URL` | 分享链接：匿名可读、过期/收回/改一字节都 404、无写按钮、零模型调用    |
+| `node scripts/chk-print-pdf.mjs --base=URL`  | 打印/存 PDF：纸是 A4 横向、页数对得上、字体嵌入、文件 < 20 MB         |
 | `node scripts/e2e-shared-reading.mts`        | 共读版全链路，一句话到读完（真花钱，`--until=story` 只验到闸门）      |
 | `node scripts/cost-model.mts`                | 一本绘本花多少钱：价目表 + 真书的出图次数与计费字符                   |
 | `node scripts/chk-admin-model.mjs`           | 管理页形状；`--live=1` 时才四种能力各真打一次                         |

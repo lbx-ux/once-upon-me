@@ -17,10 +17,12 @@
 @import '../components/creation/story-sheet.css';
 @import '../components/creation/redraw-dialog.css';
 @import '../components/reader/reader-book.css';
+@import '../components/print/print-book.css';
 @import '../components/reader/rotate-hint.css';
 @import '../components/reader/fullscreen-button.css';
 @import '../components/shelf/shelf.css';
 @import '../components/shelf/share-dialog.css';
+@import '../components/notices/notices.css';
 @import '../components/admin/admin.css';
 @import '../components/shell/app-shell.css';
 @import '../components/shell/settings-dialog.css';
@@ -652,11 +654,23 @@ body {
   margin: 0 auto;
   padding: 20px 20px 0;
   font-size: 14px;
+  /* 2026-10-29：右边多了一颗「打印 / 存成 PDF」（导出打印那件）。
+     一条 flex 把两边分开，链接本身一个字没变；手机横屏那一档见下面的媒体查询。 */
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
 }
 
 .reader-page__back a {
   color: var(--ink-soft);
   text-decoration: none;
+}
+
+/* 打印那颗：与「← 再做一本」同一档字号与颜色，位置靠右。
+   它不是书的一部分（打印出来的是 `/print/<书号>` 那一屏），只是这本书的一个出口。 */
+.reader-page__print {
+  flex: none;
 }
 
 /* 2026-10-19 加了这两个 span（理由在页面那边）：箭头的右边距替掉原来那个空格。
@@ -710,6 +724,15 @@ body {
     font-size: 17px;
     line-height: 1;
     box-shadow: var(--sheet-shadow);
+  }
+
+  /* 打印那颗在横屏手机上不出现（2026-10-29）。
+     这一档里 `.reader-page__back` 是**一颗 44px 的圆钮**（上面那段解释了为什么），
+     多一个孩子会在书面上多压一颗钮；而且这一屏的产物是 A4 横向的纸，
+     在手机上存成 PDF 之后再去找一台打印机，不如回桌面做。
+     ★ 少的是**这一档的入口**，不是这个功能：地址 `/print/<书号>` 在手机上照样打得开。 */
+  .reader-page__print {
+    display: none;
   }
 
   /* 名字收进 `sr-only`（不是 `display: none`）：钮上只剩箭头，而这条链接

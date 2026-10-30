@@ -76,6 +76,49 @@ export function thumbKeyOf(relative: string, width: ThumbWidth): string {
   return `${THUMB_PREFIX}${width}/${relative}.webp`
 }
 
+/* 打印那一档：同一个缩略图出口，另一种编码（2026-10-29） */
+
+/**
+ * 打印用的质量。比屏幕上那一档高：它进的是纸，不是屏幕。
+ *
+ * 为什么不是 WebP：`@media print` 那条路把图交给 Chrome 自己的 PDF 生成器，
+ *   它会先解码再**按无损（Flate）重新压一遍**——一本书 20 页实测能压到 30 MB 上下，
+ *   而"存成 PDF 发给家人 / 传到打印店"这件事从 20 MB 起就开始处处卡。
+ *   JPEG 走 DCTDecode，**原样搬进 PDF**，一页 300–450 KB。
+ *   判据与读数在 `scripts/chk-print-pdf.mjs` 与 docs/known-tradeoffs.md。
+ *
+ * 4:4:4 不抽样色度：插画的线条与色块在 4:2:0 下会渗出彩色边，而这一档是给人看的成品。
+ */
+export const PRINT_QUALITY = 86
+
+/**
+ * 打印图的缓存键。★ 宽度为 null 表示"不缩，用原图尺寸"（1536 一类的原尺寸），
+ * 所以键里要能分辨这两种，不能都写成同一格。
+ */
+export function printKeyOf(relative: string, width: number | null): string {
+  return `${THUMB_PREFIX}print/${width ?? 'native'}/${relative}.jpg`
+}
+
+/**
+ * 出一张能进 PDF 的 JPEG。`width` 为 null 时按原尺寸，只换编码。
+ *
+ * `flatten`：JPEG 没有透明通道，带透明的图直接编码会得到一块黑底——
+ *   压到白纸上（与打印出来看到的同一条）。★ 这是这一档唯一一次"改像素"，
+ *   不是调色：其余部分与屏幕那一档同一条纪律（`withoutEnlargement`，绝不放大）。
+ */
+export async function renderPrintImage(
+  bytes: Uint8Array,
+  width: number | null,
+): Promise<Uint8Array> {
+  let pipeline = sharp(Buffer.from(bytes))
+  if (width !== null) pipeline = pipeline.resize({ width, withoutEnlargement: true })
+  const out = await pipeline
+    .flatten({ background: '#ffffff' })
+    .jpeg({ quality: PRINT_QUALITY, chromaSubsampling: '4:4:4' })
+    .toBuffer()
+  return new Uint8Array(out)
+}
+
 /**
  * 真缩一次。`withoutEnlargement`：★ 绝不放大——源图比档位还窄时按原样出，
  * 补不回来的像素放大只会把"小"变成"更贵的糊"（与 make-webp.py 同一条纪律）。

@@ -76,6 +76,7 @@ import StudioBackdrop from '@/components/shell/StudioBackdrop.tsx'
 import SettingsDialog from '@/components/shell/SettingsDialog.tsx'
 import { DEFAULT_AVATAR } from '@/lib/avatars.ts'
 import { maskPhone } from '@/lib/auth/state.ts'
+import { useUnreadNotices } from '@/lib/use-unread-notices.ts'
 import { staggerFor } from '@/lib/useEnterTimeline.ts'
 
 const COLLAPSE_KEY = 'xiaozhujue.shell.collapsed'
@@ -245,12 +246,42 @@ function NavContent({ item, avatar }: { item: NavItem; avatar?: string | null })
   )
 }
 
+/**
+ * 「通知」那一格的图标（2026-10-30）：一枚铃铛。
+ *
+ * 侧栏里已有的形状有笔 / 书签带 / 书架 / 人形 / 声波 / 钥匙 / 门框 / 推子 / 箭头，
+ *   一个"上面圆、下面一条小横"的都没有——收起侧栏只剩图标时也分得开。
+ * 与 `SettingsGlyph` 同一副骨架（20px、`currentColor` 描边），换形状时这一格不跳。
+ */
+function NoticeGlyph() {
+  return (
+    <svg className="shell__icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M12 3.6a5.4 5.4 0 0 0-5.4 5.4v4.3L5 16.6h14l-1.6-3.3V9a5.4 5.4 0 0 0-5.4-5.4Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M10 19a2 2 0 0 0 4 0"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}
+
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const [collapsed, setCollapsed] = useState(false)
   /** 「设置」那个弹窗开着没有。同上，不持久化——里面那些偏好自己会落盘 */
   const [settingsOpen, setSettingsOpen] = useState(false)
   const { user } = useAuth()
+  /* 侧栏那颗红点（2026-10-30）。未登录不问——通知只属于登录后的这一片 */
+  const unreadNotices = useUnreadNotices(user !== null)
   const sideRef = useRef<HTMLElement>(null)
 
   /* ── 进工作台时侧栏从左边让进来（2026-10-16）────────────────────────────────
@@ -443,9 +474,37 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </Link>
 
           {/*
+           * ★ 「通知」（2026-10-30）。生成一本要 12–174 分钟，用户多半不在这一屏前
+           *   （`docs/business.md` §9.4），所以"书好了没有"要有一个常驻的落点。
+           *
+           * ★ 它排在「个人主页」与「设置」之间。那一列原本是一句话：
+           *   先是谁在用（个人主页），再是这个人在哪儿调（设置），最后是一个开关。
+           *   加上这一格之后那句话变成：先是谁在用，再是**有什么新动静**，
+           *   再是怎么调，最后是开关——次序仍然是"从人往外"。
+           *
+           * ★ 未读数由 `useUnreadNotices` 问（一次 `?count=1`，不拉列表）。
+           *   红点只是视觉：读屏拿到的是旁边那句 `sr-only` 里的"3 条未读"。
+           *   颜色不单独承担信息——这一条与 `.ntc__unread` 那枚字是同一条判据。
+           */}
+          <Link
+            className="shell__link"
+            href="/notices"
+            aria-current={pathname === '/notices' ? 'page' : undefined}
+            title={unreadNotices > 0 ? `通知（${unreadNotices} 条未读）` : '通知'}
+          >
+            <span className="shell__glyph">
+              <NoticeGlyph />
+              {unreadNotices > 0 && <span className="shell__dot" aria-hidden="true" />}
+            </span>
+            <span className="shell__link-label">通知</span>
+            {unreadNotices > 0 && <span className="sr-only">{unreadNotices} 条未读</span>}
+          </Link>
+
+          {/*
            * ★ 「设置」在「帮助」**上面**（2026-10-17 加）。这一列的次序是一句话：
-           *   先是谁在用（个人主页），再是这个人在哪儿调（设置），
-           *   然后是"还有问题去哪问"（帮助），最后是一个开关（收起侧栏）。
+           *   先是谁在用（个人主页），再是有什么新动静（通知，2026-10-30 加），
+           *   再是这个人在哪儿调（设置），最后是一个开关（收起侧栏）。
+           *   （「帮助」2026-10-18 拆掉了，理由见下面那一段。）
            *   管理与帮助都不是"去做事"，与上面那五格不同类，所以它们留在底部。
            *
            * ★ 图标是**两根推子**（三条横线 + 三个错开的圆点），不引图标库：
@@ -526,17 +585,34 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* ── 手机那一档的顶栏（2026-10-19 移动端适配）────────────────────────────
           侧栏在手机上收成**底部标签栏**（`.shell__nav`，见 `app-shell.css` 的 §手机），
-          那一条放得下五格导航，放不下「我是谁」与「设置」。所以这两格搬到顶上这一行。
+          那一条放得下五格导航，放不下「通知」「设置」与「我是谁」。所以这几格搬到顶上这一行。
 
-          ★ 为什么是**再渲染一组**而不是把 `.shell__foot` 那两格挪进来：
+          ★ 为什么是**再渲染一组**而不是把 `.shell__foot` 那几格挪进来：
             它们在 DOM 里的位置决定了桌面那一版的长相（底部那一列），
             挪出来就要用 `order` / 绝对定位把它们摆回去，而那比多写四个标签脆得多。
             两处**各在对方的档里 `display: none`**，所以同一时刻辅助技术只看得见一组
             —— `display: none` 的东西不进可访问性树，不会出现"同一样东西念两遍"。
           ★ 两处共用同一个 `setSettingsOpen`：设置弹窗只有一份（挂在壳上，见文件末尾）。
           ★ 记账那一格（「请登录」/昵称）与侧栏那一格**同一份取值**（`user` 那三条派生，
-            见上面 `signInItem` / `accountItem` / `avatar`），不是又算了一遍。 */}
+            见上面 `signInItem` / `accountItem` / `avatar`），不是又算了一遍。
+          ★ 通知那一格与侧栏那一格共用 `unreadNotices`：同一个数，不在两处各问一次。 */}
       <div className="shell__bar">
+        {/* 通知（2026-10-30）：手机上侧栏收成底部标签栏，这一格跟着「设置」搬上来。
+            红点与侧栏那一格是同一个数（`unreadNotices`），不是又算了一遍 */}
+        <Link
+          className="shell__bar-btn"
+          href="/notices"
+          aria-current={pathname === '/notices' ? 'page' : undefined}
+          title={unreadNotices > 0 ? `通知（${unreadNotices} 条未读）` : '通知'}
+        >
+          <span className="shell__glyph">
+            <NoticeGlyph />
+            {unreadNotices > 0 && <span className="shell__dot" aria-hidden="true" />}
+          </span>
+          <span className="shell__link-label">通知</span>
+          {unreadNotices > 0 && <span className="sr-only">{unreadNotices} 条未读</span>}
+        </Link>
+
         <button
           type="button"
           className="shell__bar-btn"

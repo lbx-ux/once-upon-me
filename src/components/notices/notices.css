@@ -1,0 +1,203 @@
+/**
+ * notices.css —— 通知那一屏（`NoticesSheet.tsx`，与组件同目录同名）
+ *
+ * 版式照 `/shelf` 与 `/character` 那两屏：栏宽、页头衬线字号、说明行 44ch。
+ *   工作台这几屏是同一套版式，栏宽或标题字号不一致最容易被看成"这一屏没做完"。
+ *
+ * 一条通知是一张纸（`--surface` + `--hairline`），不是一行通栏文字：
+ *   未读与已读的差别要在一眼扫过去时看得出来，而"纸的左边多一个小圆点 + 标题加粗"
+ *   比换底色更安静（换底色会让整屏在滚动时一块亮一块暗）。
+ *   未读那一列用 `--accent`（在 `--surface` 上 5.18:1，与 `.shelf__edit` 同一个依据），
+ *   失败那一列用 `--danger` —— 它不是"又一本做好了"，颜色要在扫读时分开。
+ *
+ * 没有任何写死的颜色：四颗令牌（`--surface` / `--hairline` / `--ink*` / `--accent` /
+ *   `--danger`）都在 `globals.css` 的 `:root`，`pnpm check:colors` 会盯着这一条。
+ */
+
+.ntc {
+  /* 与 `/shelf` 同一栏宽（`shelf.css` 那句"工作台这几屏是同一套版式"） */
+  max-width: 1180px;
+  margin: 0 auto;
+}
+
+.ntc__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 24px;
+}
+
+.ntc__title {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: clamp(26px, 3.6vw, 36px);
+  font-weight: 600;
+}
+
+/* 说明行：与 `.shelf__sub` 同一规格。这一屏整屏在天空带里，所以只能用 `--ink-on-sky`
+   （`--ink-muted` / `--accent` 在带子里做正文会破 4.5:1，`scripts/check-scrim.mts` 管这条） */
+.ntc__sub {
+  max-width: 44ch;
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--ink-on-sky);
+}
+
+/* 「全部标为已读」：与 `.shelf__edit` 是同一颗纸白胶囊——它不是"造东西"，
+   所以不占实心强调色 */
+.ntc__all {
+  flex: 0 0 auto;
+  padding: 10px 20px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+
+.ntc__all:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.ntc__all:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.ntc__list {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ntc__item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px 14px;
+  padding: 16px 20px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--card-radius);
+  background: var(--surface);
+  box-shadow: var(--sheet-shadow);
+}
+
+/* 未读那一格：左边的小圆点由 `[data-unread]` 点亮，已读时它只是一枚灰色的空位
+   —— 位置不动，扫读时行不会跳 */
+.ntc__mark {
+  width: 9px;
+  height: 9px;
+  margin-top: 7px;
+  border-radius: 50%;
+  background: var(--hairline);
+}
+
+.ntc__item[data-unread='true'] .ntc__mark {
+  background: var(--accent);
+}
+
+.ntc__item[data-unread='true'] .ntc__mark[data-kind='book-failed'] {
+  background: var(--danger);
+}
+
+.ntc__body {
+  min-width: 0;
+}
+
+.ntc__line {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--ink);
+}
+
+.ntc__item[data-unread='true'] .ntc__name {
+  font-weight: 600;
+}
+
+/* 「未读」两个字只在读屏里念一次就够了？不：屏幕上也要有，因为那颗圆点在
+   已读之后仍然占位（见 `.ntc__mark`），颜色是唯一线索——而颜色不能单独承担信息
+   （WCAG 1.4.1）。所以它是一枚小小的字，不是纯色点 */
+.ntc__unread {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(var(--accent-rgb), var(--accent-a2));
+  color: var(--accent);
+  font-size: 11.5px;
+  line-height: 1.6;
+  vertical-align: 1px;
+}
+
+.ntc__note {
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--ink-muted);
+}
+
+.ntc__meta {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.ntc__go {
+  align-self: center;
+  flex: 0 0 auto;
+  padding: 8px 14px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  color: var(--accent);
+  font-size: 13px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.ntc__go:hover {
+  border-color: var(--accent);
+}
+
+.ntc__go:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* 一屏只画 60 条（`NOTICE_LIMIT`）。更老的没有删，只是不在这一屏——
+   这一行要说出来，否则"红点 70、列表 60"是读者解释不清的差 */
+.ntc__more {
+  margin: 14px 0 0;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--ink-on-sky);
+  text-align: center;
+}
+
+/* 手机那一档（与 `app-shell.css` 的 §手机 同一个断点）：那三列收成两行——
+   圆点 + 正文在上，动作在下。动作不缩成一颗小字：它是这一条的唯一出口 */
+@media (max-width: 640px) {
+  .ntc__head {
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .ntc__item {
+    grid-template-columns: auto minmax(0, 1fr);
+    padding: 14px 16px;
+  }
+
+  .ntc__go {
+    grid-column: 2;
+    justify-self: start;
+    margin-top: 2px;
+  }
+}
