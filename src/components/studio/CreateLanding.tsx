@@ -4,7 +4,7 @@
  * CreateLanding —— 工作台「创作」那一屏：一句话进去。
  *
  * 版式（2026-10-15 与首页并成同一世界之后）：左对齐的标题 → 两颗胶囊 → 一张纸（输入区 /
- * 分隔线 / 左边两颗工具 + 右边「开始创作」）→ 12 个主题的封面墙。
+ * 分隔线 / 左边三颗工具 + 右边「开始创作」）→ 12 个主题的封面墙。
  *
  * 2026-10-16 到 2026-10-18 之间，标题上方还有一行「书的形态」（`.cl__forms`，居中、两颗
  * 按钮、共读版那颗写着「还没做」）。用户 2026-10-18 要求撤掉了，现在这一屏上没有任何形态
@@ -18,7 +18,7 @@
  * 2026-10-15 按用户要求删掉三行字，别把它们当成漏了：标题下那行说明（`.cl__sub`，"选好小
  * 主角和声音…"）、输入框下那行小字（`.cl__hint`，"一句话就够…"）、以及那句语音警示
  * （`.cl__warn`，"语音的 Key 或模型名还没填…"）。留下的只有"他必须看见的那几件"：
- * 两颗胶囊、输入框，以及动作栏里那三颗按钮。
+ * 两颗胶囊、输入框，以及动作栏里那四颗按钮。
  *
  * 2026-10-16 两个下拉各减一行，都是用户要求（"只显示照片和姓名就行，不用写那么多"）：
  * 小主角那一项后面的「第 N 版 · <模型名> 画的」撤了——那是卡的历史，做卡的人（`/character`）
@@ -33,8 +33,8 @@
  *
  * 「优化提示词」与「换一句」搬过一次家，也没有删过，记在这里免得再被误读一遍：它们原来挤在
  * 动作栏右边（和主按钮抢同一处视线），用户要求挪到左边、并且去掉可见文字只留图标。所以动作栏
- * 是 `[左：两颗图标] …… [右：开始创作]`。这个排法不只是好看：右边那颗是离开这一屏的动作，
- * 左边两颗是改框里这句话的动作，两者不是一件事，本来就不该并排。只有图标就必须补
+ * 是 `[左：三颗图标] …… [右：开始创作]`。这个排法不只是好看：右边那颗是离开这一屏的动作，
+ * 左边三颗是改框里这句话的动作，两者不是一件事，本来就不该并排。只有图标就必须补
  * `aria-label`，而且"正在想…"那件事也要换个方式说——现在靠 `data-busy` 的呼吸 + `aria-busy`。
  * 优化那一颗必须长在它真正作用的输入框旁边（工单 07 §一）：长在主题那一行，用户会以为
  * "挑了恐龙再优化"会变成另一只恐龙。
@@ -53,9 +53,11 @@ import { useEffect, useRef, useState } from 'react'
 import { ofTheme } from '@/lib/creation/example-wishes.ts'
 import { drawInspiration, INSPIRATION_POOL } from '@/lib/creation/inspirations.ts'
 import { DEFAULT_FIGURE, figurePath } from '@/lib/figures.ts'
+import { speechFailureText } from '@/lib/speech.ts'
 import { forgetThemes, peekThemes, themeArrival } from '@/lib/theme-handoff.ts'
 import { THEMES, themeCardPath, type ThemeKey } from '@/lib/themes.ts'
 import { useEnterTimeline } from '@/lib/useEnterTimeline.ts'
+import { useSpeechInput } from '@/lib/use-speech.ts'
 import { useVoice } from '@/components/voices/VoiceProvider.tsx'
 import { useAuth } from '@/components/auth/AuthProvider.tsx'
 import { useSignInGate } from '@/components/auth/SignInGate.tsx'
@@ -114,6 +116,34 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
   const voiceRef = useRef<HTMLDivElement>(null)
   /** 弹窗关掉之后焦点要回的那一颗（`startRun` 那条不走——它把人带离了这一屏） */
   const goRef = useRef<HTMLButtonElement>(null)
+
+  /* ── 语音输入（2026-10-30）───────────────────────────────────────────────
+   * 麦克风是**显式**的：只有按下它才开麦，默认一个字都不听。
+   *   ★ 不做常开：这一屏旁边就坐着孩子，而一个常开的麦会让家长以为它在录。
+   *     按下才听，说完就关（`continuous = false`，见 `use-speech.ts` 第 5 条）。
+   * ★ 中间结果**直接写进输入框**（`voiceBaseRef` + 这一轮的文本），而不是另起
+   *   一行预览：字在原地长出来，家长才知道麦克风真的在工作；另起一行会多一块
+   *   版面，而这一屏刚被用户要求删掉三行小字（见文件头）。
+   * ★ 用户一打字就 `cancel()`：不取消的话，下一段中间结果会把他刚打的字盖掉。
+   *   判据是"按下麦克风之前那一句"（`voiceBaseRef`）——失败时也退回它，
+   *   屏幕上不会留下半句没有定稿的字。
+   */
+  const voiceBaseRef = useRef('')
+  const [voiceNote, setVoiceNote] = useState<string | null>(null)
+  const speech = useSpeechInput({
+    maxMs: 10000,
+    onPartial: (text) => setWish(voiceBaseRef.current + text),
+    onFinal: (text) => {
+      setWish(voiceBaseRef.current + text)
+      setVoiceNote(null)
+    },
+    onFail: (reason) => {
+      // 用户自己取消的那一次不说话（`speech.ts` 的 `speechFailureText`）
+      if (reason === 'aborted') return
+      setWish(voiceBaseRef.current)
+      setVoiceNote(speechFailureText(reason))
+    },
+  })
 
   /* ── 优化那句话（工单 07）───────────────────────────────────────────────
    * 四条状态而不是一条：一条的话，"正在想"和"没改成"会共用一个位，
@@ -219,6 +249,9 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
   }, [open])
 
   const submit = async (): Promise<void> => {
+    // 正在听的时候点「开始创作」：先关麦。不然最后半句会在离开这一屏之后
+    // 通过 `onFinal` 写进一个已经不存在的输入框（React 不报错，但那个字白丢了）
+    if (speech.listening) speech.cancel()
     if (!ready) return
     /*
      * 先问"登录了没有"（用户 2026-10-17：没有登录就去创作，出现一个弹窗
@@ -316,6 +349,11 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
    *    像是在说"这句话是这张卡的"）。清成空之后走默认形象，与"还没挑过主题"同一条路。
    */
   const applyWish = (text: string, key: ThemeKey | null): void => {
+    // 换主题 / 换一句也是"换掉框里这句话"：正在听的话先关麦，否则下一段中间结果
+    // 会盖在刚换上的那句上面（与打字那条同一条判据）
+    if (speech.listening) speech.cancel()
+    // 上一轮的"没听见 / 麦克风没开"跟着这句话一起作废——它说的是刚才那一句
+    setVoiceNote(null)
     setWish(text)
     setTheme(key)
   }
@@ -323,6 +361,8 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
   /** 用建议：把框里的字换成建议那一句。★ 原句没丢——就在 `suggest.original` 里 */
   const useSuggestion = (): void => {
     if (!suggest) return
+    if (speech.listening) speech.cancel()
+    setVoiceNote(null)
     setWish(suggest.text)
     setApplied(true)
   }
@@ -330,8 +370,23 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
   /** 退回原句。★ 这才是真的撤销：退回去的是提出建议时框里那一句，不是"再优化一次" */
   const undoSuggestion = (): void => {
     if (!suggest) return
+    if (speech.listening) speech.cancel()
+    setVoiceNote(null)
     setWish(suggest.original)
     setApplied(false)
+  }
+
+  /**
+   * 按下麦克风：把当前这一句存成底稿，然后开听。
+   *
+   * ★ 不判 `ready`：框里空着正是语音输入最常用的那一幕（"直接说"）。
+   *   底稿是"按下那一刻框里的字"，所以第二次按麦克风会接在上一句后面，
+   *   而不是把上一句替掉——说话人补一句，比重新说一遍省事。
+   */
+  const startVoice = (): void => {
+    voiceBaseRef.current = wish
+    setVoiceNote(null)
+    speech.start()
   }
 
   /**
@@ -606,7 +661,13 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
             value={wish}
             rows={2}
             placeholder="例如：朵朵抱着月亮，轻轻走过屋顶"
-            onChange={(event) => setWish(event.target.value)}
+            onChange={(event) => {
+              // 一打字就关麦（见上面语音那一段）：否则下一段中间结果会把刚打的字盖掉
+              if (speech.listening) speech.cancel()
+              // 上一轮的失败提示说的是"刚才那一句"，字一改就该收掉
+              setVoiceNote(null)
+              setWish(event.target.value)
+            }}
             onKeyDown={(event) => {
               // Ctrl/⌘+Enter 提交：写故事的人会用回车换行，不能抢走回车
               if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
@@ -616,6 +677,16 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
             }}
           />
         </label>
+
+        {/* 语音这一路没成时才出现的一行（权限没给 / 没听见 / 浏览器没有这个 API）。
+            ★ 它与 `.cl__warn` 分开：那一句是"没改成"（优化 / 音色），这一句是
+              "这一路用不了"，下一步是"直接用键盘写"，不是"再点一次"。
+            ★ `role="status"`：它出现时读屏要念一次；光靠按钮标题的变化，读屏不会说 */}
+        {voiceNote && (
+          <p className="cl__voice-note" role="status">
+            {voiceNote}
+          </p>
+        )}
 
         {/* 建议区。★ 它在**框下面**、在动作栏上面：这一块只属于"这句话"，不属于整张卡
             ★ `role="status"`（2026-10-18）：这一块是**按下一颗按钮之后才出现**的，
@@ -663,7 +734,7 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
           </p>
         )}
 
-        {/* 动作栏。★ 左边两颗是**改框里这句话**的工具，右边那颗是**离开这一屏**——
+        {/* 动作栏。★ 左边三颗是**改框里这句话**的工具，右边那颗是**离开这一屏**——
             两者不是一类动作，所以分成两组、各占一边（原来三颗挤在右边，
             主按钮和工具抢同一处视线，用户要求把工具挪到左边） */}
         <div className="cl__bar">
@@ -730,6 +801,35 @@ export default function CreateLanding({ cards }: { cards: ChildOption[] }) {
                 <circle cx="12" cy="12" r="1.4" />
                 <circle cx="8.5" cy="15.5" r="1.4" />
                 <circle cx="15.5" cy="15.5" r="1.4" />
+              </svg>
+            </button>
+            {/* 语音输入（2026-10-30）。★ 与旁边两颗同一尺寸（40×40）、同一颗圆：
+                这一格是"改框里这句话"的那一组，语音是它的入口，不是第四个功能。
+                ★ 不支持时**不禁用**：按下去会得到一句人话（`speechFailureText`），
+                  而一颗禁用按钮连"为什么"都不给——键盘用户连 title 都读不到。
+                ★ `aria-pressed` 跟着 `listening`：读屏念的是"按下 / 未按下"，
+                  而按钮的可见状态是"在听 / 不在听"，两件事同一个事实。 */}
+            <button
+              type="button"
+              className="cl__mic"
+              data-listening={speech.listening ? 'true' : 'false'}
+              onClick={() => {
+                if (speech.listening) speech.stop()
+                else startVoice()
+              }}
+              aria-label={speech.listening ? '正在听…点一下停' : '语音输入：说一句话写进框里'}
+              aria-pressed={speech.listening}
+              title={
+                speech.supported === false
+                  ? speechFailureText('unsupported')
+                  : speech.listening
+                    ? '正在听…说完会自动停，也可以点一下停'
+                    : '语音输入：说一句话，写进框里（按下才开始听）'
+              }
+            >
+              <svg className="cl__mic-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="9" y="3" width="6" height="11" rx="3" />
+                <path d="M5.5 10.5a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7" />
               </svg>
             </button>
           </div>

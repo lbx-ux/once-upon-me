@@ -549,7 +549,7 @@ button.cl__pill:hover {
      或改用 `--select` 那支蓝），不是把这条橙边加回来——用户撤的是这个效果，
      不是"焦点要被看见"这件事。 */
 
-/* 输入区下面那条分隔线：左边两颗工具，右边「开始创作」。
+/* 输入区下面那条分隔线：左边三颗工具，右边「开始创作」。
    两边不是一类动作——左边改的是框里这句话，右边是离开这一屏。
      原来三颗并排挤在右边，主按钮和工具抢同一处视线；用户要求把工具挪过来。
    `flex-wrap` + `.cl__go { margin-left: auto }` 是一组的：
@@ -600,7 +600,7 @@ button.cl__pill:hover {
   word-break: break-all;
 }
 
-/* 左半边那两颗工具。★ `min-width: 0` 让窄屏时它们先收缩，而不是先把主按钮挤下去 */
+/* 左半边那三颗工具。★ `min-width: 0` 让窄屏时它们先收缩，而不是先把主按钮挤下去 */
 .cl__tools {
   display: flex;
   align-items: center;
@@ -659,6 +659,64 @@ button.cl__pill:hover {
   fill: none;
   stroke: currentColor;
   stroke-width: 1.6;
+}
+
+/* 语音输入（2026-10-30）。形状照抄「换一句」那一颗：同一组工具、同一颗圆、同一档
+   40×40。★ 它不借 `--accent` 的常驻描边（那是「优化提示词」的位置）：三颗里只有
+   一颗能是主工具，多一颗实心橙就会让"哪一颗是 AI"这件事失去答案。
+   听的时候才点亮（`[data-listening='true']`），那是这一颗唯一的高光时刻 */
+.cl__mic {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink-muted);
+  cursor: pointer;
+  transition:
+    color 0.16s ease,
+    border-color 0.16s ease,
+    background-color 0.16s ease;
+}
+
+.cl__mic:hover {
+  border-color: rgba(var(--accent-rgb), var(--accent-a4));
+  color: var(--accent);
+}
+
+/* 正在听：实心橙 + 一圈荡出去的光，与「优化提示词」的忙态同一支笔。
+   ★ 用 `cl-think-ring`（本文件已有的那条）而不是新写一条：两处在说同一件事
+     ——"它还在动"，同一个动作就该是同一种动 */
+.cl__mic[data-listening='true'] {
+  border-color: transparent;
+  background: var(--accent);
+  color: var(--surface);
+  cursor: progress;
+  animation: cl-think-ring 1.5s ease-out infinite;
+}
+
+.cl__mic-icon {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* 语音这一路没成时那一行。颜色与 `.cl__warn` 分开：那一句是 `--accent`（"没改成，
+   再点一次"），这一句是 `--ink-muted`（"这一路用不了，用键盘写"）——前者要你
+   再看它，后者只是告诉你一声 */
+.cl__voice-note {
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--ink-muted);
 }
 
 /* 「优化提示词」：与「换一句」同尺寸、同一颗圆，但它是这两颗里唯一
@@ -882,7 +940,7 @@ button.cl__pill:hover {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  /* 顶到这一行的最右边：左边是两颗工具。写成 `margin-left: auto` 而不是靠
+  /* 顶到这一行的最右边：左边是三颗工具。写成 `margin-left: auto` 而不是靠
      `.cl__bar` 的 `justify-content`，是因为窄屏换行之后它也得靠在自己那一行的右边 */
   margin-left: auto;
   height: 52px;
@@ -1076,6 +1134,12 @@ button.cl__pill:hover {
     animation: none;
     transform: rotate(35deg);
   }
+
+  /* 语音那颗在听的时候：光晕不荡，但实心橙与"在听"这件事一点不少——
+     静止模式要的是少动，不是少状态（与上面那条同一个判据） */
+  .cl__mic[data-listening='true'] {
+    animation: none;
+  }
 }
 
 /* 窄屏：标题会折成两三行，装饰若还钉在框外就会被视口裁掉，
@@ -1108,18 +1172,19 @@ button.cl__pill:hover {
     bottom: -38px;
   }
 
-  /* 动作栏：两颗图标 + 主按钮在这一档放不下（约 88 + 137 + 间距 > 331 的内容宽），
-     `.cl__bar` 的 `flex-wrap` 会让「开始创作」自己换到第二行、靠右
+  /* 动作栏：三颗图标 + 主按钮在这一档更挤（三颗 36 + 两道 8 的间距 = 124，再加主按钮
+     与栏间距），`.cl__bar` 的 `flex-wrap` 会让「开始创作」自己换到第二行、靠右
      （那一条在主规则里，窄屏不需要补丁）。
-     这里只把左组那两颗收紧一点：40px 在这一档偏肥，36 仍够点得准
+     这里只把左组那三颗收紧一点：40px 在这一档偏肥，36 仍够点得准
      （手指靶目标的下限是 44 CSS px 那条规矩管的是主动作，
-     这两颗是次动作，而且它们的 `title`/可访问名都在） */
+     这三颗是次动作，而且它们的 `title`/可访问名都在） */
   .cl__tools {
     gap: 8px;
   }
 
   .cl__optimize,
-  .cl__roll {
+  .cl__roll,
+  .cl__mic {
     width: 36px;
     height: 36px;
   }

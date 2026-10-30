@@ -74,6 +74,15 @@ const b64 = (bytes: Uint8Array): string => Buffer.from(bytes).toString('base64')
 /** 不进搜索的目录。★ 每一条都要能说出理由，不然"没找到"就只是"没找" */
 const SKIP_DIRS = new Set(['node_modules', '.git', '.next', '.next-session', '.next-eval', 'dist'])
 /**
+ * ★ 构建产物按前缀跳（2026-10-30 补的）：文件头那句"除 `.next*`"说的是**所有**
+ * 构建目录，而上面那个集合只列了三格。本机同时开着几台隔离 dev server 时，
+ * `.next-credits` 这类目录一直在被写——扫到一半文件消失或被独占（实测：
+ * `ENOENT ... .pack.gz_` 与 `EBUSY: resource busy or locked, read`），
+ * 整条 `pnpm verify` 就因为一个**不该进搜索的目录**变红。
+ * 判据没有被放宽：构建产物不是产品存东西的地方，它们从来就不在搜索范围里。
+ */
+const SKIP_DIR_PREFIXES = ['.next']
+/**
  * 无头浏览器用户档（`.out/chrome-*`）：那是本机调试残留，不是产品存东西的地方。
  * ★ 跳它要在输出里说出来——一份静悄悄跳过的搜索，读起来与"全搜过了"一样。
  */
@@ -101,7 +110,12 @@ async function walk(dir: string, out: string[]): Promise<void> {
   }
   for (const entry of entries) {
     if (entry.isDirectory()) {
-      if (SKIP_DIRS.has(entry.name) || SKIP_PREFIX.some((p) => entry.name.startsWith(p))) continue
+      if (
+        SKIP_DIRS.has(entry.name) ||
+        SKIP_DIR_PREFIXES.some((p) => entry.name.startsWith(p)) ||
+        SKIP_PREFIX.some((p) => entry.name.startsWith(p))
+      )
+        continue
       await walk(join(dir, entry.name), out)
     } else {
       out.push(join(dir, entry.name))
@@ -112,10 +126,36 @@ async function walk(dir: string, out: string[]): Promise<void> {
 /** 超过这个大小的文件不读（页图最大 1.5MB；再大的多半是浏览器残留或视频） */
 const MAX_BYTES = 32 * 1024 * 1024
 
+/**
+ * 一批（相对仓库根的）路径里，被 `.gitignore` 点名过的是哪几个。
+ *
+ * ★ 用 `git check-ignore --stdin` 而不是自己解析 `.gitignore`：规则、否定式、
+ *   子目录里的那一份，全由 git 说了算；抄一份到这里就是两套规则。
+ * ★ 一个都没命中时它的退出码是 1 —— 那不是错误（见 `git help check-ignore`）。
+ */
+function gitIgnoredOf(paths: readonly string[]): Set<string> {
+  if (paths.length === 0) return new Set()
+  try {
+    const out = execFileSync('git', ['check-ignore', '--stdin'], {
+      cwd: ROOT,
+      input: paths.join('\n'),
+      encoding: 'utf8',
+    })
+    return new Set(out.split(/\r?\n/).filter((one) => one !== ''))
+  } catch (err) {
+    if ((err as { status?: number }).status === 1) return new Set()
+    throw err
+  }
+}
+
 type Hit = { file: string; needle: Needle; at: number }
 type SweepReport = {
   files: number
   skippedBig: number
+  /** 扫的时候盘还在动（编辑器存盘、别的进程在写），这些文件读不到 */
+  skippedBusy: number
+  /** 没读成的文件，最多记前 5 个——"跳过了什么"要能点名 */
+  skippedBusyFiles: string[]
   hits: Hit[]
 }
 
@@ -125,13 +165,29 @@ async function sweep(roots: string[], needles: Needle[]): Promise<SweepReport> {
 
   const hits: Hit[] = []
   let skippedBig = 0
+  let skippedBusy = 0
+  const skippedBusyFiles: string[] = []
   for (const file of files) {
-    const info = await stat(file)
-    if (info.size > MAX_BYTES) {
-      skippedBig += 1
-      continue
+    let bytes: Buffer
+    try {
+      const info = await stat(file)
+      if (info.size > MAX_BYTES) {
+        skippedBig += 1
+        continue
+      }
+      bytes = await readFile(file)
+    } catch (err) {
+      /* ★ 不吞错、也不中断：这个文件在扫描途中消失或被人独占（实测 `ENOENT` /
+         `EBUSY`）。记一笔、跳过，并在输出里写出来——"没读到"不许冒充"没命中"，
+         而为一个正在被别的进程写的文件让整条 verify 变红，是在报假警。 */
+      const code = (err as NodeJS.ErrnoException).code ?? 'unknown'
+      if (code === 'ENOENT' || code === 'EBUSY' || code === 'EPERM' || code === 'EACCES') {
+        skippedBusy += 1
+        if (skippedBusyFiles.length < 5) skippedBusyFiles.push(relative(ROOT, file))
+        continue
+      }
+      throw err
     }
-    const bytes = await readFile(file)
     for (const needle of needles) {
       if (needle.kind === 'sha') {
         if (sha256(bytes) === needle.value) hits.push({ file, needle, at: 0 })
@@ -141,7 +197,7 @@ async function sweep(roots: string[], needles: Needle[]): Promise<SweepReport> {
       if (at >= 0) hits.push({ file, needle, at })
     }
   }
-  return { files: files.length, skippedBig, hits }
+  return { files: files.length, skippedBig, skippedBusy, skippedBusyFiles, hits }
 }
 
 /* ── 段 1 · 照片那条路真跑一遍 ───────────────────────────────────────────── */
@@ -475,10 +531,10 @@ async function main(): Promise<void> {
   line('')
   line(`搜索 · 范围 工作区 ${ROOT} ＋ 临时资产根 ${run.root}`)
   line(
-    `       扫了 ${report.files} 个文件${report.skippedBig > 0 ? `（另有 ${report.skippedBig} 个超过 32MB 的没读）` : ''}`,
+    `       扫了 ${report.files} 个文件${report.skippedBig > 0 ? `（另有 ${report.skippedBig} 个超过 32MB 的没读）` : ''}${report.skippedBusy > 0 ? `（另有 ${report.skippedBusy} 个在扫描时消失或被别的进程占着，没读成：${report.skippedBusyFiles.join('、')}${report.skippedBusy > report.skippedBusyFiles.length ? ' …' : ''}）` : ''}`,
   )
   line(
-    `       跳过：${[...SKIP_DIRS].join(' / ')} 与 .out/chrome-*（无头浏览器用户档，不是产品存东西的地方）`,
+    `       跳过：${[...SKIP_DIRS].join(' / ')} 与其余 .next*（构建产物）／ .out/chrome-*（无头浏览器用户档，不是产品存东西的地方）`,
   )
 
   const misses: string[] = []
@@ -536,12 +592,25 @@ async function main(): Promise<void> {
   )
   const publicFiles: string[] = []
   await walk(join(ROOT, 'public'), publicFiles)
-  const untracked = publicFiles
+  const media = publicFiles
     .filter((file) => MEDIA_EXT.has(file.slice(file.lastIndexOf('.')).toLowerCase()))
     .map((file) => relative(ROOT, file).split(sep).join('/'))
-    .filter((file) => !tracked.has(file))
+  /**
+   * ★ `.gitignore` 里点过名的那些不进判据（2026-10-30 补）。
+   *
+   * 探针的夹具（`scripts/mk-shared-fixture.mjs` 写的 `public/demo/books/xzj-shared-*`）
+   * 天生就是"跑一次、生成一次"的东西，仓库**刻意**把它们挡在门外（`.gitignore`
+   * 第 94–95 行）。可这条判据原来只问 `git ls-files`，于是任何一次跑过探针之后，
+   * 它们都会被当成"运行产物写进了 public/"——红的是一条**本来就该存在**的夹具。
+   * 判据因此改成：**入库的** 与 **.gitignore 点名过的** 都算认领，其余才算越界。
+   * ★ 不是放宽：真有一份用户的书被写进 `public/`，它既不在 git 里、也不会被
+   *   `.gitignore` 认领（那两条是具体路径，不是 `public/**`），照样红。
+   * ★ 跳过多少要说出来——否则"跳过了 29 个"与"压根没有 29 个"读起来一样。
+   */
+  const ignored = gitIgnoredOf(media)
+  const untracked = media.filter((file) => !tracked.has(file) && !ignored.has(file))
   line(
-    `  ${untracked.length === 0 ? '✓' : '★'} public 下媒体 ${publicFiles.length} 个文件，没入库的 ${untracked.length} 个`,
+    `  ${untracked.length === 0 ? '✓' : '★'} public 下媒体 ${publicFiles.length} 个文件，没入库的 ${untracked.length} 个${ignored.size > 0 ? `（另有 ${ignored.size} 个在 .gitignore 里点名过、由探针生成，不计：${[...ignored].slice(0, 3).join('、')}${ignored.size > 3 ? ' …' : ''}）` : ''}`,
   )
   for (const one of untracked.slice(0, 20)) line(`      ★ ${one}`)
 

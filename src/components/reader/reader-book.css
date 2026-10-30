@@ -491,6 +491,100 @@
   color: var(--ink-muted);
 }
 
+/* 「念一遍」与「用嘴说」那一行（2026-10-30）。包成一行是为了不增加这一块的高度：
+   它浮在书的下沿，多一行就多压一点画面。`flex-wrap` 给窄屏兜底——两颗药丸
+   最宽的时候（"正在念…（点一下停下）" + "在听…"）在 390 宽的竖屏上放不下。 */
+.book-choice__acts {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* 用嘴选：与「念一遍」同一支笔（药丸、同一边框、同一档字号），因为它们是同一类
+   辅助通道。★ 不画成主按钮：孩子真正要按的是上面那两颗大按钮，这一颗是"另一种
+   按法"，不是第三个选项 */
+.book-choice__voice {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 1px solid var(--dot);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.book-choice__voice:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* 在听：描边与字一起变强调色——这一颗的高光只在"真的在听"的时候亮，
+   不像「念一遍」那样常驻（常驻的高光会让两颗药丸抢同一处注意力） */
+.book-choice__voice[data-state='listening'] {
+  border-color: var(--accent);
+  color: var(--accent);
+  cursor: progress;
+}
+
+/* 没听清 / 没听见 / 没法开麦 / 连不上：退成次要色。
+   ★ 不退成 `--danger`：没有东西坏掉，孩子再点一次就行，把一次"没听见"画成错误
+   会让这一屏显得很不友好。四种失败的文案不同（`voiceHintLabel`），长相同一个 */
+.book-choice__voice[data-hint] {
+  color: var(--ink-muted);
+}
+
+.book-choice__voice-icon {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.book-choice__voice[data-state='listening'] .book-choice__voice-icon {
+  animation: book-choice-mic 1s ease-in-out infinite alternate;
+}
+
+@keyframes book-choice-mic {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.45;
+  }
+}
+
+/* 只给读屏的那一句（在听 / 没听清 / 没法开麦）。与 `.cl__sr` 同一手法：
+   不占布局、不进视觉 */
+.book-choice__status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* 静止模式：光不呼吸，但"在听"的强调色与文案一个不少 */
+  .book-choice__voice[data-state='listening'] .book-choice__voice-icon {
+    animation: none;
+  }
+}
+
 /* 4. ★★ 静止模式：把首页那一套"回到文档流"整块推翻回来。
       首页在 `prefers-reduced-motion` 下把选择点放回文档流是对的（那一屏本来就是一条
       从头读到尾的长页）。这一屏是一条定高的舞台：回到文档流会把书往上顶、把底栏
@@ -580,8 +674,10 @@
     padding: 8px 18px;
   }
 
-  /* 选择点那颗「念一遍」：形状与 `__audio` 同一支笔，尺寸跟着同一条走 */
-  .book-choice__speak {
+  /* 选择点那颗「念一遍」：形状与 `__audio` 同一支笔，尺寸跟着同一条走。
+     「用嘴说」是同一支笔，所以同一档 44（2026-10-30） */
+  .book-choice__speak,
+  .book-choice__voice {
     min-height: 44px;
     padding: 8px 18px;
   }
@@ -777,7 +873,8 @@
        在书旁边而不是书下面 —— 药丸从 32 长到 44 是横向长，书一个像素不少。
        （上一版它在书下面那一行里，靠"那颗圆钮本来就是 44"才没吃到高度。） */
   .reader__audio,
-  .book-choice__speak {
+  .book-choice__speak,
+  .book-choice__voice {
     min-height: 44px;
     padding: 8px 14px;
   }

@@ -12,6 +12,15 @@ build
 pnpm-lock.yaml
 next-env.d.ts
 
+# `tsconfig.json` 的 `include` 是 **Next 的 dev server 自己写进去的**（2026-10-30 补）：
+# 每起一台按 `NEXT_DIST_DIR` 隔离的 dev server，它就往里追加一条
+# `.next-<名字>/types/**/*.ts`，顺序与排版由它决定，不由人。多会话同时开着时，
+# 这个文件在两次提交之间会被改好几次——于是 `pnpm format:check` 在**与排版无关的
+# 事情上**随机变红（`pre-push` 里红过两次，都是它）。
+# ★ 不是"放过一个手写文件"：这一份的内容本来就是工具写的，要改行为改的是
+#   `next.config.ts`。人真要动它时，格式不归这条闸门管。
+tsconfig.json
+
 # 二进制美术资源：不是文本，Prettier 处理它们只会误伤
 public/art
 public/brand

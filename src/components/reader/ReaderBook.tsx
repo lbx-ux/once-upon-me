@@ -65,8 +65,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { flipState } from '@/components/book/flip.ts'
 import { loadPick, savePick } from '@/lib/reading-path.ts'
+import { speechFailureText, spokenPickOf, type SpeechFailure } from '@/lib/speech.ts'
 import { useReadingLog } from '@/lib/use-reading-log.ts'
 import { useReaderPaper, useSharedTurnMode, useTurnMode } from '@/lib/use-reading-prefs.ts'
+import { useSpeechInput } from '@/lib/use-speech.ts'
 import {
   choiceClipsOf,
   choiceScreenOf,
@@ -761,6 +763,30 @@ function FaceView({
 /* 选择点 */
 
 /**
+ * 选择点上语音那一颗的临时状态。
+ * `'unclear'` 是"听清了、但没听出左右"，其余都是浏览器自己报的失败。
+ * ★ 不把失败压成一个"没听清"：下一步不一样——没听见是再说一次，没权限是去开麦，
+ *   连不上是换键盘（`speech.ts` 的 `speechFailureText` 每种一句）。
+ */
+type VoiceHint = 'unclear' | SpeechFailure
+
+function voiceHintLabel(hint: VoiceHint | null): string {
+  if (hint === null) return '用嘴说'
+  if (hint === 'unclear') return '没听清'
+  if (hint === 'not-allowed' || hint === 'audio-capture' || hint === 'unsupported')
+    return '没法开麦'
+  if (hint === 'no-speech') return '没听见'
+  return '语音没通'
+}
+
+function voiceHintText(hint: VoiceHint | null): string {
+  if (hint === null) return ''
+  // 'unclear' 没有对应的浏览器错误码，这一句是这一层自己的
+  if (hint === 'unclear') return '没听清，再点一次'
+  return speechFailureText(hint)
+}
+
+/**
  * 选择点那一屏：画面停住，浮出两颗大按钮（产品定义原话）。
  *
  * 五条判断，每条都对着一个具体的坏法：
@@ -787,6 +813,7 @@ function FaceView({
  *    这一层不在 `.reader__stage` 里，所以这些键不会被翻页抢走——反过来说，
  *      "容器的翻页键与控件的键互不干扰"是靠位置保证的，挪进舞台就没了。
  */
+
 function ChoicePoint({
   choice,
   pressed,
@@ -808,6 +835,74 @@ function ChoicePoint({
   onToggleSpeak: () => void
 }) {
   const rowRef = useRef<HTMLDivElement>(null)
+
+  /**
+   * 用嘴选（2026-10-30）。
+   *
+   * 产品前提是"孩子不识字"，而今天的选择点仍然要用手点。3–8 岁孩子的真实动作是
+   * 嘴比手快，所以这一屏多一条通道：说「左边」或「右边」，与按钮走同一个 `onPick`。
+   *
+   * 五条判断，每条都对应一个具体的坏法：
+   *
+   * 1. **只在按下按钮之后开麦，不自动听。** 这一屏一出现，自动朗读正在念提问与
+   *    两个选项（`use-narration`），自动开的麦会把那段 TTS 当成孩子在说话——
+   *    最先被"听"到的永远是机器自己。所以入口是一颗按钮，按一下才听。
+   * 2. **一次只听 6 秒**（`maxMs`）。孩子的答案是两三个字，6 秒是"说完之后还等
+   *    一会儿"的长度；再长就会录进旁边的电视声与大人说话。
+   * 3. **不认"这个 / 那个"**，只认方位与序数（理由在 `speech.ts` 文件头 1）。
+   *    判不出来说"没听清"，而不是猜一边——猜错的代价是孩子被带进另一条支。
+   * 4. **失败不改主路径**：按钮一直在，声音这条路不通时孩子照样用手点。
+   *    失败文案分两档（没听清 / 没法开麦），因为下一步不同：一个再说一次，
+   *    一个去开权限。
+   * 5. **结果落进同一个 `onPick`**：这里不新开一条"语音专用"的选择路径，
+   *    否则按下态、翻页、落盘（`savePick`）会有两份实现，而它们必须一模一样。
+   */
+  const [voiceHint, setVoiceHint] = useState<VoiceHint | null>(null)
+  const hintTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const clearHintTimer = useCallback(() => {
+    if (hintTimer.current !== null) {
+      clearTimeout(hintTimer.current)
+      hintTimer.current = null
+    }
+  }, [])
+
+  /* 离开这一屏（翻开下一页、切书）时把那个 3 秒的提示计时器一起收掉 */
+  useEffect(() => clearHintTimer, [clearHintTimer])
+
+  const showHint = useCallback(
+    (hint: VoiceHint) => {
+      setVoiceHint(hint)
+      clearHintTimer()
+      hintTimer.current = setTimeout(() => setVoiceHint(null), 3200)
+    },
+    [clearHintTimer],
+  )
+
+  const speech = useSpeechInput({
+    maxMs: 6000,
+    onFinal: (text) => {
+      const side = spokenPickOf(text)
+      if (side) {
+        setVoiceHint(null)
+        onPick(side)
+        return
+      }
+      // 听清了、但它不是"左 / 右 / 第一 / 第二"里的任何一个
+      showHint('unclear')
+    },
+    onFail: (reason) => {
+      // 用户自己取消（点停 / 切页）不说一句话
+      if (reason === 'aborted') return
+      // ★ 原样把浏览器给的那一种交出去：没权限、没听见、连不上，下一步不是同一件事
+      showHint(reason)
+    },
+  })
+
+  const voiceLabel = speech.listening ? '在听…' : voiceHintLabel(voiceHint)
+
+  /** 读屏要念的那一句。★ 光靠按钮文字变化，读屏不会主动说（按钮不是 status） */
+  const voiceStatus = speech.listening ? '正在听，说「左边」或「右边」' : voiceHintText(voiceHint)
 
   /**
    * ← → 在两颗按钮之间走。
@@ -856,18 +951,71 @@ function ChoicePoint({
           )
         })}
       </div>
-      {canSpeak ? (
-        <button
-          type="button"
-          className="book-choice__speak"
-          onClick={onToggleSpeak}
-          aria-label={speaking ? '停下' : '念一遍这两个选项'}
-        >
-          {speaking ? '正在念…（点一下停下）' : '🔊 念一遍'}
-        </button>
-      ) : (
-        <p className="book-choice__note">这一页的选项没有朗读，念给孩子听吧</p>
-      )}
+      {/* 「念一遍」与「用嘴说」并排：两者都是"帮孩子做这一次选择"的辅助通道，
+          不是选项本身。★ 包成一行而不是各占一行：这一块浮在书的下沿上，多一行
+          就多压一点画面（`reader-book.css` 那条约 25×7px 的重叠判据盯着这件事）。 */}
+      <div className="book-choice__acts">
+        {canSpeak ? (
+          <button
+            type="button"
+            className="book-choice__speak"
+            onClick={onToggleSpeak}
+            aria-label={speaking ? '停下' : '念一遍这两个选项'}
+          >
+            {speaking ? '正在念…（点一下停下）' : '🔊 念一遍'}
+          </button>
+        ) : (
+          <p className="book-choice__note">这一页的选项没有朗读，念给孩子听吧</p>
+        )}
+        {/* ★ `supported === null`（还没到浏览器上）时什么都不画：SSR 与首帧必须
+            是同一份 DOM，否则 hydrate 会 mismatch。按钮晚一帧出现，没有人看得出来 */}
+        {speech.supported === true && (
+          <button
+            type="button"
+            className="book-choice__voice"
+            data-state={speech.listening ? 'listening' : 'idle'}
+            data-hint={voiceHint ?? undefined}
+            onClick={() => {
+              if (speech.listening) {
+                // ★ 这一屏的"停下"是**取消**，不是"把听到的交出去"：孩子可能只是
+                //   随手戳了一下，而一次误触不该替他选中一支。真正的提交只发生在
+                //   浏览器自己 `end`（说完 6 秒到点）那一次。
+                speech.cancel()
+                setVoiceHint(null)
+                return
+              }
+              setVoiceHint(null)
+              // ★ 自动朗读还在念选项的话先停下：麦就在这一屏上，它会把 TTS 当成
+              //   孩子在说话（文件头第 1 条说的是"别自动听"，这里是同一个理由的
+              //   手动版本——按下麦克风那一刻，这一屏必须安静）。
+              if (speaking) onToggleSpeak()
+              speech.start()
+            }}
+            aria-label={
+              speech.listening
+                ? '正在听，说「左边」或「右边」，点一下取消'
+                : '用嘴说：点一下，然后说「左边」或「右边」'
+            }
+            title={
+              speech.listening
+                ? '正在听…说完会自动停；点一下是取消这一次'
+                : '用嘴说：点一下，然后说「左边」或「右边」'
+            }
+          >
+            <svg className="book-choice__voice-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="9" y="3" width="6" height="11" rx="3" />
+              <path d="M5.5 10.5a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7" />
+            </svg>
+            <span>{voiceLabel}</span>
+          </button>
+        )}
+      </div>
+
+      {/* 状态说给读屏。★ 视觉上已经由按钮文字承担了（在听 / 没听清 / 没法开麦），
+          这里只补"读屏不会主动念按钮变化"这一条 */}
+      <span className="book-choice__status" role="status">
+        {voiceStatus}
+      </span>
     </div>
   )
 }

@@ -77,7 +77,19 @@ describe('signShareToken / verifyShareToken', () => {
     })
     const parts = signed.token.split('.')
 
-    const flip = (text: string): string => text.slice(0, -1) + (text.at(-1) === 'A' ? 'B' : 'A')
+    /**
+     * ★ 改的是**第一格**，不是最后一格（2026-10-30 实测改的）。
+     *
+     * base64url 的最后一格只有高 4 位是真数据、低 2 位是填充：32 字节的签名
+     * 编成 43 格，最后一格落在填充位上，`A`（000000）与 `B`（000001）解出来是
+     * **同一串字节**。于是"翻最后一格"有约 6% 的时候根本没改到任何一位，
+     * 验签照样通过，这条判据就假红一次。
+     *   量法：签 2000 张、翻末字符再验，**147 张（7.3%）仍然验过**；同样的样本
+     *   翻首字符，**0 张**。第一格 6 位全部有效，改它一定改变解码后的字节。
+     * 这条不是"把测试改松"——判据还是"改一个字节就验不过"，只是改在一个
+     * 真的落在数据位上的字节。
+     */
+    const flip = (text: string): string => (text.startsWith('A') ? 'B' : 'A') + text.slice(1)
 
     expect(verifyShareToken(`v1.${flip(parts[1] as string)}.${parts[2]}`)).toBeNull()
     expect(verifyShareToken(`${parts[0]}.${parts[1]}.${flip(parts[2] as string)}`)).toBeNull()

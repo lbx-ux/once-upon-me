@@ -41,10 +41,11 @@
     ".next-redeem/types/**/*.ts",
     ".next-session/types/**/*.ts",
     ".next-share/types/**/*.ts",
+    ".next-sharecheck/types/**/*.ts",
     ".next-shots/types/**/*.ts",
     ".next/types/**/*.ts",
     "next-env.d.ts",
-    ".next-sharecheck/types/**/*.ts"
+    ".next-insp/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"
