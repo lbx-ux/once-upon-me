@@ -30,6 +30,7 @@ import org.springframework.test.web.servlet.ResultActions;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.onceuponme.api.auth.AuthService;
 import com.onceuponme.api.credit.dto.RedeemResult;
 import com.onceuponme.api.support.ApiException;
 
@@ -59,6 +60,15 @@ import com.onceuponme.api.support.ApiException;
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 class CreditFlowIntegrationTest {
+
+  /**
+   * 每个新号开户时账上已经有的那几本（2026-11-10 起是 2，见 {@code AuthService#WELCOME_BOOKS}）。
+   *
+   * <p>★ 这一组测试的每一个数都从它算起，不写死 2：开户赠送不是这些用例要测的东西，
+   * 但它们发的每一笔额度都叠在这 2 本上——写死一个"2"的话，赠送一变，
+   * 这里七处断言会一起红，而红的不是账本坏了。
+   */
+  private static final int WELCOME = AuthService.WELCOME_BOOKS;
 
   @Autowired private MockMvc mvc;
   @Autowired private ObjectMapper json;
@@ -103,7 +113,7 @@ class CreditFlowIntegrationTest {
                 .content(send(Map.of("code", messy))))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.books").value(2))
-        .andExpect(jsonPath("$.balance").value(2))
+        .andExpect(jsonPath("$.balance").value(WELCOME + 2))
         .andExpect(jsonPath("$.codeTail").isNotEmpty());
 
     // 第二个人拿同一张码：同一句话，不是"已经用过了"（那等于告诉他这张码存在）
@@ -118,13 +128,15 @@ class CreditFlowIntegrationTest {
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.code").value("bad-code"));
 
-    // 余额是 2，账本里也恰好是 +2
+    // 余额是开户那 2 本 + 兑换的 2 本；账本两行，最近一行是这次兑换
     mvc.perform(get("/api/credits").header("Authorization", "Bearer " + user))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.balance").value(2))
-        .andExpect(jsonPath("$.entries.length()").value(1))
+        .andExpect(jsonPath("$.balance").value(WELCOME + 2))
+        .andExpect(jsonPath("$.entries.length()").value(2))
         .andExpect(jsonPath("$.entries[0].delta").value(2))
-        .andExpect(jsonPath("$.entries[0].reason").value("redeem"));
+        .andExpect(jsonPath("$.entries[0].reason").value("redeem"))
+        .andExpect(jsonPath("$.entries[1].delta").value(WELCOME))
+        .andExpect(jsonPath("$.entries[1].reason").value("grant"));
   }
 
   @Test
@@ -136,30 +148,24 @@ class CreditFlowIntegrationTest {
     String user = login(phone, "huafei-1234");
     long userId = userIdOf(admin, phone);
 
-    // 发一本
+    // 发一本：账上从开户赠送的那几本变成 +1
     mvc.perform(
             post("/api/admin/credits/grant")
                 .header("Authorization", "Bearer " + admin)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(send(Map.of("userId", userId, "books", 1, "note", "测试补发"))))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.balance").value(1));
+        .andExpect(jsonPath("$.balance").value(WELCOME + 1));
 
-    // 画一本：扣掉
-    mvc.perform(
-            post("/api/credits/spend")
-                .header("Authorization", "Bearer " + user)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(send(Map.of("books", 1, "ref", "book-a"))))
+    // 一本一本画到 0
+    spend(user, "book-a")
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.balance").value(0));
+        .andExpect(jsonPath("$.balance").value(WELCOME));
+    spend(user, "book-b").andExpect(status().isOk()).andExpect(jsonPath("$.balance").value(1));
+    spend(user, "book-c").andExpect(status().isOk()).andExpect(jsonPath("$.balance").value(0));
 
     // 再画一本：402，余额仍是 0（不是 -1）
-    mvc.perform(
-            post("/api/credits/spend")
-                .header("Authorization", "Bearer " + user)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(send(Map.of("books", 1, "ref", "book-b"))))
+    spend(user, "book-d")
         .andExpect(status().isPaymentRequired())
         .andExpect(jsonPath("$.code").value("no-credits"));
     mvc.perform(get("/api/credits/balance").header("Authorization", "Bearer " + user))
@@ -167,20 +173,8 @@ class CreditFlowIntegrationTest {
         .andExpect(jsonPath("$.balance").value(0));
 
     // 一页都没画出来 → 退。打两次是常态（重连），第二次无害
-    mvc.perform(
-            post("/api/credits/refund")
-                .header("Authorization", "Bearer " + user)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(send(Map.of("books", 1, "ref", "book-a"))))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.balance").value(1));
-    mvc.perform(
-            post("/api/credits/refund")
-                .header("Authorization", "Bearer " + user)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(send(Map.of("books", 1, "ref", "book-a"))))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.balance").value(1));
+    refund(user, "book-c", 1).andExpect(status().isOk()).andExpect(jsonPath("$.balance").value(1));
+    refund(user, "book-c", 1).andExpect(status().isOk()).andExpect(jsonPath("$.balance").value(1));
 
     // 没扣过的书退不了——退款不是造币机
     mvc.perform(
@@ -211,14 +205,18 @@ class CreditFlowIntegrationTest {
     long userId = userIdOf(admin, phone);
     grantBooks(admin, userId, 2);
 
-    spend(user, "book-retry").andExpect(status().isOk()).andExpect(jsonPath("$.balance").value(1));
-    refund(user, "book-retry", 1).andExpect(jsonPath("$.balance").value(2));
+    spend(user, "book-retry")
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.balance").value(WELCOME + 1));
+    refund(user, "book-retry", 1).andExpect(jsonPath("$.balance").value(WELCOME + 2));
 
     // 第二轮的同一个书号：这是一次新的生成，钱也真的花了第二次
-    spend(user, "book-retry").andExpect(status().isOk()).andExpect(jsonPath("$.balance").value(1));
-    refund(user, "book-retry", 1).andExpect(jsonPath("$.balance").value(2));
+    spend(user, "book-retry")
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.balance").value(WELCOME + 1));
+    refund(user, "book-retry", 1).andExpect(jsonPath("$.balance").value(WELCOME + 2));
 
-    assertEquals(2, credits.balanceOf(userId));
+    assertEquals(WELCOME + 2, credits.balanceOf(userId));
   }
 
   /**
@@ -237,13 +235,19 @@ class CreditFlowIntegrationTest {
     long userId = userIdOf(admin, phone);
     grantBooks(admin, userId, 3);
 
-    spend(user, "book-cap").andExpect(status().isOk()).andExpect(jsonPath("$.balance").value(2));
+    spend(user, "book-cap")
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.balance").value(WELCOME + 2));
 
-    refund(user, "book-cap", 10).andExpect(status().isOk()).andExpect(jsonPath("$.balance").value(3));
+    refund(user, "book-cap", 10)
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.balance").value(WELCOME + 3));
     // 退满之后再来一次：还是 3（重连、重试打两次无害），不是 4
-    refund(user, "book-cap", 1).andExpect(status().isOk()).andExpect(jsonPath("$.balance").value(3));
+    refund(user, "book-cap", 1)
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.balance").value(WELCOME + 3));
 
-    assertEquals(3, credits.balanceOf(userId));
+    assertEquals(WELCOME + 3, credits.balanceOf(userId));
   }
 
   /**
@@ -262,7 +266,7 @@ class CreditFlowIntegrationTest {
     String user = login(phone, "bingfa-1234");
     long userId = userIdOf(admin, phone);
     grantBooks(admin, userId, 1);
-    spend(user, "book-race").andExpect(jsonPath("$.balance").value(0));
+    spend(user, "book-race").andExpect(jsonPath("$.balance").value(WELCOME));
 
     CountDownLatch start = new CountDownLatch(1);
     AtomicInteger failed = new AtomicInteger();
@@ -287,7 +291,7 @@ class CreditFlowIntegrationTest {
 
     // ★ 判据是余额，不是"没人报错"：修前这里也一个错都没有，只是多发了四本
     assertEquals(0, failed.get(), "并发退款不该抛异常");
-    assertEquals(1, credits.balanceOf(userId), "只扣过 1 本，最多退 1 本");
+    assertEquals(WELCOME + 1, credits.balanceOf(userId), "只扣过 1 本，最多退 1 本");
   }
 
   /**
@@ -307,27 +311,27 @@ class CreditFlowIntegrationTest {
     grantBooks(admin, userId, 3);
 
     // 两次扣、一次都没结算（两次都"进程没了"）：对账该把两笔一起退回来
-    spend(user, "book-orphan").andExpect(jsonPath("$.balance").value(2));
-    spend(user, "book-orphan").andExpect(jsonPath("$.balance").value(1));
+    spend(user, "book-orphan").andExpect(jsonPath("$.balance").value(WELCOME + 2));
+    spend(user, "book-orphan").andExpect(jsonPath("$.balance").value(WELCOME + 1));
 
     settle(userId, "book-orphan")
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.refunded").value(true))
-        .andExpect(jsonPath("$.balance").value(3));
+        .andExpect(jsonPath("$.balance").value(WELCOME + 3));
 
     // 再扫一次：账本里已经对齐了，不该再发
     settle(userId, "book-orphan")
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.refunded").value(false))
-        .andExpect(jsonPath("$.balance").value(3));
+        .andExpect(jsonPath("$.balance").value(WELCOME + 3));
 
     // 从没扣过额度的书号：既不是错，也不该发钱
     settle(userId, "book-ghost")
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.refunded").value(false))
-        .andExpect(jsonPath("$.balance").value(3));
+        .andExpect(jsonPath("$.balance").value(WELCOME + 3));
 
-    assertEquals(3, credits.balanceOf(userId));
+    assertEquals(WELCOME + 3, credits.balanceOf(userId));
   }
 
   @Test
@@ -388,7 +392,7 @@ class CreditFlowIntegrationTest {
     assertEquals(1, rejected.get(), "另一个人应当被拒");
 
     int total = credits.balanceOf(userA) + credits.balanceOf(userB);
-    assertEquals(5, total, "一共只该多出 5 本");
+    assertEquals(WELCOME * 2 + 5, total, "除了各自开户送的那几本，一共只该多出 5 本");
   }
 
   /**

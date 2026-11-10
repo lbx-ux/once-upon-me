@@ -39,6 +39,28 @@ import com.onceuponme.api.support.ApiException;
 @Service
 public class AuthService {
 
+  /**
+   * 新账号开户送几本（2026-11-10）。
+   *
+   * <p>★ 原来的口径是 0：注册完余额是 0，必须去兑换一张码才画得了第一本。
+   * 那对一个**陌生人**来说是死路——码只有站长发得出来，而他没有站长的微信。
+   * 评审自己注册一个号，一本都画不了，只能翻文档去找演示账号。
+   *
+   * <p>★ 送 2 不是"送一次试试"，是"够走完一遍完整流程"：一本可能因为孩子那张卡
+   * 画得不像而重画（重画是**新一轮生成、再扣一本**，见 {@code CreditService#spend}），
+   * 只有 1 本的话第一次不满意就没了。
+   *
+   * <p>★ 上限就是这 2 本，且只发一次（{@code refNo} 幂等）。这个号被反复注册薅走的
+   * 上限是每人两本——比"新来的人什么都做不了"便宜。
+   *
+   * <p>★ 它是 {@code public} 的（这一层里其它常量都是包内可见）：额度那一组测试在另一个包，
+   * 而它们发的每一笔都叠在这几本上——那个数要有**一处**真值，不能在测试里再写一个 2。
+   */
+  public static final int WELCOME_BOOKS = 2;
+
+  /** 开户赠送在账本里的标记。★ 一次性授予的判据就是它（见 {@code CreditService#ensureGrantOnce}） */
+  static final String WELCOME_REF = "welcome";
+
   private final UserMapper users;
   private final UserPermissionMapper permissions;
   private final SmsCodeSender smsSender;
@@ -366,10 +388,14 @@ public class AuthService {
     users.insert(user);
 
     permissions.insert(UserPermission.allowedFor(user.getId(), Times.now()));
-    // ★ 开户，0 本。开户本身是一次写入、而不是"缺行按 0 算"：
+    // ★ 户头要先建出来，哪怕这一笔马上要被下面那句加满：
     //   启动时那条迁移（CreditBootstrap）扫的是"谁还没有户头"，
-    //   新账号不在这里开的话，下一次重启会被当成老账号补上 2 本
+    //   新账号不在这里开的话，下一次重启会被当成老账号再补 2 本
     credits.ensureAccount(user.getId(), 0, "开户");
+    // ★ 开户就送（见 WELCOME_BOOKS）。用 `ensureGrantOnce` 而不是 `grant`：
+    //   判据落在账本那一行上，于是这个方法被调两次（重试、并发、以后挪了位置）
+    //   也只发一次——而 `grant` 的每一次调用都是真的多两本
+    credits.ensureGrantOnce(user.getId(), WELCOME_BOOKS, WELCOME_REF, "新账号开户赠送");
     return user;
   }
 

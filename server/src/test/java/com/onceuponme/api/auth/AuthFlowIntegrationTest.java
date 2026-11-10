@@ -46,6 +46,27 @@ class AuthFlowIntegrationTest {
   @Autowired private MockMvc mvc;
   @Autowired private ObjectMapper json;
 
+  @Test
+  @DisplayName("★ 新号开户就送 2 本：不用兑换也能画第一本，账本里那一行带标记")
+  void newUserStartsWithWelcomeCredits() throws Exception {
+    String phone = "13911110011";
+    signUp(phone, "kaihu-123456");
+    String token = login(phone, "kaihu-123456");
+
+    // ★ 判据是**那个常量**，不是"余额 > 0"：多送的那几本是真钱
+    mvc.perform(get("/api/credits/balance").header("Authorization", "Bearer " + token))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.balance").value(AuthService.WELCOME_BOOKS));
+
+    // 账本里恰好一行，且带着那一枚标记——"只发一次"的判据落在它上面
+    mvc.perform(get("/api/credits").header("Authorization", "Bearer " + token))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.entries.length()").value(1))
+        .andExpect(jsonPath("$.entries[0].delta").value(AuthService.WELCOME_BOOKS))
+        .andExpect(jsonPath("$.entries[0].reason").value("grant"))
+        .andExpect(jsonPath("$.entries[0].ref").value(AuthService.WELCOME_REF));
+  }
+
   /* ── 演示账号 ───────────────────────────────────────────────────────────── */
 
   @Test
